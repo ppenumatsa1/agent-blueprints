@@ -2,19 +2,27 @@
 
 ## Purpose
 
-The Software Factory turns incomplete customer inputs into a demonstrable,
-verified prototype and a transparent path to customer-owned production.
-Rapid delivery is an aspiration, not a substitute for security, evidence, or
-customer decisions. Unknowns remain visible as assumptions.
+The Software Factory turns incomplete customer inputs into verified agent,
+API, or web-app prototypes, targeting delivery within 2–3 hours when feasible,
+with a transparent path to customer-owned production. This is an unverified
+goal, not a guarantee or a substitute for security, evidence, or customer
+decisions. Unknowns remain visible as assumptions and limitations.
 
 ```text
-Customer notes / transcript / requirements
+Customer requirements
   -> Specification Studio: business + technical specs, verification contract
-  -> Select an agent or app/API blueprint
-  -> Copilot implements bounded work in an independent project
-  -> Tests, evaluations, security checks, and requirement evidence
-  -> Demonstration, customer feedback, and an explicit handoff
+  -> Select Agent / App / API Blueprints
+  -> Implementation in an independent project
+  -> Verification: tests, evaluations, security checks, and evidence
+  -> Deployment: local prototype, then authorized hosting when appropriate
+  -> Business value: demonstration, customer feedback, and production handoff
 ```
+
+The [interactive architecture](software-factory.html) is the original supplied
+design source, preserved unchanged. It predates the repository and may
+describe proposed work or historical status; use the
+[master checklist](master-checklist.md) and [implementation plan](implementation-plan.md)
+for current progress.
 
 Inputs can contain sensitive or untrusted content. Future intake must establish
 permission, storage, retention, and redaction before using real customer data;
@@ -43,9 +51,12 @@ deployment, and operations.
 3. Choose an appropriate blueprint, implement bounded work, and retain links
    from requirement to code, checks, and evidence.
 4. Report **passed**, **failed**, **unverified**, or a justified
-   **not applicable** result. Missing evidence is never a pass.
-5. Demonstrate the prototype; production-candidate readiness and customer
-   validation require additional evidence and explicit human decisions.
+   **not applicable** result for every requirement. Prototype readiness
+   requires all blocking checks to pass while disclosing non-blocking issues;
+   missing evidence never becomes a passing check.
+5. Demonstrate the prototype and its business value. Production-candidate
+   readiness requires stricter controls and human-reviewed risk decisions;
+   customer validation requires explicit customer approval.
 
 Copilot can help implement and test the project, while existing GitHub Actions
 and framework tooling execute checks. Builders must not silently weaken approved
@@ -56,5 +67,6 @@ criteria or approve their own exceptions. See the [readiness contract](readiness
 Phase 0 documents the agent family and its contracts. Phase 1 will implement a
 small MAF workflow golden path. It will first target authenticated
 public-network endpoints and GitHub-hosted CI. Private networking and
-self-hosted runners are later work. The
-[implementation plan](implementation-plan.md) records the remaining phases.
+self-hosted runners are later work. The [implementation plan](implementation-plan.md) records the remaining
+phases, while the [master checklist](master-checklist.md) tracks acceptance
+criteria, evidence, and next actions.

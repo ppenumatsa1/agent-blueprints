@@ -1,13 +1,16 @@
 {
-  "schema_version": "0.2.0",
+  "schema_version": "0.3.0",
   "contract_id": "SYNTHETIC-DEMO",
-  "contract_version": "0.2.0",
+  "contract_version": "0.3.0",
   "title": "Missing failure criteria",
   "requirements": [
     {
       "id": "REQ-001",
       "statement": "A consequential simulated action requires human approval.",
       "success_criteria": "The action is blocked without approval.",
+      "critical": true,
+      "security_critical": true,
+      "domains": ["security", "integration"],
       "checks": [
         {
           "id": "CHECK-001",

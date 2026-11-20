@@ -13,9 +13,16 @@
   Keep model/tool input untrusted, side effects idempotent, and logs
   privacy-safe. Never silently replace failed model calls with synthetic output.
 - Map significant requirements to checks and evidence; label assumptions and
-  unverified claims. Do not weaken, skip, or relabel applicable criteria to make
-  a readiness report pass, including criteria labeled `non_blocking`. Customer
-  approval is an authorized human decision.
+  unverified claims. Do not weaken, skip, or relabel failed or unverified
+  checks. Prototype readiness may disclose non-blocking failures; production
+  requires verified, scoped human risk acceptance for them. Critical and
+  security-critical checks cannot be silently downgraded or waived.
+- For each meaningful PR, update `docs/master-checklist.md`,
+  `docs/implementation-plan.md`, and relevant architecture documentation.
+  Record acceptance criteria, evidence or a PR link, and the next action; mark
+  work completed only when implemented and supported by evidence. Preserve the
+  supplied architecture HTML as the original source unless its revision is
+  explicitly requested.
 - Keep proposed schema versions and synthetic examples consistent. Schemas do
   not authenticate people, verify artifacts, or enforce cross-file traceability;
   do not represent schema validation as a release gate. Future producer metadata

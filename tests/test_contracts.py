@@ -16,6 +16,7 @@ VALID_EXAMPLES = {
     "readiness-report": (
         "readiness-report.unverified.valid.json",
         "readiness-report.passed.valid.json",
+        "readiness-report.production.valid.json",
     ),
 }
 
@@ -121,12 +122,14 @@ class ContractSchemaTests(unittest.TestCase):
         self.assert_invalid("verification-contract", contract)
 
     def test_outdated_schema_versions_are_not_silently_accepted(self):
-        contract = load_json(EXAMPLES / "verification-contract.valid.json")
-        contract["schema_version"] = "0.1.0"
-        self.assert_invalid("verification-contract", contract)
-        report = load_json(EXAMPLES / "readiness-report.passed.valid.json")
-        report["schema_version"] = "0.1.0"
-        self.assert_invalid("readiness-report", report)
+        for version in ("0.1.0", "0.2.0"):
+            with self.subTest(version=version):
+                contract = load_json(EXAMPLES / "verification-contract.valid.json")
+                contract["schema_version"] = version
+                self.assert_invalid("verification-contract", contract)
+                report = load_json(EXAMPLES / "readiness-report.passed.valid.json")
+                report["schema_version"] = version
+                self.assert_invalid("readiness-report", report)
 
     def test_producer_extensions_preserve_required_core_fields(self):
         contract = load_json(EXAMPLES / "verification-contract.valid.json")
@@ -156,22 +159,146 @@ class ContractSchemaTests(unittest.TestCase):
         ]
         self.assert_invalid("readiness-report", report)
 
-    def test_passed_gate_requires_all_applicable_results_to_pass(self):
-        original = load_json(EXAMPLES / "readiness-report.passed.valid.json")
-        for index in (0, 1):
-            for status in ("failed", "unverified"):
-                with self.subTest(result=index, status=status):
-                    report = copy.deepcopy(original)
-                    result = report["results"][index]
-                    result["status"] = status
-                    result["reason"] = "Synthetic missing or failing evidence"
-                    result.pop("check_results")
-                    self.assert_invalid("readiness-report", report)
-        report = copy.deepcopy(original)
+    def test_unverified_requirement_cannot_hide_a_failed_check(self):
+        report = load_json(EXAMPLES / "readiness-report.production.valid.json")
+        report["results"][3]["status"] = "unverified"
+        self.assert_invalid("readiness-report", report)
+
+    def test_prototype_discloses_non_blocking_failures_and_unknowns(self):
+        report = load_json(EXAMPLES / "readiness-report.passed.valid.json")
+        self.assert_valid("readiness-report", report)
+        self.assertEqual(report["results"][2]["status"], "unverified")
+        self.assertEqual(report["results"][2]["check_results"][0]["outcome"], "unverified")
+        self.assertEqual(report["results"][3]["status"], "failed")
+        self.assertEqual(report["results"][3]["check_results"][0]["outcome"], "failed")
+        for field in ("assumptions", "incomplete_integrations", "limitations"):
+            with self.subTest(field=field):
+                incomplete = copy.deepcopy(report)
+                incomplete.pop(field)
+                self.assert_invalid("readiness-report", incomplete)
+
+    def test_passed_gate_requires_all_blocking_results_to_pass(self):
+        for filename in (
+            "readiness-report.passed.valid.json",
+            "readiness-report.production.valid.json",
+        ):
+            original = load_json(EXAMPLES / filename)
+            blocking_indices = [
+                index for index, result in enumerate(original["results"])
+                if result["gate"] == "blocking"
+            ]
+            for index in blocking_indices:
+                for status in ("failed", "unverified"):
+                    with self.subTest(example=filename, result=index, status=status):
+                        report = copy.deepcopy(original)
+                        result = report["results"][index]
+                        result["status"] = status
+                        result["reason"] = "Synthetic missing or failing evidence"
+                        result.pop("check_results")
+                        self.assert_invalid("readiness-report", report)
+        report = load_json(EXAMPLES / "readiness-report.passed.valid.json")
         report["results"][0]["gate"] = "non_blocking"
         self.assert_invalid("readiness-report", report)
         report["gate_status"] = "unverified"
         self.assert_valid("readiness-report", report)
+
+    def test_production_pass_requires_risk_acceptance_without_relabeling(self):
+        original = load_json(EXAMPLES / "readiness-report.production.valid.json")
+        result = original["results"][3]
+        self.assertEqual(result["status"], "failed")
+        self.assertEqual(result["check_results"][0]["outcome"], "failed")
+        self.assert_valid("readiness-report", original)
+        for status in ("failed", "unverified"):
+            with self.subTest(status=status):
+                report = copy.deepcopy(original)
+                result = report["results"][3]
+                result["status"] = status
+                result["check_results"][0]["outcome"] = status
+                result["risk_acceptance"]["scope"]["requirement_status"] = status
+                self.assert_valid("readiness-report", report)
+                result.pop("risk_acceptance")
+                self.assert_invalid("readiness-report", report)
+        for field in (
+            "decision", "reviewer", "reference", "decided_at", "expires_at",
+            "rationale", "compensating_controls", "scope",
+        ):
+            with self.subTest(missing_field=field):
+                report = copy.deepcopy(original)
+                report["results"][3]["risk_acceptance"].pop(field)
+                self.assert_invalid("readiness-report", report)
+        for field in (
+            "requirement_id", "check_ids", "requirement_status", "contract_sha256", "target_maturity",
+            "source_revision", "environment",
+        ):
+            with self.subTest(missing_scope=field):
+                report = copy.deepcopy(original)
+                report["results"][3]["risk_acceptance"]["scope"].pop(field)
+                self.assert_invalid("readiness-report", report)
+        for field, value in (("decision", "rejected"), ("expires_at", "not-a-date")):
+            with self.subTest(field=field):
+                report = copy.deepcopy(original)
+                report["results"][3]["risk_acceptance"][field] = value
+                self.assert_invalid("readiness-report", report)
+        report = copy.deepcopy(original)
+        report["results"][3]["status"] = "passed"
+        report["results"][3]["check_results"] = copy.deepcopy(
+            original["results"][0]["check_results"]
+        )
+        self.assert_invalid("readiness-report", report)
+
+    def test_critical_and_security_critical_classifications_are_explicit(self):
+        original = load_json(EXAMPLES / "verification-contract.valid.json")
+        for target in ("prototype", "production_candidate", "customer_validated"):
+            with self.subTest(target=target):
+                contract = copy.deepcopy(original)
+                contract["requirements"][0]["gates"][target] = "non_blocking"
+                self.assert_invalid("verification-contract", contract)
+        contract = copy.deepcopy(original)
+        contract["requirements"][0]["critical"] = False
+        self.assert_invalid("verification-contract", contract)
+        contract = copy.deepcopy(original)
+        contract["requirements"][0]["domains"] = ["integration"]
+        self.assert_invalid("verification-contract", contract)
+        for field in ("critical", "security_critical", "domains"):
+            with self.subTest(missing_field=field):
+                contract = copy.deepcopy(original)
+                contract["requirements"][0].pop(field)
+                self.assert_invalid("verification-contract", contract)
+
+    def test_production_control_applicability_needs_review(self):
+        contract = load_json(EXAMPLES / "verification-contract.valid.json")
+        contract.pop("production_controls")
+        self.assert_valid("verification-contract", contract)
+        contract = load_json(EXAMPLES / "verification-contract.valid.json")
+        controls = contract["production_controls"]
+        controls["security"]["applicability"] = "not_applicable"
+        self.assert_invalid("verification-contract", contract)
+        controls["security"]["applicability"] = "required"
+        controls["integration"] = {"applicability": "not_applicable"}
+        self.assert_invalid("verification-contract", contract)
+        controls["integration"]["reason"] = "No external integrations in this fixture."
+        controls["integration"]["review"] = {
+            "reviewer": "Synthetic reviewer",
+            "reference": "fixture://applicability-review",
+        }
+        self.assert_valid("verification-contract", contract)
+
+    def test_accepted_risk_cannot_override_a_blocking_result(self):
+        original = load_json(EXAMPLES / "readiness-report.production.valid.json")
+        for status in ("failed", "unverified"):
+            with self.subTest(status=status):
+                report = copy.deepcopy(original)
+                result = report["results"][0]
+                result["status"] = status
+                result["reason"] = "The critical check did not pass."
+                result.pop("check_results")
+                result["risk_acceptance"] = copy.deepcopy(
+                    original["results"][3]["risk_acceptance"]
+                )
+                result["risk_acceptance"]["scope"]["requirement_id"] = "REQ-001"
+                result["risk_acceptance"]["scope"]["check_ids"] = ["CHECK-001"]
+                result["risk_acceptance"]["scope"]["requirement_status"] = status
+                self.assert_invalid("readiness-report", report)
 
     def test_passed_gate_requires_contract_digest_and_approval(self):
         report = load_json(EXAMPLES / "readiness-report.passed.valid.json")
@@ -185,9 +312,9 @@ class ContractSchemaTests(unittest.TestCase):
         self.assert_invalid("readiness-report", report)
 
     def test_customer_validated_pass_requires_approval(self):
-        report = load_json(EXAMPLES / "readiness-report.passed.valid.json")
+        report = load_json(EXAMPLES / "readiness-report.production.valid.json")
         report["target_maturity"] = "customer_validated"
-        report["results"][1]["gate"] = "blocking"
+        report["results"][3]["risk_acceptance"]["scope"]["target_maturity"] = "customer_validated"
         self.assert_invalid("readiness-report", report)
         report["customer_approval"] = {
             "decision": "rejected",
@@ -255,31 +382,41 @@ class ContractSchemaTests(unittest.TestCase):
                     self.assertEqual(
                         result["gate"], requirement["gates"][report["target_maturity"]]
                     )
+                    expected = {check["id"]: check for check in requirement["checks"]}
+                    checks = result.get("check_results", [])
+                    actual = {check["check_id"]: check for check in checks}
+                    self.assertEqual(len(actual), len(checks))
+                    self.assertTrue(set(actual).issubset(expected))
                     if result["status"] == "passed":
-                        expected = {check["id"]: check for check in requirement["checks"]}
-                        actual = {check["check_id"]: check for check in result["check_results"]}
-                        self.assertEqual(len(actual), len(result["check_results"]))
                         self.assertEqual(set(actual), set(expected))
-                        for check_id, check in actual.items():
+                    for check_id, check in actual.items():
+                        if check["outcome"] == "passed":
                             actual_types = {item["kind"] for item in check["evidence"]}
                             self.assertTrue(
                                 set(expected[check_id]["evidence_types"]).issubset(actual_types)
                             )
-                            for item in check["evidence"]:
-                                self.assertEqual(item["revision"], report["source_revision"])
-                                self.assertEqual(item["environment"], report["environment"])
+                        for item in check.get("evidence", []):
+                            self.assertEqual(item["revision"], report["source_revision"])
+                            self.assertEqual(item["environment"], report["environment"])
+                    if "risk_acceptance" in result:
+                        scope = result["risk_acceptance"]["scope"]
+                        self.assertEqual(scope["requirement_id"], requirement_id)
+                        self.assertEqual(scope["requirement_status"], result["status"])
+                        self.assertEqual(
+                            set(scope["check_ids"]),
+                            {check["check_id"] for check in checks if check["outcome"] != "passed"},
+                        )
+                        for field in ("contract_sha256", "target_maturity", "source_revision", "environment"):
+                            self.assertEqual(scope[field], report[field])
 
-                blocking = [result for result in results if result["gate"] == "blocking"]
-                applicable = [result for result in results if result["gate"] != "not_applicable"]
-                expected_gate = (
-                    "failed"
-                    if any(result["status"] == "failed" for result in applicable)
-                    else "unverified"
-                    if not blocking
-                    or any(result["status"] not in ("passed", "not_applicable") for result in results)
-                    else "passed"
-                )
-                self.assertEqual(report["gate_status"], expected_gate)
+                if report["target_maturity"] != "prototype":
+                    for domain, control in contract["production_controls"].items():
+                        if control["applicability"] == "required":
+                            self.assertTrue(any(
+                                domain in requirement["domains"]
+                                and requirement["gates"][report["target_maturity"]] == "blocking"
+                                for requirement in requirements
+                            ), domain)
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 {
-  "schema_version": "0.2.0",
+  "schema_version": "0.3.0",
   "contract_id": "SYNTHETIC-DEMO",
-  "contract_version": "0.2.0",
+  "contract_version": "0.3.0",
   "title": "Synthetic approval workflow",
   "extensions": {
     "specification_studio": {
@@ -9,12 +9,21 @@
       "note": "Illustrative metadata, not a real Specification Studio output."
     }
   },
+  "production_controls": {
+    "security": { "applicability": "required" },
+    "integration": { "applicability": "required" },
+    "operations": { "applicability": "required" },
+    "evaluation": { "applicability": "required" }
+  },
   "requirements": [
     {
       "id": "REQ-001",
       "statement": "A consequential simulated action requires human approval.",
       "success_criteria": "The action is blocked until an authorized approval is recorded.",
       "failure_criteria": "The action executes without the required approval.",
+      "critical": true,
+      "security_critical": true,
+      "domains": ["security", "integration"],
       "checks": [
         {
           "id": "CHECK-001",
@@ -35,6 +44,9 @@
       "statement": "The generated explanation meets a reviewed quality rubric.",
       "success_criteria": "The explanation meets the agreed evaluation threshold.",
       "failure_criteria": "The evaluation falls below the agreed threshold.",
+      "critical": false,
+      "security_critical": false,
+      "domains": ["evaluation"],
       "checks": [
         {
           "id": "CHECK-002",
@@ -48,6 +60,52 @@
         "prototype": "non_blocking",
         "production_candidate": "blocking",
         "customer_validated": "blocking"
+      }
+    },
+    {
+      "id": "REQ-003",
+      "statement": "The service exposes a useful operational health signal.",
+      "success_criteria": "A health check reports the service's actual availability.",
+      "failure_criteria": "The health check is missing or incorrectly reports availability.",
+      "critical": false,
+      "security_critical": false,
+      "domains": ["operations"],
+      "checks": [
+        {
+          "id": "CHECK-003",
+          "method": "smoke",
+          "procedure": "Exercise the health endpoint in the assessed environment.",
+          "evidence_max_age_seconds": 86400,
+          "evidence_types": ["test_report"]
+        }
+      ],
+      "gates": {
+        "prototype": "non_blocking",
+        "production_candidate": "blocking",
+        "customer_validated": "blocking"
+      }
+    },
+    {
+      "id": "REQ-004",
+      "statement": "The interface displays an optional explanatory hint.",
+      "success_criteria": "The hint is displayed when requested.",
+      "failure_criteria": "The optional hint is missing or misleading.",
+      "critical": false,
+      "security_critical": false,
+      "domains": ["functional"],
+      "checks": [
+        {
+          "id": "CHECK-004",
+          "method": "e2e",
+          "procedure": "Request the optional hint in the synthetic interface.",
+          "evidence_max_age_seconds": 86400,
+          "evidence_types": ["test_report"]
+        }
+      ],
+      "gates": {
+        "prototype": "non_blocking",
+        "production_candidate": "non_blocking",
+        "customer_validated": "non_blocking"
       }
     }
   ]
