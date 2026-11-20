@@ -4,43 +4,79 @@
 
 This pull request proposes the architecture, reference analysis, catalog,
 engineering standards, readiness contracts, schema examples, and GitHub-hosted
-validation. It does not create an agent template, integrate Specification
-Studio, deploy Azure resources, or establish production/customer approval.
+validation. The repository uses the MIT License. Specification Studio has not
+yet produced an artifact, so the proposed handoff is not an end-to-end
+compatibility claim. Phase 0 does not implement the validator or an agent
+template, integrate Specification Studio, deploy Azure resources, or establish
+production/customer approval.
 
 ## Phase 1: MAF workflow golden path
 
-**Goal:** an independently runnable synthetic application that demonstrates a
-framework-native MAF workflow, a durable human approval and safe recovery, and
-evidence-driven verification. Foundry Hosted Agents are the preferred
-public-network deployment; Azure Container Apps (ACA) is an explicitly
-selected fallback. Both require their own verification.
+**Goal:** an independently runnable synthetic application with a native MAF
+workflow, durable human approval and recovery, and an executable
+Verification/Readiness Validator. Start locally with FastAPI, React,
+PostgreSQL, Docker Compose, tests, and evaluations. Foundry Hosted Agents are
+the preferred later deployment target, subject to compatibility verification;
+Azure Container Apps (ACA) is the explicit fallback.
 
-Use the following bounded work packages as separate implementation units.
-Parallel work can start after its stated inputs are agreed. Acceptance criteria
-are future requirements, not completed functionality.
+### Execution sequence and work packages
 
-| ID | Work package and dependencies | Acceptance evidence |
-| --- | --- | --- |
-| P1-A | **Contract and scenario:** review Phase 0 schemas; define a synthetic, non-destructive business scenario and stable requirement IDs, safety boundaries, expected behavior, test data, and maturity gates. No dependencies. | Reviewed contract covers normal, failure, approval, rejection, and recovery paths; no real customer data or implied release approval. |
-| P1-B | **Business state and action ledger:** design PostgreSQL records for the scenario, approvals, audit, and idempotency. Depends on P1-A. | Transactions and uniqueness constraints prevent duplicate or conflicting actions, including concurrent submissions and restart; business records remain distinct from workflow checkpoints. |
-| P1-C | **Native MAF workflow:** implement bounded executors, explicit pause, resume, rejection, and request isolation. Depends on P1-A and the P1-B interfaces. | Deterministic local tests cover success, failure, repeated decision, concurrent requests, and recovery; no universal orchestration wrapper or invented business approval. |
-| P1-D | **FastAPI boundary:** define typed operations, input validation, authenticated identity, per-record authorization, approval endpoints, and error mapping. Depends on P1-A and P1-B interfaces; integrate P1-C. | Positive and negative tests reject anonymous, unauthorized, malformed, replayed, and cross-user requests; the server derives the actor from validated identity. Local mock identity is explicitly selected and cannot be deployed as production security. |
-| P1-E | **React application:** implement accessible sign-in, scenario submission, status, approval/rejection, and error states against the documented API. Depends on P1-A and P1-D's API contract. | UI and end-to-end tests exercise user-visible states, authorization failures, refresh, and safe retry; browser code holds no service secrets. |
-| P1-F | **Foundry hosted adapter:** use the documented Responses integration and request-aware MAF workflow factory with stable identities and host-managed checkpoints; pin the prerelease integration. Depends on P1-C and the hosting contract. | Version/protocol and identity constraints are recorded; request isolation and pause/resume are checked. Local tests do not claim a hosted deployment. Do not configure a separate workflow checkpoint store for host-managed recovery. |
-| P1-G | **ACA fallback:** build a separate, explicitly selected MAF runtime/hosting path and choose a tested framework-compatible checkpoint strategy. Depends on P1-C and P1-B. | Independent checkpoint, restart, approval, and idempotency tests pass; no claim that ACA and Foundry share checkpoint ownership or that a model failure silently switches hosts. |
-| P1-H | **Local development:** compose API, UI, PostgreSQL, and a selected local agent mode with synthetic settings. Depends on P1-B, P1-C, P1-D, and P1-E interfaces. | A clean-machine setup has documented prerequisites and reproducible commands. Explicit scripted/offline mode is visibly distinct from real model execution and does not mask failed calls. |
-| P1-I | **Verification and evaluations:** implement requirement-to-code/check/evidence traceability and an actual gate evaluator; define synthetic evaluation data, rubric, thresholds, negative tests, and evidence retention. Depends on P1-A; integrate P1-B through P1-H. | Automated checks cover missing or stale evidence, unique IDs, contract/report gate matching, failed blocking checks, human approval, and evaluation regressions. Real reviewer authorization is enforced outside JSON Schema. |
-| P1-J | **Telemetry and operations:** add privacy-safe structured logs, traces and correlation across API, workflow, approvals, and side effects; define latency, usage, cost, retention, and alerts. Depends on P1-D and P1-C interfaces. | Tests verify redaction and correlation; an authorized environment demonstrates actual telemetry export and operational ownership. |
-| P1-K | **Public-network infrastructure and CI:** prepare parameterized Bicep, managed identities, least-privilege role assignments, secret handling, budgets/quotas, and GitHub-hosted build/test checks. Depends on P1-D, P1-F, P1-G, and P1-J interfaces. | Static validation and security review pass without credentials. Deployment uses authenticated endpoints and explicit origins; no resources are provisioned or paid features enabled without separate authorization. |
-| P1-L | **Deployment and handoff:** after explicit Azure authorization, select Foundry or ACA, deploy to an approved environment, execute smoke/recovery tests, and record revision, versions, region, identity, network mode, evidence, cost, and teardown ownership. Depends on P1-I, P1-J, and P1-K. | Reproducible, environment-specific evidence supports only the demonstrated maturity; customer acceptance remains an authorized human decision. |
+The packages are future implementation work, not completed functionality.
+Inputs and interfaces can be agreed in parallel; integrations wait on the
+dependencies listed.
 
-**Critical integration decisions:** Foundry's Python hosted-workflow integration
-is documented as prerelease, so establish compatible package versions and the
-approval/resume protocol before promising this path. Foundry-managed
-checkpoints do not replace PostgreSQL business state. ACA recovery must be
-tested separately. If the preferred hosting path cannot satisfy the contract,
-record the limitation and select the fallback explicitly rather than
-misrepresenting the result.
+| ID | Bounded work package | Dependencies | Independently verifiable outcome |
+| --- | --- | --- | --- |
+| P1-01 | Define a synthetic, non-destructive scenario and approve requirement/check IDs, criteria, evidence types, freshness limits, and maturity gates. | None | Reviewed contract and an authorized approval record bind the exact contract digest; fixtures cover success, failure, approval, rejection, and recovery without customer data. |
+| P1-02 | Define normalized test-result and evidence-manifest inputs, including contract/version, requirement/check IDs, outcome, revision, environment, timestamps, artifact references, and digests. Map local test/evaluation output explicitly. | P1-01 | Synthetic input fixtures cover multiple checks and evidence types; unknown or unmappable results cannot be silently ignored. |
+| P1-03 | Implement the validator's contract, traceability, evidence-integrity, freshness, and gate logic as a small local Python component. | P1-02 | Focused tests reject missing, failed, stale, future-dated, mismatched, duplicate, inaccessible, or tampered inputs, including non-blocking requirements. |
+| P1-04 | Expose the validator as a CLI that consumes the approved contract, test results, and supporting evidence and writes a schema-valid readiness report. | P1-03 | Automated CLI tests verify success, nonzero failure, actionable diagnostics, report contents, and no fabricated approval. |
+| P1-05 | Create the local Docker Compose development stack and documented setup for React, FastAPI, PostgreSQL, and the selected local workflow mode. | P1-01 interfaces | A clean-machine setup starts and stops the stack with synthetic configuration; no Azure credentials are needed. |
+| P1-06 | Implement PostgreSQL business records, approval/audit state, and an idempotent action ledger. | P1-01, P1-05 interfaces | Transaction, uniqueness, concurrency, restart, and duplicate-action tests pass; business records are separate from workflow checkpoints. |
+| P1-07 | Implement typed FastAPI operations, authenticated identity, per-record authorization, approvals, and explicit error responses. | P1-01, P1-06 interfaces | Positive and negative tests cover anonymous, unauthorized, malformed, replayed, and cross-user requests. Local mock identity is explicit and cannot become production security. |
+| P1-08 | Implement an accessible React client for sign-in, scenario submission, status, approval/rejection, and failure states. | P1-01, P1-07 API contract | UI tests cover visible states and safe retries; browser code contains no service secrets. |
+| P1-09 | Implement the framework-native MAF workflow with bounded executors, request isolation, pause, resume, rejection, and safe recovery. | P1-01, P1-06 interfaces | Local tests cover repeated decisions, concurrent requests, and recovery without a universal orchestration wrapper. |
+| P1-10 | Add integration/E2E tests and synthetic agent evaluations; connect their actual results and artifacts to the validator. | P1-04 through P1-09 | A local run produces a report from real test/evaluation artifacts; negative runs cannot pass, and rubric/threshold decisions are recorded. |
+| P1-11 | Add privacy-safe logs, traces, correlation, and operational signals across API, workflow, approvals, and side effects. | P1-07, P1-09 interfaces | Tests verify redaction and correlation; actual export remains environment-specific. |
+| P1-12 | Validate Foundry Hosted Agent compatibility for the selected MAF version, Responses protocol, request-aware workflow factory, identity, and host-managed checkpoints. | P1-09, P1-10 | Record versions and evidence for the compatibility assessment; local checks alone are not a hosted deployment. No Azure resources are provisioned. |
+| P1-13 | Prepare the explicitly selected ACA fallback and a framework-compatible checkpoint strategy. | P1-09, P1-10 | Separate local/container recovery and idempotency checks pass; no claim that ACA shares Foundry checkpoint ownership or silently replaces a failed model call. |
+| P1-14 | Prepare Bicep, least-privilege identities, authenticated public endpoints, GitHub-hosted CI, and deployment/handoff instructions. Deploy only after separate Azure authorization. | P1-10, P1-11, P1-12; P1-13 if selected | Static checks work without Azure credentials; an authorized deployment later records its revision, versions, identity, network, evidence, cost, and teardown owner. |
+
+### Validator acceptance contract
+
+The validator consumes the approved, versioned verification contract; actual
+normalized test/evaluation results; and supporting evidence artifacts. Its
+assessment context supplies the target maturity, source revision, environment,
+and assessment time. The first implementation reads bounded local artifacts,
+not arbitrary remote URLs, and verifies their bytes and SHA-256 digests. It runs
+locally or in CI with the generated project, not as a shared factory runtime.
+
+It must verify the contract's exact byte digest against an authorized approval,
+then match contract/version, unique requirement and check IDs, expected evidence
+types, results, revision, environment, and each check's explicit freshness
+policy. A failed check is **failed**; missing, stale, future-dated, inaccessible,
+or mismatched evidence is **unverified**. Either prevents an overall pass for
+every applicable requirement, including `non_blocking`. Verify contract approval,
+applicability, and customer decisions through an authorized human decision
+mechanism, including scope, validity, and revocation where applicable; a name
+or approval string alone is not authority. If approval cannot be verified,
+report unverified rather than inventing it.
+
+For a valid contract and assessment context, write a machine-readable
+readiness report even when checks fail or evidence is unverified. Exit zero
+only for a passing report and nonzero otherwise. If the contract or assessment
+context cannot be parsed or identified, emit a machine-readable diagnostic
+and a nonzero exit rather than fabricating a schema-valid report. Tests must
+cover missing or invalid contract approval, freshness boundaries,
+revision/environment and digest mismatches,
+missing or duplicate IDs and checks, failed tests, non-blocking failures,
+unreviewed applicability, and missing or rejected customer approval.
+
+**Hosting constraint:** the Python Foundry hosting integration is documented as
+prerelease. Establish package/protocol compatibility and the approval/resume
+path before promising it. Foundry-managed checkpoints do not replace PostgreSQL
+business state; ACA recovery requires separate evidence. Select a fallback
+explicitly and never provision Azure resources without approval.
 
 ## Later phases
 

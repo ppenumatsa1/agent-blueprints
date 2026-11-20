@@ -70,5 +70,5 @@ unverified` means the claim has not been independently established here.
   Verify settings and entitlement before claiming coverage.
 - **Reuse and licensing:** the inspected repositories carry MIT licenses.
   If source is copied later, retain the applicable notice and review
-  third-party material. The new repository's own license is an open owner
-  decision; links and original analysis do not establish reuse rights.
+  third-party material. This repository is also MIT-licensed; consult each
+  reference project's own license and documentation before reuse.

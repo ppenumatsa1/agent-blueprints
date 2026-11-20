@@ -1,7 +1,7 @@
 {
-  "schema_version": "0.1.0",
+  "schema_version": "0.2.0",
   "contract_id": "SYNTHETIC-DEMO",
-  "contract_version": "0.1.0",
+  "contract_version": "0.2.0",
   "title": "Missing failure criteria",
   "requirements": [
     {
@@ -13,6 +13,7 @@
           "id": "CHECK-001",
           "method": "integration",
           "procedure": "Attempt the action before approval.",
+          "evidence_max_age_seconds": 86400,
           "evidence_types": ["test_report"]
         }
       ],

@@ -52,7 +52,7 @@ dependencies, infrastructure, evidence, and operations.
   protect access and retention. Verify exported telemetry rather than assuming
   a configured exporter works.
 - Record known gaps, ownership, decisions, and human-approved exceptions
-  without silently weakening a blocking gate. The
+  without silently weakening any applicable evidence requirement. The
   [readiness contract](readiness-contract.md) defines the evidence states.
 
 ## Supply chain and GitHub security
@@ -73,6 +73,6 @@ dependencies, infrastructure, evidence, and operations.
   setup not configured. The vulnerability-alerts endpoint reported alerts
   disabled. These are point-in-time settings, not proof that all secrets or
   vulnerabilities are detected; recheck them before relying on them.
-- The reference repositories are MIT-licensed. Preserve applicable notices if
-  code is copied later. This repository's own license is an owner decision and
-  has not been selected; do not imply broader reuse rights.
+- This repository and the inspected reference repositories use the MIT
+  License. Consult each project's own license and preserve applicable notices
+  if code is copied; third-party dependencies may have different terms.

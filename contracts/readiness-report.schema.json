@@ -8,43 +8,43 @@
     "schema_version",
     "contract_id",
     "contract_version",
+    "contract_sha256",
     "source_revision",
+    "environment",
     "assessed_at",
     "target_maturity",
     "gate_status",
     "results"
   ],
   "properties": {
-    "schema_version": { "const": "0.1.0" },
+    "schema_version": { "const": "0.2.0" },
     "contract_id": { "$ref": "#/$defs/identifier" },
     "contract_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "contract_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
     "source_revision": { "type": "string", "minLength": 1, "pattern": "\\S" },
+    "environment": { "type": "string", "minLength": 1, "pattern": "\\S" },
     "assessed_at": { "type": "string", "format": "date-time" },
     "target_maturity": { "enum": ["prototype", "production_candidate", "customer_validated"] },
     "gate_status": { "enum": ["passed", "failed", "unverified"] },
+    "extensions": { "$ref": "#/$defs/extensions" },
     "results": {
       "type": "array",
       "minItems": 1,
       "uniqueItems": true,
       "items": { "$ref": "#/$defs/result" }
     },
-    "customer_approval": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["decision", "reviewer", "reference", "decided_at"],
-      "properties": {
-        "decision": { "enum": ["approved", "rejected"] },
-        "reviewer": { "type": "string", "minLength": 1, "pattern": "\\S" },
-        "reference": { "type": "string", "minLength": 1, "pattern": "\\S" },
-        "decided_at": { "type": "string", "format": "date-time" }
-      }
-    }
+    "contract_approval": { "$ref": "#/$defs/approval" },
+    "customer_approval": { "$ref": "#/$defs/approval" }
   },
   "allOf": [
     {
       "if": { "properties": { "gate_status": { "const": "passed" } } },
       "then": {
+        "required": ["contract_approval"],
         "properties": {
+          "contract_approval": {
+            "properties": { "decision": { "const": "approved" } }
+          },
           "results": {
             "contains": {
               "properties": {
@@ -54,8 +54,7 @@
               "required": ["gate", "status"]
             },
             "items": {
-              "if": { "properties": { "gate": { "const": "blocking" } }, "required": ["gate"] },
-              "then": { "properties": { "status": { "const": "passed" } } }
+              "properties": { "status": { "enum": ["passed", "not_applicable"] } }
             }
           }
         }
@@ -81,17 +80,36 @@
   ],
   "$defs": {
     "identifier": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9._-]{0,63}$" },
+    "approval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["decision", "reviewer", "reference", "decided_at"],
+      "properties": {
+        "decision": { "enum": ["approved", "rejected"] },
+        "reviewer": { "type": "string", "minLength": 1, "pattern": "\\S" },
+        "reference": { "type": "string", "minLength": 1, "pattern": "\\S" },
+        "decided_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "extensions": {
+      "description": "Supplementary producer metadata; it cannot change readiness semantics.",
+      "type": "object",
+      "propertyNames": { "pattern": "^[A-Za-z][A-Za-z0-9._-]{0,63}$" },
+      "additionalProperties": { "type": "object" }
+    },
     "evidence": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["kind", "reference"],
+      "required": ["kind", "reference", "revision", "environment", "recorded_at", "sha256"],
       "properties": {
         "kind": {
           "enum": ["test_report", "evaluation_result", "trace", "approval_record", "human_review", "security_report", "other"]
         },
         "reference": { "type": "string", "minLength": 1, "pattern": "\\S" },
         "revision": { "type": "string", "minLength": 1, "pattern": "\\S" },
-        "recorded_at": { "type": "string", "format": "date-time" }
+        "environment": { "type": "string", "minLength": 1, "pattern": "\\S" },
+        "recorded_at": { "type": "string", "format": "date-time" },
+        "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
       }
     },
     "check_result": {
@@ -162,7 +180,9 @@
         },
         {
           "if": { "properties": { "gate": { "const": "not_applicable" } } },
-          "then": { "properties": { "status": { "const": "not_applicable" } } }
+          "then": {
+            "properties": { "status": { "enum": ["not_applicable", "unverified"] } }
+          }
         },
         {
           "if": { "properties": { "status": { "const": "not_applicable" } } },

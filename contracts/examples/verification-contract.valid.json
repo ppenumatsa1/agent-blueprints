@@ -1,8 +1,14 @@
 {
-  "schema_version": "0.1.0",
+  "schema_version": "0.2.0",
   "contract_id": "SYNTHETIC-DEMO",
-  "contract_version": "0.1.0",
+  "contract_version": "0.2.0",
   "title": "Synthetic approval workflow",
+  "extensions": {
+    "specification_studio": {
+      "source_specification_id": "SPEC-SYNTHETIC",
+      "note": "Illustrative metadata, not a real Specification Studio output."
+    }
+  },
   "requirements": [
     {
       "id": "REQ-001",
@@ -14,6 +20,7 @@
           "id": "CHECK-001",
           "method": "integration",
           "procedure": "Attempt the action before and after a recorded approval.",
+          "evidence_max_age_seconds": 86400,
           "evidence_types": ["test_report", "approval_record"]
         }
       ],
@@ -33,6 +40,7 @@
           "id": "CHECK-002",
           "method": "agent_evaluation",
           "procedure": "Evaluate the synthetic explanation against the approved rubric.",
+          "evidence_max_age_seconds": 86400,
           "evidence_types": ["evaluation_result"]
         }
       ],

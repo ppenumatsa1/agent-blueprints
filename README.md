@@ -29,6 +29,8 @@ The [contracts](contracts/) directory contains versioned, proposed JSON Schemas.
 Their synthetic examples are test fixtures, **not evidence of an actual release
 or customer approval**. Schema validation checks document shape; it does not
 authenticate reviewers, verify an evidence artifact, or replace a release gate.
+The executable Verification/Readiness Validator is required Phase 1 work and
+has not been implemented.
 
 ## Validate the contracts
 
@@ -43,3 +45,14 @@ python -m unittest discover -s tests -v
 GitHub Actions runs the same checks on GitHub-hosted runners without Azure
 credentials. Do not commit customer data, credentials, tenant-specific
 configuration, or private evidence to this public repository.
+
+## License and reference projects
+
+This repository is licensed under the [MIT License](LICENSE).
+
+**Caution:** The [MAF monorepo](https://github.com/ppenumatsa1/maf-monorepo),
+[LangGraph workflows](https://github.com/ppenumatsa1/langgraph-wf-monorepo), and
+[Model to Harness](https://github.com/ppenumatsa1/model-to-harness) are
+separate reference projects. Consult each project's documentation and license
+before reuse, and independently verify its security and suitability; examples or
+historical deployments are not production assurances.

@@ -89,9 +89,61 @@ class ContractSchemaTests(unittest.TestCase):
     def test_passed_check_requires_nonblank_evidence(self):
         report = load_json(EXAMPLES / "readiness-report.passed.valid.json")
         check = report["results"][0]["check_results"][0]
-        check.pop("evidence")
+        evidence = check.pop("evidence")
         self.assert_invalid("readiness-report", report)
-        check["evidence"] = [{"kind": "test_report", "reference": "  "}]
+        check["evidence"] = evidence
+        evidence[0]["reference"] = "  "
+        self.assert_invalid("readiness-report", report)
+
+    def test_evidence_requires_revision_environment_timestamp_and_digest(self):
+        original = load_json(EXAMPLES / "readiness-report.passed.valid.json")
+        for field in ("revision", "environment", "recorded_at", "sha256"):
+            with self.subTest(field=field):
+                report = copy.deepcopy(original)
+                report["results"][0]["check_results"][0]["evidence"][0].pop(field)
+                self.assert_invalid("readiness-report", report)
+        report = copy.deepcopy(original)
+        report["results"][0]["check_results"][0]["evidence"][0]["sha256"] = "not-a-digest"
+        self.assert_invalid("readiness-report", report)
+        report = copy.deepcopy(original)
+        report["results"][0]["check_results"][0]["evidence"][0]["recorded_at"] = "not-a-date"
+        self.assert_invalid("readiness-report", report)
+        report = copy.deepcopy(original)
+        report.pop("environment")
+        self.assert_invalid("readiness-report", report)
+
+    def test_check_requires_explicit_positive_freshness_policy(self):
+        contract = load_json(EXAMPLES / "verification-contract.valid.json")
+        check = contract["requirements"][0]["checks"][0]
+        check.pop("evidence_max_age_seconds")
+        self.assert_invalid("verification-contract", contract)
+        check["evidence_max_age_seconds"] = 0
+        self.assert_invalid("verification-contract", contract)
+
+    def test_outdated_schema_versions_are_not_silently_accepted(self):
+        contract = load_json(EXAMPLES / "verification-contract.valid.json")
+        contract["schema_version"] = "0.1.0"
+        self.assert_invalid("verification-contract", contract)
+        report = load_json(EXAMPLES / "readiness-report.passed.valid.json")
+        report["schema_version"] = "0.1.0"
+        self.assert_invalid("readiness-report", report)
+
+    def test_producer_extensions_preserve_required_core_fields(self):
+        contract = load_json(EXAMPLES / "verification-contract.valid.json")
+        self.assert_valid("verification-contract", contract)
+        contract["extensions"]["specification_studio"]["extra_context"] = "Synthetic"
+        self.assert_valid("verification-contract", contract)
+        contract["unrecognized_root_field"] = "Synthetic"
+        self.assert_invalid("verification-contract", contract)
+        contract.pop("unrecognized_root_field")
+        contract.pop("contract_id")
+        contract["extensions"]["specification_studio"]["contract_id"] = "SYNTHETIC-DEMO"
+        self.assert_invalid("verification-contract", contract)
+
+        report = load_json(EXAMPLES / "readiness-report.passed.valid.json")
+        report["extensions"] = {"producer": {"extra_context": "Synthetic"}}
+        self.assert_valid("readiness-report", report)
+        report["extensions"] = {"invalid namespace": {}}
         self.assert_invalid("readiness-report", report)
 
     def test_passed_requirement_requires_all_reported_checks_to_pass(self):
@@ -104,40 +156,38 @@ class ContractSchemaTests(unittest.TestCase):
         ]
         self.assert_invalid("readiness-report", report)
 
-    def test_passed_gate_requires_blocking_results_to_pass(self):
+    def test_passed_gate_requires_all_applicable_results_to_pass(self):
         original = load_json(EXAMPLES / "readiness-report.passed.valid.json")
-        for status in ("failed", "unverified"):
-            with self.subTest(status=status):
-                report = copy.deepcopy(original)
-                result = report["results"][1]
-                result["gate"] = "blocking"
-                result["status"] = status
-                result["reason"] = "Synthetic missing or failing evidence"
-                self.assert_invalid("readiness-report", report)
+        for index in (0, 1):
+            for status in ("failed", "unverified"):
+                with self.subTest(result=index, status=status):
+                    report = copy.deepcopy(original)
+                    result = report["results"][index]
+                    result["status"] = status
+                    result["reason"] = "Synthetic missing or failing evidence"
+                    result.pop("check_results")
+                    self.assert_invalid("readiness-report", report)
         report = copy.deepcopy(original)
         report["results"][0]["gate"] = "non_blocking"
         self.assert_invalid("readiness-report", report)
         report["gate_status"] = "unverified"
         self.assert_valid("readiness-report", report)
 
+    def test_passed_gate_requires_contract_digest_and_approval(self):
+        report = load_json(EXAMPLES / "readiness-report.passed.valid.json")
+        approval = report.pop("contract_approval")
+        self.assert_invalid("readiness-report", report)
+        report["contract_approval"] = approval
+        approval["decision"] = "rejected"
+        self.assert_invalid("readiness-report", report)
+        approval["decision"] = "approved"
+        report["contract_sha256"] = "not-a-digest"
+        self.assert_invalid("readiness-report", report)
+
     def test_customer_validated_pass_requires_approval(self):
         report = load_json(EXAMPLES / "readiness-report.passed.valid.json")
         report["target_maturity"] = "customer_validated"
-        result = report["results"][1]
-        result.update(
-            gate="blocking",
-            status="passed",
-            check_results=[
-                {
-                    "check_id": "CHECK-002",
-                    "outcome": "passed",
-                    "evidence": [
-                        {"kind": "evaluation_result", "reference": "fixture://evaluation"}
-                    ],
-                }
-            ],
-        )
-        result.pop("reason")
+        report["results"][1]["gate"] = "blocking"
         self.assert_invalid("readiness-report", report)
         report["customer_approval"] = {
             "decision": "rejected",
@@ -164,7 +214,16 @@ class ContractSchemaTests(unittest.TestCase):
         self.assert_invalid("readiness-report", report)
         result["gate"] = "not_applicable"
         result["status"] = "unverified"
+        self.assert_valid("readiness-report", report)
+        report = load_json(EXAMPLES / "readiness-report.passed.valid.json")
+        result = report["results"][1]
+        result["gate"] = "not_applicable"
+        result["status"] = "unverified"
+        result["reason"] = "Applicability review has not been verified."
+        result.pop("check_results")
         self.assert_invalid("readiness-report", report)
+        report["gate_status"] = "unverified"
+        self.assert_valid("readiness-report", report)
 
     def test_dates_are_checked(self):
         report = load_json(EXAMPLES / "readiness-report.unverified.valid.json")
@@ -206,13 +265,18 @@ class ContractSchemaTests(unittest.TestCase):
                             self.assertTrue(
                                 set(expected[check_id]["evidence_types"]).issubset(actual_types)
                             )
+                            for item in check["evidence"]:
+                                self.assertEqual(item["revision"], report["source_revision"])
+                                self.assertEqual(item["environment"], report["environment"])
 
                 blocking = [result for result in results if result["gate"] == "blocking"]
+                applicable = [result for result in results if result["gate"] != "not_applicable"]
                 expected_gate = (
                     "failed"
-                    if any(result["status"] == "failed" for result in blocking)
+                    if any(result["status"] == "failed" for result in applicable)
                     else "unverified"
-                    if not blocking or any(result["status"] != "passed" for result in blocking)
+                    if not blocking
+                    or any(result["status"] not in ("passed", "not_applicable") for result in results)
                     else "passed"
                 )
                 self.assertEqual(report["gate_status"], expected_gate)

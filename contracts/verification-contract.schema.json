@@ -6,10 +6,11 @@
   "additionalProperties": false,
   "required": ["schema_version", "contract_id", "contract_version", "title", "requirements"],
   "properties": {
-    "schema_version": { "const": "0.1.0" },
+    "schema_version": { "const": "0.2.0" },
     "contract_id": { "$ref": "#/$defs/identifier" },
     "contract_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
     "title": { "type": "string", "minLength": 1 },
+    "extensions": { "$ref": "#/$defs/extensions" },
     "requirements": {
       "type": "array",
       "minItems": 1,
@@ -19,17 +20,24 @@
   },
   "$defs": {
     "identifier": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9._-]{0,63}$" },
+    "extensions": {
+      "description": "Supplementary producer metadata; it cannot change contract semantics.",
+      "type": "object",
+      "propertyNames": { "pattern": "^[A-Za-z][A-Za-z0-9._-]{0,63}$" },
+      "additionalProperties": { "type": "object" }
+    },
     "gate": { "enum": ["blocking", "non_blocking", "not_applicable"] },
     "check": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "method", "procedure", "evidence_types"],
+      "required": ["id", "method", "procedure", "evidence_types", "evidence_max_age_seconds"],
       "properties": {
         "id": { "$ref": "#/$defs/identifier" },
         "method": {
           "enum": ["unit", "contract", "integration", "e2e", "agent_evaluation", "security", "smoke", "manual"]
         },
         "procedure": { "type": "string", "minLength": 1 },
+        "evidence_max_age_seconds": { "type": "integer", "minimum": 1 },
         "evidence_types": {
           "type": "array",
           "minItems": 1,
