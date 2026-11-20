@@ -1,0 +1,71 @@
+{
+  "schema_version": "0.2.0",
+  "contract_id": "SYNTHETIC-DEMO",
+  "contract_version": "0.2.0",
+  "contract_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "source_revision": "illustrative-only",
+  "environment": "synthetic-local",
+  "assessed_at": "2026-01-01T00:00:00Z",
+  "target_maturity": "prototype",
+  "gate_status": "passed",
+  "contract_approval": {
+    "decision": "approved",
+    "reviewer": "Synthetic reviewer",
+    "reference": "fixture://contract-approval",
+    "decided_at": "2026-01-01T00:00:00Z"
+  },
+  "results": [
+    {
+      "requirement_id": "REQ-001",
+      "gate": "blocking",
+      "status": "passed",
+      "implementation_refs": ["fixture://synthetic-workflow"],
+      "check_results": [
+        {
+          "check_id": "CHECK-001",
+          "outcome": "passed",
+          "evidence": [
+            {
+              "kind": "test_report",
+              "reference": "fixture://test-report",
+              "revision": "illustrative-only",
+              "environment": "synthetic-local",
+              "recorded_at": "2026-01-01T00:00:00Z",
+              "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            {
+              "kind": "approval_record",
+              "reference": "fixture://approval-record",
+              "revision": "illustrative-only",
+              "environment": "synthetic-local",
+              "recorded_at": "2026-01-01T00:00:00Z",
+              "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "requirement_id": "REQ-002",
+      "gate": "non_blocking",
+      "status": "passed",
+      "implementation_refs": ["fixture://synthetic-evaluation"],
+      "check_results": [
+        {
+          "check_id": "CHECK-002",
+          "outcome": "passed",
+          "evidence": [
+            {
+              "kind": "evaluation_result",
+              "reference": "fixture://evaluation-result",
+              "revision": "illustrative-only",
+              "environment": "synthetic-local",
+              "recorded_at": "2026-01-01T00:00:00Z",
+              "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

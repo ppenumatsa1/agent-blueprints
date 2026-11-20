@@ -1,0 +1,27 @@
+{
+  "schema_version": "0.1.0",
+  "id": "maf-workflow",
+  "name": "MAF workflow",
+  "description": "Planned synthetic workflow golden path.",
+  "version": "0.1.0",
+  "status": "planned",
+  "framework": { "name": "Microsoft Agent Framework" },
+  "execution_strategy": "workflow",
+  "hosting": [
+    {
+      "target": "foundry_hosted",
+      "compatibility": "requires_validation",
+      "protocol": "responses",
+      "notes": "The complete workflow and approval path have not been verified."
+    },
+    {
+      "target": "azure_container_apps",
+      "compatibility": "requires_validation",
+      "notes": "Fallback hosting requires an independently tested checkpoint strategy."
+    }
+  ],
+  "capabilities": [
+    { "name": "human_approval", "status": "planned" },
+    { "name": "durable_recovery", "status": "planned" }
+  ]
+}

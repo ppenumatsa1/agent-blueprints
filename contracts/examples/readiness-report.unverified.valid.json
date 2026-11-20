@@ -1,0 +1,25 @@
+{
+  "schema_version": "0.2.0",
+  "contract_id": "SYNTHETIC-DEMO",
+  "contract_version": "0.2.0",
+  "contract_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "source_revision": "illustrative-only",
+  "environment": "synthetic-local",
+  "assessed_at": "2026-01-01T00:00:00Z",
+  "target_maturity": "prototype",
+  "gate_status": "unverified",
+  "results": [
+    {
+      "requirement_id": "REQ-001",
+      "gate": "blocking",
+      "status": "unverified",
+      "reason": "The synthetic workflow has not been implemented."
+    },
+    {
+      "requirement_id": "REQ-002",
+      "gate": "non_blocking",
+      "status": "unverified",
+      "reason": "The synthetic evaluation has not been run."
+    }
+  ]
+}

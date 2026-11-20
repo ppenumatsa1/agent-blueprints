@@ -1,0 +1,27 @@
+{
+  "schema_version": "0.2.0",
+  "contract_id": "SYNTHETIC-DEMO",
+  "contract_version": "0.2.0",
+  "title": "Missing failure criteria",
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "statement": "A consequential simulated action requires human approval.",
+      "success_criteria": "The action is blocked without approval.",
+      "checks": [
+        {
+          "id": "CHECK-001",
+          "method": "integration",
+          "procedure": "Attempt the action before approval.",
+          "evidence_max_age_seconds": 86400,
+          "evidence_types": ["test_report"]
+        }
+      ],
+      "gates": {
+        "prototype": "blocking",
+        "production_candidate": "blocking",
+        "customer_validated": "blocking"
+      }
+    }
+  ]
+}

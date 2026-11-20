@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Verification contract",
+  "description": "Proposed requirements, checks, evidence types, and maturity gates.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "contract_id", "contract_version", "title", "requirements"],
+  "properties": {
+    "schema_version": { "const": "0.2.0" },
+    "contract_id": { "$ref": "#/$defs/identifier" },
+    "contract_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "title": { "type": "string", "minLength": 1 },
+    "extensions": { "$ref": "#/$defs/extensions" },
+    "requirements": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/requirement" }
+    }
+  },
+  "$defs": {
+    "identifier": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9._-]{0,63}$" },
+    "extensions": {
+      "description": "Supplementary producer metadata; it cannot change contract semantics.",
+      "type": "object",
+      "propertyNames": { "pattern": "^[A-Za-z][A-Za-z0-9._-]{0,63}$" },
+      "additionalProperties": { "type": "object" }
+    },
+    "gate": { "enum": ["blocking", "non_blocking", "not_applicable"] },
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "method", "procedure", "evidence_types", "evidence_max_age_seconds"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "method": {
+          "enum": ["unit", "contract", "integration", "e2e", "agent_evaluation", "security", "smoke", "manual"]
+        },
+        "procedure": { "type": "string", "minLength": 1 },
+        "evidence_max_age_seconds": { "type": "integer", "minimum": 1 },
+        "evidence_types": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": ["test_report", "evaluation_result", "trace", "approval_record", "human_review", "security_report", "other"]
+          }
+        }
+      }
+    },
+    "requirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "statement", "success_criteria", "failure_criteria", "checks", "gates"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "statement": { "type": "string", "minLength": 1 },
+        "success_criteria": { "type": "string", "minLength": 1 },
+        "failure_criteria": { "type": "string", "minLength": 1 },
+        "checks": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/check" }
+        },
+        "gates": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["prototype", "production_candidate", "customer_validated"],
+          "properties": {
+            "prototype": { "$ref": "#/$defs/gate" },
+            "production_candidate": { "$ref": "#/$defs/gate" },
+            "customer_validated": { "$ref": "#/$defs/gate" }
+          }
+        }
+      }
+    }
+  }
+}

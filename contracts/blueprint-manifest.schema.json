@@ -1,0 +1,152 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Agent blueprint manifest",
+  "description": "Proposed metadata for one independently usable blueprint.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "name",
+    "version",
+    "status",
+    "framework",
+    "execution_strategy",
+    "hosting",
+    "capabilities"
+  ],
+  "properties": {
+    "schema_version": { "const": "0.1.0" },
+    "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,63}$" },
+    "name": { "type": "string", "minLength": 1 },
+    "description": { "type": "string", "minLength": 1 },
+    "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "status": { "enum": ["planned", "experimental", "validated", "deprecated"] },
+    "framework": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "minLength": 1, "pattern": "\\S" }
+      }
+    },
+    "execution_strategy": { "enum": ["single_agent", "workflow", "harness"] },
+    "hosting": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/hosting" }
+    },
+    "capabilities": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "status"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "status": { "enum": ["planned", "implemented", "not_applicable"] },
+          "notes": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "const": "validated" } } },
+      "then": {
+        "properties": {
+          "hosting": {
+            "contains": {
+              "properties": { "compatibility": { "const": "verified" } },
+              "required": ["compatibility"]
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "hosting": {
+            "contains": {
+              "properties": { "compatibility": { "const": "verified" } },
+              "required": ["compatibility"]
+            }
+          }
+        }
+      },
+      "then": { "properties": { "framework": { "required": ["version"] } } }
+    }
+  ],
+  "$defs": {
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "reference"],
+      "properties": {
+        "kind": { "enum": ["test_run", "deployment", "documentation"] },
+        "reference": { "type": "string", "minLength": 1, "pattern": "\\S" },
+        "revision": { "type": "string", "minLength": 1, "pattern": "\\S" },
+        "environment": { "type": "string", "minLength": 1, "pattern": "\\S" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "kind": { "enum": ["test_run", "deployment"] } } },
+          "then": { "required": ["revision", "environment"] }
+        }
+      ]
+    },
+    "hosting": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target", "compatibility", "notes"],
+      "properties": {
+        "target": {
+          "enum": ["local", "foundry_hosted", "foundry_prompt", "azure_container_apps"]
+        },
+        "compatibility": { "enum": ["verified", "unsupported", "requires_validation"] },
+        "notes": { "type": "string", "minLength": 1 },
+        "protocol": { "type": "string", "minLength": 1, "pattern": "\\S" },
+        "evidence": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/evidence" }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "compatibility": { "const": "verified" } } },
+          "then": {
+            "required": ["protocol", "evidence"],
+            "properties": {
+              "evidence": {
+                "contains": {
+                  "properties": { "kind": { "enum": ["test_run", "deployment"] } },
+                  "required": ["kind"]
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "compatibility": { "const": "unsupported" } } },
+          "then": {
+            "required": ["evidence"],
+            "properties": {
+              "evidence": {
+                "contains": {
+                  "properties": { "kind": { "const": "documentation" } },
+                  "required": ["kind"]
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

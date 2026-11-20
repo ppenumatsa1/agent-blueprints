@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "id": "maf-workflow",
+  "name": "MAF workflow",
+  "version": "0.1.0",
+  "status": "experimental",
+  "framework": { "name": "Microsoft Agent Framework" },
+  "execution_strategy": "workflow",
+  "hosting": [
+    {
+      "target": "foundry_hosted",
+      "compatibility": "verified",
+      "notes": "Documentation alone is not a verified deployment.",
+      "evidence": [
+        { "kind": "documentation", "reference": "fixture://documentation-only" }
+      ]
+    }
+  ],
+  "capabilities": [{ "name": "human_approval", "status": "planned" }]
+}
