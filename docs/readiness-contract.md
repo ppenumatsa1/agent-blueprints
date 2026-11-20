@@ -1,59 +1,91 @@
 # Verification and readiness contract
 
-This is a proposed contract for future projects. Phase 0 provides document
-schemas and synthetic fixtures, not a verification service, a release
-authorization system, or evidence that any agent has passed these gates.
+This is a proposed contract for future projects. Phase 0 provides schemas and
+synthetic fixtures, not a verification service, release authorization system,
+or evidence that any agent has passed these gates. The goal is a verified
+customer prototype in 2–3 hours when feasible, without concealing risk or
+claiming production readiness.
 
-## Maturity
+## Profiles and maturity
 
 | Target | Required outcome |
 | --- | --- |
-| Prototype | A demonstrable synthetic scenario with its agreed blocking requirements, basic security, privacy, and failure behavior verified. It is not a production or customer-acceptance claim. |
-| Production candidate | The project's blocking functionality, identity, authorization, security, reliability, operations, evaluation, deployment, and recovery requirements have appropriate evidence for the intended environment. A human release authority reviews remaining risk. |
-| Customer validated | The agreed customer acceptance criteria are evidenced and an authorized customer representative explicitly approves the specific scope and revision. This is not a substitute for ongoing operational assurance. |
+| Prototype | Every applicable critical or blocking requirement passes. Failed or unverified non-blocking requirements remain visible with reasons but do not prevent prototype readiness. Record assumptions, incomplete integrations, and limitations; this is not a production or customer-acceptance claim. |
+| Production candidate | All applicable blocking requirements pass. Appropriate security, integration, operations, and evaluation controls have verified evidence or an authorized, documented applicability decision. A non-blocking failure or unknown requires explicit, independently reviewed risk acceptance; its actual result remains failed or unverified. |
+| Customer validated | The production-candidate policy applies, and an authorized customer representative explicitly approves the evidenced acceptance criteria for the specific scope and revision. |
 
-The requirement owner defines measurable success and failure criteria, checks,
-evidence types, an explicit maximum evidence age for each check, and a gate for
-each maturity target. The project identifies the owner and reviewer for each
-check; an independent authorized person reviews exceptions and customer
-acceptance.
+For each requirement, the owner specifies measurable success and failure
+criteria, `critical` and `security_critical` classifications, domains, checks,
+expected evidence types, a positive maximum evidence age for each check, and
+one gate per target. A security-critical requirement is also critical, must
+include the security domain, and may not be marked non-blocking at any target.
+Other critical requirements may not be non-blocking either. `not_applicable`
+is allowed only for a genuinely inapplicable scope, with the authorized human
+review described below; it is not a waiver.
 
-## Result and gate semantics
+The approved contract and its security classifications must not be silently
+weakened. The planned validator must compare an updated contract against the
+previously approved baseline and require a separate, authenticated human
+decision with rationale for any critical or security-critical downgrade,
+removal, or change to `not_applicable`. Initial classifications also require
+human contract review. A new approval must bind the changed contract bytes;
+an extension or a changed flag alone cannot authorize a downgrade.
 
-Each requirement has one of these outcomes:
+`production_controls` declares whether security, integration, operations, and
+evaluation are required. It may be omitted for a prototype-only contract, but
+the validator must require it for production-candidate and customer-validated
+assessments. Security is always required. Each required domain needs at least
+one applicable, blocking requirement tagged with that domain and backed by
+appropriate checks and evidence. The other domains may be `not_applicable`
+only with a rationale and an authorized review reference; the validator must
+verify that review. Missing coverage or an unverifiable decision cannot
+support a production pass.
 
-- **Passed:** every required check passed and its expected evidence is
-  available, attributable, and applicable to the assessed revision and
-  environment.
+## Results and gates
+
+Each requirement retains one distinct outcome:
+
+- **Passed:** all required checks passed and their expected evidence is
+  available, attributable, current, and applicable to the assessed revision
+  and environment.
 - **Failed:** an applicable required check failed or a defined failure
   criterion occurred. Record the reason and supporting evidence.
 - **Unverified:** a required check or evidence is missing, incomplete, stale,
-  inaccessible, or not yet assessed. Missing evidence is never a pass.
+  inaccessible, mismatched, or not yet assessed. Missing evidence is never a
+  pass.
 - **Not applicable:** an authorized human has reviewed and documented why the
   requirement does not apply to this scope. Record the reviewer, rationale,
-  and decision reference; do not use this as a silent waiver.
+  and decision reference.
 
-For a maturity target, an applicable requirement is `blocking` or
-`non_blocking`, or has a reviewed `not_applicable` decision. The owner has
-chosen a strict readiness policy: **every applicable requirement**, including
-one labeled `non_blocking`, needs passing checks and valid evidence. The
-`non_blocking` label is retained for prioritization, not as an evidence
-waiver.
+The planned validator computes results from the approved contract and actual
+inputs; it does not trust a submitted gate or relabel a failed check. Invalid,
+missing, stale, failed, or mismatched evidence cannot establish a passing
+check. For every profile, a failed blocking requirement makes the gate
+**failed**; an unverified blocking requirement, unverified applicability or
+contract approval, or a contract with no applicable blocking requirements
+makes it **unverified**. A pass requires at least one passing blocking
+requirement and a verified contract approval.
 
-The proposed reducer reports **failed** if any applicable requirement fails;
-otherwise **unverified** if any applicable evidence is missing, stale,
-mismatched, or otherwise unverified, or an applicability decision has not been
-verified; otherwise **passed** only when all applicable requirements pass and
-at least one is blocking. A `not_applicable` gate can be reported as
-`unverified` until its human review is verified. If no blocking requirement
-applies, do not automatically promote readiness: review the contract and report
-it as unverified until resolved.
+For a prototype, non-blocking failures and unknowns do not change that gate,
+but their separate outcomes, reasons, and applicable disclosures remain in the
+report. For production-candidate and customer-validated assessments, each
+non-blocking failure or unknown additionally needs valid risk acceptance:
+without it the gate is failed for a failure or unverified for an unknown.
+Accepted risk permits an overall pass only for that non-blocking result; it
+does not turn a failed or unverified requirement or check into a pass. Risk
+acceptance never overrides a blocking or critical requirement.
 
-Document exceptions, their scope, owner, rationale, risk, compensating
-controls, expiration, and approval in the project's decision system. An
-exception is not an implicit passing test or authority to rewrite an approved
-contract; any change to criteria or applicability requires a reviewed contract
-version and an explicit decision.
+The report records an acceptance decision, reviewer, evidence reference,
+decision time, expiration, rationale, compensating controls, and scope:
+requirement ID, affected check IDs, actual requirement status, contract
+SHA-256, target maturity, source revision, and environment. An empty controls
+list explicitly means none. The validator must verify that the referenced
+human decision covers the exact adverse check outcomes and supporting evidence,
+the reviewer's authority, scope, decision time, expiry, and revocation as of
+assessment time. New or changed findings require a new decision. Missing,
+expired, mismatched, or unverifiable acceptance cannot support a production
+pass. Approvals and exceptions are decisions, not evidence that the underlying
+check passed.
 
 ## Traceability and human authority
 
@@ -70,81 +102,70 @@ that the approval binds those bytes and is authorized; a reviewer string or
 schema-valid approval record alone cannot establish approval. Preserve the
 approved file's encoding and line endings when distributing it: reserializing
 the contract changes its digest and requires a new approval. The decision must
-be valid and unrevoked at assessment time; missing or unverifiable approval
-cannot support a pass.
+be valid and unrevoked at assessment time.
 
-For each check, `evidence_max_age_seconds` is a positive, explicitly approved
-limit, not a validator default. Evidence records carry a reference, SHA-256
-digest, revision, environment, and recorded timestamp. The future validator
-must read and verify the referenced bytes, match the revision and environment,
-and compare each required artifact's timestamp to `assessed_at`: it must not be
-in the future or older than the check's maximum age, with the maximum-age
-boundary included. A claimed digest, timestamp, or identity in JSON is not
-independently verified evidence. Check-result timestamps must also satisfy the
-approved freshness policy.
+Evidence records carry a reference, SHA-256 digest, revision, environment, and
+recorded timestamp. The validator must read and verify referenced bytes, match
+revision and environment, corroborate each check's outcome against the
+referenced result artifact, and compare each required artifact's timestamp to
+`assessed_at`: it must not be in the future or older than the check's maximum
+age, with the maximum-age boundary included. A claimed digest, timestamp, or
+identity in JSON is not independently verified evidence.
 
-Customer approval must be an explicit decision by an authorized human, not a
-model assertion, synthetic fixture, or client-supplied identity. The future
-application or release system must authenticate the reviewer, authorize the
-decision, record a tamper-resistant audit trail, and enforce the approved scope.
-Similarly, a not-applicable decision must be attributable to an authorized
-human.
+Customer approval, applicability review, classification changes, and risk
+acceptance must be explicit decisions by authorized humans, not model
+assertions, synthetic fixtures, or client-supplied identities. The future
+application or release system must authenticate reviewers, authorize their
+decisions, retain an audit trail, and enforce approved scope.
 
 ## Proposed JSON Schemas
 
-All three use JSON Schema 2020-12. The blueprint manifest is proposed at
-`0.1.0`; the verification and readiness schemas are proposed at `0.2.0`:
+All three use JSON Schema 2020-12. The blueprint manifest remains `0.1.0`;
+the verification and readiness schemas are proposed at `0.3.0`:
 
 | Schema | Purpose |
 | --- | --- |
-| [Blueprint manifest](../contracts/blueprint-manifest.schema.json) | Names a blueprint, framework, execution strategy, capabilities, and per-host compatibility with evidence. A verified host requires a framework version, protocol, and test or deployment reference with revision and environment; a documented unsupported claim requires a documentation reference. |
-| [Verification contract](../contracts/verification-contract.schema.json) | Describes stable requirement and check IDs, success and failure criteria, expected evidence types, maximum evidence ages, and maturity gates. |
-| [Readiness report](../contracts/readiness-report.schema.json) | Records the contract digest and approval, revision and environment, per-requirement results, evidence provenance, applicability review, gate status, and customer approval when relevant. |
+| [Blueprint manifest](../contracts/blueprint-manifest.schema.json) | Names a blueprint, framework, execution strategy, capabilities, and per-host compatibility with evidence. |
+| [Verification contract](../contracts/verification-contract.schema.json) | Describes requirements, criticality, domains, checks, evidence and freshness policy, maturity gates, and optional production controls. |
+| [Readiness report](../contracts/readiness-report.schema.json) | Records disclosures, per-requirement results, evidence, approval, applicable risk acceptance, and the gate outcome. |
 
-Version `0.2.0` supersedes the earlier `0.1.0` drafts in this PR: freshness
-policy, evidence provenance, and a contract digest are now required; a pass
-also requires contract approval and passing results for all applicable
-requirements. Existing drafts need an explicit, reviewed update; consumers
-must not silently fill in missing policy. After a schema is released, make
-breaking changes under a new version and document the migration.
+Version `0.3.0` is a breaking change from `0.2.0`: classify and tag every
+requirement through human review, supply the report disclosure arrays, and
+define production controls where required. Reassess gates and reapprove the
+new contract bytes; do not silently infer classifications or carry forward a
+passing report. The synthetic prototype and production examples demonstrate
+different profile policies, not actual readiness.
 
-The readiness schema rejects a passed check without a nonblank evidence
-reference and provenance fields, a passed requirement with missing or
-non-passing reported checks, and a passed gate without a contract approval,
-containing any non-passing applicable result, or containing no passing blocking
-result. A passed customer-validated report must also contain an `approved`
-customer decision. A not-applicable result requires a reason and a reviewer
-reference. Dates are checked when the validator enables format checking.
+The schemas enforce document shape and some local invariants: for example, a
+blocking result cannot be non-passing in a passed report, a passed production
+report needs risk-acceptance records for non-blocking failures and unknowns,
+and security-critical requirements cannot be marked non-blocking. The schema
+cannot determine whether a risk reviewer is authorized, a decision is valid,
+a contract changed classifications, a control has appropriate coverage, or the
+report matches its contract.
 
-**Important limitations:** schemas cannot ensure unique IDs within objects,
-compare a report to its verification contract, determine whether all required
-checks or evidence types are present, verify evidence contents, digests or
-freshness, authenticate reviewers, or compute a trustworthy release gate. In
-particular, the report's `gate` values must be compared to the applicable
-contract; a consumer must not trust a report merely because it validates. The
-focused tests check cross-file relationships in the included fixtures only.
-Phase 1 must implement an executable validator that enforces these relationships
-and authorization for real projects, fails closed, and emits a machine-readable
-report; see the [work packages](implementation-plan.md).
+**Schema validation is not readiness verification.** The executable Phase 1
+validator must check all cross-file relationships, unique IDs, all required
+checks and evidence types, evidence bytes and freshness, authorized decisions,
+and the profile-specific gate; see the [work packages](implementation-plan.md).
+The focused tests check relationships in the included synthetic fixtures only.
 
 ## Specification Studio handoff
 
 The proposed verification contract is the producer-neutral handoff: a future
 Specification Studio producer should emit this versioned JSON shape or use an
-explicit, lossless adapter. Preserve stable contract, requirement, and check IDs,
-criteria, evidence types, freshness limits, and maturity gates; do not silently
-invent missing policy or downgrade a gate. Requirement IDs must be unique within
-the contract, and check IDs must be unique across it. The corresponding
-readiness report uses the same contract ID and version.
+explicit, lossless adapter. Preserve stable contract, requirement, and check
+IDs, criteria, classifications, domains, evidence types, freshness limits,
+maturity gates, and production controls; do not silently invent policy or
+downgrade a gate. Requirement IDs must be unique within the contract, and
+check IDs must be unique across it.
 
-Both schemas allow optional `extensions` objects for producer-specific metadata.
-Each namespace starts with a letter, contains only letters, digits, `.`, `_`,
-or `-`, and has an object value. Extensions are supplementary data, never a
-replacement for required core fields or authority to change gate semantics.
-The `specification_studio` metadata in the fixture is illustrative. No actual
-Specification Studio output or integration exists yet, so interoperability
-with a future producer remains to be verified rather than assumed.
+Both schemas allow optional namespaced `extensions` objects for supplementary
+producer metadata. Extensions never replace required core fields or override
+gate semantics. The `specification_studio` metadata in the fixture is
+illustrative. No actual Specification Studio output or integration exists yet,
+so interoperability remains to be verified rather than assumed.
 
 The [examples](../contracts/examples/), `fixture://` references, and placeholder
-digests are entirely synthetic. Even the intentionally passing example is not
-evidence that a blueprint, customer, or deployment has been validated.
+digests are entirely synthetic. They are not evidence that a blueprint,
+customer, or deployment has been validated.

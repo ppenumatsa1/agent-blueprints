@@ -17,6 +17,8 @@ still be authenticated and authorized.
 ## Start here
 
 - [Software Factory overview](docs/software-factory-overview.md)
+- [Interactive architecture: original source](docs/software-factory.html)
+- [Living master checklist](docs/master-checklist.md)
 - [Agent Blueprints architecture and proposed structure](docs/agent-blueprints-architecture.md)
 - [Reference repository analysis](docs/reference-repository-analysis.md)
 - [Blueprint catalog and hosting compatibility](docs/blueprint-catalog.md)
@@ -24,6 +26,9 @@ still be authenticated and authorized.
 - [Readiness contract](docs/readiness-contract.md)
 - [Phased implementation plan](docs/implementation-plan.md)
 - [Copilot development conventions](.github/copilot-instructions.md)
+
+The supplied HTML is a historical design source; the overview, plan, and
+checklist track current decisions and progress.
 
 The [contracts](contracts/) directory contains versioned, proposed JSON Schemas.
 Their synthetic examples are test fixtures, **not evidence of an actual release

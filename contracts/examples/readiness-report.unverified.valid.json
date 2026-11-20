@@ -1,13 +1,16 @@
 {
-  "schema_version": "0.2.0",
+  "schema_version": "0.3.0",
   "contract_id": "SYNTHETIC-DEMO",
-  "contract_version": "0.2.0",
+  "contract_version": "0.3.0",
   "contract_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
   "source_revision": "illustrative-only",
   "environment": "synthetic-local",
   "assessed_at": "2026-01-01T00:00:00Z",
   "target_maturity": "prototype",
   "gate_status": "unverified",
+  "assumptions": ["The scenario and identities are synthetic."],
+  "incomplete_integrations": [],
+  "limitations": ["The example has no real execution evidence."],
   "results": [
     {
       "requirement_id": "REQ-001",
@@ -20,6 +23,18 @@
       "gate": "non_blocking",
       "status": "unverified",
       "reason": "The synthetic evaluation has not been run."
+    },
+    {
+      "requirement_id": "REQ-003",
+      "gate": "non_blocking",
+      "status": "unverified",
+      "reason": "The synthetic health check has not been run."
+    },
+    {
+      "requirement_id": "REQ-004",
+      "gate": "non_blocking",
+      "status": "unverified",
+      "reason": "The synthetic interface has not been tested."
     }
   ]
 }

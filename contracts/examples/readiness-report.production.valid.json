@@ -1,0 +1,135 @@
+{
+  "schema_version": "0.3.0",
+  "contract_id": "SYNTHETIC-DEMO",
+  "contract_version": "0.3.0",
+  "contract_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "source_revision": "illustrative-only",
+  "environment": "synthetic-local",
+  "assessed_at": "2026-01-01T00:00:00Z",
+  "target_maturity": "production_candidate",
+  "gate_status": "passed",
+  "assumptions": ["The scenario and identities are synthetic."],
+  "incomplete_integrations": [],
+  "limitations": ["The optional hint remains failed despite the reviewed risk acceptance."],
+  "contract_approval": {
+    "decision": "approved",
+    "reviewer": "Synthetic reviewer",
+    "reference": "fixture://contract-approval",
+    "decided_at": "2025-12-31T23:50:00Z"
+  },
+  "results": [
+    {
+      "requirement_id": "REQ-001",
+      "gate": "blocking",
+      "status": "passed",
+      "implementation_refs": ["fixture://synthetic-workflow"],
+      "check_results": [
+        {
+          "check_id": "CHECK-001",
+          "outcome": "passed",
+          "evidence": [
+            {
+              "kind": "test_report",
+              "reference": "fixture://test-report",
+              "revision": "illustrative-only",
+              "environment": "synthetic-local",
+              "recorded_at": "2026-01-01T00:00:00Z",
+              "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            {
+              "kind": "approval_record",
+              "reference": "fixture://approval-record",
+              "revision": "illustrative-only",
+              "environment": "synthetic-local",
+              "recorded_at": "2026-01-01T00:00:00Z",
+              "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "requirement_id": "REQ-002",
+      "gate": "blocking",
+      "status": "passed",
+      "check_results": [
+        {
+          "check_id": "CHECK-002",
+          "outcome": "passed",
+          "evidence": [
+            {
+              "kind": "evaluation_result",
+              "reference": "fixture://evaluation-result",
+              "revision": "illustrative-only",
+              "environment": "synthetic-local",
+              "recorded_at": "2026-01-01T00:00:00Z",
+              "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "requirement_id": "REQ-003",
+      "gate": "blocking",
+      "status": "passed",
+      "check_results": [
+        {
+          "check_id": "CHECK-003",
+          "outcome": "passed",
+          "evidence": [
+            {
+              "kind": "test_report",
+              "reference": "fixture://health-report",
+              "revision": "illustrative-only",
+              "environment": "synthetic-local",
+              "recorded_at": "2026-01-01T00:00:00Z",
+              "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "requirement_id": "REQ-004",
+      "gate": "non_blocking",
+      "status": "failed",
+      "reason": "The optional hint was not displayed.",
+      "check_results": [
+        {
+          "check_id": "CHECK-004",
+          "outcome": "failed",
+          "reason": "The optional hint was not displayed.",
+          "evidence": [
+            {
+              "kind": "test_report",
+              "reference": "fixture://failed-hint-report",
+              "revision": "illustrative-only",
+              "environment": "synthetic-local",
+              "recorded_at": "2026-01-01T00:00:00Z",
+              "sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+            }
+          ]
+        }
+      ],
+      "risk_acceptance": {
+        "decision": "accepted",
+        "reviewer": "Synthetic risk reviewer",
+        "reference": "fixture://risk-acceptance",
+        "decided_at": "2025-12-31T23:59:00Z",
+        "expires_at": "2026-02-01T00:00:00Z",
+        "rationale": "The optional hint is not needed for the synthetic demonstration.",
+        "compensating_controls": ["The limitation is disclosed to the reviewer."],
+        "scope": {
+          "requirement_id": "REQ-004",
+          "check_ids": ["CHECK-004"],
+          "requirement_status": "failed",
+          "contract_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "target_maturity": "production_candidate",
+          "source_revision": "illustrative-only",
+          "environment": "synthetic-local"
+        }
+      }
+    }
+  ]
+}

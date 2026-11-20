@@ -1,13 +1,16 @@
 {
-  "schema_version": "0.2.0",
+  "schema_version": "0.3.0",
   "contract_id": "SYNTHETIC-DEMO",
-  "contract_version": "0.2.0",
+  "contract_version": "0.3.0",
   "contract_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
   "source_revision": "illustrative-only",
   "environment": "synthetic-local",
   "assessed_at": "2026-01-01T00:00:00Z",
   "target_maturity": "prototype",
   "gate_status": "passed",
+  "assumptions": [],
+  "incomplete_integrations": [],
+  "limitations": [],
   "results": [
     {
       "requirement_id": "REQ-001",
