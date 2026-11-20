@@ -1,0 +1,46 @@
+{
+  "schema_version": "0.1.0",
+  "contract_id": "SYNTHETIC-DEMO",
+  "contract_version": "0.1.0",
+  "title": "Synthetic approval workflow",
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "statement": "A consequential simulated action requires human approval.",
+      "success_criteria": "The action is blocked until an authorized approval is recorded.",
+      "failure_criteria": "The action executes without the required approval.",
+      "checks": [
+        {
+          "id": "CHECK-001",
+          "method": "integration",
+          "procedure": "Attempt the action before and after a recorded approval.",
+          "evidence_types": ["test_report", "approval_record"]
+        }
+      ],
+      "gates": {
+        "prototype": "blocking",
+        "production_candidate": "blocking",
+        "customer_validated": "blocking"
+      }
+    },
+    {
+      "id": "REQ-002",
+      "statement": "The generated explanation meets a reviewed quality rubric.",
+      "success_criteria": "The explanation meets the agreed evaluation threshold.",
+      "failure_criteria": "The evaluation falls below the agreed threshold.",
+      "checks": [
+        {
+          "id": "CHECK-002",
+          "method": "agent_evaluation",
+          "procedure": "Evaluate the synthetic explanation against the approved rubric.",
+          "evidence_types": ["evaluation_result"]
+        }
+      ],
+      "gates": {
+        "prototype": "non_blocking",
+        "production_candidate": "blocking",
+        "customer_validated": "blocking"
+      }
+    }
+  ]
+}

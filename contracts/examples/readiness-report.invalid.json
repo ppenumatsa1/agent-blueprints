@@ -1,0 +1,17 @@
+{
+  "schema_version": "0.1.0",
+  "contract_id": "SYNTHETIC-DEMO",
+  "contract_version": "0.1.0",
+  "source_revision": "illustrative-only",
+  "assessed_at": "2026-01-01T00:00:00Z",
+  "target_maturity": "prototype",
+  "gate_status": "passed",
+  "results": [
+    {
+      "requirement_id": "REQ-001",
+      "gate": "blocking",
+      "status": "unverified",
+      "reason": "A missing blocking check cannot support a passed gate."
+    }
+  ]
+}
