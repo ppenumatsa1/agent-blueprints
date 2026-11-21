@@ -415,6 +415,35 @@ entries to hide failed attempts or gaps.
   viewpoints, but implementation claims must be grounded in this repository
   and tied to evidence at the revision being reviewed.
 
+## 2026-11-21 - Delegated session isolation and debugger evidence
+
+- **Security clarification:** Microsoft's
+  [per-user isolation guidance](https://learn.microsoft.com/azure/foundry/agents/how-to/isolate-sessions-per-user)
+  warns that the platform does not fence one delegated end user from another
+  within delegated access. If an application routes two users to the same
+  session, they can see each other's data. The trusted application must
+  authenticate each caller, maintain a server-side caller-to-session
+  mapping, issue distinct session IDs, and reject unchecked client-supplied
+  session IDs. `x-ms-user-identity` is an opaque identity-scoping value, not
+  authorization. This hosted bridge and mapping are not implemented or tested.
+- **PR #13 debugger report:** The workstream owner reports a headless
+  generated-project debugpy/DAP smoke using `.vscode/launch.json`'s
+  `Backend: FastAPI` configuration: execution stopped at `health.py:9`, the
+  stack was inspected, and continuing returned HTTP 204 with exit code 0.
+  Temporary resources were cleaned. This is owner-reported evidence; the
+  report did not identify an immutable revision. It does not verify the
+  interactive VS Code UI, Restricted Mode, or macOS.
+- **Separate hosted CI evidence:** PR #13 is open at head
+  `7325765cbbfb809e2064ec0e78a5567b465e3621`. Actions run
+  [44947297321](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44947297321)
+  completed successfully for that exact head with all five jobs passing.
+  This verifies that PR's CI revision, not the debugger smoke or this
+  documentation branch.
+- **Next action / limit:** Keep the Foundry workstream blocked until the
+  caller-to-session mapping, authorization boundary, and live behavior are
+  implemented and tested. Keep debugger UI, Restricted Mode, and macOS
+  checks explicitly unverified.
+
 ## Current acceptance queue
 
 | Item | Status | Evidence needed / next action |
@@ -423,9 +452,9 @@ entries to hide failed attempts or gaps.
 | Canonical imports, API module boundaries and legacy-shim removal | Implemented in foundation head `8144918` | PR #11 run 44945419570 passed all five checks; root suite passed 47/47. Preserve direct imports and canonical route/composition/lifecycle boundaries. |
 | Generated-verifier pipeline failure propagation | Implemented in foundation commit `d0e1727` | `tests/test_ci_workflow.py` covers failed, skipped, expected-failure, and successful outputs; PR #11 run 44945419570 passed all five checks at head `8144918`. |
 | Versioned database migrations | Proposed in parallel PR #16 | Owner-reported tests passed on PostgreSQL 16/17; run 44944613749 is stale against foundation head `8144918`; reconcile and rerun. |
-| Locked developer tooling | Open in parallel PR #13 | Reconcile only after review/merge; verify any resulting revision and platform matrix independently. |
+| Locked developer tooling | Open in parallel PR #13 at `7325765cbbfb809e2064ec0e78a5567b465e3621` | Actions run 44947297321 passed all five jobs on this exact head. Owner-reported headless debugpy/DAP smoke stopped at `health.py:9`, inspected the stack, then returned HTTP 204/exit 0; its report does not name a revision. Verify interactive VS Code UI, Restricted Mode, and macOS independently. |
 | Current dependent PR CI | Pending on updated revision | Confirm all required checks correspond to the pushed PR head. |
-| Foundry host identity, credential lifecycle and lost-response recovery | Blocked | OID caller binding and host-managed checkpoints have documented patterns but no bridge, role assignment, host integration, or live verification. Hosted credential delivery/rotation and downstream OBO lifecycle are unimplemented; never persist end-user bearer/OBO tokens. Visible response metadata is best-effort only; obtain bounded visibility/idempotency or a separate durable reconciliation contract before retrying ambiguous creates. |
+| Foundry host identity, per-user session isolation, credential lifecycle and lost-response recovery | Blocked | The platform does not fence delegated users sharing a session: the trusted application must map authenticated callers to distinct sessions and reject unchecked client IDs; opaque `x-ms-user-identity` is not authorization. No bridge or mapping tests exist. Host-managed checkpoints have a documented pattern but no integration or live verification. Hosted credential delivery/rotation and downstream OBO lifecycle are unimplemented; never persist end-user bearer/OBO tokens. Visible response metadata is best-effort only; obtain bounded visibility/idempotency or a separate durable reconciliation contract before retrying ambiguous creates. |
 | Live Entra/OBO, cloud telemetry, Azure deployment | Unverified | Separate scoped implementation, authorization where required, and live evidence. |
 
 Future entries should use this form: date and scope; observed issue and

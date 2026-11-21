@@ -69,17 +69,20 @@ Foundry hosting, infrastructure and integration evidence. Do not merge PRs
 without approval. Azure deployment is a deliverable but requires prior
 approval of its resource inventory, estimated cost and deployment plan;
 permanent reference repository creation requires separate approval. As of 2026-11-21, locked tooling is proposed in open
-[PR #13](https://github.com/ppenumatsa1/agent-blueprints/pull/13), at the
-workstream-owner-reported head
-`b78634b3b746c7adbf5f8500e4b7023c96c67963`. Its
-[hosted run](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44928260607)
-passed five checks for prior exact revision
-`e1d953662e615e547fa641ad0831907c363318e3` only. The proposal's reported
-Windows/Linux Compose verification used an approved mirror after public TLS
-failures. The owner could not exercise the debugger in VS Code Restricted
-Mode or run uv because no executable was available in that environment;
-macOS and debugger verification remain unverified. These results do not
-establish that tooling in PR #13 is merged or validated on this branch.
+[PR #13](https://github.com/ppenumatsa1/agent-blueprints/pull/13), currently
+at `7325765cbbfb809e2064ec0e78a5567b465e3621`. Actions run
+[44947297321](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44947297321)
+passed all five jobs on that exact head. The owner reports a headless
+generated-project debugpy/DAP smoke using `.vscode/launch.json`'s
+`Backend: FastAPI` configuration: execution stopped at `health.py:9`, the
+stack was inspected, and continuing returned HTTP 204 with exit code 0;
+temporary resources were cleaned. That report did not identify an immutable
+revision. It does not verify the interactive VS Code UI, Restricted Mode, or
+macOS. Earlier Windows/Linux Compose verification used an approved mirror
+after public TLS failures. The owner also previously could not run uv in a
+separate validation environment. PR #13's checks and reported debugger
+evidence do not establish that the proposal is merged or validated on this
+branch.
 
 For PR #16, the owner reports guarded Alembic adoption only after exact
 baseline-manifest validation and checking that no later-revision-owned tables
@@ -177,7 +180,7 @@ the local HTTP smoke check. Its unsigned readiness report is unverified.
 | P1-10 | Add integration/E2E tests, synthetic agent evaluations, and GitHub Actions; connect actual results and artifacts to the validator. | P1-04 through P1-09 | A local or CI run produces a report from real artifacts; blocking failures cannot pass, non-blocking outcomes follow the selected profile, and rubric/threshold decisions are recorded. |
 | P1-11 | Add privacy-safe logs, traces, correlation, and operational signals across API, workflow, approvals, and side effects. | P1-07, P1-09 interfaces | Tests verify redaction and correlation; actual export remains environment-specific. |
 | P1-15 | Demonstrate the local prototype from a synthetic specification through approval, evaluation, and its readiness report. | P1-10, P1-11 | Record the scenario, evidence, limitations, and observed elapsed time; the 2–3 hour objective is a target until a representative run demonstrates it. |
-| P1-12 | Validate Foundry Hosted Agent compatibility for the selected MAF version, Responses protocol, request-aware workflow factory, identity, and host-managed checkpoints. | P1-09, P1-15 | A documented workload-identity binding pattern is not implemented or live verified. The OID header is identity, not a credential; hosted secret delivery/rotation and downstream OBO token lifecycle are not implemented, and end-user bearer/OBO tokens must not be persisted. Lost `response.id` recovery remains blocked because no idempotency key or proven unambiguous per-operation lookup is documented; see the [investigation journal](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-21---hosted-caller-binding-and-lost-responses). Local checks alone are not a hosted deployment. No Azure resources are provisioned. |
+| P1-12 | Validate Foundry Hosted Agent compatibility for the selected MAF version, Responses protocol, request-aware workflow factory, identity, per-user session isolation, and host-managed checkpoints. | P1-09, P1-15 | Microsoft warns delegated users are not fenced from one another within a shared session. A trusted app must authenticate callers, enforce a server-side caller-to-session mapping, assign distinct session IDs, and reject unchecked client IDs; opaque `x-ms-user-identity` is not authorization. This bridge and mapping are not implemented or tested. The OID header is identity, not a credential; hosted secret delivery/rotation and downstream OBO token lifecycle are not implemented, and end-user bearer/OBO tokens must not be persisted. Lost `response.id` recovery remains blocked because no idempotency key or proven unambiguous per-operation lookup is documented; see the [investigation journal](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-21---hosted-caller-binding-and-lost-responses) and [session-isolation clarification](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-21---delegated-session-isolation-and-debugger-evidence). Local checks alone are not a hosted deployment. No Azure resources are provisioned. |
 | P1-13 | Prepare the explicitly selected ACA fallback and a framework-compatible checkpoint strategy. | P1-09, P1-15 | Separate local/container recovery and idempotency checks pass; no claim that ACA shares Foundry checkpoint ownership or silently replaces a failed model call. |
 | P1-14 | Prepare Bicep, least-privilege identities, authenticated public endpoints, GitHub-hosted CI, and deployment/handoff instructions. Deploy only after separate Azure authorization. | P1-10, P1-11, P1-12; P1-13 if selected | Static checks work without Azure credentials; an authorized deployment later records its revision, versions, identity, network, evidence, cost, and teardown owner. |
 

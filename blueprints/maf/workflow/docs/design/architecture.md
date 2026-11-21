@@ -245,6 +245,17 @@ See the
 [hosted-agent contract](https://learn.microsoft.com/azure/foundry/agents/concepts/hosted-agent-contract)
 and [on-behalf-of guidance](https://learn.microsoft.com/azure/foundry/agents/how-to/use-on-behalf-of-flow).
 
+Microsoft's
+[per-user isolation guidance](https://learn.microsoft.com/azure/foundry/agents/how-to/isolate-sessions-per-user)
+warns that delegated users are not fenced from one another within delegated
+access: a user can access another user's data if the application routes them
+to the same session. Therefore, a trusted application must authenticate each
+caller, enforce a server-side caller-to-session mapping, assign distinct
+session IDs, and reject unchecked client-supplied session IDs. The opaque
+`x-ms-user-identity` value is an identity-scoping input, not authorization.
+This blueprint has no hosted session bridge or mapping test, so per-user
+hosted isolation is not implemented or verified.
+
 The identity header is a user OID, not a credential. Do not persist an
 end-user bearer/OBO token in business state, workflow checkpoints, or logs.
 The current local OBO option reads its secret from the backend environment;
