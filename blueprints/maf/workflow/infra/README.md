@@ -39,7 +39,7 @@ no environment-level route is supplied. See
 | --- | --- |
 | `network.bicep` | One parameterized RFC1918 VNet; separate delegated ACA and PostgreSQL subnets; PostgreSQL private DNS zone and link. No Foundry/monitor private endpoints, NSGs, egress filtering or production network controls. |
 | `foundry.bicep` | Foundry account and project with system identities, key authentication disabled, public access disabled and deny-by-default ACLs. A model deployment is opt-in and requires a reviewed model, version, SKU, capacity, region and quota. |
-| `postgres.bicep` | Private Flexible Server and database, Entra-only auth, an explicitly supplied administrator, TLS required, 7-day backup and development-sized burstable default. No password administrator, firewall allow-all, database application principal or token-refresh implementation is created. |
+| `postgres.bicep` | Private PostgreSQL 16 Flexible Server and database, Entra-only auth, an explicitly supplied administrator, TLS required, 7-day backup and development-sized burstable default. The PostgreSQL 17 local/migration-test baseline differs; see the open version gap below. No password administrator, firewall allow-all, database application principal or token-refresh implementation is created. |
 | `observability.bicep` | Workspace-based Application Insights and Log Analytics, 30-day default retention and 1 GB/day ingestion cap. Public ingestion/query and Insights local authentication are disabled; no private connectivity or exporter role is configured. The cap can discard telemetry. |
 | `identities.bicep` | Separate API and UI user-assigned managed identities. The project system identity receives Foundry User at account scope per Foundry guidance. A project-wide Foundry Agent Consumer grant to the API is opt-in and disabled by default; its scope covers all agents in that project. Actual role requirements need live review. |
 | `registry.bicep` | Optional Basic registry. It is internet-reachable when selected, but disables admin credentials and anonymous pulls; the two workload identities get only registry-scoped AcrPull. Private registry networking and hosted-agent image-pull permissions are not implemented. |
@@ -51,6 +51,38 @@ Creating the template's other resources would still incur cost, especially
 PostgreSQL; the defaults are development-oriented, not free and not a
 production availability, backup, security or cost claim. Availability,
 retention, networking and pricing require a separate regional review.
+
+## Open PostgreSQL version gap
+
+The staged server uses PostgreSQL **16** with the
+`Microsoft.DBforPostgreSQL/flexibleServers@2024-08-01` API, while
+[`compose.yaml`](../compose.yaml) and the parallel migration workstream's
+catalog tests use PostgreSQL **17**. Tests against 17 do not establish that
+migrations, catalog snapshots, extensions or application behavior work on 16.
+Do not assume that data or migrations can safely be moved to an older major
+version. Target-version migration and drift verification is required before
+deployment, in addition to the separately authorized live Azure checks.
+
+Azure Flexible Server [lists PostgreSQL 17 as supported](https://learn.microsoft.com/en-us/azure/postgresql/configure-maintain/concepts-supported-versions),
+but the pinned [2024-08-01 resource reference](https://learn.microsoft.com/en-us/azure/templates/microsoft.dbforpostgresql/2024-08-01/flexibleservers#serverproperties)
+lists only 11–16. Its [REST schema and example](https://learn.microsoft.com/en-us/rest/api/postgresql/servers/create?view=rest-postgresql-2024-08-01#serverversion)
+are inconsistent: the enum lists 11–16 while a create example requests 18.
+Bicep 0.49.2 compiles `17` for this API without diagnostics, but also accepts
+an arbitrary invalid version string; compilation alone cannot settle the
+API's supported engine versions. The existing 16 setting is retained rather
+than treating that ambiguity as proof of 17 support.
+
+The stable [2025-08-01 resource reference](https://learn.microsoft.com/en-us/azure/templates/microsoft.dbforpostgresql/2025-08-01/flexibleservers#serverproperties)
+lists 17 and is a possible future alignment path, not a validated API change.
+In 2025, an Azure API contributor described 17 support in
+[preview APIs after 2024-08-01](https://github.com/Azure/azure-rest-api-specs/issues/36451#issuecomment-3308512467);
+that historical statement does not verify today's behavior for the pinned API.
+Review the 2025 API's other property and network semantics, choose the target
+version, and run clean migration, upgrade and drift tests against that major
+version. Regional availability, Entra authentication and the complete
+deployment remain unverified.
+
+## Authorization and configuration
 
 Container Apps platform authentication is a separate child resource and can
 fail to configure after an app is created. It is not a substitute for
@@ -117,8 +149,11 @@ only when this prerequisite check fails. The checker compiles and lints the
 local Bicep graph, compiles both parameter examples, checks the committed
 network examples, and validates local service paths and required azd
 bindings. Tests additionally inspect compiled ARM security properties and
-exercise negative configuration cases. These checks do **not** evaluate
-arbitrary future operator-supplied parameters or prove Azure compatibility.
+exercise negative configuration cases. A focused test also checks that any
+major-version difference between the compiled server and Compose is disclosed
+with the actual versions; it does not verify migration compatibility. These
+checks do **not** evaluate arbitrary future operator-supplied parameters or
+prove Azure compatibility.
 
 The modules use local Bicep resources rather than external registry modules,
 so offline validation and generated copies do not depend on AVM downloads.

@@ -135,7 +135,10 @@ Container Apps default off. Foundry public
 access and monitoring public ingestion/query are disabled, but this increment
 does not provide their private endpoints or verify any runtime connection.
 PostgreSQL uses a delegated subnet, private DNS and Entra-only authentication;
-the existing API does not acquire a database token. Container Apps platform
+the existing API does not acquire a database token. The staged server selects
+PostgreSQL 16, whereas local Compose and the parallel migration tests use 17;
+migration and application compatibility with the chosen Azure target are
+unverified. Container Apps platform
 auth is a separately applied resource; application-level authentication and
 record authorization remain mandatory even if it fails. The optional registry
 is publicly network-reachable but disallows anonymous and admin access.

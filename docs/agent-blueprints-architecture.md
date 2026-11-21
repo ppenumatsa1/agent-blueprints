@@ -88,6 +88,11 @@ working topology. The optional registry remains publicly network-reachable
 with anonymous and admin access disabled. The API's project-wide
 agent-consumer grant is optional and disabled by default; review narrower
 agent scope, inherited grants, and actual caller restrictions.
+The staged PostgreSQL server selects major 16 while local Compose and the
+parallel migration catalog tests use 17; target-version migration and drift
+compatibility are unverified. The
+[version-gap review](../blueprints/maf/workflow/infra/README.md#open-postgresql-version-gap)
+does not claim live Azure support.
 Any future public API still requires Entra-backed authentication,
 application authorization, restrictive CORS, and safe secret handling.
 See the [infrastructure guide](../blueprints/maf/workflow/infra/README.md).

@@ -58,6 +58,13 @@ local azd paths, and inspect compiled security properties. They cannot validate
 arbitrary future parameters or live Azure behavior. See
 [infrastructure preparation](../../infra/README.md).
 
+The staged server selects PostgreSQL 16 while Compose and the parallel
+migration catalog tests use 17. Bicep compilation does not verify engine
+support or migration compatibility. Resolve the
+[version gap](../../infra/README.md#open-postgresql-version-gap) and run
+clean, upgrade and drift tests on the chosen target major before deployment;
+no automatic downgrade or cross-major data compatibility is assumed.
+
 Before PR approval:
 
 1. Generate a fresh project outside the repository and verify all documentation,
@@ -77,7 +84,7 @@ Before PR approval:
 flowchart TD
     A[Local design and implementation] --> B[Static checks and generated-copy tests]
     B --> C[PR-specific CI and human review]
-    C --> D{Hosting interfaces and recovery verified?}
+    C --> D{Hosting, target database version and recovery verified?}
     D -- No --> E[Stop; keep host and cloud integration unverified]
     D -- Yes --> F[Prepare inventory, cost, identity, network, backup and rollback]
     F --> G[Explicit human authorization for Azure provisioning]

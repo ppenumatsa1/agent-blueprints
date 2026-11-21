@@ -83,6 +83,24 @@ class InfrastructureTests(unittest.TestCase):
         self.assertIn("require_secure_transport", tls[0]["name"])
         self.assertEqual(tls[0]["properties"]["value"], "ON")
 
+    def test_postgres_major_version_disclosure_matches_compose_and_compiled_template(self):
+        postgres = self.resources_of_type("Microsoft.DBforPostgreSQL/flexibleServers")[0]
+        staged_version = postgres["properties"]["version"]
+        compose = (validation.ROOT / "compose.yaml").read_text(encoding="utf-8")
+        images = re.findall(r"(?m)^[ \t]*image:[ \t]*['\"]?postgres:(\d+)(?=[^0-9]|$)", compose)
+        self.assertEqual(len(images), 1, "Compose must select one explicit PostgreSQL major version.")
+        local_version = images[0]
+        guide = (INFRA / "README.md").read_text(encoding="utf-8")
+        section = guide.partition("## Open PostgreSQL version gap")[2].partition("\n## ")[0]
+        if staged_version != local_version:
+            self.assertTrue(section, "Document the PostgreSQL major-version mismatch.")
+            self.assertIn(f"PostgreSQL **{staged_version}**", section)
+            self.assertIn(f"PostgreSQL **{local_version}**", section)
+            self.assertIn("do not establish", section)
+            self.assertIn("drift", section)
+        else:
+            self.assertFalse(section, "Remove the stale PostgreSQL version-gap disclosure.")
+
     def test_monitoring_disables_public_access_and_insights_local_auth(self):
         workspace = self.resources_of_type("Microsoft.OperationalInsights/workspaces")[0]["properties"]
         insights = self.resources_of_type("Microsoft.Insights/components")[0]["properties"]

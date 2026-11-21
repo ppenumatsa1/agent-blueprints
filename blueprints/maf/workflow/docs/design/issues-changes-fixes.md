@@ -67,6 +67,46 @@ entries to hide failed attempts or gaps.
   configured. Treat restrictive but unreachable services as blocked
   integrations, not as evidence of a working secure deployment.
 
+## 2026-11-21 - PostgreSQL major-version alignment review
+
+- **Issue:** The staged server selects PostgreSQL 16, but Compose and the
+  parallel migration workstream's catalog tests use 17. Passing tests on 17
+  do not prove clean migration, upgrade, catalog-drift or application behavior
+  on 16. The migration workstream also reports separate unresolved local
+  checkpoint-evidence failures on its `031fdb4` revision; this review does
+  not resolve them.
+- **Investigation:** The
+  [Azure service](https://learn.microsoft.com/en-us/azure/postgresql/configure-maintain/concepts-supported-versions)
+  lists PostgreSQL 17, while the pinned
+  [2024-08-01 resource schema](https://learn.microsoft.com/en-us/azure/templates/microsoft.dbforpostgresql/2024-08-01/flexibleservers#serverproperties)
+  lists 11–16. The corresponding
+  [REST reference](https://learn.microsoft.com/en-us/rest/api/postgresql/servers/create?view=rest-postgresql-2024-08-01)
+  has the same enum but an example requesting 18. Bicep 0.49.2 emitted 17
+  without diagnostics; it also accepted a deliberately invalid version
+  string, so the compiler probe is not proof of API support. An Azure API
+  contributor [described 17 in later preview APIs](https://github.com/Azure/azure-rest-api-specs/issues/36451#issuecomment-3308512467)
+  in 2025, not a current guarantee for the pinned API.
+- **Decision:** Retain 16 under the pinned API and disclose the mismatch.
+  The stable 2025-08-01 API lists 17 and compiled in an isolated probe, but
+  its other semantics and live deployment are not verified; it is a candidate
+  for later review, not an implemented upgrade.
+- **Verification / next action:** The compiler prerequisite initially failed
+  because the required version was absent; the official 0.49.2 binary was
+  obtained in task-owned storage and SHA-256 verified. For this revision,
+  source and independently generated compilation, lint, parameter checks and
+  nine infrastructure tests each passed, including a new regression check
+  tying the disclosed majors to the compiled template and Compose. Both focused
+  generated-documentation tests passed. A deliberately stale disclosure in
+  the generated copy produced the expected assertion failure; the copy was
+  restored and the focused test passed. Actual PR-head CI is pending; rerun
+  checks after any rebase. Before deployment, choose and review a supported
+  target, then run clean, upgrade and drift tests on that major version;
+  separately authorize any live Azure test. Do not assume safe downgrade or
+  cross-major data compatibility.
+- **Reusable lesson:** An extensible API enum and permissive compiler can
+  accept a value syntactically even when version-specific support remains
+  ambiguous. Compare service, API-schema and migration-test evidence.
+
 ## Prior implementation evidence
 
 ### 2026-11-21 - Local checkpoint timestamp ties
@@ -223,6 +263,7 @@ entries to hide failed attempts or gaps.
 | Canonical imports and legacy-shim removal | Open in foundation workstream | Inspect final diff across imports, tests, Docker, CI, docs, and generator; do not approve while forwarding paths remain. |
 | Locked developer tooling | Open in parallel PR #13 | Reconcile only after review/merge; verify any resulting revision and platform matrix independently. |
 | Foundry-first infrastructure | In progress | Source and generated offline checks passed locally; confirm final-revision checks and actual PR-head CI, then coordinate live host, networking, identity and cost review. |
+| PostgreSQL major-version alignment | Open | Resolve the staged 16 / tested 17 gap and run clean, upgrade and drift tests on the chosen target; live API and Azure compatibility remain unverified. |
 | Current dependent PR CI | Pending on updated revision | Confirm all required checks correspond to the pushed PR head. |
 | Foundry host caller binding and lost-response recovery | Blocked | Establish supported identity and reconciliation guarantees before implementing a hosted bridge. |
 | Live Entra/OBO, cloud telemetry, Azure deployment | Unverified | Separate scoped implementation, authorization where required, and live evidence. |

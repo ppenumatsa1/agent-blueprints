@@ -12,7 +12,7 @@ deployed environment.
 | Python | Python 3.12; `python:3.12-slim` backend image | Matches the source and GitHub Actions runtime. A different Python minor requires package and CI verification. |
 | Agent workflow | `agent-framework-core==1.26.0` | Uses MAF `WorkflowBuilder`, `Executor`, `WorkflowContext`, and `CheckpointStorage` natively. LangGraph or an SDK harness would be a separate blueprint, not a hidden runtime switch. |
 | API | FastAPI `0.162.7`, Uvicorn `0.54.0` | Typed HTTP boundary, dependency-based bearer auth, and an ASGI server. |
-| Persistence | PostgreSQL `17-alpine`, Psycopg binary `3.3.9` | Relational transactions and uniqueness constraints support the decision/action ledger; MAF file checkpoints remain separate. |
+| Persistence | Local PostgreSQL `17-alpine`, Psycopg binary `3.3.9`; staged Azure PostgreSQL 16 | Relational transactions and uniqueness constraints support the decision/action ledger; MAF file checkpoints remain separate. The major-version mismatch and target migration compatibility remain open. |
 | Identity | MSAL `1.39.0`, PyJWT crypto `2.15.1` | MSAL is used in the browser; the API verifies Entra v2 access tokens, scopes, roles, and record access. Test identities are isolated to tests. |
 | API models | Pydantic provided by the pinned FastAPI graph | Request/response parsing rejects extra fields. A separate direct version pin is not currently declared. |
 | Frontend | React/React DOM `19.3.1`, TypeScript `7.0.2`, Vite `8.3.8` | Component UI, static typing, and a production build; a different UI framework would need its own client contract and tests. |
@@ -29,10 +29,14 @@ frontend's direct dependency manifest and lock are
 [`frontend/package.json`](../../frontend/package.json) and
 [`frontend/package-lock.json`](../../frontend/package-lock.json).
 Compose declares the PostgreSQL image in
-[`compose.yaml`](../../compose.yaml). GitHub Actions pins action revisions in
-`.github/workflows/ci.yml` in the source repository pins GitHub Actions
-revisions; that source-repository CI file is not copied into a generated
-project.
+[`compose.yaml`](../../compose.yaml). The source repository's
+`.github/workflows/ci.yml` pins GitHub Actions revisions; that CI file is not
+copied into a generated project.
+
+The staged server's API/version evidence and the risk of testing migrations
+on 17 while targeting 16 are recorded in the
+[infrastructure guide](../../infra/README.md#open-postgresql-version-gap).
+Neither local tests nor Bicep compilation establish Azure compatibility.
 
 ## State and identity choices
 
