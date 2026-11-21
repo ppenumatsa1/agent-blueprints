@@ -102,6 +102,67 @@ entries to hide failed attempts or gaps.
   bridge, and validate the actual service only with separate authorization.
   Do not persist bearer credentials or silently retry ambiguous side effects.
 
+### 2026-11-21 - Reconcile developer tooling with canonical imports
+
+- **Issue / cause:** The tooling branch and the foundation independently
+  changed CI, generation tests, and setup guidance. The foundation removed
+  forwarding modules and `tests.test_modularity`, while the tooling branch
+  replaced requirements files with a locked environment.
+- **Fix / decision:** Retain canonical imports, remove references to deleted
+  tests and requirements files, copy the design docs in generated projects,
+  and run evidence-normalization tests in both source and generated CI.
+- **Evidence:** After rebasing onto checkpoint-fix foundation
+  `9efeef0`, source and generated backend suites each passed 36 tests with
+  isolated PostgreSQL, including timestamp ties, checkpoint selection,
+  terminal replay, security and worker recovery. Generated independent
+  verification passed 44 without skips; generated frontend passed 8 tests,
+  build and CSP check. Ruff passed in source and generated backends. The root
+  suite passed 46 with one intentional unselected-adapter skip. Generated
+  npm installation used the approved mirror. Public package downloads still
+  fail locally with TLS errors. Check hosted CI for the actual PR head before
+  approval.
+- **Hosted evidence:** Run
+  [44937433206](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44937433206)
+  passed all five jobs for code head `2a8fafdbcf5574d2a4e6cba59e8621bf1b3c0cd7`,
+  including the checkpoint regressions and generated Compose build. Check the
+  actual PR-head run after this documentation update before approval.
+- **Lesson / limit:** Integrate environment instructions with the canonical
+  source layout; a successful earlier CI run cannot establish the result of a
+  rebased revision. Public-only local downloads, macOS, and interactive
+  debugging remain unverified.
+
+### 2026-11-21 - Exercise generated-verifier failure propagation with locked uv
+
+- **Issue / cause:** The foundation added `set -o pipefail` and a regression
+  test for the generated-verifier pipeline. After reconciliation, the tooling
+  workflow invokes the test through `uv run --locked --project`, but the
+  regression harness forwarded those uv arguments directly to its Python
+  stub, so it did not model the actual locked command.
+- **Fix / decision:** Keep the foundation's workflow change and regression
+  coverage. Update the harness to assert the locked `uv run --locked
+  --project <generated backend> python` selector, then forward only the
+  Python arguments to the simulated test process. Failure, skipped,
+  expected-failure, and success outcomes are still exercised against the
+  extracted Actions step.
+- **Evidence:** On the reconciled tree based on foundation
+  `d0e172751a39bc6e3a072d80482b3581b7007413`, the root suite passed 47 tests
+  with one intentional unselected-adapter skip; the focused pipeline and
+  instantiation tests passed. Source and generated backend suites each passed
+  36 tests with isolated PostgreSQL. Ruff check and format-check passed for
+  both 28-file backend copies. Generated verification passed 44 tests with no
+  skips or expected failures. Generated frontend passed 8 tests, build, and
+  CSP check. Generated Compose configuration passed, but the local image build
+  could not download `uv==0.9.26` from the public Python package host because
+  of a TLS handshake failure; local Compose smoke is therefore unverified on
+  this revision. The foundation's
+  [run 44939172266](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44939172266)
+  passed all five jobs for its exact base revision, not this dependent PR.
+  Confirm Actions on the final PR head before approval.
+- **Lesson / limit:** CI regression tests must execute the real step shape,
+  including its package-manager selectors and shell pipeline semantics.
+  Public-only local package downloads, macOS, and interactive debugging remain
+  unverified; no Azure credentials or resources were used.
+
 ### PR #6 - Native MAF workflow and local recovery core
 
 - **Change:** Added a native MAF approval workflow, local checkpoint host,
@@ -197,7 +258,7 @@ entries to hide failed attempts or gaps.
 | --- | --- | --- |
 | Eight design documents and generated inclusion | In progress | Run the focused instantiation tests and verify copied Markdown links. |
 | Canonical imports and legacy-shim removal | Open in foundation workstream | Inspect final diff across imports, tests, Docker, CI, docs, and generator; do not approve while forwarding paths remain. |
-| Locked developer tooling | Open in parallel PR #13 | Reconcile only after review/merge; verify any resulting revision and platform matrix independently. |
+| Locked developer tooling | Open in PR #13 | Verify reconciled source/generated checks and actual-head CI; macOS and interactive debugging remain unverified. |
 | Current dependent PR CI | Pending on updated revision | Confirm all required checks correspond to the pushed PR head. |
 | Foundry host caller binding and lost-response recovery | Blocked | Establish supported identity and reconciliation guarantees before implementing a hosted bridge. |
 | Live Entra/OBO, cloud telemetry, Azure deployment | Unverified | Separate scoped implementation, authorization where required, and live evidence. |

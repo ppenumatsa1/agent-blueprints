@@ -21,9 +21,7 @@ UNVERIFIED_CAPABILITIES = {
     "CHECK-EXPLANATION": (
         "The fixture formats and checks recorded facts; no agent explanation was evaluated."
     ),
-    "CHECK-HINT": (
-        "The fixture supplies the hint; no browser end-to-end hint was exercised."
-    ),
+    "CHECK-HINT": ("The fixture supplies the hint; no browser end-to-end hint was exercised."),
 }
 
 
@@ -50,7 +48,10 @@ class RecordedResult(unittest.TestResult):
 
     def addSubTest(self, test, subtest, error):
         case_id = subtest.params.get("case")
-        if case_id and getattr(test, "_testMethodName", "") == "test_application_against_golden_cases":
+        if (
+            case_id
+            and getattr(test, "_testMethodName", "") == "test_application_against_golden_cases"
+        ):
             record = {"outcome": "failed" if error else "passed"}
             actual = getattr(test, "case_actuals", {}).get(case_id)
             if actual is not None:
@@ -59,7 +60,9 @@ class RecordedResult(unittest.TestResult):
                 record["failure"] = _failure(error)
             self.cases[case_id] = record
         elif error:
-            self.suite_errors.append({"test": subtest.id(), "outcome": "failed", "failure": _failure(error)})
+            self.suite_errors.append(
+                {"test": subtest.id(), "outcome": "failed", "failure": _failure(error)}
+            )
         super().addSubTest(test, subtest, error)
 
     def addSuccess(self, test):
@@ -124,7 +127,9 @@ def summarize(contract, cases, observed_cases, observed_crashes, suite_errors):
         relevant = [case for case in cases if check_id in case["checks"]]
         observations = []
         for case in relevant:
-            record = observed_cases.get(case["id"], {"outcome": "unverified", "reason": "Case did not run."})
+            record = observed_cases.get(
+                case["id"], {"outcome": "unverified", "reason": "Case did not run."}
+            )
             outcome = record["outcome"]
             if outcome == "passed" and "actual" not in record:
                 outcome = "unverified"
@@ -136,7 +141,9 @@ def summarize(contract, cases, observed_cases, observed_crashes, suite_errors):
             for name in CRASH_TESTS:
                 record = observed_crashes.get(name, {"outcome": "unverified"})
                 observations.append({"id": name, "outcome": record["outcome"]})
-        observations.extend({"id": error["test"], "outcome": error["outcome"]} for error in suite_errors)
+        observations.extend(
+            {"id": error["test"], "outcome": error["outcome"]} for error in suite_errors
+        )
         if any(item["outcome"] == "failed" for item in observations):
             outcome = "failed"
             reason = "An actual observation or explanation-grounding check failed."
@@ -161,7 +168,9 @@ def produce(verification_root, output, revision, environment):
     scenario = verification_root / "scenarios" / "order-adjustment"
     contract = json.loads((scenario / "verification-contract.json").read_text(encoding="utf-8"))
     cases = json.loads((scenario / "golden-cases.json").read_text(encoding="utf-8"))
-    checks = [check["id"] for requirement in contract["requirements"] for check in requirement["checks"]]
+    checks = [
+        check["id"] for requirement in contract["requirements"] for check in requirement["checks"]
+    ]
     required_checks = {"CHECK-APPROVAL", "CHECK-RECOVERY", "CHECK-EXPLANATION", "CHECK-HINT"}
     case_ids = [case["id"] for case in cases]
     case_checks = {check for case in cases for check in case["checks"]}
@@ -171,7 +180,9 @@ def produce(verification_root, output, revision, environment):
         or len(case_ids) != len(set(case_ids))
         or case_checks != required_checks
     ):
-        raise ValueError("The synthetic contract and golden-case mapping are incomplete or ambiguous.")
+        raise ValueError(
+            "The synthetic contract and golden-case mapping are incomplete or ambiguous."
+        )
     adapter = BLUEPRINT / "tests" / "order_adjustment_adapter.py"
     golden_test = verification_root / "tests" / "test_golden_scenario.py"
     if not adapter.is_file() or not golden_test.is_file():
@@ -190,14 +201,20 @@ def produce(verification_root, output, revision, environment):
             raise ValueError("The golden test could not be loaded.")
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
-        suite = unittest.TestSuite([
-            module.GoldenScenarioTests("test_scenario_contract_and_traceability"),
-            module.GoldenScenarioTests("test_unapproved_example_is_schema_valid_and_baseline_pinned"),
-            module.GoldenScenarioTests("test_application_against_golden_cases"),
-        ])
-        suite.addTests(unittest.defaultTestLoader.loadTestsFromNames(
-            [f"tests.test_core.WorkflowIntegrationTests.{name}" for name in CRASH_TESTS]
-        ))
+        suite = unittest.TestSuite(
+            [
+                module.GoldenScenarioTests("test_scenario_contract_and_traceability"),
+                module.GoldenScenarioTests(
+                    "test_unapproved_example_is_schema_valid_and_baseline_pinned"
+                ),
+                module.GoldenScenarioTests("test_application_against_golden_cases"),
+            ]
+        )
+        suite.addTests(
+            unittest.defaultTestLoader.loadTestsFromNames(
+                [f"tests.test_core.WorkflowIntegrationTests.{name}" for name in CRASH_TESTS]
+            )
+        )
         recorded = RecordedResult()
         suite.run(recorded)
     finally:
@@ -208,30 +225,38 @@ def produce(verification_root, output, revision, environment):
 
     summary = summarize(contract, cases, recorded.cases, recorded.crashes, recorded.suite_errors)
     observed_at = datetime.now(timezone.utc).isoformat()
-    write_json(output / "runner-results.json", {
-        "source_revision": revision,
-        "environment": environment,
-        "recorded_at": observed_at,
-        "cases": recorded.cases,
-        "worker_recovery": recorded.crashes,
-        "suite_errors": recorded.suite_errors,
-        "tests_run": recorded.testsRun,
-    })
+    write_json(
+        output / "runner-results.json",
+        {
+            "source_revision": revision,
+            "environment": environment,
+            "recorded_at": observed_at,
+            "cases": recorded.cases,
+            "worker_recovery": recorded.crashes,
+            "suite_errors": recorded.suite_errors,
+            "tests_run": recorded.testsRun,
+        },
+    )
     approvals = []
     for case_id, record in recorded.cases.items():
         actual = record.get("actual")
         if isinstance(actual, dict):
-            approvals.append({
-                "case_id": case_id,
-                "decision": actual.get("decision"),
-                "state": actual.get("state"),
-                "action_count": actual.get("action_count"),
-            })
-    write_json(output / "synthetic-approval-observations.json", {
-        "synthetic": True,
-        "not_a_human_approval": True,
-        "observations": approvals,
-    })
+            approvals.append(
+                {
+                    "case_id": case_id,
+                    "decision": actual.get("decision"),
+                    "state": actual.get("state"),
+                    "action_count": actual.get("action_count"),
+                }
+            )
+    write_json(
+        output / "synthetic-approval-observations.json",
+        {
+            "synthetic": True,
+            "not_a_human_approval": True,
+            "observations": approvals,
+        },
+    )
 
     def evidence(kind, filename):
         path = output / filename
@@ -250,16 +275,19 @@ def produce(verification_root, output, revision, environment):
             check_id = check["id"]
             result = summary[check_id]
             filename = f"{check_id}.json"
-            write_json(output / filename, {
-                "check_id": check_id,
-                "outcome": result["outcome"],
-                "reason": result["reason"],
-                "source_revision": revision,
-                "environment": environment,
-                "recorded_at": observed_at,
-                "observations": result["observations"],
-                "runner_artifact": "runner-results.json",
-            })
+            write_json(
+                output / filename,
+                {
+                    "check_id": check_id,
+                    "outcome": result["outcome"],
+                    "reason": result["reason"],
+                    "source_revision": revision,
+                    "environment": environment,
+                    "recorded_at": observed_at,
+                    "observations": result["observations"],
+                    "runner_artifact": "runner-results.json",
+                },
+            )
             files = {
                 "test_report": filename,
                 "evaluation_result": filename,
@@ -269,34 +297,42 @@ def produce(verification_root, output, revision, environment):
             }
             if any(kind not in files for kind in check["evidence_types"]):
                 raise ValueError(f"Unsupported evidence type for {check_id}.")
-            normalized.append({
-                "check_id": check_id,
-                "outcome": result["outcome"],
-                "reason": result["reason"],
-                "implementation_refs": ["tests/order_adjustment_adapter.py", "tests/test_core.py"],
-                "evidence": [evidence(kind, files[kind]) for kind in check["evidence_types"]],
-            })
+            normalized.append(
+                {
+                    "check_id": check_id,
+                    "outcome": result["outcome"],
+                    "reason": result["reason"],
+                    "implementation_refs": [
+                        "tests/order_adjustment_adapter.py",
+                        "tests/test_core.py",
+                    ],
+                    "evidence": [evidence(kind, files[kind]) for kind in check["evidence_types"]],
+                }
+            )
     assessed_at = datetime.now(timezone.utc).isoformat()
-    write_json(output / "readiness-input.json", {
-        "schema_version": "1.0.0",
-        "context": {
-            "target_maturity": "prototype",
-            "source_revision": revision,
-            "environment": environment,
-            "assessed_at": assessed_at,
+    write_json(
+        output / "readiness-input.json",
+        {
+            "schema_version": "1.0.0",
+            "context": {
+                "target_maturity": "prototype",
+                "source_revision": revision,
+                "environment": environment,
+                "assessed_at": assessed_at,
+            },
+            "assumptions": ["All scenario records and identities are synthetic."],
+            "incomplete_integrations": [
+                "Live Entra/OBO and Foundry-managed recovery are unverified.",
+                "Agent explanation evaluation and browser end-to-end hint behavior are unverified.",
+            ],
+            "limitations": [
+                "The local producer and its timestamps are not independently attested.",
+                "Synthetic approval observations are not human contract approval.",
+            ],
+            "results": normalized,
+            "decisions": [],
         },
-        "assumptions": ["All scenario records and identities are synthetic."],
-        "incomplete_integrations": [
-            "Live Entra/OBO and Foundry-managed recovery are unverified.",
-            "Agent explanation evaluation and browser end-to-end hint behavior are unverified.",
-        ],
-        "limitations": [
-            "The local producer and its timestamps are not independently attested.",
-            "Synthetic approval observations are not human contract approval.",
-        ],
-        "results": normalized,
-        "decisions": [],
-    })
+    )
     return summary, recorded
 
 

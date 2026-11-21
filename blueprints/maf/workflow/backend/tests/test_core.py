@@ -37,7 +37,9 @@ class WorkflowIntegrationTests(unittest.IsolatedAsyncioTestCase):
     def setUpClass(cls):
         dsn = os.environ.get("MAF_TEST_DATABASE_URL")
         if not dsn:
-            raise RuntimeError("MAF_TEST_DATABASE_URL must point to an isolated PostgreSQL test database.")
+            raise RuntimeError(
+                "MAF_TEST_DATABASE_URL must point to an isolated PostgreSQL test database."
+            )
         cls.store = PostgresStore(dsn)
         cls.store.initialize()
         initialize_fixture(cls.store)
@@ -95,9 +97,7 @@ class WorkflowIntegrationTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_rejection_and_unauthorized_decisions_never_apply_action(self):
         case = await self.submit()
-        stranger = Principal(
-            "test-tenant", "stranger", REVIEWER.scopes, REVIEWER.roles
-        )
+        stranger = Principal("test-tenant", "stranger", REVIEWER.scopes, REVIEWER.roles)
         for actor in (
             stranger,
             Principal("other-tenant", REVIEWER.subject, REVIEWER.scopes, REVIEWER.roles),
@@ -166,7 +166,10 @@ class WorkflowIntegrationTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(ActionError):
             await self.service.decide(REVIEWER, case.id, "approved")
         failed = self.store.get(case.id)
-        self.assertEqual((failed.status, failed.decision, failed.failure_code), ("failed", "approved", "action_failed"))
+        self.assertEqual(
+            (failed.status, failed.decision, failed.failure_code),
+            ("failed", "approved", "action_failed"),
+        )
         self.assertEqual(action_count(self.store, case.id), 0)
         self.host.action = FixtureAction()
         await self.host.resume(case.id)
@@ -291,8 +294,12 @@ class WorkflowIntegrationTests(unittest.IsolatedAsyncioTestCase):
 
     def _worker(self, operation, case_id, barrier=None, marker=None):
         command = [
-            sys.executable, "-m", "tests.crash_worker", operation,
-            str(case_id), str(self.checkpoint_root),
+            sys.executable,
+            "-m",
+            "tests.crash_worker",
+            operation,
+            str(case_id),
+            str(self.checkpoint_root),
         ]
         if barrier:
             command.extend(["--barrier", barrier, "--marker", str(marker)])

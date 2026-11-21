@@ -11,10 +11,14 @@ maf-workflow/
 ├── README.md
 ├── compose.yaml
 ├── .dockerignore
+├── .vscode/
+│   ├── launch.json
+│   └── tasks.json
 ├── backend/
 │   ├── Dockerfile
-│   ├── requirements.txt
-│   ├── requirements-dev.txt
+│   ├── .python-version
+│   ├── pyproject.toml
+│   ├── uv.lock
 │   ├── examples/
 │   │   └── synthetic_application.py
 │   ├── app/

@@ -13,15 +13,18 @@ deployment command.
 
 ## Local development and Compose
 
-1. Install Python 3.12, Node 22, Docker with Compose, and an isolated
+1. Install Python 3.12, uv 0.9.26, Node 22, Docker with Compose, and an isolated
    PostgreSQL database for direct tests. Use authorized existing Entra
    registrations for interactive sign-in; registration and consent are not
    created by the project.
-2. Install backend requirements from `backend/requirements-dev.txt` and run
-   the targeted source suite from `backend`:
+2. From `backend`, install the locked environment and run the targeted source
+   suite:
 
    ```text
-   python -m unittest -v tests.test_core tests.test_security tests.test_evidence_runner
+   uv sync --locked
+   uv run --locked ruff check .
+   uv run --locked ruff format --check .
+   uv run --locked python -m unittest -v tests.test_core tests.test_security tests.test_evidence_runner
    ```
 
 3. From `frontend`, run `npm ci`, `npm test`, `npm run build`, and
@@ -43,16 +46,26 @@ disclosures, and builds the generated Compose stack. CI does not provision
 Azure or prove live Entra/Foundry behavior. The generated-verifier pipeline
 propagates the test command's nonzero exit through `tee` and separately
 rejects skipped or expected-failure results; `tests/test_ci_workflow.py`
-exercises these failure paths against the actual CI step.
+extracts the actual step and exercises failure, skip, expected-failure, and
+success outcomes, including the locked `uv run --locked --project` selector.
+
+On the tooling PR reconciliation to foundation
+`d0e172751a39bc6e3a072d80482b3581b7007413`, local source and generated backend
+tests each passed 36 cases, generated verification passed 44 with no skips,
+Ruff passed in both backend copies, and generated frontend tests/build/CSP
+passed. The generated Compose configuration passed locally, but its image
+build could not fetch the pinned uv package from the public package host due
+to a TLS handshake failure. Treat local Compose smoke as unverified for that
+revision; the exact dependent PR head still requires hosted CI.
 
 Before PR approval:
 
 1. Generate a fresh project outside the repository and verify all documentation,
    contract bytes, and imports are independent.
 2. Run focused regression, security, durability, and independent checks
-   affected by the change; the mandated contract-change command is
-   `python -m unittest discover -s tests -v` in an isolated environment with
-   `requirements-dev.txt` installed.
+   affected by the change. For contract changes, run
+   `python -m unittest discover -s tests -v` with the source repository's
+   root `requirements-dev.txt` installed in an isolated environment.
 3. Confirm all required GitHub Actions checks belong to the exact PR head
    revision. A prior commit's green run is not evidence for a new revision.
 4. Review the diff for compatibility shims, duplicate implementations,

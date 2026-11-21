@@ -75,6 +75,38 @@ verification and CI outcomes for its final revision. The design documents
 must accompany generated applications and distinguish planned work from
 verified behavior.
 
+The dependent developer-tooling branch adds `backend/pyproject.toml` and a
+public-registry `uv.lock`, locked development and container installs, Ruff,
+portable development commands and VS Code configurations. Acceptance requires
+source and generated lint/tests and locked builds without Azure credentials,
+then passing hosted CI on the actual reviewed head. Local Windows source and
+generated backend tests, Ruff, generated UI tests/build and Linux Compose
+204/401 smoke passed using an approved temporary mirror; public artifact downloads failed locally with
+a TLS handshake error. After rebasing onto verified checkpoint fix `9efeef0`,
+source and generated backend suites passed 36 tests each, independent
+verification passed 44 without skips, generated frontend passed 8 tests/build/
+CSP, and Ruff passed in both backends. Hosted
+[run 44937433206](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44937433206)
+passed all five jobs for code head `2a8fafdb`; check CI on the actual PR head.
+Earlier runs apply only to their own revisions. macOS,
+interactive debugging and a clean public-only local installation remain
+unverified. Next confirm hosted CI on the final reviewed head.
+
+The foundation then added `set -o pipefail` and an executable regression for
+the generated verification step. On reconciliation to
+`d0e172751a39bc6e3a072d80482b3581b7007413`, the harness was aligned with the
+locked `uv run --locked --project` invocation and now checks failure, skipped,
+expected-failure, and success outcomes. The root suite passed 47 tests with
+one intentional adapter skip; source and generated backend suites passed 36
+each, generated verification passed 44 with no skips, and generated frontend
+passed 8 tests/build/CSP. Ruff passed in both backend copies. Compose config
+passed, but local image build and smoke are unverified because a public Python
+package download failed TLS. Foundation run
+[44939172266](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44939172266)
+passed all five jobs on the base SHA only. Confirm all checks on the final PR
+head; macOS, interactive debugging, and public-only local downloads remain
+unverified.
+
 P1-01 through P1-04 have an initial local foundation and a test-only
 application adapter, but the scenario has no authorized contract approval.
 Trusted result production and repository protection remain unverified. The

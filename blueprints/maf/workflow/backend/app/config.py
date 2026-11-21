@@ -44,8 +44,13 @@ class Settings:
             object.__setattr__(self, "tenant_id", str(UUID(self.tenant_id)))
             object.__setattr__(self, "api_client_id", str(UUID(self.api_client_id)))
         except (ValueError, TypeError, AttributeError) as exc:
-            raise ValueError("Entra tenant and API client IDs must be configured as UUIDs.") from exc
-        if not self.database_url or urlsplit(self.database_url).scheme not in ("postgres", "postgresql"):
+            raise ValueError(
+                "Entra tenant and API client IDs must be configured as UUIDs."
+            ) from exc
+        if not self.database_url or urlsplit(self.database_url).scheme not in (
+            "postgres",
+            "postgresql",
+        ):
             raise ValueError("A PostgreSQL connection URL is required.")
         if not str(self.checkpoint_root):
             raise ValueError("A local checkpoint root is required.")
@@ -57,13 +62,19 @@ class Settings:
             raise ValueError("Enabled OBO requires a client secret and allowed downstream scopes.")
         for scope in self.obo_allowed_scopes:
             parsed = urlsplit(scope)
-            if parsed.scheme not in ("https", "api") or not parsed.netloc or any(c.isspace() for c in scope):
+            if (
+                parsed.scheme not in ("https", "api")
+                or not parsed.netloc
+                or any(c.isspace() for c in scope)
+            ):
                 raise ValueError("OBO scopes must be explicit resource-qualified scopes.")
 
     @classmethod
     def from_environment(cls) -> "Settings":
         def values(name: str) -> tuple[str, ...]:
-            return tuple(value.strip() for value in os.environ.get(name, "").split(",") if value.strip())
+            return tuple(
+                value.strip() for value in os.environ.get(name, "").split(",") if value.strip()
+            )
 
         enabled = os.environ.get("OBO_ENABLED", "false").lower()
         if enabled not in ("true", "false"):
