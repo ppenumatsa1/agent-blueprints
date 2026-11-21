@@ -38,7 +38,8 @@ they are not a second runtime or a guarantee that a provider is configured.
   `FunctionTool` implementations to a trusted, authenticated `Principal` and
   an application-owned `ToolAuthorization`. Each tool must reauthorize the
   principal and model-supplied resource identifiers inside its handler before
-  reading protected data or causing an effect. The synthetic tool in
+  reading protected data or causing an effect; the authorization callback must
+  return exactly `True`, and the example rejects `False` or `None`. The synthetic tool in
   [synthetic_application.py](../backend/examples/synthetic_application.py)
   demonstrates a scope- and resource-gated read-only call. This example does
   not authorize business decisions or external effects. `ToolRegistry` is
@@ -46,13 +47,22 @@ they are not a second runtime or a guarantee that a provider is configured.
   handlers to authorize, sandbox Python, or provide idempotency. Consequential
   remote effects remain blocked pending the authorization, idempotency/outbox,
   reconciliation, and fault-injection evidence required by [#32](https://github.com/ppenumatsa1/agent-blueprints/issues/32).
+- **Extension limits:** Typed contracts and fixture tests do not sandbox
+  arbitrary trusted Python callbacks or prove that every possible extension
+  cannot bypass authorization, approval, recovery, idempotency, or readiness.
+  That absolute non-bypass acceptance criterion remains unverified; adopters
+  must review and test each callback and keep consequential effects blocked.
 - **Executor/workflow composition:** implement the existing
   `WorkflowFactory` signature with MAF `Executor` and `WorkflowBuilder`;
   receive the checkpoint provider selected by the host. Keep workflow name,
   executor identity, pending request IDs, response contract, and checkpoint
   ownership stable for the local host. The generated synthetic example uses
-  the native approval workflow factory; no generic orchestration layer is
-  added. Foundry-managed hosting/checkpoints and recovery remain unverified
+  an application-owned `SyntheticApprovalExecutor` and workflow factory while
+  preserving the host-required workflow name, executor ID, request/response
+  shape, and host-supplied checkpoint provider. Its source/generated
+  integration tests exercise approval, rejection, restart, and both local
+  crash-recovery windows. No generic orchestration layer is added.
+  Foundry-managed hosting/checkpoints and recovery remain unverified
   under [#19](https://github.com/ppenumatsa1/agent-blueprints/issues/19),
   [#20](https://github.com/ppenumatsa1/agent-blueprints/issues/20), and
   [#22](https://github.com/ppenumatsa1/agent-blueprints/issues/22).

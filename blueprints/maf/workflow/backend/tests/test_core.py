@@ -19,6 +19,7 @@ from app.infrastructure.store import PostgresStore
 from app.usecases.service import WorkflowService
 from app.workflows.host import LocalWorkflowHost
 from app.workflows.workflow import create_workflow
+from examples.synthetic_application import build_application, prepare
 from tests.fixture_application import FixtureAction, action_count, initialize_fixture
 
 
@@ -33,6 +34,15 @@ REVIEWER = Principal(
 )
 
 
+def synthetic_action_count(store, case_id):
+    with store.connect() as connection:
+        row = connection.execute(
+            "SELECT count(*) AS count FROM synthetic_effects WHERE case_id = %s",
+            (case_id,),
+        ).fetchone()
+    return row["count"]
+
+
 class WorkflowIntegrationTests(unittest.IsolatedAsyncioTestCase):
     @classmethod
     def setUpClass(cls):
@@ -45,6 +55,7 @@ class WorkflowIntegrationTests(unittest.IsolatedAsyncioTestCase):
         upgrade(dsn)
         cls.store.initialize()
         initialize_fixture(cls.store)
+        prepare(cls.store)
 
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -57,6 +68,17 @@ class WorkflowIntegrationTests(unittest.IsolatedAsyncioTestCase):
         return await self.service.submit(
             OWNER, reviewer, payload if payload is not None else {"value": 42}, key or str(uuid4())
         )
+
+    def use_synthetic_application(self):
+        application = build_application()
+        self.host = LocalWorkflowHost(
+            self.store,
+            application.action,
+            self.checkpoint_root,
+            workflow_factory=application.workflow_factory,
+        )
+        self.service = WorkflowService(self.store, self.host, application.rules, application.policy)
+        return application
 
     def fixed_checkpoint_timestamps(self):
         save = FileCheckpointStorage.save
@@ -178,6 +200,26 @@ class WorkflowIntegrationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.store.get(case.id).status, "completed")
         self.assertEqual(action_count(self.store, case.id), 1)
 
+    async def test_application_owned_workflow_approves_rejects_and_restarts(self):
+        self.use_synthetic_application()
+
+        approved = await self.submit(key=f"synthetic-approve-{uuid4()}")
+        self.assertEqual(approved.status, "pending")
+        self.use_synthetic_application()
+        await self.host.resume(approved.id)
+        completed = await self.service.decide(REVIEWER, approved.id, "approved")
+        self.assertEqual(completed.status, "completed")
+        self.assertTrue(completed.execution_complete)
+        self.assertEqual(synthetic_action_count(self.store, approved.id), 1)
+
+        rejected = await self.submit(key=f"synthetic-reject-{uuid4()}")
+        self.use_synthetic_application()
+        await self.host.resume(rejected.id)
+        denied = await self.service.decide(REVIEWER, rejected.id, "rejected")
+        self.assertEqual(denied.status, "rejected")
+        self.assertTrue(denied.execution_complete)
+        self.assertEqual(synthetic_action_count(self.store, rejected.id), 0)
+
     async def test_missing_checkpoint_fails_closed(self):
         case = await self.submit()
         (self.checkpoint_root / str(case.id) / f"{case.checkpoint_id}.json").unlink()
@@ -294,7 +336,7 @@ class WorkflowIntegrationTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(self.store.get(case.id).execution_complete)
         self.assertEqual(action_count(self.store, case.id), 1)
 
-    def _worker(self, operation, case_id, barrier=None, marker=None):
+    def _worker(self, operation, case_id, barrier=None, marker=None, application="fixture"):
         command = [
             sys.executable,
             "-m",
@@ -302,6 +344,8 @@ class WorkflowIntegrationTests(unittest.IsolatedAsyncioTestCase):
             operation,
             str(case_id),
             str(self.checkpoint_root),
+            "--application",
+            application,
         ]
         if barrier:
             command.extend(["--barrier", barrier, "--marker", str(marker)])
@@ -316,8 +360,8 @@ class WorkflowIntegrationTests(unittest.IsolatedAsyncioTestCase):
             time.sleep(0.05)
         self.assertTrue(marker.exists(), "Worker did not reach the crash barrier.")
 
-    def _restart_worker(self, case_id):
-        worker = self._worker("resume", case_id)
+    def _restart_worker(self, case_id, application="fixture"):
+        worker = self._worker("resume", case_id, application=application)
         out, err = worker.communicate(timeout=30)
         self.assertEqual(worker.returncode, 0, f"Recovery worker failed: {out} {err}")
 
@@ -342,11 +386,41 @@ class WorkflowIntegrationTests(unittest.IsolatedAsyncioTestCase):
         self._restart_worker(case.id)
         self.assertEqual(action_count(self.store, case.id), 1)
 
+    async def _crash_and_recover_synthetic(self, barrier):
+        self.use_synthetic_application()
+        case = await self.submit(key=f"synthetic-crash-{barrier}-{uuid4()}")
+        marker = Path(self.temp.name) / f"synthetic-{barrier}"
+        worker = self._worker("decide", case.id, barrier, marker, "synthetic")
+        try:
+            self._wait_for_marker(worker, marker)
+            before = self.store.get(case.id)
+            self.assertEqual(before.decision, "approved")
+            self.assertFalse(before.execution_complete)
+            self.assertEqual(
+                synthetic_action_count(self.store, case.id), int(barrier == "after-action")
+            )
+        finally:
+            worker.kill()
+            worker.communicate(timeout=10)
+        self._restart_worker(case.id, "synthetic")
+        recovered = self.store.get(case.id)
+        self.assertEqual(recovered.status, "completed")
+        self.assertTrue(recovered.execution_complete)
+        self.assertEqual(synthetic_action_count(self.store, case.id), 1)
+        self._restart_worker(case.id, "synthetic")
+        self.assertEqual(synthetic_action_count(self.store, case.id), 1)
+
     async def test_worker_crash_after_decision_before_resume(self):
         await self._crash_and_recover("after-decision")
 
     async def test_worker_crash_after_action_before_checkpoint(self):
         await self._crash_and_recover("after-action")
+
+    async def test_application_owned_workflow_recovers_after_decision_crash(self):
+        await self._crash_and_recover_synthetic("after-decision")
+
+    async def test_application_owned_workflow_recovers_after_action_crash(self):
+        await self._crash_and_recover_synthetic("after-action")
 
 
 if __name__ == "__main__":

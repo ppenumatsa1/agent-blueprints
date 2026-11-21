@@ -3,7 +3,7 @@ from hashlib import sha256
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from agent_framework import Agent, FunctionTool, Workflow
 
@@ -18,6 +18,8 @@ from examples.synthetic_application import (
     PROMPT_PATH,
     SYNTHETIC_AGENT,
     SyntheticToolAuthorization,
+    _inspect_synthetic_case,
+    build_application,
     build_synthetic_agent,
     build_synthetic_tools,
 )
@@ -109,10 +111,23 @@ class ExtensionTests(unittest.TestCase):
         reader_tool = build_synthetic_tools(self.reader, authorization)[0]
         with self.assertRaises(AccessDenied):
             asyncio.run(reader_tool.invoke(arguments={"case_id": "unauthorized-case-id"}))
-        self.assertEqual(
-            len(asyncio.run(reader_tool.invoke(arguments={"case_id": "synthetic-case"}))),
-            1,
-        )
+        result = asyncio.run(reader_tool.invoke(arguments={"case_id": "synthetic-case"}))
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].text, "Synthetic case reference: synthetic-case")
+
+    def test_tool_authorization_requires_affirmative_true_before_reading(self):
+        for result in (False, None, 1):
+            with self.subTest(result=result):
+                authorization = Mock()
+                authorization.authorize_tool.return_value = result
+                with patch(
+                    "examples.synthetic_application._read_synthetic_case_reference"
+                ) as read_case:
+                    with self.assertRaises(AccessDenied):
+                        asyncio.run(
+                            _inspect_synthetic_case(self.reader, authorization, "synthetic-case")
+                        )
+                    read_case.assert_not_called()
 
     def test_tool_registry_rejects_duplicate_names_and_binds_request_principal(self):
         registry = ToolRegistry()
@@ -125,7 +140,9 @@ class ExtensionTests(unittest.TestCase):
         factory.assert_called_once_with(self.reader, authorization)
 
     def test_workflow_extension_remains_a_native_maf_workflow(self):
-        workflow = create_workflow(Mock(), Mock())
+        application = build_application()
+        self.assertIsNot(application.workflow_factory, create_workflow)
+        workflow = application.workflow_factory(Mock(), Mock(), None)
         self.assertIsInstance(workflow, Workflow)
 
 
