@@ -4,6 +4,7 @@ import re
 from typing import Any
 from uuid import UUID
 
+from .errors import InvalidInput
 from .models import AccessPolicy, BusinessRules, Case, Decision, Principal, StateRepository, WorkflowHost
 
 
@@ -25,7 +26,7 @@ class WorkflowService:
     ) -> Case:
         self.policy.authorize_submission(actor, reviewer_id)
         if not re.fullmatch(r"[A-Za-z0-9._:-]{1,128}", idempotency_key):
-            raise ValueError("The idempotency key must be 1-128 safe characters.")
+            raise InvalidInput("The idempotency key must be 1-128 safe characters.")
         validated = self.rules.validate(payload)
         canonical = json.dumps(
             {"reviewer_id": reviewer_id, "payload": validated},

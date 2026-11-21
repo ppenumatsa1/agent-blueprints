@@ -88,14 +88,20 @@ file/database boundary; a transaction commits the application-owned
 database action together with its unique ledger entry. Tests terminate and
 restart real workers at both specified commit windows. This applies only to
 database effects in the same transaction, not arbitrary external services.
-Missing or corrupt checkpoints fail visibly. The Entra API, UI, generated
-application, and end-to-end verification remain in progress.
+Missing or corrupt checkpoints fail visibly. The application increment
+adds the Entra API, MSAL UI, and a loopback-only Compose stack with a
+non-root API and a private persistent checkpoint volume. Local HTTP smoke
+checks are not live identity verification. The generated application and
+end-to-end verification remain in progress.
 
 Interactive local and hosted access uses Microsoft Entra ID: React uses MSAL,
 and FastAPI validates access tokens, scopes, roles, and record-level access.
 Synthetic identities are confined to automated tests. Existing registrations
 and authorized sign-in are prerequisites for interactive use; no registration
-or Azure resource is created by this blueprint.
+or Azure resource is created by this blueprint. The frontend receives public
+configuration at build time; secrets and optional OBO token exchange remain
+server-side. The supplied synthetic action is selected explicitly and can be
+replaced without importing the source repository.
 
 ## Shared versus framework-specific
 
@@ -114,7 +120,7 @@ before copying anything; preserve any applicable license notices.
 ## Proposed future structure
 
 Documentation, contracts, a synthetic scenario, an independent readiness
-validator, tests, CI, and the in-progress MAF workflow core currently exist.
+validator, tests, CI, and the in-progress MAF workflow blueprint currently exist.
 Other blueprint directories below remain proposed:
 
 ```text
@@ -124,7 +130,7 @@ agent-blueprints/
   readiness/               # independent local verification CLI
   scenarios/               # synthetic contract and acceptance fixtures
   blueprints/
-    maf/workflow/          # in-progress local workflow core
+    maf/workflow/          # in-progress local workflow blueprint
     maf/harness/
     foundry-sdk/agent/
     langgraph/workflow/
