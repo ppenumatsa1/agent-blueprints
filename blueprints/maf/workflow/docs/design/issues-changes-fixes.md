@@ -178,8 +178,11 @@ entries to hide failed attempts or gaps.
   `61d44ed`, retain its canonical imports and remove stale `test_modularity`
   command references. Preserve the six generated-project guides, their README
   navigation, the eight design documents, and copy/link verification.
-- **Evidence:** Focused generated-project tests and checks for the final rebased
-  PR head are pending; record exact local and hosted results before approval.
+- **Evidence:** Both focused `tests.test_instantiation` tests passed after
+  rebasing onto `61d44ed`. Foundation PR #11 run
+  [44930591252](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44930591252)
+  passed all five checks on the exact foundation commit. Hosted checks for
+  this dependent PR remain pending until its rebased head is published.
 - **Limit:** This reconciliation does not verify Azure hosting, interactive
   debugging on macOS, live Entra/OBO, or hosted checkpoint recovery.
 
@@ -206,8 +209,8 @@ entries to hide failed attempts or gaps.
 
 | Item | Status | Evidence needed / next action |
 | --- | --- | --- |
-| Eight design documents and generated inclusion | In progress | Run focused instantiation tests and verify copied Markdown links on the rebased PR head. |
-| Canonical imports and legacy-shim removal | Implemented in foundation commit `61d44ed` | Confirm foundation CI and verify no compatibility forwarding paths appear in the rebased PR diff. |
+| Eight design documents and generated inclusion | In progress | Focused instantiation tests passed after rebase; confirm this PR's hosted CI on its rebased head. |
+| Canonical imports and legacy-shim removal | Implemented in foundation commit `61d44ed` | Foundation PR #11 run 44930591252 passed all five checks; preserve direct imports in later changes. |
 | Locked developer tooling | Open in parallel PR #13 | Reconcile only after review/merge; verify any resulting revision and platform matrix independently. |
 | Current dependent PR CI | Pending on updated revision | Confirm all required checks correspond to the pushed PR head. |
 | Foundry host caller binding and lost-response recovery | Blocked | Establish supported identity and reconciliation guarantees before implementing a hosted bridge. |
