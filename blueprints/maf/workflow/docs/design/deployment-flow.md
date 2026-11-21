@@ -17,8 +17,8 @@ deployment command.
    PostgreSQL database for direct tests. Use authorized existing Entra
    registrations for interactive sign-in; registration and consent are not
    created by the project.
-2. Install the locked backend environment and run
-   the targeted source suite from `backend`:
+2. From `backend`, install the locked environment and run the targeted source
+   suite:
 
    ```text
    uv sync --locked
@@ -50,9 +50,9 @@ Before PR approval:
 1. Generate a fresh project outside the repository and verify all documentation,
    contract bytes, and imports are independent.
 2. Run focused regression, security, durability, and independent checks
-   affected by the change; the mandated contract-change command is
-   `python -m unittest discover -s tests -v` in an isolated environment with
-   `requirements-dev.txt` installed.
+   affected by the change. For contract changes, run
+   `python -m unittest discover -s tests -v` with the source repository's
+   root `requirements-dev.txt` installed in an isolated environment.
 3. Confirm all required GitHub Actions checks belong to the exact PR head
    revision. A prior commit's green run is not evidence for a new revision.
 4. Review the diff for compatibility shims, duplicate implementations,

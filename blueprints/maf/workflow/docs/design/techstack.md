@@ -27,9 +27,9 @@ frontend's direct dependency manifest and lock are
 [`frontend/package.json`](../../frontend/package.json) and
 [`frontend/package-lock.json`](../../frontend/package-lock.json).
 Compose declares the PostgreSQL image in
-[`compose.yaml`](../../compose.yaml). GitHub Actions pins action revisions in
-the source repository's `.github/workflows/ci.yml` pins GitHub Actions
-revisions; that CI file is not copied into a generated project.
+[`compose.yaml`](../../compose.yaml). The source repository's
+`.github/workflows/ci.yml` pins GitHub Actions revisions; that CI file is not
+copied into a generated project.
 
 ## State and identity choices
 
@@ -54,17 +54,18 @@ immutable image digests, so supply-chain hardening is still an acceptance
 concern. See [deployment flow](deployment-flow.md) and
 the source repository's `docs/engineering-standards.md`.
 
-The **open** developer-tooling change is PR
+The **open** developer-tooling PR
 [#13](https://github.com/ppenumatsa1/agent-blueprints/pull/13), head
-`e1d953662e615e547fa641ad0831907c363318e3` before reconciliation. It added Python 3.12, uv
-0.9.26 with a public-PyPI `uv.lock` and hash-pinned backend/image installs,
-Ruff 0.14.13, Node 22 with `npm ci`, and VS Code task/debug configurations.
-Its hosted run
+was originally `e1d9536` and is being rebased onto the checkpoint fix at
+`9efeef0`. It adds Python 3.12, uv 0.9.26 with a public-PyPI `uv.lock` and
+hash-pinned backend/image installs, Ruff 0.14.13, Node 22 with `npm ci`, and
+VS Code task/debug configurations. Earlier hosted runs
 [44928260607](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44928260607)
-passed five checks for that exact prior tooling revision, not this revision. The
-workstream reports Windows and Linux Compose verification with an approved
-package mirror after public TLS failures; macOS and interactive debugger
-verification remain unverified. See the [journal](issues-changes-fixes.md).
+and [44931241591](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44931241591)
+passed five checks for their respective earlier revisions only. Local Windows
+package downloads required approved mirrors after public TLS failures; macOS
+and interactive debugger verification remain unverified. See the
+[journal](issues-changes-fixes.md) for scoped verification.
 
 ## Official references
 
