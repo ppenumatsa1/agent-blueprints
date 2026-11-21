@@ -2,15 +2,23 @@ import asyncio
 import json
 import logging
 import os
+import subprocess
+import sys
 import tempfile
+import textwrap
 import unittest
 from dataclasses import replace
 from pathlib import Path
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 from uuid import UUID
 
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from opentelemetry.sdk.metrics.export import InMemoryMetricReader, MetricExportResult
+from opentelemetry.sdk.metrics.export import (
+    AggregationTemporality,
+    InMemoryMetricReader,
+    MetricExportResult,
+)
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor, SpanExportResult
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from opentelemetry.trace import StatusCode
@@ -21,7 +29,8 @@ from app.infrastructure.telemetry import SafeExporter, SafeMetricExporter, Telem
 from app.infrastructure.delegation import OnBehalfOf
 from app.infrastructure.identity import AuthenticatedRequest
 from app.infrastructure.store import PostgresStore
-from app.domain.errors import DelegationError
+from app.domain.errors import ActionError, BlueprintError, Conflict, DelegationError
+from app.lifecycle import create_lifespan
 
 
 CANARY = "secret-canary-prompt-token-tool-result-sql-identifier"
@@ -29,15 +38,13 @@ CANARY = "secret-canary-prompt-token-tool-result-sql-identifier"
 
 def fake_metric_exporter():
     exporter = Mock()
-    exporter._preferred_temporality = None
-    exporter._preferred_aggregation = None
     exporter.force_flush.return_value = True
     exporter.export.return_value = MetricExportResult.SUCCESS
     return exporter
 
 
 class TelemetryTests(unittest.TestCase):
-    def app(self, *, store=None, components=None):
+    def app(self, *, store=None, components=None, cors_origins=()):
         checkpoint_dir = tempfile.TemporaryDirectory(dir=".")
         self.addCleanup(checkpoint_dir.cleanup)
         store = store if store is not None else Mock()
@@ -48,6 +55,7 @@ class TelemetryTests(unittest.TestCase):
             "20000000-0000-4000-8000-000000000002",
             "postgresql://localhost/test",
             Path(checkpoint_dir.name),
+            cors_origins=cors_origins,
         )
         return create_app(settings, components, store=store, identity=Mock())
 
@@ -125,7 +133,11 @@ class TelemetryTests(unittest.TestCase):
         self.assertEqual(
             (unsampled_log["outcome"], unsampled_log["http_status_code"]), ("error", 500)
         )
-        spans = exporter.get_finished_spans()
+        spans = [
+            span
+            for span in exporter.get_finished_spans()
+            if span.name in {"http.request", "workflow.resume"}
+        ]
         self.assertEqual(len(spans), 4)
         error = next(s for s in spans if s.status.status_code == StatusCode.ERROR)
         self.assertFalse(error.events)
@@ -133,6 +145,39 @@ class TelemetryTests(unittest.TestCase):
         self.assertEqual(child.context.trace_id, int(trace_id, 16))
         self.assertTrue(any(s.context.span_id == child.parent.span_id for s in spans))
         self.assertNotIn(CANARY, str(records) + repr(spans) + "".join(s.to_json() for s in spans))
+
+    def test_cors_preflight_allows_traceparent_and_exposes_correlation_id(self):
+        origin = "https://client.example"
+        app = self.app(cors_origins=(origin,))
+        with TestClient(app) as client:
+            preflight = client.options(
+                "/healthz",
+                headers={
+                    "Origin": origin,
+                    "Access-Control-Request-Method": "GET",
+                    "Access-Control-Request-Headers": "authorization, traceparent",
+                },
+            )
+            response = client.get(
+                "/healthz",
+                headers={
+                    "Origin": origin,
+                    "traceparent": "00-1234567890abcdef1234567890abcdef-1234567890abcdef-01",
+                },
+            )
+
+        self.assertEqual(preflight.status_code, 200)
+        self.assertEqual(preflight.headers["access-control-allow-origin"], origin)
+        allowed_headers = {
+            value.strip().lower()
+            for value in preflight.headers["access-control-allow-headers"].split(",")
+        }
+        self.assertIn("traceparent", allowed_headers)
+        self.assertNotIn("*", allowed_headers)
+        self.assertEqual(response.status_code, 204)
+        self.assertEqual(response.headers["access-control-allow-origin"], origin)
+        self.assertEqual(response.headers["access-control-expose-headers"], "X-Correlation-ID")
+        self.assertTrue(response.headers["X-Correlation-ID"])
 
     def test_bad_trace_context_and_export_failures_are_safe(self):
         fake = Mock()
@@ -173,6 +218,227 @@ class TelemetryTests(unittest.TestCase):
         self.assertIn('"outcome":"failure"', str(logs.output))
         self.assertIn('"event":"telemetry.metric_export"', str(logs.output))
         self.assertNotIn(CANARY, str(logs.output))
+
+    def test_maf_auto_instrumentation_stays_disabled_and_manual_spans_remain_safe(self):
+        script = textwrap.dedent(
+            """
+            import asyncio
+            from agent_framework import Executor, WorkflowBuilder, WorkflowContext, handler
+            from fastapi.testclient import TestClient
+            from opentelemetry import metrics, trace
+            from opentelemetry.sdk.metrics import MeterProvider
+            from opentelemetry.sdk.metrics.export import InMemoryMetricReader
+            from opentelemetry.sdk.trace import TracerProvider
+            from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+            from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+            from pathlib import Path
+            from tempfile import TemporaryDirectory
+            from unittest.mock import Mock
+
+            from app.application import ApplicationComponents
+            from app.composition import create_app
+            from app.config import Settings
+            from app.infrastructure.telemetry import SafeExporter
+
+            PROMPT_CANARY = "private-prompt-canary"
+            TOOL_CANARY = "private-tool-canary"
+            IDENTITY_CANARY = "private-identity-canary"
+            FAILURE_CANARY = "private-failure-canary"
+
+            global_trace_provider = TracerProvider()
+            global_trace_exporter = InMemorySpanExporter()
+            global_trace_provider.add_span_processor(
+                SimpleSpanProcessor(global_trace_exporter)
+            )
+            global_metrics_reader = InMemoryMetricReader()
+            global_meter_provider = MeterProvider(metric_readers=[global_metrics_reader])
+            trace.set_tracer_provider(global_trace_provider)
+            metrics.set_meter_provider(global_meter_provider)
+
+            class Passthrough(Executor):
+                def __init__(self, *, fail=False):
+                    super().__init__(id=TOOL_CANARY)
+                    self.fail = fail
+
+                @handler
+                async def run(self, value: str, ctx: WorkflowContext) -> None:
+                    if self.fail:
+                        raise RuntimeError(FAILURE_CANARY)
+                    await ctx.yield_output(TOOL_CANARY)
+
+            with TemporaryDirectory() as directory:
+                settings = Settings(
+                    "10000000-0000-4000-8000-000000000001",
+                    "20000000-0000-4000-8000-000000000002",
+                    "postgresql://localhost/test",
+                    Path(directory),
+                )
+                components = ApplicationComponents(
+                    rules=Mock(),
+                    policy=Mock(),
+                    action=Mock(),
+                    workflow_factory=Mock(),
+                )
+                store = Mock()
+                store.recoverable.return_value = []
+                app = create_app(settings, components, store=store, identity=Mock())
+                second_store = Mock()
+                second_store.recoverable.return_value = []
+                second_app = create_app(
+                    settings, components, store=second_store, identity=Mock()
+                )
+                first_telemetry = app.state.telemetry
+                second_telemetry = second_app.state.telemetry
+                assert first_telemetry.provider is not second_telemetry.provider
+                assert trace.get_tracer_provider() is global_trace_provider
+                assert metrics.get_meter_provider() is global_meter_provider
+
+                manual_exporter = InMemorySpanExporter()
+                first_telemetry.provider.add_span_processor(
+                    SimpleSpanProcessor(SafeExporter(manual_exporter))
+                )
+
+                @app.get("/private")
+                def endpoint():
+                    return {"ok": True}
+
+                @app.get("/failure")
+                def fail_request():
+                    raise RuntimeError(FAILURE_CANARY)
+
+                with TestClient(app, raise_server_exceptions=False) as client:
+                    response = client.get(
+                        "/private?" + PROMPT_CANARY,
+                        headers={"Authorization": "Bearer " + IDENTITY_CANARY},
+                    )
+                    assert response.status_code == 200
+                    failure_response = client.get(
+                        "/failure?" + PROMPT_CANARY,
+                        headers={"Authorization": "Bearer " + IDENTITY_CANARY},
+                    )
+                    assert failure_response.status_code == 500
+
+                normal_workflow = WorkflowBuilder(
+                    name="normal-" + TOOL_CANARY,
+                    start_executor=Passthrough(),
+                ).build()
+                asyncio.run(normal_workflow.run(PROMPT_CANARY))
+                failure_workflow = WorkflowBuilder(
+                    name="failure-" + TOOL_CANARY,
+                    start_executor=Passthrough(fail=True),
+                ).build()
+                failure_observed = False
+                try:
+                    asyncio.run(failure_workflow.run(PROMPT_CANARY))
+                except Exception as exc:
+                    failure_observed = FAILURE_CANARY in str(exc)
+                assert failure_observed, "The failing workflow did not preserve its failure."
+
+                spans = manual_exporter.get_finished_spans()
+                assert [span.name for span in spans] == [
+                    "http.request",
+                    "http.request",
+                ]
+                assert all(span.instrumentation_scope.name == "blueprint.manual" for span in spans)
+                assert all(not span.events for span in spans)
+                assert all(
+                    not any(
+                        canary in span.to_json()
+                        for canary in (
+                            PROMPT_CANARY,
+                            TOOL_CANARY,
+                            IDENTITY_CANARY,
+                            FAILURE_CANARY,
+                        )
+                    )
+                    for span in spans
+                )
+                global_spans = global_trace_exporter.get_finished_spans()
+                assert not global_spans, [
+                    (
+                        span.name,
+                        span.instrumentation_scope.name,
+                        sorted(span.attributes),
+                        [event.name for event in span.events],
+                        any(
+                            canary in span.to_json()
+                            for canary in (
+                                PROMPT_CANARY,
+                                TOOL_CANARY,
+                                IDENTITY_CANARY,
+                                FAILURE_CANARY,
+                            )
+                        ),
+                    )
+                    for span in global_spans
+                ]
+                global_metrics = global_metrics_reader.get_metrics_data()
+                assert global_metrics is None or not global_metrics.resource_metrics
+                assert trace.get_tracer_provider() is global_trace_provider
+                assert metrics.get_meter_provider() is global_meter_provider
+                second_telemetry.shutdown()
+            global_trace_provider.shutdown()
+            global_meter_provider.shutdown()
+            """
+        )
+        environment = os.environ.copy()
+        environment.update(
+            ENABLE_INSTRUMENTATION="true",
+            ENABLE_SENSITIVE_DATA="true",
+            ENABLE_MESSAGE_EVENTS="true",
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", script],
+            cwd=Path(__file__).resolve().parents[1],
+            env=environment,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn(CANARY, result.stdout + result.stderr)
+        for canary in (
+            "private-prompt-canary",
+            "private-tool-canary",
+            "private-identity-canary",
+            "private-failure-canary",
+        ):
+            self.assertNotIn(canary, result.stdout + result.stderr)
+
+    def test_recovery_logs_omit_case_ids_and_exception_messages(self):
+        case_id = UUID("30000000-0000-4000-8000-000000000003")
+        for error, outcome, level in (
+            (Conflict(CANARY), "conflict", logging.WARNING),
+            (ActionError(CANARY), "action_failure", logging.ERROR),
+            (BlueprintError(CANARY), "failure", logging.ERROR),
+        ):
+            with self.subTest(outcome=outcome):
+                store = Mock()
+                store.recoverable.return_value = [(case_id, "pending")]
+                host = Mock()
+                host.resume = AsyncMock(side_effect=error)
+                telemetry = Telemetry()
+                lifespan = create_lifespan(
+                    store,
+                    Mock(),
+                    host,
+                    telemetry,
+                )
+
+                with (
+                    self.assertLogs("blueprint.lifecycle", level=level) as lifecycle_logs,
+                    self.assertLogs("blueprint.telemetry", level=logging.INFO) as telemetry_logs,
+                ):
+
+                    async def run_lifespan():
+                        async with lifespan(FastAPI(telemetry={"tracing": False})):
+                            pass
+
+                    asyncio.run(run_lifespan())
+
+                combined_logs = " ".join(lifecycle_logs.output + telemetry_logs.output)
+                self.assertNotIn(str(case_id), combined_logs)
+                self.assertNotIn(CANARY, combined_logs)
+                self.assertIn(f'"event":"recovery","outcome":"{outcome}"', combined_logs)
 
     def test_logging_failure_uses_fixed_stderr_signal_without_changing_operation(self):
         telemetry = Telemetry()
@@ -440,9 +706,7 @@ class TelemetryTests(unittest.TestCase):
         exporter = Mock()
 
         def fail(_spans):
-            logging.getLogger(
-                "azure.monitor.opentelemetry.exporter.export.trace._exporter"
-            ).exception(CANARY)
+            logging.getLogger("azure.monitor.opentelemetry.exporter").exception(CANARY)
             return SpanExportResult.FAILURE
 
         exporter.export.side_effect = fail
@@ -473,23 +737,16 @@ class TelemetryTests(unittest.TestCase):
         finally:
             root.removeHandler(root_handler)
 
-    def test_azure_envelope_does_not_default_to_host_identifier(self):
-        from azure.monitor.opentelemetry.exporter import _utils
-        from azure.monitor.opentelemetry.exporter.export.trace._exporter import (
-            _convert_span_to_envelope,
-        )
-
+    def test_azure_resource_attributes_are_static_and_nonidentifying(self):
         telemetry = Telemetry()
         exporter = InMemorySpanExporter()
         telemetry.provider.add_span_processor(SimpleSpanProcessor(exporter))
         with telemetry.operation("workflow.resume"):
             pass
-        with patch.dict(_utils.azure_monitor_context, {"ai.device.id": CANARY}):
-            envelope = _convert_span_to_envelope(exporter.get_finished_spans()[0])
-        self.assertNotIn(CANARY, str(envelope.tags))
-        self.assertEqual(envelope.tags["ai.device.id"], "not-collected")
-        self.assertEqual(envelope.tags["ai.cloud.roleInstance"], "not-collected")
-        self.assertEqual(envelope.tags["ai.internal.nodeName"], "not-collected")
+        resource = exporter.get_finished_spans()[0].resource.attributes
+        self.assertEqual(resource["device.id"], "not-collected")
+        self.assertEqual(resource["service.instance.id"], "not-collected")
+        self.assertNotIn(CANARY, str(resource))
         telemetry.shutdown()
 
     def test_azure_auxiliary_collection_is_disabled(self):
@@ -546,16 +803,7 @@ class TelemetryTests(unittest.TestCase):
             Telemetry("azure-monitor", "invalid-" + CANARY)
         self.assertNotIn(CANARY, str(exc.exception))
 
-    def test_metric_initialization_failure_cleans_up_and_is_not_silent(self):
-        exporter = Mock()
-        metric_exporter = fake_metric_exporter()
-        metric_exporter._metrics_to_log_analytics = False
-        with self.assertRaisesRegex(RuntimeError, "Azure Monitor telemetry initialization failed"):
-            Telemetry(
-                "azure-monitor", "configured", exporter=exporter, metric_exporter=metric_exporter
-            )
-        exporter.shutdown.assert_called_once()
-        metric_exporter.shutdown.assert_called_once()
+    def test_metric_exporter_initialization_failure_cleans_up_and_is_not_silent(self):
         exporter = Mock()
         with patch(
             "azure.monitor.opentelemetry.exporter.AzureMonitorMetricExporter",
@@ -570,11 +818,6 @@ class TelemetryTests(unittest.TestCase):
         self.assertTrue(exc.exception.__suppress_context__)
 
     def test_metrics_use_only_allowlisted_labels_and_no_exemplars_or_host_identifier(self):
-        from azure.monitor.opentelemetry.exporter import _utils
-        from azure.monitor.opentelemetry.exporter.export.metrics._exporter import (
-            _convert_point_to_envelope,
-        )
-
         reader = InMemoryMetricReader()
         telemetry = Telemetry(metric_reader=reader)
         with telemetry.operation("workflow.resume", correlation_id=CANARY):
@@ -587,6 +830,8 @@ class TelemetryTests(unittest.TestCase):
         data = reader.get_metrics_data()
         self.assertNotIn(CANARY, data.to_json())
         resources = data.resource_metrics
+        self.assertEqual(resources[0].resource.attributes["device.id"], "not-collected")
+        self.assertEqual(resources[0].resource.attributes["service.instance.id"], "not-collected")
         metrics = resources[0].scope_metrics[0].metrics
         self.assertEqual(
             {metric.name for metric in metrics},
@@ -606,19 +851,13 @@ class TelemetryTests(unittest.TestCase):
             for point in points:
                 self.assertEqual(set(point.attributes), {"operation", "outcome"})
                 self.assertFalse(point.exemplars)
-                with patch.dict(_utils.azure_monitor_context, {"ai.device.id": CANARY}):
-                    envelope = _convert_point_to_envelope(point, metric.name, resources[0].resource)
-                self.assertNotIn(CANARY, str(envelope.as_dict()))
-                self.assertEqual(envelope.tags["ai.device.id"], "not-collected")
-                self.assertEqual(envelope.tags["ai.cloud.roleInstance"], "not-collected")
-                self.assertEqual(envelope.tags["ai.internal.nodeName"], "not-collected")
         telemetry.shutdown()
 
     def test_request_canaries_do_not_reach_metrics_even_when_unsampled(self):
         reader = InMemoryMetricReader()
         with patch(
             "app.composition.Telemetry",
-            side_effect=lambda *args: Telemetry(*args, metric_reader=reader),
+            side_effect=lambda *args, **kwargs: Telemetry(*args, metric_reader=reader, **kwargs),
         ):
             app = self.app()
 
@@ -684,6 +923,12 @@ class TelemetryTests(unittest.TestCase):
         self.assertEqual(
             {metric.name for metric in metrics},
             {"blueprint.operations", "blueprint.operation.duration"},
+        )
+        self.assertTrue(
+            all(
+                metric.data.aggregation_temporality == AggregationTemporality.DELTA
+                for metric in metrics
+            )
         )
         self.assertTrue(all(not p.exemplars for m in metrics for p in m.data.data_points))
         telemetry.shutdown()

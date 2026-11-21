@@ -882,10 +882,10 @@ entries to hide failed attempts or gaps.
 - **Separate reconciliation candidate:** The owner is assessing a
   Postgres compare-and-set claim bound to an owner and request digest as a
   possible way to recover the winning outer response ID. Public MAF host docs
-  do not define its recovery contract. The owner inspected the exact public
+  do not define its recovery contract. Inspection of the exact public
   wheel `agent-framework-foundry-hosting==1.0.0b261112`
-  (SHA-256 `9609ca758dd7f9e45542e2407b473acb7514ec6c0fd4dad3189068fd4ee2e55c`):
-  `HostedResponseRequest.response_id` is exposed in `_request.py:150-164`,
+  (SHA-256 `9609ca758dd7f9e45542e2407b473acb7514ec6c0fd4dad3189068fd4ee2e55c`)
+  found `HostedResponseRequest.response_id` exposed in `_request.py:150-164`,
   and `_workflow_responses.py:425-434` resolves the request-aware factory
   before checkpoint preparation, parsing, and run claim. The parser is skipped
   on recovery while the factory still runs. This establishes source-level
@@ -909,18 +909,20 @@ entries to hide failed attempts or gaps.
   (`fastapi.dependencies`, `fastapi.endpoint`, `fastapi.serialization`, and
   `GET /secret`) alongside manual HTTP telemetry. A synthetic query canary
   appeared in exported span JSON.
-- **Decision:** The PR #14 owner is removing the opt-in or explicitly
-  disabling auto-instrumentation until prompt/tool/identity and failure-path
-  privacy are proven. Native MAF instrumentation must not be described as
-  safe based on the separate manual telemetry tests.
-- **Evidence limit:** The owner report did not include an immutable revision
-  or exact regression-test output. Run 44940364995 passed five jobs on the
-  earlier workstream head `cb4ff78`; that historical result does not verify
-  this probe's fix or show whether it covered the failing case.
-- **Next action:** Record the fix commit and exact-head CI when available.
-  Add negative tests that assert the query canary is absent and duplicate
-  auto-generated spans are disabled across prompt, tool, identity, and
-  failure paths before enabling this instrumentation.
+- **Implemented fix:** The final PR #14 code at
+  `3aa389f21bf027e61a417f3c56fae358358e675a` removes the native opt-in,
+  disables automatic instrumentation, uses public metric classes and
+  temporality instead of private SDK fields, preserves payload-free recovery
+  signals, and restores restricted-origin CORS trace/correlation headers.
+- **Focused evidence:** All 23 telemetry tests passed locally in the
+  integrated hash-verified locked environment, including the subprocess
+  query/prompt/tool/identity/failure canaries, recovery-log redaction, and
+  allowed/disallowed-origin CORS checks. The imported unnecessary f-string
+  initially failed Ruff; its safe fix and formatting now pass.
+- **Limit / next action:** These are focused integrated working-tree results,
+  not final combined CI or cloud ingestion evidence. Native auto-instrumentation
+  remains disabled and unverified, not approved for privacy-sensitive use.
+  Run source/generated and exact-final-revision checks before review.
 
 ## Current acceptance queue
 

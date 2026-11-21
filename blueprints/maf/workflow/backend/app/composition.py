@@ -22,7 +22,10 @@ def create_app(
 ) -> FastAPI:
     repository = store if store is not None else PostgresStore(settings.database_url)
     identity_provider = identity if identity is not None else EntraIdentity(settings)
-    telemetry = Telemetry(settings.telemetry_mode, settings.applicationinsights_connection_string)
+    telemetry = Telemetry(
+        settings.telemetry_mode,
+        settings.applicationinsights_connection_string,
+    )
     try:
         workflow_host = LocalWorkflowHost(
             repository,

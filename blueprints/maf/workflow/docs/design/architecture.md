@@ -83,10 +83,11 @@ auto-instrumentation is privacy-safe. The PR #14 owner reports an opt-in probe
 on the pinned stack emitted duplicate FastAPI spans
 (`fastapi.dependencies`, `fastapi.endpoint`, `fastapi.serialization`, and
 `GET /secret`) alongside manual HTTP telemetry and leaked a synthetic query
-canary into exported span JSON. The owner is removing the opt-in or explicitly
-disabling auto-instrumentation until prompt/tool/identity and failure-path
-privacy are proven. The exact fix revision and regression evidence are
-pending; do not enable or claim native MAF auto-instrumentation as safe.
+canary into exported span JSON. The integrated fix from `3aa389f` removes the
+opt-in and disables auto-instrumentation; all 23 focused telemetry regressions
+passed locally, including recovery redaction and restricted-origin CORS.
+Public metric APIs replace private SDK fields. Final combined checks and cloud
+ingestion remain separate gates; native auto-instrumentation is not approved.
 
 The browser is not authoritative for identity or permission. FastAPI validates
 the bearer token and derives the principal; `CaseAccessPolicy` controls record

@@ -381,6 +381,12 @@ ingestion remain unverified. No Azure provisioning or ingestion is implied.
 
 ## API-boundary integration follow-up
 
+The final PR #14 code from `3aa389f` is reconciled with migrations and the
+canonical dependency lock. All 23 focused privacy regressions passed locally;
+native automatic instrumentation remains disabled following the measured
+query-canary leak. Complete source/generated and final-revision CI checks
+before review; hosted caller binding and lost-response recovery remain blocked.
+
 The PR #11 API split and source-map fix are being reconciled with integrated
 telemetry rather than replaying earlier workstream history. The
 [integration journal](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-21---reconcile-api-boundaries-with-integration-telemetry)

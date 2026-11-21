@@ -25,7 +25,19 @@ def create_api_app(
     lifespan: Lifespan,
     telemetry: Telemetry,
 ) -> FastAPI:
-    app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
+    app = FastAPI(
+        lifespan=lifespan,
+        docs_url=None,
+        redoc_url=None,
+        openapi_url=None,
+        telemetry={
+            "tracing": False,
+            "metrics": False,
+            "logs": False,
+            "operation_spans": False,
+            "auto_configure": False,
+        },
+    )
     app.state.service = service
     app.state.identity = identity
     app.state.obo = obo
@@ -37,7 +49,12 @@ def create_api_app(
             allow_origins=list(settings.cors_origins),
             allow_credentials=False,
             allow_methods=["GET", "POST"],
-            allow_headers=["Authorization", "Content-Type", "Idempotency-Key", "traceparent"],
+            allow_headers=[
+                "Authorization",
+                "Content-Type",
+                "Idempotency-Key",
+                "traceparent",
+            ],
             expose_headers=["X-Correlation-ID"],
         )
 

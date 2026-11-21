@@ -1,22 +1,33 @@
 """Allowlisted operational telemetry; never inspect application payloads."""
 
+import inspect
 import json
 import logging
 import os
 import time
-import inspect
 from contextlib import contextmanager
 from functools import wraps
 from uuid import UUID
 
-from opentelemetry.sdk.trace import TracerProvider
+from agent_framework.observability import disable_instrumentation
 from opentelemetry.sdk.resources import Resource
-from opentelemetry.sdk.metrics import AlwaysOffExemplarFilter, MeterProvider
+from opentelemetry.sdk.metrics import (
+    AlwaysOffExemplarFilter,
+    Counter,
+    Histogram,
+    MeterProvider,
+    ObservableCounter,
+    ObservableGauge,
+    ObservableUpDownCounter,
+    UpDownCounter,
+)
 from opentelemetry.sdk.metrics.export import (
+    AggregationTemporality,
     MetricExporter,
     MetricExportResult,
     PeriodicExportingMetricReader,
 )
+from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, SpanExportResult, SpanExporter
 from opentelemetry.trace import SpanKind, Status, StatusCode
 from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
@@ -83,14 +94,18 @@ def instrumented(name):
 
 
 class SafeExporter(SpanExporter):
-    """Keep exporter errors and exception text out of operational logs."""
+    """Drop unredacted FastAPI spans and keep exporter diagnostics payload-free."""
 
     def __init__(self, exporter):
         self._exporter = exporter
 
     def export(self, spans):
+        spans = tuple(spans)
+        exportable = tuple(span for span in spans if span.instrumentation_scope.name != "fastapi")
+        if spans and not exportable:
+            return SpanExportResult.SUCCESS
         try:
-            result = self._exporter.export(spans)
+            result = self._exporter.export(exportable)
         except Exception:
             result = SpanExportResult.FAILURE
         if result != SpanExportResult.SUCCESS:
@@ -117,9 +132,16 @@ class SafeMetricExporter(MetricExporter):
     """Report metric exporter failures without exposing payload or exception text."""
 
     def __init__(self, exporter):
+        # Match Azure Monitor's documented delta sums without reading exporter internals.
         super().__init__(
-            preferred_temporality=exporter._preferred_temporality,
-            preferred_aggregation=exporter._preferred_aggregation,
+            preferred_temporality={
+                Counter: AggregationTemporality.DELTA,
+                Histogram: AggregationTemporality.DELTA,
+                ObservableCounter: AggregationTemporality.DELTA,
+                ObservableGauge: AggregationTemporality.CUMULATIVE,
+                ObservableUpDownCounter: AggregationTemporality.CUMULATIVE,
+                UpDownCounter: AggregationTemporality.CUMULATIVE,
+            }
         )
         self._exporter = exporter
 
@@ -202,6 +224,7 @@ class Telemetry:
         provider = meter_provider = azure_reader = processor = None
         processor_attached = reader_attached = False
         try:
+            disable_instrumentation()
             if mode == "azure-monitor":
                 # Do not let exporter diagnostics collect environment identifiers.
                 for setting in (
@@ -230,8 +253,6 @@ class Telemetry:
                     metric_exporter = AzureMonitorMetricExporter(
                         connection_string=connection_string, disable_offline_storage=True
                     )
-                if getattr(metric_exporter, "_metrics_to_log_analytics", True) is False:
-                    raise ValueError("Azure Monitor custom metric export is disabled.")
             provider = TracerProvider(resource=resource)
             tracer = provider.get_tracer("blueprint.manual")
             if mode == "azure-monitor":
