@@ -168,15 +168,20 @@ host in this repository. No Responses service/dependency, workload networking,
 or hosted lifecycle is present, and package/API compatibility requires
 verification before claiming durability.
 
-The documented caller-binding direction is for the authenticated API to
-authorize the caller and send Foundry workload Authorization plus
-`x-ms-user-identity` populated from the trusted user OID. The hosted container
-receives platform-injected `x-agent-user-id`; protocol 2.0.0 exposes that
-identity as `get_request_context().user_id`. The caller needs Foundry Agent
-Consumer and custom `UserIdentityImpersonation/action` authorization. This
-avoids forwarding or persisting an end-user bearer/OBO token when no
-downstream API call as the user is needed. The identity bridge and role
-assignment are not implemented or live verified.
+The proposed caller-binding direction requires the authenticated API to
+authorize the caller and send Foundry workload Authorization plus an opaque
+app-supplied `x-ms-user-identity` scoping value derived from the validated
+principal. The hosted container receives distinct platform-injected
+`x-agent-user-id`; protocol 2.0.0 exposes that platform identity as
+`get_request_context().user_id`. Neither header establishes authorization,
+and their equivalence or mapping to the validated principal is unsupported and
+unverified. A trusted application must authorize each principal's session,
+map callers to distinct sessions and reject unchecked client session IDs.
+The caller needs Foundry Agent Consumer and custom
+`UserIdentityImpersonation/action` authorization. Do not persist end-user
+bearer/OBO tokens in business state, checkpoints or logs. The identity bridge,
+session binding and role assignment are not implemented or live verified;
+track [#22](https://github.com/ppenumatsa1/agent-blueprints/issues/22).
 
 Hosted response recovery remains blocked: a visible matching metadata record
 may reveal `response.id`, but an empty paged conversation list has no

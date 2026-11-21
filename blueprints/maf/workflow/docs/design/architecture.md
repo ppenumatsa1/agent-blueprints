@@ -348,16 +348,18 @@ lifecycle require review and live verification before claiming hosted
 durability. See Microsoft's
 [Responses-protocol guidance](https://learn.microsoft.com/agent-framework/hosting/foundry-hosted-agent#responses-protocol).
 
-For hosted caller binding, the documented direction is for the authenticated
+For hosted caller binding, the proposed direction is for the authenticated
 API to authorize the user and send Foundry workload Authorization together
-with `x-ms-user-identity` set from the trusted user OID. The hosted container
-receives platform-injected `x-agent-user-id`; protocol 2.0.0 exposes that
+with an opaque app-supplied `x-ms-user-identity` scoping value derived from
+the validated principal. The hosted container receives platform-injected
+`x-agent-user-id`; protocol 2.0.0 exposes that
 platform-generated global per-user identifier through
 `get_request_context().user_id`. It is distinct from the service-supplied,
-opaque `x-ms-user-identity`; do not assume the raw values match. The bridge
-must verify an explicit mapping to the already validated application
-principal. The caller needs Foundry Agent Consumer and custom
-`UserIdentityImpersonation/action` authorization.
+opaque `x-ms-user-identity`; do not assume the raw values match. Their
+equivalence or binding to the validated application principal is unsupported
+and unverified. The bridge must verify an explicit mapping to that principal
+and authorize each principal's session. The caller needs Foundry Agent Consumer
+and custom `UserIdentityImpersonation/action` authorization.
 This avoids forwarding or persisting an end-user bearer/OBO token when the
 hosted workflow does not need to call a downstream API as that user. The
 bridge, role assignment, and network path remain unimplemented and unverified.
@@ -376,8 +378,8 @@ session IDs, and reject unchecked client-supplied session IDs. The opaque
 This blueprint has no hosted session bridge or mapping test, so per-user
 hosted isolation is not implemented or verified.
 
-The identity header is a user OID, not a credential. Do not persist an
-end-user bearer/OBO token in business state, workflow checkpoints, or logs.
+The opaque scoping value is not a credential or authorization. Do not persist
+an end-user bearer/OBO token in business state, workflow checkpoints, or logs.
 The current local OBO option reads its secret from the backend environment;
 there is no hosted secret delivery/rotation, workload-identity configuration,
 or delegated-token lifecycle in this blueprint. If a hosted workflow must call
