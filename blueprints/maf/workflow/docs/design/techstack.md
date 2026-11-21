@@ -62,7 +62,11 @@ hash-pinned backend/image installs, Ruff 0.14.13, Node 22 with `npm ci`, and
 VS Code task/debug configurations. Earlier hosted runs
 [44928260607](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44928260607)
 and [44931241591](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44931241591)
-passed five checks for their respective earlier revisions only. Local Windows
+passed five checks for their respective earlier revisions only. After
+reconciliation with checkpoint foundation `9efeef0`, run
+[44937433206](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44937433206)
+passed all five jobs for code head `2a8fafdb`; verify CI for the final PR
+revision. Local Windows
 package downloads required approved mirrors after public TLS failures; macOS
 and interactive debugger verification remain unverified. See the
 [journal](issues-changes-fixes.md) for scoped verification.

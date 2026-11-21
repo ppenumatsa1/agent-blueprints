@@ -85,8 +85,10 @@ generated backend tests, Ruff, generated UI tests/build and Linux Compose
 a TLS handshake error. After rebasing onto verified checkpoint fix `9efeef0`,
 source and generated backend suites passed 36 tests each, independent
 verification passed 44 without skips, generated frontend passed 8 tests/build/
-CSP, and Ruff passed in both backends. Hosted CI is pending for the dependent
-PR's rebased head; earlier runs apply only to their own revisions. macOS,
+CSP, and Ruff passed in both backends. Hosted
+[run 44937433206](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44937433206)
+passed all five jobs for code head `2a8fafdb`; check CI on the actual PR head.
+Earlier runs apply only to their own revisions. macOS,
 interactive debugging and a clean public-only local installation remain
 unverified. Next confirm hosted CI on the final reviewed head.
 
