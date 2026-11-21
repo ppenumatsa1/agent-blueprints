@@ -68,30 +68,56 @@ Independent workstreams cover locked tooling, migrations, observability,
 Foundry hosting, infrastructure and integration evidence. Do not merge PRs
 without approval. Azure deployment is a deliverable but requires prior
 approval of its resource inventory, estimated cost and deployment plan;
-permanent reference repository creation requires separate approval. As of
-2026-11-21, locked tooling is proposed in open
-[PR #13](https://github.com/ppenumatsa1/agent-blueprints/pull/13), head
-`e1d953662e615e547fa641ad0831907c363318e3`; its
+permanent reference repository creation requires separate approval. As of 2026-11-21, locked tooling is proposed in open
+[PR #13](https://github.com/ppenumatsa1/agent-blueprints/pull/13), at the
+workstream-owner-reported head
+`b78634b3b746c7adbf5f8500e4b7023c96c67963`. Its
 [hosted run](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44928260607)
-passed five checks for that exact revision. The proposal's reported
+passed five checks for prior exact revision
+`e1d953662e615e547fa641ad0831907c363318e3` only. The proposal's reported
 Windows/Linux Compose verification used an approved mirror after public TLS
-failures; macOS and interactive debugger verification remain unverified.
-These results do not establish that tooling in PR #13 is merged or validated
-on this branch.
+failures. The owner could not exercise the debugger in VS Code Restricted
+Mode or run uv because no executable was available in that environment;
+macOS and debugger verification remain unverified. These results do not
+establish that tooling in PR #13 is merged or validated on this branch.
+
+For PR #16, the owner reports guarded Alembic adoption only after exact
+baseline-manifest validation and checking that no later-revision-owned tables
+exist; fresh databases run revision `0001`, and validation never stamps.
+Source/generated suites each passed 48 tests on PostgreSQL 16.15 and 17.12;
+the root suite passed 47 with one expected adapter-not-selected skip. Run
+44944613749 passed five jobs for `897aae8` against `d0e1727`, but is stale
+relative to foundation head `8144918`; reconcile and rerun before relying
+on this evidence.
 
 Each PR must remove obsolete compatibility layers, use direct imports,
 update affected `docs/design` specifications and the cumulative engineering
 journal, and record actual regression, security, durability, independent
-verification and CI outcomes for its final revision. The design documents
-must accompany generated applications and distinguish planned work from
-verified behavior. The six generated-project guides and eight documents under
-`blueprints/maf/workflow/docs/design/` must evolve alongside implementation,
-remain in generated applications, and use actual source/configuration
-references, meaningful Mermaid diagrams, and accurate implemented/planned
-labels. Maintain the engineering journal without inventing historical
-findings. For each meaningful PR update this plan, `docs/master-checklist.md`,
-and relevant architecture documentation with acceptance criteria, evidence,
-status, and next action.
+verification and CI outcomes for its final revision. PR #12 is deepening the
+six generated-project guides and eight documents under
+`blueprints/maf/workflow/docs/design/`; these documents must evolve alongside
+implementation, remain in generated applications, and use actual
+source/configuration references, meaningful Mermaid diagrams, and accurate
+implemented/planned labels. The current documentation working tree passed three focused
+instantiation and generated-verifier pipeline tests. PR #11 is now pushed at
+`44ee18b886d409b0b59cf6df6b4893917370307d`. Its canonical source separates
+`composition.py`, `api/app.py`, route handlers, schemas, dependencies,
+errors, middleware, and `lifecycle.py`; the current PR #12 source-map links
+now point to these exact paths. The owner reports 37 backend tests passed.
+Actions run 44944929394 completed with four jobs passing and `contracts`
+failing on the stale `specs.md` API link; the root suite had 47 tests, one
+failure from that link, and one expected adapter-not-selected skip. Rebase
+onto the new head and rerun root/contracts before final PR validation. The
+coordinator reports the minimal link correction was then pushed at
+`814491811eac457826108b70fc213fdc564af0e5`; root tests passed 47/47 and
+Actions run
+[44945419570](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44945419570)
+passed all five jobs on that exact head, including generated checks without
+skips. This does not substitute for checking PR #12 after rebase.
+Maintain the
+engineering journal without inventing historical findings. For each meaningful PR update
+this plan, `docs/master-checklist.md`, and relevant architecture documentation
+with acceptance criteria, evidence, status, and next action.
 
 ### Cross-cutting PR acceptance gates
 
@@ -145,7 +171,7 @@ the local HTTP smoke check. Its unsigned readiness report is unverified.
 | P1-10 | Add integration/E2E tests, synthetic agent evaluations, and GitHub Actions; connect actual results and artifacts to the validator. | P1-04 through P1-09 | A local or CI run produces a report from real artifacts; blocking failures cannot pass, non-blocking outcomes follow the selected profile, and rubric/threshold decisions are recorded. |
 | P1-11 | Add privacy-safe logs, traces, correlation, and operational signals across API, workflow, approvals, and side effects. | P1-07, P1-09 interfaces | Tests verify redaction and correlation; actual export remains environment-specific. |
 | P1-15 | Demonstrate the local prototype from a synthetic specification through approval, evaluation, and its readiness report. | P1-10, P1-11 | Record the scenario, evidence, limitations, and observed elapsed time; the 2–3 hour objective is a target until a representative run demonstrates it. |
-| P1-12 | Validate Foundry Hosted Agent compatibility for the selected MAF version, Responses protocol, request-aware workflow factory, identity, and host-managed checkpoints. | P1-09, P1-15 | Hosted caller binding and lost-response reconciliation are blocked; see the [investigation journal](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-21---hosted-caller-binding-and-lost-responses). Local checks alone are not a hosted deployment. No Azure resources are provisioned. |
+| P1-12 | Validate Foundry Hosted Agent compatibility for the selected MAF version, Responses protocol, request-aware workflow factory, identity, and host-managed checkpoints. | P1-09, P1-15 | A documented workload-identity binding pattern is now available but not implemented or live verified. Lost `response.id` recovery remains blocked because no idempotency key or proven unambiguous per-operation lookup is documented; see the [investigation journal](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-21---hosted-caller-binding-and-lost-responses). Local checks alone are not a hosted deployment. No Azure resources are provisioned. |
 | P1-13 | Prepare the explicitly selected ACA fallback and a framework-compatible checkpoint strategy. | P1-09, P1-15 | Separate local/container recovery and idempotency checks pass; no claim that ACA shares Foundry checkpoint ownership or silently replaces a failed model call. |
 | P1-14 | Prepare Bicep, least-privilege identities, authenticated public endpoints, GitHub-hosted CI, and deployment/handoff instructions. Deploy only after separate Azure authorization. | P1-10, P1-11, P1-12; P1-13 if selected | Static checks work without Azure credentials; an authorized deployment later records its revision, versions, identity, network, evidence, cost, and teardown owner. |
 

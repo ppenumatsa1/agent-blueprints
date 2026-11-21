@@ -33,7 +33,17 @@ of generated-verifier failures through CI's `tee` pipeline and adds regression
 coverage for failure, skipped, expected-failure, and success outputs; its
 [actual-head run 44939172266](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44939172266)
 passed all five checks on that exact commit. These are CI results, not a merge
-or live hosting result. The copied
+or live hosting result. PR #11 subsequently split API composition, assembly,
+routes, schemas, dependencies, middleware/errors, and lifecycle into canonical
+modules at `44ee18b`; its `contracts` run failed on the now-deleted
+`backend/app/api.py` documentation link while the other four jobs passed.
+The source map was corrected in the PR #11 follow-up at
+`814491811eac457826108b70fc213fdc564af0e5`; the owner reports root tests
+passed 47/47 on that tip. Actual-head run
+[44945419570](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44945419570)
+passed all five checks, including generated checks without skips. PR #12 still
+requires its own rebase and revision-specific checks.
+The copied
 [project guides](../blueprints/maf/workflow/README.md#project-guide) describe
 the current local boundaries and planned deployment/observability designs.
 Their [design baseline](../blueprints/maf/workflow/docs/design/architecture.md)
@@ -83,10 +93,33 @@ For Foundry's native Python workflow host, follow the current
 use a request-aware workflow factory, stable workflow/executor identities, and
 the host's checkpoint provider. Do not also configure an independent workflow
 checkpoint store for host-managed recovery. Application-owned PostgreSQL
-records remain separate from host-managed workflow state. The Python hosting
-integration is documented as prerelease; package versions and the complete
-hosted approval/recovery path must be validated in P1-12 before claiming
-hosted durability.
+records remain separate from host-managed workflow state. The PR #15
+workstream owner reports the documented Responses-host pattern uses
+`ResponsesServerOptions(resilient_background=True)` with Requests
+`store=true, background=true`; this is design guidance, not an implemented
+host in this repository. No Responses service/dependency, workload networking,
+or hosted lifecycle is present, and package/API compatibility requires
+verification before claiming durability.
+
+The documented caller-binding direction is for the authenticated API to
+authorize the caller and send Foundry workload Authorization plus
+`x-ms-user-identity` populated from the trusted user OID. The hosted container
+receives platform-injected `x-agent-user-id`; protocol 2.0.0 exposes that
+identity as `get_request_context().user_id`. The caller needs Foundry Agent
+Consumer and custom `UserIdentityImpersonation/action` authorization. This
+avoids forwarding or persisting an end-user bearer/OBO token when no
+downstream API call as the user is needed. The identity bridge and role
+assignment are not implemented or live verified.
+
+Hosted response recovery remains blocked: a visible matching metadata record
+may reveal `response.id`, but an empty paged conversation list has no
+documented bounded read-after-write visibility and cannot prove creation
+failed. Conversation creation has the same lost-ack ambiguity, and a lock
+cannot make remote creation atomic with the application database. No
+Responses-create idempotency key or safe unambiguous recovery contract is
+documented. Local business idempotency does not solve hosted response identity
+recovery; do not silently retry. See the [hosted blocker
+journal](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-21---hosted-caller-binding-and-lost-responses).
 
 The fallback hosts the framework runtime in Azure Container Apps and selects a
 tested framework-compatible checkpoint strategy. Do not assume that its
