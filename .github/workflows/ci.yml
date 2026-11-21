@@ -52,9 +52,9 @@ jobs:
           done
           echo "PostgreSQL did not become ready" >&2
           exit 1
-      - name: Run workflow, worker recovery, and API security tests
+      - name: Run workflow, worker recovery, API security, and evidence tests
         working-directory: blueprints/maf/workflow/backend
-        run: uv run --locked python -m unittest -v tests.test_core tests.test_security
+        run: uv run --locked python -m unittest -v tests.test_core tests.test_security tests.test_evidence_runner
       - name: Stop isolated PostgreSQL
         if: always()
         run: docker stop maf-core-test || true
