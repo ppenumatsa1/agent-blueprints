@@ -13,15 +13,18 @@ deployment command.
 
 ## Local development and Compose
 
-1. Install Python 3.12, Node 22, Docker with Compose, and an isolated
+1. Install Python 3.12, uv 0.9.26, Node 22, Docker with Compose, and an isolated
    PostgreSQL database for direct tests. Use authorized existing Entra
    registrations for interactive sign-in; registration and consent are not
    created by the project.
-2. Install backend requirements from `backend/requirements-dev.txt` and run
+2. Install the locked backend environment and run
    the targeted source suite from `backend`:
 
    ```text
-   python -m unittest -v tests.test_core tests.test_security tests.test_evidence_runner
+   uv sync --locked
+   uv run --locked ruff check .
+   uv run --locked ruff format --check .
+   uv run --locked python -m unittest -v tests.test_core tests.test_security tests.test_evidence_runner
    ```
 
 3. From `frontend`, run `npm ci`, `npm test`, `npm run build`, and

@@ -5,7 +5,9 @@ Install dependencies as described in [setup](setup.md). Set
 `backend`, run:
 
 ```text
-python -m unittest -v tests.test_core tests.test_security tests.test_evidence_runner
+uv run --locked ruff check .
+uv run --locked ruff format --check .
+uv run --locked python -m unittest -v tests.test_core tests.test_security tests.test_evidence_runner
 ```
 
 Tests create and drop isolated schemas and fail if the database is
@@ -33,7 +35,7 @@ requirements. Set `SCENARIO_ADAPTER` to the absolute path of
 `backend/tests/order_adjustment_adapter.py`, then from `verification` run:
 
 ```text
-python -m unittest discover -s tests -v
+uv run --locked --project ../backend python -m unittest discover -s tests -v
 ```
 
 The readiness validator guide at `verification/docs/readiness-validator.md`

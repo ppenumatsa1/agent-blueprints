@@ -27,6 +27,25 @@ entries to hide failed attempts or gaps.
 
 ## Prior implementation evidence
 
+### 2026-11-21 - Reconcile developer tooling with canonical imports
+
+- **Issue / cause:** The tooling branch and the foundation independently
+  changed CI, generation tests, and setup guidance. The foundation removed
+  forwarding modules and `tests.test_modularity`, while the tooling branch
+  replaced requirements files with a locked environment.
+- **Fix / decision:** Retain canonical imports, remove references to deleted
+  tests and requirements files, copy the design docs in generated projects,
+  and run evidence-normalization tests in both source and generated CI.
+- **Evidence:** Before reconciliation, local source and generated backend
+  suites each passed 32 tests, independent verification passed 44 without
+  skips, and generated frontend tests/build/CSP passed with the approved npm
+  mirror. The earlier hosted run is linked in the PR #13 entry below and is
+  valid only for its recorded head; reconciled-head checks remain pending.
+- **Lesson / limit:** Integrate environment instructions with the canonical
+  source layout; a successful earlier CI run cannot establish the result of a
+  rebased revision. Public-only local downloads, macOS, and interactive
+  debugging remain unverified.
+
 ### PR #6 - Native MAF workflow and local recovery core
 
 - **Change:** Added a native MAF approval workflow, local checkpoint host,
@@ -122,7 +141,7 @@ entries to hide failed attempts or gaps.
 | --- | --- | --- |
 | Eight design documents and generated inclusion | In progress | Run the focused instantiation tests and verify copied Markdown links. |
 | Canonical imports and legacy-shim removal | Open in foundation workstream | Inspect final diff across imports, tests, Docker, CI, docs, and generator; do not approve while forwarding paths remain. |
-| Locked developer tooling | Open in parallel PR #13 | Reconcile only after review/merge; verify any resulting revision and platform matrix independently. |
+| Locked developer tooling | Open in PR #13 | Verify reconciled source/generated checks and actual-head CI; macOS and interactive debugging remain unverified. |
 | Current dependent PR CI | Pending on updated revision | Confirm all required checks correspond to the pushed PR head. |
 | Live Entra/OBO, Foundry host/recovery, cloud telemetry, Azure deployment | Unverified | Separate scoped implementation, authorization where required, and live evidence. |
 
