@@ -24,12 +24,28 @@ single-host; PostgreSQL separately stores business, decision, audit, and
 action-ledger records.
 
 Foundry-hosted execution, host-managed checkpoints, hosted identity binding,
-lost-response reconciliation, cloud telemetry, ACA hosting, Bicep, and azd
-deployment are **planned or blocked**, not alternate configured runtime
-modes. The example's database schema is initialized by `PostgresStore` at
-startup; versioned migrations and production schema administration are not
-implemented. No Azure resource or permanent repository creation is authorized
-by this PRD.
+lost-response reconciliation, cloud telemetry, and ACA workflow hosting are
+**planned or blocked**, not alternate configured runtime modes. Bicep/azd
+assets have credential-free static validation but are not wired into a
+working cloud application or deployed. A schema owner applies the explicit
+Alembic migration; runtime validates the expected revision without DDL.
+Managed database operations and live backup/restore remain unverified
+([#24](https://github.com/ppenumatsa1/agent-blueprints/issues/24)). No Azure
+resource or permanent repository creation is authorized by this PRD.
+
+The integrated review tree passed final six-job CI, but that does not make
+the blueprint or a generated application complete or deployment-ready.
+Track hosted implementation, trust, and evidence work in
+[#18](https://github.com/ppenumatsa1/agent-blueprints/issues/18),
+[#19](https://github.com/ppenumatsa1/agent-blueprints/issues/19),
+[#20](https://github.com/ppenumatsa1/agent-blueprints/issues/20),
+[#21](https://github.com/ppenumatsa1/agent-blueprints/issues/21),
+[#22](https://github.com/ppenumatsa1/agent-blueprints/issues/22),
+[#25](https://github.com/ppenumatsa1/agent-blueprints/issues/25),
+[#26](https://github.com/ppenumatsa1/agent-blueprints/issues/26), and
+[#28](https://github.com/ppenumatsa1/agent-blueprints/issues/28).
+Hosted recovery was explicitly deferred to a separate scoped follow-up; this
+is not a security waiver.
 
 ## Users and needs
 

@@ -4,14 +4,24 @@
 
 **Implemented:** local development, Docker Compose, source tests, generated
 project tests, staged Bicep/azd definitions and credential-free static checks.
-GitHub Actions contains source and generated-infrastructure jobs; the actual
-PR-head run remains a separate acceptance gate.
+Final integrated PR #17 head `98091a35976069dafa239ade9bf053b35ee829b7`
+passed all six jobs in [run 44951264840](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44951264840).
+The tested merge-ref tree was verified identical to the head; this is not
+readiness or deployment evidence.
 
 **Planned and unverified:** azd provisioning/deployment, Foundry-hosted MAF,
 managed identity binding, Azure resource validation, cloud telemetry ingestion,
 an ACA workflow alternative, and live sign-in. Explicit Azure trace and
 metric exporter configuration is implemented but not cloud-verified. This
-document does not authorize a cloud deployment command.
+document does not authorize a cloud deployment command. Track infrastructure
+wiring [#18](https://github.com/ppenumatsa1/agent-blueprints/issues/18),
+managed database operations [#24](https://github.com/ppenumatsa1/agent-blueprints/issues/24),
+and deployment [#28](https://github.com/ppenumatsa1/agent-blueprints/issues/28).
+Deployment's offline prerequisites are wired IaC, selected versions, reviewed
+identity/network/secret configuration, static validation and separate human
+authorization. An authorized live deployment is intended to produce evidence
+for hosted/cloud issues; it need not wait for every live-verification issue to
+be closed. No resource has been provisioned.
 
 ## Local development and Compose
 
@@ -98,7 +108,10 @@ tables. Fresh databases run the baseline revision normally. Local recovery is
 single-host and uses the persistent file-checkpoint volume. Do not copy this
 topology to a hosted runtime:
 Foundry-managed checkpoint recovery, caller binding, and lost-response
-handling remain unresolved.
+handling remain unresolved; see [#19](https://github.com/ppenumatsa1/agent-blueprints/issues/19),
+[#20](https://github.com/ppenumatsa1/agent-blueprints/issues/20), and
+[#22](https://github.com/ppenumatsa1/agent-blueprints/issues/22). Hosted
+recovery is explicitly deferred to scoped follow-up, not waived.
 
 ## Staged Foundry-first infrastructure
 
@@ -172,7 +185,9 @@ was corrected. Bicep compilation and local tests do not verify Azure
 compatibility. Resolve the [version gap](../../infra/README.md#open-postgresql-version-gap)
 and repeat migration tests on the exact integrated revision and selected
 target before deployment; no automatic downgrade or cross-major data
-compatibility is assumed.
+compatibility is assumed. Track managed PostgreSQL migration, restore and
+least-privilege operations in
+[#24](https://github.com/ppenumatsa1/agent-blueprints/issues/24).
 
 Before PR approval:
 

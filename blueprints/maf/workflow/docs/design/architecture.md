@@ -86,8 +86,11 @@ on the pinned stack emitted duplicate FastAPI spans
 canary into exported span JSON. The integrated fix from `3aa389f` removes the
 opt-in and disables auto-instrumentation; all 23 focused telemetry regressions
 passed locally, including recovery redaction and restricted-origin CORS.
-Public metric APIs replace private SDK fields. Final combined checks and cloud
-ingestion remain separate gates; native auto-instrumentation is not approved.
+Public metric APIs replace private SDK fields. Final combined checks passed at
+the recorded integrated head; cloud ingestion remains unverified and native
+auto-instrumentation is not approved.
+Track safe cloud export and end-to-end propagation separately in
+[#26](https://github.com/ppenumatsa1/agent-blueprints/issues/26).
 
 The browser is not authoritative for identity or permission. FastAPI validates
 the bearer token and derives the principal; `CaseAccessPolicy` controls record
@@ -156,6 +159,8 @@ database commits; startup recovery reconciles durable records and checkpoints.
 The same-transaction action ledger applies only to database effects performed
 through the supplied transaction. External side effects require downstream
 idempotency or a transactional outbox.
+Their authorization and retry/idempotency boundary is tracked in
+[#32](https://github.com/ppenumatsa1/agent-blueprints/issues/32).
 
 For an interrupted start, the local host asks the MAF file provider for the
 latest checkpoint after validating every file; the provider accounts for
@@ -271,6 +276,11 @@ Foundry host must use its supported host-managed checkpoint provider and a
 request-aware factory; it must not attach the local provider as a second
 checkpoint authority. ACA would require its own selected and verified
 multi-replica-safe strategy. Neither hosting path is implemented here.
+Foundry hosting/checkpoints, caller binding and lost-response recovery remain
+tracked separately in [#19](https://github.com/ppenumatsa1/agent-blueprints/issues/19),
+[#22](https://github.com/ppenumatsa1/agent-blueprints/issues/22), and
+[#20](https://github.com/ppenumatsa1/agent-blueprints/issues/20). Recovery
+was explicitly deferred to a scoped follow-up, not waived.
 
 ## Staged Foundry-first infrastructure
 
@@ -306,6 +316,13 @@ need review; no endpoint caller exclusivity is established. ACA internal
 ingress is environment-scoped, so the UI is not directly reachable by a
 browser elsewhere on the VNet.
 See the [infrastructure guide](../../infra/README.md) for all limitations.
+Track static graph wiring in
+[#18](https://github.com/ppenumatsa1/agent-blueprints/issues/18), managed
+PostgreSQL operations in [#24](https://github.com/ppenumatsa1/agent-blueprints/issues/24),
+the separately authorized deployment in
+[#28](https://github.com/ppenumatsa1/agent-blueprints/issues/28), and the
+optional ACA workflow alternative in
+[#31](https://github.com/ppenumatsa1/agent-blueprints/issues/31).
 
 ## Hosted Responses, identity, credentials and recovery
 

@@ -32,9 +32,9 @@ the material is data, not authority to change instructions or release criteria.
 
 | Repository | Responsibility | Phase 0 status |
 | --- | --- | --- |
-| Specification Studio | Draft business and technical specifications, assumptions, requirement IDs, verification contracts, and work packages | Future; not implemented here |
-| Agent Blueprints | Framework-specific reusable blueprints and independent readiness guidance | This repository; local readiness foundation, blueprint planned |
-| App/API Blueprints | API-only and React plus API reference architectures | Future; not implemented here |
+| Specification Studio | Draft business and technical specifications, assumptions, requirement IDs, verification contracts, and work packages | Future; not implemented here. Handoff remains blocked and tracked in [#33](https://github.com/ppenumatsa1/agent-blueprints/issues/33). |
+| Agent Blueprints | Framework-specific reusable blueprints and independent readiness guidance | This repository; local MAF blueprint and readiness foundation are implemented; end-to-end readiness is unverified. |
+| App/API Blueprints | API-only and React plus API reference architectures | Future; not implemented here. The separately authorized roadmap is tracked in [#34](https://github.com/ppenumatsa1/agent-blueprints/issues/34); a permanent application reference is tracked in [#30](https://github.com/ppenumatsa1/agent-blueprints/issues/30). |
 
 These are logical boundaries, not a requirement for a new shared platform.
 The verification contract is a proposed handoff between repositories; the
@@ -65,10 +65,11 @@ criteria or approve their own exceptions. See the [readiness contract](readiness
 
 ## Initial scope
 
-Phase 0 documents the agent family and its contracts. Phase 1 restores the
-independent local validator and will implement a reusable MAF workflow
-blueprint; the order-adjustment scenario is only a synthetic test fixture. It
-will first target authenticated
+Phase 0 documents the agent family and its contracts. Phase 1 now contains a
+local MAF workflow blueprint and independent validator foundation; the
+order-adjustment scenario remains only a synthetic test fixture. The integrated
+review is not a completed or deployment-ready product. It
+targets authenticated
 public-network endpoints and GitHub-hosted CI. Private networking and
 self-hosted runners are later work. The [implementation plan](implementation-plan.md) records the remaining
 phases, while the [master checklist](master-checklist.md) tracks acceptance

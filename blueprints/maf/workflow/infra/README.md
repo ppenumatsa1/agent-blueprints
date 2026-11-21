@@ -8,6 +8,10 @@ managed checkpoints and recovery remain unverified. The Foundry hosted-agent
 service is deliberately absent from `azure.yaml` until its actual source
 root, entrypoint and contract are agreed. The two declared Container Apps
 services are the adjacent API and web UI, **not** workflow runtimes.
+Track completion of the infrastructure graph in
+[#18](https://github.com/ppenumatsa1/agent-blueprints/issues/18); the
+separately authorized live deployment is tracked in
+[#28](https://github.com/ppenumatsa1/agent-blueprints/issues/28).
 
 ```mermaid
 flowchart LR
@@ -72,6 +76,8 @@ This local evidence does not establish Azure Flexible Server compatibility,
 the behavior of an integrated application, or safe cross-major downgrades.
 After integration, repeat migration and drift checks on the exact combined
 revision and selected target; separately authorize any live Azure checks.
+Managed database migration/backup/restore operations are tracked in
+[#24](https://github.com/ppenumatsa1/agent-blueprints/issues/24).
 
 Azure Flexible Server [lists PostgreSQL 17 as supported](https://learn.microsoft.com/en-us/azure/postgresql/configure-maintain/concepts-supported-versions),
 but the pinned [2024-08-01 resource reference](https://learn.microsoft.com/en-us/azure/templates/microsoft.dbforpostgresql/2024-08-01/flexibleservers#serverproperties)
@@ -109,6 +115,10 @@ restriction or authenticated principal propagation has been verified.
 Any future forwarded workload token also requires reviewed evidence for
 gateway retention, stripping, replay and background recovery; no forwarding
 or token policy is configured here.
+Track the fail-closed caller/session ownership contract in
+[#22](https://github.com/ppenumatsa1/agent-blueprints/issues/22); the hosted
+workflow and checkpoint implementation is separately tracked in
+[#19](https://github.com/ppenumatsa1/agent-blueprints/issues/19).
 See [Foundry RBAC](https://learn.microsoft.com/en-us/azure/foundry/concepts/rbac-foundry)
 and [hosted-agent permissions](https://learn.microsoft.com/en-us/azure/foundry/agents/concepts/hosted-agent-permissions).
 
@@ -177,3 +187,7 @@ database authentication, reverse proxy and UI build; review network, roles,
 secrets, logging and image provenance; then prepare the required inventory,
 cost estimate and approval. A future live test must record real outcomes,
 including failures. No Azure resource mutation is authorized by these files.
+The deployment issue [#28](https://github.com/ppenumatsa1/agent-blueprints/issues/28)
+depends on offline integration/readiness decisions and explicit authorization;
+live deployment evidence should then help close hosted and cloud-verification
+issues rather than being blocked on every such issue's prior closure.
