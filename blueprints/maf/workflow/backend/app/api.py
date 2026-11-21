@@ -79,7 +79,11 @@ def create_app(
 ) -> FastAPI:
     store = store if store is not None else PostgresStore(settings.database_url)
     identity = identity if identity is not None else EntraIdentity(settings)
-    telemetry = Telemetry(settings.telemetry_mode, settings.applicationinsights_connection_string)
+    telemetry = Telemetry(
+        settings.telemetry_mode,
+        settings.applicationinsights_connection_string,
+        enable_native_instrumentation=settings.telemetry_mode == "azure-monitor",
+    )
     try:
         return _create_app(settings, components, store, identity, telemetry)
     except BaseException:

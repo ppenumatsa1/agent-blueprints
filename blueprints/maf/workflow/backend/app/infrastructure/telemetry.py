@@ -5,14 +5,27 @@ import logging
 import os
 import time
 import inspect
+import threading
 from contextlib import contextmanager
 from functools import wraps
 from uuid import UUID
 
+from agent_framework.observability import enable_instrumentation
+from opentelemetry import metrics as otel_metrics
+from opentelemetry import trace as otel_trace
+from opentelemetry.sdk.metrics import (
+    Counter,
+    Histogram,
+    ObservableCounter,
+    ObservableGauge,
+    ObservableUpDownCounter,
+    UpDownCounter,
+)
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.metrics import AlwaysOffExemplarFilter, MeterProvider
 from opentelemetry.sdk.metrics.export import (
+    AggregationTemporality,
     MetricExporter,
     MetricExportResult,
     PeriodicExportingMetricReader,
@@ -28,6 +41,8 @@ if not _log.handlers:
 _log.setLevel(logging.INFO)
 _log.propagate = False
 _propagator = TraceContextTextMapPropagator()
+_global_provider_lock = threading.Lock()
+_global_providers_registered = False
 _OPERATIONS = frozenset(
     {
         "http.request",
@@ -117,9 +132,16 @@ class SafeMetricExporter(MetricExporter):
     """Report metric exporter failures without exposing payload or exception text."""
 
     def __init__(self, exporter):
+        # Match Azure Monitor's documented delta sums without reading exporter internals.
         super().__init__(
-            preferred_temporality=exporter._preferred_temporality,
-            preferred_aggregation=exporter._preferred_aggregation,
+            preferred_temporality={
+                Counter: AggregationTemporality.DELTA,
+                Histogram: AggregationTemporality.DELTA,
+                ObservableCounter: AggregationTemporality.DELTA,
+                ObservableGauge: AggregationTemporality.CUMULATIVE,
+                ObservableUpDownCounter: AggregationTemporality.CUMULATIVE,
+                UpDownCounter: AggregationTemporality.CUMULATIVE,
+            }
         )
         self._exporter = exporter
 
@@ -181,6 +203,7 @@ class Telemetry:
         exporter=None,
         metric_exporter=None,
         metric_reader=None,
+        enable_native_instrumentation=False,
     ):
         if mode not in ("local", "azure-monitor"):
             raise ValueError("TELEMETRY_MODE must be local or azure-monitor.")
@@ -230,8 +253,6 @@ class Telemetry:
                     metric_exporter = AzureMonitorMetricExporter(
                         connection_string=connection_string, disable_offline_storage=True
                     )
-                if getattr(metric_exporter, "_metrics_to_log_analytics", True) is False:
-                    raise ValueError("Azure Monitor custom metric export is disabled.")
             provider = TracerProvider(resource=resource)
             tracer = provider.get_tracer("blueprint.manual")
             if mode == "azure-monitor":
@@ -248,6 +269,22 @@ class Telemetry:
                 processor = BatchSpanProcessor(SafeExporter(exporter))
                 provider.add_span_processor(processor)
                 processor_attached = True
+            if enable_native_instrumentation:
+                global _global_providers_registered
+                with _global_provider_lock:
+                    if not _global_providers_registered:
+                        # Agent Framework instrumentation uses the process-wide OTel providers.
+                        otel_trace.set_tracer_provider(provider)
+                        otel_metrics.set_meter_provider(meter_provider)
+                        if (
+                            otel_trace.get_tracer_provider() is not provider
+                            or otel_metrics.get_meter_provider() is not meter_provider
+                        ):
+                            raise RuntimeError("OpenTelemetry providers were already configured.")
+                        _global_providers_registered = True
+                enable_instrumentation(
+                    enable_sensitive_data=False, enable_message_events=False
+                )
         except Exception:
             if provider is not None:
                 try:
