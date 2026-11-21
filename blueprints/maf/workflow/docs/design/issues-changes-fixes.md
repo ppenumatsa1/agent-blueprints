@@ -363,22 +363,79 @@ entries to hide failed attempts or gaps.
 - **Issue:** A hosted bridge needs to bind each request to the authorized API
   caller and safely reconcile a successful remote request whose response ID
   was lost. Neither guarantee has been established.
-- **Investigation:** In `azure-ai-agentserver-responses==2.4.0`, resilient
-  execution can serialize forwarded `x-client-*` headers even for foreground
-  `store=true` requests when resilient or steering features are enabled.
-  Offline middleware tests rejected unauthorized requests and stripped a
-  header before SDK context creation for `store=false`; gateway retention
-  for stored requests remains unknown. The
+- **Investigation:** Earlier SDK inspection found that, in
+  `azure-ai-agentserver-responses==2.4.0`, resilient execution can serialize
+  forwarded `x-client-*` headers even for foreground `store=true` requests
+  when resilient or steering features are enabled. Offline middleware tests
+  rejected unauthorized requests and stripped a header before SDK context
+  creation for `store=false`; gateway retention for stored requests remains
+  unknown. The
   [hosted-agent contract](https://learn.microsoft.com/en-us/azure/foundry/agents/concepts/hosted-agent-contract)
   documents trusted but opaque platform identities and drops caller headers
-  outside its allowlist. The
+  outside its allowlist.
+- **Documented pattern, not implemented:** The PR #15 workstream owner reports
+  that current Microsoft Agent Framework guidance supports a native Python
+  `Workflow` in the Responses host with
+  `ResponsesServerOptions(resilient_background=True)` and Requests
+  `store=true, background=true`. The host owns durable workflow checkpoints;
+  do not pass a separate checkpoint store to the Workflow. For caller binding,
+  the backend must first authenticate and authorize the user, then send the
+  Foundry workload Authorization and `x-ms-user-identity` populated from the
+  trusted user OID. Current azd protocol-adapter documentation explicitly
+  declares protocol 2.0.0 in `azure.yaml`; the Foundry hosted-agent sample
+  uses `host: azure.ai.agent` with version 2.0.0. The
+  hosted container receives platform-injected `x-agent-user-id`; the backend
+  sets the distinct `x-ms-user-identity` when calling Foundry, and
+  `get_request_context().user_id` exposes the trusted identity. Use requires
+  the Foundry Agent Consumer role and custom
+  `UserIdentityImpersonation/action`. If the hosted workflow does not call a
+  downstream API as the user, no end-user bearer/OBO token needs to be
+  forwarded or persisted. The wire mechanism and protocol declaration are
+  documented, but these are not evidence that this blueprint implements
+  them.
+- **Remaining blocker:** `response.id` is required for polling. Creating a
+  conversation first does not provide a documented idempotency key or
+  unambiguous lookup for the case where response creation succeeds but its
+  result is lost. The
   [list responses API](https://learn.microsoft.com/en-us/azure/foundry/reference/rest/list-responses)
-  filters by agent or conversation, not operation metadata; its consistency
-  and suitability for this recovery path remain unverified.
-- **Decision / next action:** No hosted adapter was implemented. Establish
-  supported caller binding and unambiguous recovery before implementing the
-  bridge, and validate the actual service only with separate authorization.
-  Do not persist bearer credentials or silently retry ambiguous side effects.
+  documents filters for limit/order/after/before/agent/conversation, but not
+  response metadata. The
+  [list conversations API](https://learn.microsoft.com/rest/api/microsoft-foundry/aiproject#conversations)
+  does not document a conversation-metadata query filter, and no
+  Responses-create idempotency key is documented.   Thus, if no conversation
+  or response ID was persisted before transport loss, metadata cannot yet
+  provide an unambiguous lookup. Dedicated per-operation conversations and
+  response metadata can be used as best-effort correlation: a matching
+  response visible in a paged `GET /responses?conversation_id=...` can yield
+  its ID. An empty list has no documented read-after-write/linearizable
+  visibility or bounded consistency, so it cannot prove that create failed
+  and is not safe grounds to retry. `POST /conversations` has the same
+  lost-ack ambiguity; conversation listing has no metadata filter or
+  visibility guarantee. Per-operation locks do not make a remote create
+  atomic with the application database across crashes, and retention is
+  setup-dependent. The reference
+  project's `ResponsesWorkflowClient` creates a conversation before
+  invoking, but does not persist/reconcile response IDs or bind user identity.
+  Its package pins (`azure-ai-agentserver-responses==2.3.0`,
+  `agent-framework-core==1.22.0`, `agent-framework-foundry==1.15.0`) are
+  reference evidence only; they do not solve the blocker or establish
+  compatibility with this blueprint. Local business idempotency protects
+  database effects; it cannot recover hosted response identity. Keep recovery
+  blocked until the provider offers a usable consistency/idempotency guarantee
+  or the application has a separate durable, idempotent reconciliation
+  contract.
+- **Decision / next action:** No Responses adapter, hosted identity bridge,
+  custom permission, private route, dependency compatibility, tests, or
+  hosted checkpoint integration exists in the current blueprint. Verify
+  package/API compatibility, workload networking, application lifecycle,
+  caller role binding, and actual service behavior with separate
+  authorization. Resolve response-ID recovery before safely retrying
+  ambiguous requests. Do not persist end-user bearer credentials or silently
+  repeat side effects.
+- **References:** [Responses protocol hosting guidance](https://learn.microsoft.com/agent-framework/hosting/foundry-hosted-agent#responses-protocol);
+  [hosted-agent contract](https://learn.microsoft.com/azure/foundry/agents/concepts/hosted-agent-contract);
+  [on-behalf-of flow](https://learn.microsoft.com/azure/foundry/agents/how-to/use-on-behalf-of-flow);
+  [Responses and conversations REST operations](https://learn.microsoft.com/rest/api/microsoft-foundry/aiproject#responses).
 
 ### 2026-11-21 - Reconcile developer tooling with checkpoint foundation
 
@@ -602,20 +659,38 @@ entries to hide failed attempts or gaps.
 
 ### PR #13 - Locked developer tooling proposal
 
-- **Historical status and revision:** At this entry, the parallel PR was open,
-  based on `modularity-foundation`, at head
-  `e1d953662e615e547fa641ad0831907c363318e3`. Tooling is not included in
-  cleaned foundation commit `9efeef0`.
+- **Historical status and revision:** The earlier hosted run was on head
+  `e1d953662e615e547fa641ad0831907c363318e3`; at that point the tooling
+  remained a parallel PR, not part of the cleaned foundation.
+- **Reported and integrated revisions:** The owner later reported PR head
+  `b78634b3b746c7adbf5f8500e4b7023c96c67963`; the #17 integration branch
+  records tooling at `543b137a432ca054920d629b943fc42a729df676`. These are
+  separate snapshots; evidence for one must not be attributed to the other.
 - **Proposed changes:** Python 3.12, uv 0.9.26, public-PyPI `uv.lock` and
   hash-pinned backend/image installs, Ruff 0.14.13, Node 22 with `npm ci`,
   and VS Code task/debug configurations.
 - **Evidence:** Hosted run
   [44928260607](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44928260607)
   passed `contracts`, `maf-core`, `maf-frontend`, `maf-compose`, and
-  `maf-independent` for that exact tooling head only. The workstream reports
+  `maf-independent` for the earlier exact head
+  `e1d953662e615e547fa641ad0831907c363318e3` only. The workstream reports
   Windows and Linux Compose checks using an approved mirror after public TLS
-  failures. Those results do not transfer to this branch or other revisions.
+  failures. Those results do not transfer to its newer head, this branch, or
+  other revisions. The current reported head retains uv/lock-based tooling
+  but has no Foundry Responses hosting dependency; adding the prerelease
+  hosting package requires separate MAF version/lock coordination.
 - **Unverified:** macOS Compose and interactive debugger operation.
+- **Additional local verification limit:** In a later owner-reported check,
+  VS Code opened the tooling checkout in Restricted Mode. The owner did not
+  bypass the trust decision, so actual breakpoints/debugging were not tested.
+  That environment also lacked an installed `uv` executable; locked-tool
+  execution was not verified there. These are environment limitations, not a
+  claim that the proposed tooling failed its hosted checks.
+- **Integrated revision evidence:** The #17 branch reports run
+  [44937692067](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44937692067)
+  passed five checks on tooling head `543b137a432ca054920d629b943fc42a729df676`.
+  This is not a check of the combined PR #17 revision or evidence for the
+  Restricted Mode debugger/uv environment gaps.
 - **References:** [PR #13](https://github.com/ppenumatsa1/agent-blueprints/pull/13);
   `uv.lock`, backend image install, and developer task/debug configuration
   were proposed in that PR, not present in the foundation baseline.
@@ -651,19 +726,135 @@ entries to hide failed attempts or gaps.
   lost-response recovery remain unverified. Local locked dependency restoration
   failed offline on an uncached Windows wheel and online on a public TLS error.
 
+### PR #16 - Versioned database migration proposal
+
+- **Status and revision:** The owner reports final commit
+  `897aae853a4381177407ab8aaf5518c6f6149b4b`. It is not part of this
+  documentation branch's local-only baseline.
+- **Decision / behavior:** Adopt an existing database only after verifying
+  the exact baseline schema manifest and confirming no later-revision-owned
+  tables exist; only then stamp Alembic at `0001` and apply upgrades in the
+  same transaction. A fresh database runs revision `0001`; validation does
+  not stamp. This preserves application data while rejecting unrecognized
+  schema histories.
+- **Evidence:** The workstream owner reports source and generated test suites
+  each passed 48 tests with no skips on PostgreSQL 16.15 and 17.12. Its root
+  suite passed 47 tests with one expected adapter-not-selected skip.
+  [Actions run 44944613749](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44944613749)
+  passed five jobs for exact head `897aae8` when the PR used foundation base
+  `d0e1727`.
+- **Revision limitation:** That hosted run is stale relative to foundation
+  PR #11's newer head
+  `814491811eac457826108b70fc213fdc564af0e5`. The
+  migration change must be reconciled and validated against its current base;
+  this entry is owner-reported evidence, not proof for this branch or a
+  production database.
+- **Follow-up owner report:** The owner applied the `897aae8` delta locally
+  and committed it as `ce86252324dca041fd5430602a3fc2c28a355274` atop PR #11
+  ancestry `51a0666`. Twelve focused migration regressions passed on isolated
+  PostgreSQL 17, and Ruff 0.14.13 lint/format checks passed. The README delta
+  was retained and shared design docs/journal were unchanged in that commit.
+  This is focused local evidence only; its ancestry needs reconciliation and
+  no final combined or hosted verification was reported.
+- **Conflict resolution and newer evidence:** The owner reports merge commit
+  `d1251352835c2d02e91690104b4dcabf465f5f05` with parents PR #16 `897aae8`
+  and foundation `8144918`. Its `specs.md` retains canonical SPEC-02 API
+  links, points SPEC-03/SPEC-05 to `backend/migrations/baseline.sql`, and
+  preserves migration SPEC-12 and its diagram. Generated instantiation/link
+  validation passed; the root suite passed 47 tests with one expected
+  adapter-not-selected skip; Actions run
+  [44947337144](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44947337144)
+  passed all five jobs on that exact PR #16 revision. This evidence does not
+  verify the distinct combined PR #17 revision.
+- **References:** [PR #16](https://github.com/ppenumatsa1/agent-blueprints/pull/16);
+  the verified baseline manifest, Alembic revision `0001`, and source/generated
+  migration tests are in that workstream.
+
+## 2026-11-21 - Deepen generated-project design documentation
+
+- **Issue / cause:** The initial generated design baseline named requirements,
+  components, and deployment boundaries, but needed more actionable identity,
+  runtime, configuration, interaction, and failure-path detail to guide
+  implementation and review. General documentation patterns alone would not
+  establish that those paths exist in this blueprint.
+- **Change / decision:** Refine the PRD, technology stack, technical
+  specifications, architecture, project structure, user flow, and deployment
+  flow with concrete local source/configuration references, API authority
+  rules, startup and recovery order, error/retry behavior, and meaningful
+  Mermaid diagrams. Follow the public reference project's separated
+  documentation viewpoints and evidence traceability without copying its
+  order-resolution behavior or business examples:
+  [reference design docs](https://github.com/ppenumatsa1/maf-monorepo/tree/main/agents/order-resolution/foundry-public/docs/design).
+  Update the source map for the canonical API composition, assembly, routes,
+  schemas, dependencies, middleware/errors, and lifecycle modules. Clearly
+  label Foundry hosting, cloud deployment, live identity, telemetry, and
+  migration capabilities that remain unimplemented or unverified.
+- **Evidence:** On the working tree descended from `58369ad`, the focused
+  command `python -m unittest tests.test_instantiation tests.test_ci_workflow
+  -v` passed all three tests. This verifies generated documentation byte-copy
+  and local Markdown links, plus the workflow-step regression for failed,
+  skipped, expected-failure, and successful verifier outcomes.
+  `git diff --check` passed. This working-tree evidence is not hosted CI for
+  the final PR revision; check that revision before approval.
+- **Foundation reconciliation:** PR #11's latest reported head is
+  `814491811eac457826108b70fc213fdc564af0e5`, parent
+  `44ee18b886d409b0b59cf6df6b4893917370307d`. Its canonical layout separates
+  `composition.py`, `api/app.py`, route handlers, schemas, dependencies,
+  errors, middleware, and `lifecycle.py`; no `app.api` compatibility shim
+  remains. The owner reports 37 backend tests passed with no skips. Before
+  PR #12's source-map fix, Actions run
+  [44944929394](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44944929394)
+  had four jobs pass and `contracts` fail on the stale
+  `../../backend/app/api.py` link. The root suite reported 47 tests, one
+  failure from that link, and one expected adapter-not-selected skip. The
+  PR #12 docs now map routes/auth to `api/routes/cases.py` and
+  `api/dependencies.py`, wiring to `composition.py`, API assembly to
+  `api/app.py`, and startup/recovery to `lifecycle.py`. Rebase onto this
+  exact foundation and rerun root/contracts before relying on the correction.
+  The coordinator reports that after a one-reference parent-branch correction,
+  root `python -m unittest discover -s tests -v` passed 47/47 with the
+  synthetic adapter selected. This verifies the root suite on the new base,
+  not this dependent PR's post-rebase checks. The owner reports PR #11 run
+  [44945419570](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44945419570)
+  passed all five jobs, including generated checks without skips, on exact
+  head `814491811eac457826108b70fc213fdc564af0e5`. PR #12 was rebased onto
+  that exact tip. Its isolated root suite passed 47 tests with one expected
+  adapter-not-selected skip; generated-copy/link and verifier-pipeline tests
+  passed, as did `git diff --check`. Actual-head run
+  [44946550709](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44946550709)
+  passed all five jobs on exact head
+  `c247bf737acabe47e7af0023eaebf69c0b393fdf`. These results do not replace
+  final combined PR #17 verification.
+- **Integrated-doc conflict and resolution:** Applying the richer PR #12
+  documents to the #17 integration branch conflicted in ten shared documents.
+  Taking foundation files wholesale would have lost migration SPEC-12 and its
+  diagram, observability SPEC-13, staged infrastructure and prior failure
+  evidence; the PR16 branch also identified stale `schema.sql` references
+  after migration integration. The docs-owner resolution preserves SPEC-02's
+  canonical API paths, points SPEC-03/SPEC-05 to
+  `backend/migrations/baseline.sql`, reserves SPEC-12 for migrations and
+  SPEC-13 for observability, and renumbers colliding API/lifecycle contracts.
+  It retains the migration diagram, infrastructure limitations, previous
+  failures/evidence, and the richer Mermaid/runtime documentation. Generated
+  copy/link and combined tests must pass before this integration is complete.
+- **Lesson:** Documentation structure may use a reference project's
+  viewpoints, but implementation claims must be grounded in this repository
+  and tied to evidence at the revision being reviewed.
+
 ## Current acceptance queue
 
 | Item | Status | Evidence needed / next action |
 | --- | --- | --- |
-| Eight design documents and generated inclusion | Open in PR #12 | Run 44939850338 passed on head `58369ad`; combined copy and link tests passed locally. |
-| Canonical imports and legacy-shim removal | Implemented in open PR #11 | Foundation run 44939172266 passed all five checks on `d0e1727`; preserve direct imports in later changes. |
-| Locked developer tooling | Open in PR #13 | Run 44940616666 passed on head `b78634b`; macOS, interactive debugging and public-only local downloads remain unverified. |
-| Privacy-safe observability | Open in PR #14 | Run 44940364995 passed on head `cb4ff78`; hosted telemetry remains unverified. |
-| Combined revision CI | Not run | Passing checks on individual PRs do not establish checks for their combined revision. |
-| Foundry-first infrastructure | Open in PR #15 | Run 44939817209 passed on head `2023e16`; combined source/generated offline checks passed locally. Resolve host, networking, identity and cost gaps. |
-| PostgreSQL major-version alignment | Open | Combined code `af3955a` passed source/generated suites on 16.15 and 17.12; the staged 16/17 mismatch, live API and Azure compatibility remain unverified. PR #16 run 44940559106 passed on head `eb898f6`. |
-| Current dependent PR CI | Passed on individual heads | Confirm combined-revision CI independently; none of the PRs has been merged. |
-| Foundry host caller binding and lost-response recovery | Blocked | Establish supported identity and reconciliation guarantees before implementing a hosted bridge. |
+| Eight design documents and generated inclusion | Verified on PR #12 head `c247bf7` | Root tests passed 47 with one expected adapter-not-selected skip; generated-copy/link and verifier-pipeline tests passed. Actual-head run [44946550709](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44946550709) passed all five jobs. Verify again on the final combined PR #17 revision. |
+| Canonical imports, API module boundaries and legacy-shim removal | Implemented in foundation head `8144918` | PR #11 run [44945419570](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44945419570) passed all five checks, including generated checks without skips. Preserve direct imports and canonical route/composition/lifecycle boundaries. |
+| Generated-verifier pipeline failure propagation | Implemented in foundation commit `d0e1727` | `tests/test_ci_workflow.py` covers failed, skipped, expected-failure, and successful outputs; PR #11 run 44945419570 passed all five checks at head `8144918`. |
+| Locked developer tooling | In integrated workstream; combined status pending | Run [44937692067](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44937692067) passed five checks for tooling head `543b137a432ca054920d629b943fc42a729df676`, not PR #17's combined revision. macOS and interactive debugging remain unverified; the owner could not test in VS Code Restricted Mode. |
+| Privacy-safe observability | Integrated workstream; hosted telemetry unverified | Run 44940364995 passed for exact workstream head `cb4ff78`; preserve allowlisted telemetry and exporter privacy guarantees, then validate the combined revision and live ingestion separately. |
+| Versioned database migrations | Integrated workstream; final combined CI pending | PR #16 run 44944613749 passed five jobs for `897aae8` against old base `d0e1727`; follow-up `ce86252324dca041fd5430602a3fc2c28a355274` reportedly passed 12 focused PostgreSQL 17 migration regressions and Ruff 0.14.13. Neither is final combined CI; preserve `SPEC-12` and `baseline.sql` references. |
+| Foundry-first infrastructure staging | Integrated but not deployed | Run 44939817209 passed for workstream head `2023e16`; offline source/generated checks were reported locally. The resource graph, private paths, identity behavior, cost, and Azure compatibility remain unverified; no resources were provisioned. |
+| PostgreSQL major-version alignment | Locally checked on a prior combined code revision | `af3955a` reportedly passed source/generated suites on PostgreSQL 16.15 and 17.12; run 44940559106 passed for `eb898f6`. Staged Azure 16/local 17 mismatch, live API and Azure compatibility remain unverified. |
+| Combined PR #17 revision CI | Not yet run | Passing workstream checks do not establish checks for the combined revision; run all required jobs against the exact final PR #17 head. |
+| Foundry host identity, credential lifecycle and lost-response recovery | Blocked | No hosted Responses host/dependency/service, caller-identity bridge/role assignment, hosted credential delivery/rotation, or host-managed checkpoint integration is implemented/live verified. The OID header is not a credential; never persist end-user bearer/OBO tokens. Visible response metadata is best-effort; obtain bounded visibility/idempotency or a durable reconciliation contract before retrying ambiguous creates. |
 | Live Entra/OBO, cloud telemetry, Azure deployment | Unverified | Separate scoped implementation, authorization where required, and live evidence. |
 
 Future entries should use this form: date and scope; observed issue and

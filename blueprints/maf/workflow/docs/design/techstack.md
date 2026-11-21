@@ -24,7 +24,35 @@ claim about a deployed environment.
 | Infrastructure | Local Bicep modules, azd service descriptors, Python static validator | Bicep 0.49.2 compiled and linted locally without Azure credentials. No external Bicep registry modules or shared runtime are required. |
 | Staged cloud resources | Foundry account/project, private PostgreSQL, Log Analytics/Application Insights, managed identities; optional model, project-wide consumer grant, registry and API/UI Container Apps | Development-oriented, restrictive defaults are not free or production-ready. Network paths and live service behavior remain unverified. |
 
-The Python direct dependencies are in
+## Runtime dependency and process topology
+
+```mermaid
+flowchart LR
+    Web[React / MSAL<br/>Vite build-time config]
+    Nginx[Frontend container<br/>loopback published]
+    API[Uvicorn / FastAPI<br/>single API process]
+    Factory[ApplicationComponents<br/>module:function]
+    MAF[MAF WorkflowBuilder<br/>ApprovalExecutor]
+    PG[(PostgreSQL 17<br/>wf_* tables)]
+    CP[(FileCheckpointStorage<br/>private per-case volume)]
+
+    Web --> Nginx
+    Nginx -->|same-origin /api proxy| API
+    API --> Factory
+    API --> MAF
+    MAF --> PG
+    MAF --> CP
+    API --> PG
+```
+
+The diagram is the checked-in local shape, not an Azure hosting diagram. The
+MAF package supplies the workflow protocol and file checkpoint implementation;
+FastAPI does not turn the graph into a separate orchestration engine. Compose
+starts PostgreSQL first, waits for its health check, then the API; the web
+service waits for the API health check. Only the web port is published, bound
+to `127.0.0.1`.
+
+The exact Python requirements are in
 [`backend/pyproject.toml`](../../backend/pyproject.toml), with the resolved
 graph and hashes in [`backend/uv.lock`](../../backend/uv.lock); the
 frontend's direct dependency manifest and lock are
@@ -53,6 +81,37 @@ Neither local tests nor Bicep compilation establish Azure compatibility.
   action, optional initialization, and a native workflow factory. The
   blueprint does not own application-specific business behavior.
 
+## Configuration contract
+
+Compose reads values from the process environment; there is no checked-in
+`.env` file and no secret-bearing configuration template. The sample
+[README setup](../../README.md#local-stack) is the runnable entry point.
+
+| Variable | Consumer and effect | Classification / validation |
+| --- | --- | --- |
+| `ENTRA_TENANT_ID`, `ENTRA_API_CLIENT_ID` | API JWT issuer/tenant and audience | Required UUIDs; server configuration |
+| `ENTRA_SPA_CLIENT_ID`, `ENTRA_API_APP_ID_URI` | Vite/MSAL tenant app and three delegated scope names | Required public SPA configuration, embedded at frontend build time |
+| `DATABASE_URL` | `PostgresStore` connection | Required PostgreSQL URL; server secret; Compose constructs it using `POSTGRES_PASSWORD` |
+| `POSTGRES_PASSWORD` | PostgreSQL initial account and API URL | Required; secret; URL-safe; changing it does not rotate an existing volume's credentials |
+| `CHECKPOINT_ROOT` | `LocalWorkflowHost` private file storage | Required absolute container path in Compose; single-host persistence |
+| `WORKFLOW_HOST` | Settings host selection | Defaults to `local`; any other value is rejected |
+| `BLUEPRINT_APPLICATION` | `app.main` loads an `ApplicationComponents` factory | Required `module:function`; Compose example selects `examples.synthetic_application:build_application` |
+| `CORS_ORIGINS` | Optional FastAPI CORS middleware | Explicit comma-separated origins only; no wildcard; plain HTTP allowed only for loopback |
+| `OBO_ENABLED`, `OBO_ALLOWED_SCOPES`, `ENTRA_API_CLIENT_SECRET` | Optional server-side MSAL OBO exchange | Off by default; enabling requires secret and explicitly allowlisted resource scopes; never a Vite variable |
+| `BLUEPRINT_PORT` | Host loopback port for web container | Optional; defaults to `8080` |
+| `NPM_REGISTRY`, `PYTHON_PACKAGE_INDEX` | Frontend/backend image build only | Optional approved package mirror; do not put credentials in registry URLs |
+
+`Settings.from_environment()` parses backend settings during startup.
+`app/main.py` loads the selected application factory and calls
+`composition.create_app()`, which wires the store, Entra verifier, local host,
+service, and `lifecycle.create_lifespan()`. `api/app.py` assembles FastAPI,
+middleware, handlers, and routers; the lifespan validates the expected
+migration revision without DDL, invokes application initialization, and
+attempts recovery before serving.
+Frontend variables are Vite build arguments, not runtime secrets. See
+[setup](../setup.md) for the full environment workflow and
+[deployment flow](deployment-flow.md) for commands and limits.
+
 ## Dependency and alternative status
 
 The backend image exports the lock and verifies artifact hashes during install.
@@ -63,14 +122,34 @@ immutable image digests, so supply-chain hardening is still an acceptance
 concern. See [deployment flow](deployment-flow.md) and
 the source repository's `docs/engineering-standards.md`.
 
-The **open** developer-tooling change is PR
-[#13](https://github.com/ppenumatsa1/agent-blueprints/pull/13), head
-`543b137a432ca054920d629b943fc42a729df676`. Its hosted
-[run 44937692067](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44937692067)
-passed five checks for that exact revision, not this combined revision. The
-workstream reports Windows and Linux Compose verification with an approved
-package mirror after public TLS failures; public-only local downloads, macOS
-and interactive debugger verification remain unverified. See the
+The **open** developer-tooling workstream is PR
+[#13](https://github.com/ppenumatsa1/agent-blueprints/pull/13). The integrated
+branch records head `543b137a432ca054920d629b943fc42a729df676` and hosted run
+[44937692067](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44937692067),
+which passed five checks for that exact revision, not this combined revision.
+Earlier owner-reported PR #13 head `b78634b3b746c7adbf5f8500e4b7023c96c67963`
+retained uv/lock-based tooling but lacked the Foundry Responses hosting
+dependency; run
+[44928260607](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44928260607)
+passed five checks for the earlier exact head
+`e1d953662e615e547fa641ad0831907c363318e3` only. Windows and Linux Compose
+were reported using an approved package mirror after public TLS failures.
+Interactive debugging was not exercised because VS Code was in Restricted
+Mode, and one owner environment lacked `uv`; macOS and those environment
+checks remain unverified. Adding the documented prerelease hosting package
+requires separate dependency/lock coordination.
+
+The migration workstream preserves the guarded Alembic adoption design:
+validate the exact legacy baseline manifest and absence of later-revision
+tables before stamping, while fresh databases run revision `0001` and
+validation never stamps. The owner reports 48 source and 48 generated tests
+on PostgreSQL 16.15 and 17.12 for commit `897aae8`; its five-job run
+[44944613749](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44944613749)
+used old base `d0e1727` and is not final combined CI. The integration branch
+contains follow-up commit `ce86252324dca041fd5430602a3fc2c28a355274`, reported
+to pass 12 focused migration regressions on isolated PostgreSQL 17 and Ruff
+0.14.13 checks. This focused local evidence does not establish the whole
+combined revision or Azure compatibility. See the
 [journal](issues-changes-fixes.md).
 
 ## Official references

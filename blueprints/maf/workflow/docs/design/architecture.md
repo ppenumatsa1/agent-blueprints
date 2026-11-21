@@ -10,29 +10,47 @@ hosted ingestion, Foundry hosting, and Azure deployment remain unverified.
 Staged Bicep/azd definitions and offline checks exist, but CI or local tests
 do not prove a live deployment.
 
+The structure follows the reference project's useful documentation pattern of
+separating logical responsibilities, process interactions, development/source
+ownership, physical boundaries, and end-to-end scenarios. This blueprint uses
+those viewpoints to describe its own current code; it does not adopt the
+reference project's order-resolution domain, hosted paths, or claims.
+
 ## Component view
 
 ```mermaid
 flowchart LR
     User[Submitter or assigned reviewer]
     UI[React workspace and MSAL]
-    API[FastAPI routes and Entra validation]
+    Composition[create_app composition]
+    API[FastAPI assembly, middleware and errors]
+    Routes[Case and health route handlers]
+    Identity[EntraIdentity dependencies]
     UC[WorkflowService and application policy]
     WF[Native MAF workflow]
     Host[LocalWorkflowHost]
+    Lifecycle[Startup and recovery lifespan]
     CP[(Private per-case file checkpoint)]
     Store[PostgresStore]
     DB[(Cases, decisions, audit, action ledger)]
     Action[Application-owned transactional action]
 
     User --> UI
-    UI -->|Bearer token and JSON| API
-    API --> UC
+    UI -->|Bearer token and JSON| Routes
+    Composition --> API
+    Composition --> UC
+    Composition --> Host
+    Composition --> Lifecycle
+    API --> Routes
+    Routes --> Identity
+    Routes --> UC
     UC --> WF
     WF --> Host
     Host --> CP
     UC --> Store
     Host --> Store
+    Lifecycle --> Store
+    Lifecycle --> Host
     Store --> DB
     Store --> Action
 ```
@@ -61,10 +79,19 @@ application behavior. Startup failure cleanup includes initialized exporters
 and pre-lifespan service initialization.
 
 The browser is not authoritative for identity or permission. FastAPI validates
-the token and derives the principal; application policy controls record access
-and decisions. Workflow checkpoints preserve framework continuation state;
-PostgreSQL owns business records, decision/audit history, and the action
-ledger. These stores are separate and do not share an atomic transaction.
+the bearer token and derives the principal; `CaseAccessPolicy` controls record
+access and decisions. `composition.py` wires the repository, identity provider, host, service, and
+lifespan. `api/app.py` assembles FastAPI and installs CORS, middleware,
+exception handlers, and routers; route handlers, schemas, and dependencies
+are separate modules under `api/`. `lifecycle.py` owns startup initialization
+and recovery. These are canonical direct-import modules; no forwarding
+`app.api` shim remains.
+
+Workflow checkpoints preserve framework continuation state; PostgreSQL owns
+business records, decision/audit history, and the action ledger. These stores
+are separate and do not share an atomic transaction. The per-case session
+advisory lock serializes host activity; it is not a distributed checkpoint
+transaction.
 
 ## Schema ownership
 
@@ -129,6 +156,85 @@ marking execution complete or accepting a completed replay. A missing or
 incomplete checkpoint remains an explicit recovery error; a committed
 database action is protected by the action ledger on retry.
 
+## Process and lifecycle view
+
+The real request path has three API operations; it does not expose a chat,
+SSE, or hosted Responses contract:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Owner
+    actor Reviewer
+    participant Browser as React/MSAL
+    participant API as FastAPI case routes
+    participant Identity as EntraIdentity
+    participant Policy as CaseAccessPolicy
+    participant Service as WorkflowService
+    participant DB as PostgresStore
+    participant MAF as ApprovalExecutor
+    participant Checkpoint as FileCheckpointStorage
+
+    Owner->>Browser: Sign in with redirect
+    Browser->>Identity: Request delegated workflow.write token
+    Identity-->>Browser: Entra access token
+    Browser->>API: POST /api/cases + Bearer + Idempotency-Key
+    API->>Identity: Validate RS256, issuer, audience, tenant, time claims
+    Identity-->>Policy: Principal(scopes, roles, tenant, subject)
+    Policy->>Policy: Require workflow.write and distinct reviewer
+    API->>Service: submit(principal, reviewer, payload, key)
+    Service->>DB: Insert case and audit / resolve identical retry
+    Service->>MAF: start(case_id)
+    MAF->>Checkpoint: Persist approval request checkpoint
+    MAF->>DB: Save checkpoint and request IDs
+    API-->>Browser: Case status and correlation ID
+    Reviewer->>Browser: Approve or reject
+    Browser->>API: POST /api/cases/{id}/decision
+    API->>Identity: Validate approver token
+    Identity-->>Policy: Reviewer principal
+    Policy->>Policy: Require workflow.approve + Workflow.Approver
+    API->>Service: decide(principal, case_id, decision)
+    Service->>DB: Persist immutable decision
+    Service->>MAF: resume(case_id)
+    MAF->>Checkpoint: Restore recorded request and checkpoint
+    MAF->>DB: Apply action + ledger transaction, then finish
+    API-->>Browser: Terminal case or explicit failure
+```
+
+### Startup and recovery sequence
+
+`backend/app/main.py` reads and validates configuration, resolves the
+`BLUEPRINT_APPLICATION` factory, and calls `create_app()` in
+`backend/app/composition.py`. That function wires the repository, identity,
+host, service, and `create_lifespan()` before delegating API assembly to
+`create_api_app()` in `backend/app/api/app.py`. A schema owner runs the
+explicit Alembic upgrade before runtime startup. The lifespan validates the
+expected revision without DDL, calls the application's initializer, and
+walks incomplete cases returned by
+`PostgresStore.recoverable()` in creation order. `created` cases use
+`LocalWorkflowHost.start`; approved/rejected/completed-but-not-terminal cases
+use `resume`. Per-case PostgreSQL advisory locks serialize overlapping
+workers. Recovery conflicts are warnings; action failures and blueprint
+errors are logged with a safe case identifier and error class, and
+blueprint errors record a recovery failure code. This is one-process startup
+recovery, not a multi-region or hosted recovery guarantee.
+
+### API and response contract
+
+| Route | Request / response | Success / failure boundary |
+| --- | --- | --- |
+| `GET /healthz` | No body | `204`; liveness only and unauthenticated |
+| `POST /api/cases` | `{ reviewer_id: UUID, payload: object }`, `Idempotency-Key`; returns `CaseOutput` | `200`; `401`, `403`, `409`, `422`, `503` as applicable |
+| `GET /api/cases/{case_id}` | UUID; returns authorized `CaseOutput` | `200`; `401`, `403`, `404` |
+| `POST /api/cases/{case_id}/decision` | `{ decision: approved|rejected }`; returns `CaseOutput` | `200`; `401`, `403`, `404`, `409`, `503` |
+
+`CaseOutput` includes `id`, `correlation_id` (currently the same UUID as the
+case ID), status, decision, payload, `execution_complete`, and failure code.
+The middleware separately generates `X-Correlation-ID` per HTTP request. A
+generic 500 body and exception-class-only logging prevent exception details
+from becoming API output. The code does not include distributed trace context
+propagation or a telemetry exporter.
+
 ## Trust and extension boundaries
 
 - `ApplicationComponents` supplies application-owned business rules, access
@@ -175,10 +281,11 @@ access and monitoring public ingestion/query are disabled, but this increment
 does not provide their private endpoints or verify any runtime connection.
 PostgreSQL uses a delegated subnet, private DNS and Entra-only authentication;
 the existing API does not acquire a database token. The staged server selects
-PostgreSQL 16, whereas local Compose uses 17. Twelve tests on a separate
-migration revision passed against local PostgreSQL 16.15; the integration
-worktree includes the migration changes, but that result belongs to the
-separate revision and compatibility with the Azure target remains unverified.
+PostgreSQL 16, whereas local Compose uses 17. The PR #16 migration owner
+reports 12 focused migration tests on isolated PostgreSQL 17 and a five-job
+Actions pass on merge commit
+`d1251352835c2d02e91690104b4dcabf465f5f05` (run 44947337144). This is
+PR #16-specific evidence, not combined PR #17 or Azure compatibility evidence.
 Container Apps platform
 auth is a separately applied resource; application-level authentication and
 record authorization remain mandatory even if it fails. The optional registry
@@ -188,6 +295,63 @@ need review; no endpoint caller exclusivity is established. ACA internal
 ingress is environment-scoped, so the UI is not directly reachable by a
 browser elsewhere on the VNet.
 See the [infrastructure guide](../../infra/README.md) for all limitations.
+
+## Hosted Responses, identity, credentials and recovery
+
+The PR #15 workstream owner reports the documented native Python Responses
+pattern uses `ResponsesServerOptions(resilient_background=True)` with Requests
+`store=true, background=true`. The host owns durable workflow checkpoints;
+do not configure an independent checkpoint store for that Workflow.
+Application-owned PostgreSQL remains separate from host-managed workflow
+state. This is an upstream-supported design direction, not code in this
+blueprint: there is no Responses host/dependency/agent service, and
+package/API compatibility, workload networking, and hosted application
+lifecycle require review and live verification before claiming hosted
+durability. See Microsoft's
+[Responses-protocol guidance](https://learn.microsoft.com/agent-framework/hosting/foundry-hosted-agent#responses-protocol).
+
+For hosted caller binding, the documented direction is for the authenticated
+API to authorize the user and send Foundry workload Authorization together
+with `x-ms-user-identity` set from the trusted user OID. The hosted container
+receives platform-injected `x-agent-user-id`; protocol 2.0.0 exposes that
+identity through `get_request_context().user_id`. The caller needs Foundry
+Agent Consumer and custom `UserIdentityImpersonation/action` authorization.
+This avoids forwarding or persisting an end-user bearer/OBO token when the
+hosted workflow does not need to call a downstream API as that user. The
+bridge, role assignment, and network path remain unimplemented and unverified.
+See the
+[hosted-agent contract](https://learn.microsoft.com/azure/foundry/agents/concepts/hosted-agent-contract)
+and [on-behalf-of guidance](https://learn.microsoft.com/azure/foundry/agents/how-to/use-on-behalf-of-flow).
+
+The identity header is a user OID, not a credential. Do not persist an
+end-user bearer/OBO token in business state, workflow checkpoints, or logs.
+The current local OBO option reads its secret from the backend environment;
+there is no hosted secret delivery/rotation, workload-identity configuration,
+or delegated-token lifecycle in this blueprint. If a hosted workflow must call
+a downstream API as the user, its OBO acquisition, renewal, and credential
+handling require a separately designed and verified path.
+
+Hosted response recovery remains unresolved: polling requires `response.id`,
+but response creation has no documented idempotency key. A matching
+response-metadata record visible while paging by conversation can provide its
+ID as best-effort correlation; an empty list has no documented bounded
+read-after-write visibility and cannot prove that create failed. Conversation
+creation has the same lost-ack ambiguity, and a per-operation lock cannot
+make the remote create atomic with the application database. The local
+database idempotency ledger cannot recover a hosted response identity. Do not
+silently retry an ambiguous hosted request.
+
+Configuration is deliberately local-only: `Settings` validates tenant/API
+UUIDs, a PostgreSQL URL, explicit CORS origins, and optional OBO allowlisted
+scopes, then rejects `WORKFLOW_HOST` values other than `local`. Compose
+requires the application factory, API and SPA client IDs, tenant, API
+application URI, and URL-safe PostgreSQL password. Vite embeds only the
+non-secret SPA values at build time. The OBO secret remains in the backend
+environment and the example does not call downstream services. There is no
+Foundry endpoint, Responses request parser, host-managed checkpoint client,
+or hosted caller-identity bridge. Bicep and azd assets are staged for static
+validation only; they do not represent provisioned resources or verified
+Azure identity, networking, or runtime behavior.
 
 For code responsibilities, see [project structure](projectstructure.md); for
 service and operator guidance, see the [project guide](../architecture.md).
