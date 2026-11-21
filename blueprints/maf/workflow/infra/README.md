@@ -59,9 +59,19 @@ The staged server uses PostgreSQL **16** with the
 [`compose.yaml`](../compose.yaml) and the parallel migration workstream's
 catalog tests use PostgreSQL **17**. Tests against 17 do not establish that
 migrations, catalog snapshots, extensions or application behavior work on 16.
-Do not assume that data or migrations can safely be moved to an older major
-version. Target-version migration and drift verification is required before
-deployment, in addition to the separately authorized live Azure checks.
+Separately, the migration workstream at
+`031fdb440908092cf09801232fe7f5d15048f065` ran its 12 migration tests
+against an isolated local `postgres:16-alpine` server reporting 16.15; all
+passed without failures, errors or skips. This covered fresh initialization,
+legacy adoption, upgrade, drift and rollback. An initial auxiliary locale
+probe failed before testing with `UndefinedObject`; a corrected catalog query
+preceded the successful run. That migration revision is not included in this
+infrastructure branch.
+
+This local evidence does not establish Azure Flexible Server compatibility,
+the behavior of an integrated application, or safe cross-major downgrades.
+After integration, repeat migration and drift checks on the exact combined
+revision and selected target; separately authorize any live Azure checks.
 
 Azure Flexible Server [lists PostgreSQL 17 as supported](https://learn.microsoft.com/en-us/azure/postgresql/configure-maintain/concepts-supported-versions),
 but the pinned [2024-08-01 resource reference](https://learn.microsoft.com/en-us/azure/templates/microsoft.dbforpostgresql/2024-08-01/flexibleservers#serverproperties)

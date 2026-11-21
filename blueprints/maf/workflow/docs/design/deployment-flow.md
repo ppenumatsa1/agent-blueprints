@@ -58,12 +58,14 @@ local azd paths, and inspect compiled security properties. They cannot validate
 arbitrary future parameters or live Azure behavior. See
 [infrastructure preparation](../../infra/README.md).
 
-The staged server selects PostgreSQL 16 while Compose and the parallel
-migration catalog tests use 17. Bicep compilation does not verify engine
-support or migration compatibility. Resolve the
-[version gap](../../infra/README.md#open-postgresql-version-gap) and run
-clean, upgrade and drift tests on the chosen target major before deployment;
-no automatic downgrade or cross-major data compatibility is assumed.
+The staged server selects PostgreSQL 16 while Compose uses 17. A separate
+migration revision passed 12 tests on local PostgreSQL 16.15, including
+fresh, upgrade and drift cases; its initial auxiliary locale probe failed and
+was corrected. Bicep compilation and local tests do not verify Azure
+compatibility. Resolve the [version gap](../../infra/README.md#open-postgresql-version-gap)
+and repeat migration tests on the exact integrated revision and selected
+target before deployment; no automatic downgrade or cross-major data
+compatibility is assumed.
 
 Before PR approval:
 

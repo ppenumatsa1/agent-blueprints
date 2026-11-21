@@ -41,16 +41,19 @@ responsibilities using canonical imports and no compatibility aliases. Acceptanc
 requires source and generated security/recovery tests, both crash windows,
 independent golden verification and exact contract bytes, credential-free
 CI and Compose smoke checks. Local evidence is recorded in the
-[checklist](master-checklist.md); PR review and hosted CI for the revised
-head remain pending. An intermittent local restore failure was observed during
-migration testing. A deterministic equal-timestamp reproduction showed that
+[checklist](master-checklist.md); PR review remains pending. Foundation
+[run 44936094798](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44936094798)
+passed five jobs on `9efeef01101b176a1a10627c654eff0ca5150b6b`; dependent
+branches require their own head-specific CI. An intermittent local restore
+failure was observed during migration testing. A deterministic equal-timestamp
+reproduction showed that
 the previous host could select an earlier checkpoint; it does not prove the
 unretained original failure had the same cause. The foundation now selects
 MAF-native persisted checkpoints and rejects incomplete terminal state on
 completion and replay. Local source/generated backend suites passed 36 tests
 each; the selected-adapter root suite passed 46 and the generated verifier
-passed 44 without skips. Confirm actual-head CI and reconcile dependent PRs
-without treating prior-head CI as evidence.
+passed 44 without skips. Reconcile dependent branches and confirm their
+actual-head CI without transferring the foundation run to a different head.
 The copied evidence producer observed approval and recovery passing while
 explanation and browser hint remained unverified; the independent unsigned
 readiness report remained unverified. The first local container build could
@@ -76,17 +79,22 @@ agent-consumer grant, registry and API/UI services default off; the remaining
 resources would still incur cost. Foundry and monitoring private connectivity,
 PostgreSQL Entra token use, API/UI binding and the hosted-agent contract are
 not implemented or verified. Source and independent generated static checks
-passed locally for this revision; rerun after any rebase and confirm the
-proposed PR head and actual PR CI, followed by separately authorized network,
-identity, cost and deployment review; no cloud mutation has occurred.
+and nine infrastructure security/configuration tests per copy passed locally
+on the rebased working tree; two instantiation tests also passed. Confirm the
+exact proposed head and actual PR CI, followed by separately authorized
+network, identity, cost and deployment review; no cloud mutation has occurred.
 
 The staged PostgreSQL server selects 16 while Compose and the parallel
 migration catalog tests use 17. The pinned API's documented enum and examples
 conflict, and the compiler accepts arbitrary version strings; neither resolves
 17 support for that API. The [version-gap review](../blueprints/maf/workflow/infra/README.md#open-postgresql-version-gap)
-records a newer API as an unverified candidate. Resolve the target major and
-run clean, upgrade and drift tests on that version before deployment; do not
-assume tests on 17 verify the staged 16 server or imply a safe downgrade.
+records a newer API as an unverified candidate. Separately, migration revision
+`031fdb440908092cf09801232fe7f5d15048f065` passed 12 migration tests on local
+PostgreSQL 16.15 after an initial auxiliary locale probe failed and was
+corrected. That revision is not integrated here. Resolve the target major and
+rerun clean, upgrade and drift tests on the exact combined revision before
+deployment; local evidence does not prove Azure compatibility or safe
+downgrade.
 
 P1-01 through P1-04 have an initial local foundation and a test-only
 application adapter, but the scenario has no authorized contract approval.

@@ -107,6 +107,48 @@ entries to hide failed attempts or gaps.
   accept a value syntactically even when version-specific support remains
   ambiguous. Compare service, API-schema and migration-test evidence.
 
+## 2026-11-21 - Local PostgreSQL 16 migration and foundation reconciliation
+
+- **Separate migration evidence:** At migration workstream revision
+  `031fdb440908092cf09801232fe7f5d15048f065`, an isolated local
+  `postgres:16-alpine` server reported PostgreSQL 16.15. From that worktree's
+  backend, `python -B -m unittest -v tests.test_migrations` passed 12 tests
+  with no failures, errors or skips, covering fresh initialization, adoption,
+  upgrades, drift, rollback and downgrade refusal.
+- **Initial attempt:** An auxiliary `current_setting('lc_collate')` probe
+  failed with `UndefinedObject` before tests ran. A retry used database
+  catalog metadata and completed the suite; the failed attempt remains part
+  of the evidence. The test container and its task-owned volume were removed.
+- **Scope / next action:** That migration revision is separate from this
+  infrastructure branch. Its local result neither resolves the separately
+  reported checkpoint-evidence failures nor proves Azure Flexible Server,
+  Entra database authentication, network access, deployment or cross-major
+  data compatibility. After integration, rerun target-version migrations and
+  drift checks on the exact combined revision; live checks require separate
+  authorization.
+- **Reconciliation:** The infrastructure branch was rebased onto foundation
+  `9efeef01101b176a1a10627c654eff0ca5150b6b`. Its
+  [GitHub Actions run 44936094798](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44936094798)
+  passed five jobs for that foundation head, not for the rebased branch.
+  The checkpoint timestamp and hosted caller-binding entries below remain
+  unchanged. Recheck the final infrastructure revision and its own PR CI.
+- **Offline checks / prerequisite:** On the rebased working tree, source and
+  independent generated-project Bicep compilation, lint and configuration
+  checks passed, as did nine infrastructure security/configuration tests in
+  each copy and two instantiation tests. The compiler prerequisite initially
+  failed because no compatible Bicep executable was available; the official
+  0.49.2 release was then obtained and its SHA-256 verified before rerunning.
+  These checks used no Azure credentials or resources and do not replace
+  exact-head PR CI.
+- **Local recovery / security regression:** Source and generated
+  `tests.test_core`, `tests.test_security` and `tests.test_evidence_runner`
+  each passed 36 tests without skips on isolated local PostgreSQL 17.12 after
+  the rebase. These exercise the local workflow, not hosted recovery or live
+  identity.
+- **Reusable lesson:** Local engine-version evidence is useful but remains
+  scoped to the tested code and runtime; a passing retry does not erase the
+  earlier failed probe or establish cloud compatibility.
+
 ## Prior implementation evidence
 
 ### 2026-11-21 - Local checkpoint timestamp ties
@@ -263,7 +305,7 @@ entries to hide failed attempts or gaps.
 | Canonical imports and legacy-shim removal | Open in foundation workstream | Inspect final diff across imports, tests, Docker, CI, docs, and generator; do not approve while forwarding paths remain. |
 | Locked developer tooling | Open in parallel PR #13 | Reconcile only after review/merge; verify any resulting revision and platform matrix independently. |
 | Foundry-first infrastructure | In progress | Source and generated offline checks passed locally; confirm final-revision checks and actual PR-head CI, then coordinate live host, networking, identity and cost review. |
-| PostgreSQL major-version alignment | Open | Resolve the staged 16 / tested 17 gap and run clean, upgrade and drift tests on the chosen target; live API and Azure compatibility remain unverified. |
+| PostgreSQL major-version alignment | Open | Separate migration revision `031fdb4` passed 12 local PostgreSQL 16.15 tests; the 16/17 mismatch, integrated revision, live API and Azure compatibility remain unverified. |
 | Current dependent PR CI | Pending on updated revision | Confirm all required checks correspond to the pushed PR head. |
 | Foundry host caller binding and lost-response recovery | Blocked | Establish supported identity and reconciliation guarantees before implementing a hosted bridge. |
 | Live Entra/OBO, cloud telemetry, Azure deployment | Unverified | Separate scoped implementation, authorization where required, and live evidence. |

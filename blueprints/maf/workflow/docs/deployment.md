@@ -23,8 +23,9 @@ deployment and establish no live identity or network behavior.
 
 **Planned, unverified:** hosted runtime bindings, usable cloud network paths,
 database token authentication and deployment automation. The staged database
-selects PostgreSQL 16, while local Compose and migration tests use 17;
-[target-version migration and drift verification](../infra/README.md#open-postgresql-version-gap)
+selects PostgreSQL 16, while local Compose uses 17. A separate migration
+revision passed 12 tests against local PostgreSQL 16.15, but
+[integrated target-version and Azure verification](../infra/README.md#open-postgresql-version-gap)
 is still required. There is no supported
 provisioning or deployment command in this project. Before any authorized deployment,
 verify service/version compatibility, authentication, authorization, network
