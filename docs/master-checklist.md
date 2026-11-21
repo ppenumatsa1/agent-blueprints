@@ -1,0 +1,38 @@
+# Software Factory master checklist
+
+This is the living tracker for the three-repository Software Factory. Update
+it, the [implementation plan](implementation-plan.md), and relevant
+architecture documentation with each meaningful PR. Use **Planned**,
+**In Progress**, **Completed**, or **Blocked**; mark work completed only
+when it is implemented and supported by evidence. A plan link is a design
+reference, not proof that functionality exists.
+
+The original [interactive architecture](software-factory.html) is a preserved
+historical source; this checklist records current status. The 2–3 hour
+prototype objective has not yet been measured.
+
+| Requirement or capability | Phase | Status | Acceptance criteria | Evidence or PR | Next action |
+| --- | --- | --- | --- | --- | --- |
+| Three-repository architecture and boundaries | 0 | Completed | Document Specification Studio, Agent Blueprints, and App/API Blueprints and their handoff. | [Overview](software-factory-overview.md); [PR #1](https://github.com/ppenumatsa1/agent-blueprints/pull/1) | Update architecture when decisions change. |
+| Reference analysis, catalog, and engineering standards | 0 | Completed | Document reference evidence, framework-native blueprints, and engineering boundaries without claiming unverified deployments. | [Analysis](reference-repository-analysis.md); [catalog](blueprint-catalog.md); [standards](engineering-standards.md); [PR #1](https://github.com/ppenumatsa1/agent-blueprints/pull/1) | Reassess compatibility as blueprints are implemented. |
+| Repository licensing | 0 | Completed | Select and include a license for the public repository. | [MIT License](../LICENSE); [PR #1](https://github.com/ppenumatsa1/agent-blueprints/pull/1) | Retain third-party notices when code is reused. |
+| Supplied interactive architecture source | 0 | In Progress | Include the original HTML without fabricating a replacement; retain its source bytes and identify it as a historical baseline. | [Original HTML](software-factory.html); [overview](software-factory-overview.md) | Review and merge the follow-up PR. |
+| Prototype and production readiness contracts | 0 | In Progress | Schemas and fixtures preserve per-requirement results, protect critical gates, disclose prototype limitations, and represent reviewed production risk acceptance. | [Policy](readiness-contract.md); [schemas and fixtures](../contracts/); [tests](../tests/test_contracts.py) | Review the follow-up PR and its CI; implement the validator in Phase 1. |
+| Living tracker and Phase 1 plan | 0 | In Progress | Track status, acceptance criteria, evidence, and next actions; keep work packages independently verifiable. | [Plan](implementation-plan.md); this checklist | Review and merge the follow-up PR; update on meaningful PRs. |
+| Synthetic business scenario and approved contract (P1-01) | 1 | Planned | Approve a non-destructive scenario and exact contract digest, with explicit criticality and profile gates. | [Phase 1 plan](implementation-plan.md#phase-1-maf-workflow-golden-path) | Define scenario and obtain authorized review. |
+| Normalized evidence and decision inputs (P1-02) | 1 | Planned | Map test results, artifacts, baseline contracts, and human decisions to explicit IDs and scope. | [Phase 1 plan](implementation-plan.md#phase-1-maf-workflow-golden-path) | Define input fixtures after P1-01. |
+| Executable readiness validator (P1-03) | 1 | Planned | Verify traceability, evidence bytes and freshness, criticality, decisions, and profile gates; reject invalid evidence as proof of passing. | [Validator acceptance contract](implementation-plan.md#validator-acceptance-contract) | Implement and test after P1-02. |
+| Readiness CLI and machine-readable report (P1-04) | 1 | Planned | Consume approved inputs, preserve outcomes and disclosures, emit a report, and use profile-appropriate exit codes. | [Phase 1 plan](implementation-plan.md#phase-1-maf-workflow-golden-path) | Add CLI after validator logic. |
+| Local development stack (P1-05) | 1 | Planned | Run React, FastAPI, PostgreSQL, and Docker Compose locally without Azure credentials. | [Phase 1 plan](implementation-plan.md#phase-1-maf-workflow-golden-path) | Define local configuration and start/stop checks. |
+| Business state, approvals, and idempotency (P1-06) | 1 | Planned | Persist isolated business and approval state and prevent duplicate actions across retries and restarts. | [Phase 1 plan](implementation-plan.md#phase-1-maf-workflow-golden-path) | Implement PostgreSQL records and transaction tests. |
+| Authenticated FastAPI service (P1-07) | 1 | Planned | Provide typed endpoints, authorization, approval actions, and explicit error responses. | [Phase 1 plan](implementation-plan.md#phase-1-maf-workflow-golden-path) | Define API contract and negative tests. |
+| Accessible React client (P1-08) | 1 | Planned | Show scenario, status, approval, rejection, and error states without exposing service secrets. | [Phase 1 plan](implementation-plan.md#phase-1-maf-workflow-golden-path) | Define UI states and accessibility checks. |
+| Framework-native durable MAF workflow (P1-09) | 1 | Planned | Support isolated execution, human pause/resume, rejection, recovery, and idempotent side effects. | [Phase 1 plan](implementation-plan.md#phase-1-maf-workflow-golden-path) | Implement with MAF-native APIs after interfaces are defined. |
+| Tests, evaluations, and GitHub Actions (P1-10) | 1 | Planned | Produce real local/CI artifacts and profile-correct readiness results, including negative cases. | [Phase 1 plan](implementation-plan.md#phase-1-maf-workflow-golden-path) | Connect test and evaluation artifacts to the validator. |
+| Privacy-safe observability (P1-11) | 1 | Planned | Correlate API, workflow, and approval activity without leaking sensitive data. | [Phase 1 plan](implementation-plan.md#phase-1-maf-workflow-golden-path) | Add redaction and correlation tests. |
+| Local prototype demonstration (P1-15) | 1 | Planned | Demonstrate the complete synthetic workflow and readiness report; record actual elapsed time and limitations. | [Phase 1 plan](implementation-plan.md#phase-1-maf-workflow-golden-path) | Run and document the demo after P1-10 and P1-11. |
+| Foundry Hosted Agents compatibility (P1-12) | 1 | Planned | Record framework, protocol, identity, checkpoint, and approval/resume compatibility evidence; local checks are not a hosted deployment. | [Phase 1 plan](implementation-plan.md#phase-1-maf-workflow-golden-path) | Assess compatibility after the local demo. |
+| ACA fallback compatibility (P1-13) | 1 | Planned | Verify a separately selected container recovery strategy without assuming Foundry checkpoint ownership. | [Phase 1 plan](implementation-plan.md#phase-1-maf-workflow-golden-path) | Prepare fallback only if selected. |
+| Azure deployment preparation (P1-14) | 1 | Planned | Prepare least-privilege infrastructure and deployment guidance; provision only with explicit approval. | [Phase 1 plan](implementation-plan.md#phase-1-maf-workflow-golden-path) | Prepare after local evidence and hosting assessment. |
+| Specification Studio interoperability | 6 | Blocked | Validate the versioned handoff with an actual producer or a reviewed lossless adapter. | [Handoff contract](readiness-contract.md#specification-studio-handoff) | Obtain a real producer artifact when available. |
+| App/API Blueprints | Later | Planned | Establish the separate repository and validate independently buildable API and web-app paths. | [Repository boundaries](software-factory-overview.md#repository-boundaries) | Scope and authorize the separate repository. |

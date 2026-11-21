@@ -1,0 +1,2 @@
+# Preserve the supplied architecture source exactly across checkouts.
+docs/software-factory.html -text
