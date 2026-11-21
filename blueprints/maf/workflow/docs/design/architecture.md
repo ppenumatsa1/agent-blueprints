@@ -86,10 +86,15 @@ on the pinned stack emitted duplicate FastAPI spans
 canary into exported span JSON. The integrated fix from `3aa389f` removes the
 opt-in and disables auto-instrumentation; all 23 focused telemetry regressions
 passed locally, including recovery redaction and restricted-origin CORS.
-Public metric APIs replace private SDK fields. Combined checks passed at
-historical head `98091a3` on base `8144918`; they predate foundation issue-doc
-commit `1e99e03` and must be rerun for the resulting head. Cloud ingestion
-remains unverified and native auto-instrumentation is not approved.
+Public metric APIs replace private SDK fields. Exact PR #17 head
+`b63353944372f2b6dcd91546cca3a350250be78b`, based on
+`1e99e038dc31c0ae25e5ea7712030d204ee35bc0`, passed all six jobs in run
+`44955776238`; its merge ref `0a54717118879bab6be56633dc29c313178d9081`
+had the exact base/head parents and identical tree. This run predates this
+documentation correction and does not cover the new tree; fresh exact-head CI
+is required. Cloud ingestion remains unverified and native
+auto-instrumentation is not approved. Any later tree or base change also
+requires revalidation.
 Track safe cloud export and end-to-end propagation separately in
 [#26](https://github.com/ppenumatsa1/agent-blueprints/issues/26).
 
