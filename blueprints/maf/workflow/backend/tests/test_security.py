@@ -15,11 +15,13 @@ from uuid import UUID, uuid4
 import jwt
 import psycopg
 from cryptography.hazmat.primitives.asymmetric import rsa
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from psycopg import sql
 
-from app.api import create_app
+from app.api.middleware import install_request_middleware
 from app.application import ApplicationComponents
+from app.composition import create_app
 from app.config import Settings
 from app.infrastructure.delegation import OnBehalfOf
 from app.domain.errors import AuthenticationFailed, AuthenticationUnavailable, DelegationError
@@ -27,6 +29,7 @@ from app.infrastructure.identity import EntraIdentity
 from app.infrastructure.migrations import upgrade
 from app.domain.policy import CaseAccessPolicy, JsonObjectRules
 from app.infrastructure.store import PostgresStore
+from app.infrastructure.telemetry import Telemetry
 from tests.fixture_application import FixtureAction, action_count, initialize_fixture
 
 
@@ -252,6 +255,25 @@ class ApiSecurityTests(unittest.TestCase):
         if key:
             result["Idempotency-Key"] = key
         return result
+
+    def test_unhandled_api_errors_are_generic_and_correlated(self):
+        app = FastAPI()
+        telemetry = Telemetry()
+        self.addCleanup(telemetry.shutdown)
+        install_request_middleware(app, telemetry)
+
+        @app.get("/failure")
+        def failure():
+            raise RuntimeError("PRIVATE-ERROR-CANARY")
+
+        with self.assertLogs("blueprint.api", level="ERROR") as captured:
+            response = TestClient(app, raise_server_exceptions=False).get("/failure")
+
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(response.json(), {"detail": "Internal server error."})
+        self.assertTrue(response.headers["X-Correlation-ID"])
+        self.assertNotIn("PRIVATE-ERROR-CANARY", response.text)
+        self.assertNotIn("PRIVATE-ERROR-CANARY", " ".join(captured.output))
 
     def submit(self, client, token=None, reviewer=REVIEWER, payload=None):
         return client.post(

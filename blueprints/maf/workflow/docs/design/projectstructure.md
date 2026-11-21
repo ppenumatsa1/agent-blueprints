@@ -81,7 +81,7 @@ occurs in the generated directory.
 
 | Path | Responsibility | Extension rule |
 | --- | --- | --- |
-| `backend/app/api.py` | HTTP routes, request models, auth dependency, safe API errors. | Add routes only with explicit authentication, authorization, validation, and failure tests. |
+| `backend/app/api/` | HTTP routes, request models, auth dependency, safe API errors and middleware. | Add routes only with explicit authentication, authorization, validation, and failure tests. |
 | `backend/app/application.py` | Load `module:function` factory and compose application components. | Supply app-owned rules, policy, action, setup and optional native workflow factory. |
 | `backend/app/domain/` | Generic principals, cases, errors, state/action/workflow protocols and policy. | Keep domain-agnostic; do not move scenario business rules into the generic layer. |
 | `backend/app/usecases/` | Coordinate authorization-approved request, decision, and workflow operations. | Preserve decision-before-resume and idempotent semantics. |

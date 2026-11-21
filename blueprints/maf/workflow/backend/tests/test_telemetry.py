@@ -15,7 +15,7 @@ from opentelemetry.sdk.trace.export import SimpleSpanProcessor, SpanExportResult
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from opentelemetry.trace import StatusCode
 
-from app.api import create_app
+from app.composition import create_app
 from app.config import Settings
 from app.infrastructure.telemetry import SafeExporter, SafeMetricExporter, Telemetry, instrumented
 from app.infrastructure.delegation import OnBehalfOf
@@ -345,10 +345,12 @@ class TelemetryTests(unittest.TestCase):
                     components.initialize.side_effect = error
                 elif stage == "recovery":
                     store.recoverable.side_effect = error
-                with patch("app.api.Telemetry", return_value=telemetry):
+                with patch("app.composition.Telemetry", return_value=telemetry):
                     if stage in ("host", "app"):
                         target = (
-                            "app.api.LocalWorkflowHost" if stage == "host" else "app.api.FastAPI"
+                            "app.composition.LocalWorkflowHost"
+                            if stage == "host"
+                            else "app.api.app.FastAPI"
                         )
                         with patch(target, side_effect=error):
                             with self.assertRaises(RuntimeError) as caught:
@@ -615,7 +617,8 @@ class TelemetryTests(unittest.TestCase):
     def test_request_canaries_do_not_reach_metrics_even_when_unsampled(self):
         reader = InMemoryMetricReader()
         with patch(
-            "app.api.Telemetry", side_effect=lambda *args: Telemetry(*args, metric_reader=reader)
+            "app.composition.Telemetry",
+            side_effect=lambda *args: Telemetry(*args, metric_reader=reader),
         ):
             app = self.app()
 

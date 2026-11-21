@@ -328,6 +328,15 @@ passed Ruff with the tooling workstream's configuration. These historical
 results are not combined-revision evidence. Hosted configuration and cloud
 ingestion remain unverified. No Azure provisioning or ingestion is implied.
 
+## API-boundary integration follow-up
+
+The PR #11 API split and source-map fix are being reconciled with integrated
+telemetry rather than replaying earlier workstream history. The
+[integration journal](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-21---reconcile-api-boundaries-with-integration-telemetry)
+records focused local evidence and limitations. Acceptance still requires the
+remaining workstream changes and source/generated checks on the final combined
+revision; earlier runs do not establish that result.
+
 ## Later phases
 
 | Phase | Scope and dependency |

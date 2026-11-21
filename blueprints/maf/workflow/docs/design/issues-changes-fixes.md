@@ -633,6 +633,24 @@ entries to hide failed attempts or gaps.
 - **Limit:** This focused result is not a full integration, security,
   durability, Compose, generated-runtime, or hosted-CI result.
 
+## 2026-11-21 - Reconcile API boundaries with integration telemetry
+
+- **Issue:** PR #11's API split deleted the monolithic API module, which the
+  integration branch had independently extended with privacy-safe telemetry.
+- **Decision:** Apply the `44ee18b` refactor and the `8144918` source-map
+  correction without replaying earlier workstream history. Move telemetry
+  construction, request spans, recovery signals, and shutdown to the new
+  composition, middleware, and lifecycle boundaries; preserve direct imports.
+- **Evidence:** On the reconciled working tree, 64 core, security, telemetry,
+  and migration tests passed against an isolated PostgreSQL 17 container using
+  the previously built integration runtime image and cached test dependencies.
+  Ruff 0.14.13 lint and format checks passed. This is focused local evidence,
+  not a locked-install or final combined CI result.
+- **Limit / next action:** Reconcile the remaining workstream deltas and rerun
+  source/generated and exact-head CI. Live hosted caller binding and
+  lost-response recovery remain unverified. Local locked dependency restoration
+  failed offline on an uncached Windows wheel and online on a public TLS error.
+
 ## Current acceptance queue
 
 | Item | Status | Evidence needed / next action |
