@@ -31,8 +31,14 @@ class EvaluationExtensionTests(unittest.TestCase):
         self.assertEqual(result.outcome, "passed")
         checks = {item.check_id: item for item in result.check_results}
         self.assertEqual(set(checks), {"CHECK-EXPLANATION", "CHECK-HINT"})
-        self.assertEqual(checks["CHECK-EXPLANATION"].trace_references, ("trace-exp-1",))
-        self.assertEqual(checks["CHECK-HINT"].trace_references, ("trace-hint-1",))
+        self.assertEqual(
+            checks["CHECK-EXPLANATION"].observations[0].case_id, "synthetic-explanation"
+        )
+        self.assertEqual(
+            checks["CHECK-EXPLANATION"].observations[0].criterion_id, "grounded-explanation"
+        )
+        self.assertEqual(checks["CHECK-EXPLANATION"].observations[0].reference, "trace-exp-1")
+        self.assertEqual(checks["CHECK-HINT"].observations[0].reference, "trace-hint-1")
 
     def test_threshold_edges_are_inclusive_and_below_threshold_fails(self):
         edge = map_observations(SYNTHETIC_DATASET, SYNTHETIC_RUBRIC, self.observations(1.0, 0.9))
@@ -111,6 +117,30 @@ class EvaluationExtensionTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(ValueError, "must match"):
             rubric.validate_for(SYNTHETIC_DATASET)
+
+    def test_multiple_criteria_produce_one_check_result_with_each_trace(self):
+        rubric = EvaluationRubric(
+            "two-explanation-criteria",
+            "v1",
+            (
+                RubricCriterion("grounded", "CHECK-EXPLANATION", 0.8),
+                RubricCriterion("safe", "CHECK-EXPLANATION", 0.9),
+                RubricCriterion("accurate-hint", "CHECK-HINT", 0.9),
+            ),
+        )
+        observations = (
+            EvaluationObservation("synthetic-explanation", "grounded", 0.95, "trace-grounded"),
+            EvaluationObservation("synthetic-explanation", "safe", 0.9, "trace-safe"),
+            EvaluationObservation("synthetic-hint", "accurate-hint", 0.9, "trace-hint"),
+        )
+        result = map_observations(SYNTHETIC_DATASET, rubric, observations)
+        explanation = [
+            item for item in result.check_results if item.check_id == "CHECK-EXPLANATION"
+        ]
+        self.assertEqual(len(explanation), 1)
+        self.assertEqual(
+            {item.criterion_id for item in explanation[0].observations}, {"grounded", "safe"}
+        )
 
 
 if __name__ == "__main__":

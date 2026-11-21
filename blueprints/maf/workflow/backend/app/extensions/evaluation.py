@@ -106,7 +106,14 @@ class CheckEvaluation:
     check_id: str
     outcome: Outcome
     reason: str
-    trace_references: tuple[str, ...]
+    observations: tuple["EvaluationTraceReference", ...]
+
+
+@dataclass(frozen=True)
+class EvaluationTraceReference:
+    case_id: str
+    criterion_id: str
+    reference: str
 
 
 @dataclass(frozen=True)
@@ -147,17 +154,18 @@ def unavailable_assessment(
     dataset: EvaluationDataset, rubric: EvaluationRubric
 ) -> EvaluationAssessment:
     rubric.validate_for(dataset)
+    check_ids = sorted({criterion.check_id for criterion in rubric.criteria})
     return _assessment(
         dataset,
         rubric,
         tuple(
             CheckEvaluation(
-                check_id=criterion.check_id,
+                check_id=check_id,
                 outcome="unverified",
                 reason="No application-owned evaluator is configured.",
-                trace_references=(),
+                observations=(),
             )
-            for criterion in rubric.criteria
+            for check_id in check_ids
         ),
     )
 
@@ -239,7 +247,9 @@ def map_observations(
         check_keys = [key for key in expected if criteria[key[1]].check_id == check_id]
         check_observations = [recorded[key] for key in check_keys if key in recorded]
         traces = tuple(
-            observation.trace_reference
+            EvaluationTraceReference(
+                observation.case_id, observation.criterion_id, observation.trace_reference
+            )
             for observation in check_observations
             if isinstance(observation.trace_reference, str)
             and observation.trace_reference
