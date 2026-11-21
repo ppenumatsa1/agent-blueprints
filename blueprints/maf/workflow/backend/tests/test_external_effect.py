@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import json
 import os
 import sqlite3
@@ -26,13 +27,22 @@ class FixtureAuthorizer:
     def __init__(self, allowed=True):
         self.allowed = allowed
         self.operation = "fixture-v1"
+        self.destination_id = "fixture"
         self.return_value = True
 
     def authorize(self, connection, case, request):
         decision = connection.execute(
             "SELECT decision, actor_id FROM wf_decisions WHERE case_id = %s", (case.id,)
         ).fetchone()
-        intent = json.loads(request.body)
+        expected = {
+            "case_id": str(case.id),
+            "tenant_id": OWNER.tenant_id,
+            "owner_id": OWNER.subject,
+            "reviewer_id": REVIEWER.subject,
+            "operation": self.operation,
+            "destination_id": self.destination_id,
+            "payload": {"value": 42},
+        }
         if (
             not self.allowed
             or case.decision != "approved"
@@ -41,8 +51,8 @@ class FixtureAuthorizer:
             or decision["actor_id"] != case.reviewer_id
             or case.owner_id == case.reviewer_id
             or request.key != f"case:{case.id}:action"
-            or intent["operation"] != self.operation
-            or intent["destination_id"] != "fixture"
+            or json.loads(request.body) != expected
+            or hashlib.sha256(request.body).hexdigest() != request.digest
         ):
             raise AccessDenied("Effect not authorized.")
         return self.return_value
@@ -56,28 +66,58 @@ class DurableDestination:
         self.fault = None
         with closing(sqlite3.connect(path)) as db, db:
             db.execute(
-                "CREATE TABLE IF NOT EXISTS effects (key TEXT PRIMARY KEY, digest TEXT NOT NULL)"
+                "CREATE TABLE IF NOT EXISTS bindings "
+                "(key TEXT PRIMARY KEY, digest TEXT NOT NULL, body BLOB NOT NULL)"
+            )
+            db.execute(
+                "CREATE TABLE IF NOT EXISTS effects "
+                "(key TEXT PRIMARY KEY REFERENCES bindings(key), value TEXT NOT NULL)"
             )
 
     def observe(self, request):
         if self.fault == "unknown":
             return Observation.UNKNOWN
         with closing(sqlite3.connect(self.path)) as db, db:
-            row = db.execute("SELECT digest FROM effects WHERE key = ?", (request.key,)).fetchone()
+            row = db.execute(
+                "SELECT b.digest, b.body, e.value FROM bindings b "
+                "LEFT JOIN effects e ON e.key = b.key WHERE b.key = ?",
+                (request.key,),
+            ).fetchone()
+            orphan = db.execute("SELECT 1 FROM effects WHERE key = ?", (request.key,)).fetchone()
         if row is None:
-            return Observation.ABSENT
-        return Observation.APPLIED if row[0] == request.digest else Observation.CONFLICT
+            return Observation.UNKNOWN if orphan else Observation.ABSENT
+        if row[0] != request.digest or row[1] != request.body:
+            return Observation.CONFLICT
+        if row[2] is None or hashlib.sha256(row[1]).hexdigest() != row[0]:
+            return Observation.UNKNOWN
+        expected = json.dumps(json.loads(row[1])["payload"], sort_keys=True)
+        return Observation.APPLIED if row[2] == expected else Observation.UNKNOWN
 
     def send(self, request):
         if self.fault == "before-effect":
             raise RuntimeError("Failure before effect.")
+        if hashlib.sha256(request.body).hexdigest() != request.digest:
+            raise RuntimeError("Request digest does not match the body.")
+        effect = json.dumps(json.loads(request.body)["payload"], sort_keys=True)
         with closing(sqlite3.connect(self.path)) as db, db:
-            db.execute("INSERT OR IGNORE INTO effects VALUES (?, ?)", (request.key, request.digest))
+            db.execute("PRAGMA foreign_keys = ON")
+            db.execute(
+                "INSERT OR IGNORE INTO bindings VALUES (?, ?, ?)",
+                (request.key, request.digest, request.body),
+            )
             stored = db.execute(
-                "SELECT digest FROM effects WHERE key = ?", (request.key,)
-            ).fetchone()[0]
-            if stored != request.digest:
+                "SELECT digest, body FROM bindings WHERE key = ?", (request.key,)
+            ).fetchone()
+            if stored != (request.digest, request.body):
                 raise RuntimeError("Conflicting request.")
+            if self.fault == "between-binding-and-effect":
+                raise RuntimeError("Transaction interrupted.")
+            db.execute("INSERT OR IGNORE INTO effects VALUES (?, ?)", (request.key, effect))
+            stored_effect = db.execute(
+                "SELECT value FROM effects WHERE key = ?", (request.key,)
+            ).fetchone()[0]
+            if stored_effect != effect:
+                raise RuntimeError("Conflicting effect.")
         if self.fault == "after-effect":
             raise RuntimeError("Acknowledgment lost.")
 
@@ -139,8 +179,39 @@ class ExternalEffectTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.destination.count(), 0)
         self.assertFalse(self.store.get(case.id).execution_complete)
 
+    async def test_unauthorized_request_fields_are_rejected_before_first_effect(self):
+        for field in ("operation", "destination", "payload"):
+            with self.subTest(field=field):
+                case = await self.submit()
+                before = self.destination.count()
+                self.host.action = ExternalEffectAction(
+                    self.authorizer,
+                    self.destination,
+                    operation="unapproved" if field == "operation" else "fixture-v1",
+                    destination_id="unapproved" if field == "destination" else "fixture",
+                )
+                if field == "payload":
+                    with self.store.connect() as connection:
+                        connection.execute(
+                            "UPDATE wf_cases SET payload = %s::jsonb WHERE id = %s",
+                            ('{"value":43}', case.id),
+                        )
+                with self.assertRaises(ActionError):
+                    await self.service.decide(REVIEWER, case.id, "approved")
+                self.assertEqual(self.destination.count(), before)
+                self.assertFalse(self.store.get(case.id).execution_complete)
+                if field == "payload":
+                    with self.store.connect() as connection:
+                        connection.execute(
+                            "UPDATE wf_cases SET payload = %s::jsonb WHERE id = %s",
+                            ('{"value":42}', case.id),
+                        )
+                self.host.action = self.action
+                await self.host.resume(case.id)
+                self.assertEqual(self.destination.count(), before + 1)
+
     async def test_fault_windows_retry_with_one_effect(self):
-        for fault in ("before-effect", "after-effect", "after-ack"):
+        for fault in ("before-effect", "between-binding-and-effect", "after-effect", "after-ack"):
             with self.subTest(fault=fault):
                 case = await self.submit()
                 before = self.destination.count()
@@ -156,7 +227,17 @@ class ExternalEffectTests(unittest.IsolatedAsyncioTestCase):
                     self.host.action = FailAfterAck()
                 with self.assertRaises(ActionError):
                     await self.service.decide(REVIEWER, case.id, "approved")
-                self.assertEqual(self.destination.count(), before + int(fault != "before-effect"))
+                self.assertEqual(
+                    self.destination.count(), before + int(fault in ("after-effect", "after-ack"))
+                )
+                if fault == "between-binding-and-effect":
+                    with closing(sqlite3.connect(self.destination.path)) as db:
+                        self.assertIsNone(
+                            db.execute(
+                                "SELECT 1 FROM bindings WHERE key = ?",
+                                (f"case:{case.id}:action",),
+                            ).fetchone()
+                        )
                 self.destination.fault = None
                 self.host.action = self.action
                 await self.host.resume(case.id)
@@ -172,10 +253,13 @@ class ExternalEffectTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.destination.count(), 0)
         self.destination.fault = None
         with closing(sqlite3.connect(self.destination.path)) as db, db:
-            db.execute("INSERT INTO effects VALUES (?, ?)", (f"case:{case.id}:action", "different"))
+            db.execute(
+                "INSERT INTO bindings VALUES (?, ?, ?)",
+                (f"case:{case.id}:action", "different", b"conflict"),
+            )
         with self.assertRaises(ActionError):
             await self.host.resume(case.id)
-        self.assertEqual(self.destination.count(), 1)
+        self.assertEqual(self.destination.count(), 0)
         self.assertFalse(self.store.get(case.id).execution_complete)
 
     async def test_ambiguous_effect_stays_blocked_until_reconciled_and_authorized(self):
@@ -216,14 +300,20 @@ class ExternalEffectTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(self.store.get(case.id).execution_complete)
 
     async def test_downstream_atomic_key_binding_under_concurrent_sends(self):
-        request = EffectRequest("shared", "digest", b"fixture")
+        body = b'{"payload":{"value":42}}'
+        request = EffectRequest("shared", hashlib.sha256(body).hexdigest(), body)
         with ThreadPoolExecutor(max_workers=8) as pool:
             futures = [pool.submit(self.destination.send, request) for _ in range(8)]
             for future in futures:
                 future.result()
         self.assertEqual(self.destination.count(), 1)
         with self.assertRaises(RuntimeError):
-            self.destination.send(EffectRequest("shared", "other", b"changed"))
+            self.destination.send(EffectRequest("shared", "forged", body))
+        changed = b'{"payload":{"value":43}}'
+        with self.assertRaises(RuntimeError):
+            self.destination.send(
+                EffectRequest("shared", hashlib.sha256(changed).hexdigest(), changed)
+            )
         self.assertEqual(self.destination.count(), 1)
 
     async def test_concurrent_retries_and_conflicting_decisions(self):

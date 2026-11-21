@@ -20,7 +20,10 @@ after a database action commits. They do not prove live Entra/OBO, external
 effect exactly-once delivery, or hosted recovery.
 
 The external-effect tests use a separate durable SQLite database as a
-synthetic downstream with atomic key binding. They exercise authorization,
+synthetic downstream that independently hashes and atomically stores both a
+key-bound request and a representative effect. Its authorizer applies a
+fixed synthetic policy to the exact request, not a real human authorization.
+The tests exercise authorization,
 rejection, concurrent sends and retries, conflicting bindings, ambiguous
 reconciliation, failures before and after the effect and acknowledgment, and
 worker termination before the local ledger commits. They do not prove any
