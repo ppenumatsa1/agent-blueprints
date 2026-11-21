@@ -86,9 +86,10 @@ on the pinned stack emitted duplicate FastAPI spans
 canary into exported span JSON. The integrated fix from `3aa389f` removes the
 opt-in and disables auto-instrumentation; all 23 focused telemetry regressions
 passed locally, including recovery redaction and restricted-origin CORS.
-Public metric APIs replace private SDK fields. Final combined checks passed at
-the recorded integrated head; cloud ingestion remains unverified and native
-auto-instrumentation is not approved.
+Public metric APIs replace private SDK fields. Combined checks passed at
+historical head `98091a3` on base `8144918`; they predate foundation issue-doc
+commit `1e99e03` and must be rerun for the resulting head. Cloud ingestion
+remains unverified and native auto-instrumentation is not approved.
 Track safe cloud export and end-to-end propagation separately in
 [#26](https://github.com/ppenumatsa1/agent-blueprints/issues/26).
 
@@ -161,6 +162,8 @@ through the supplied transaction. External side effects require downstream
 idempotency or a transactional outbox.
 Their authorization and retry/idempotency boundary is tracked in
 [#32](https://github.com/ppenumatsa1/agent-blueprints/issues/32).
+Consequential remote actions are blocked until the P0 authorization,
+idempotency, and reconciliation requirements are verified.
 
 For an interrupted start, the local host asks the MAF file provider for the
 latest checkpoint after validating every file; the provider accounts for
@@ -255,7 +258,9 @@ propagation or a telemetry exporter.
 
 - `ApplicationComponents` supplies application-owned business rules, access
   policy, transactional action, optional initialization, and optionally a
-  workflow factory.
+  workflow factory. Reusable typed patterns for models, agents, prompts,
+  tools, and executors remain to be specified and verified in
+  [#35](https://github.com/ppenumatsa1/agent-blueprints/issues/35).
 - `StateRepository` and `WorkflowHost` are narrow domain boundaries. Replacing
   either requires preserving identity isolation, decision ordering,
   idempotency, recovery, and failure semantics.

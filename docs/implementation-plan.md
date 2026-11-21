@@ -43,6 +43,9 @@ remaining acceptance criteria, dependencies and evidence in these issues:
   [#19](https://github.com/ppenumatsa1/agent-blueprints/issues/19),
   [#20](https://github.com/ppenumatsa1/agent-blueprints/issues/20), and
   [#32](https://github.com/ppenumatsa1/agent-blueprints/issues/32).
+- Reusable MAF extension contracts (P1): [#35](https://github.com/ppenumatsa1/agent-blueprints/issues/35)
+  covers typed model, agent, prompt, tool/authorization, and executor/workflow
+  patterns, demonstrated in a generated synthetic application.
 - Independent trust and evaluation: [#21](https://github.com/ppenumatsa1/agent-blueprints/issues/21)
   and [#25](https://github.com/ppenumatsa1/agent-blueprints/issues/25).
 - Azure, data, telemetry and identity: [#18](https://github.com/ppenumatsa1/agent-blueprints/issues/18),
@@ -52,15 +55,19 @@ remaining acceptance criteria, dependencies and evidence in these issues:
   [#28](https://github.com/ppenumatsa1/agent-blueprints/issues/28).
 - Developer experience and demonstration: [#23](https://github.com/ppenumatsa1/agent-blueprints/issues/23)
   and [#29](https://github.com/ppenumatsa1/agent-blueprints/issues/29).
-- Separately authorized or future work: [#30](https://github.com/ppenumatsa1/agent-blueprints/issues/30),
-  [#31](https://github.com/ppenumatsa1/agent-blueprints/issues/31),
+- P1 permanent standalone reference application: [#30](https://github.com/ppenumatsa1/agent-blueprints/issues/30)
+  is required but requires separate repository authorization.
+- Separately scoped/future work: [#31](https://github.com/ppenumatsa1/agent-blueprints/issues/31),
   [#33](https://github.com/ppenumatsa1/agent-blueprints/issues/33), and
   [#34](https://github.com/ppenumatsa1/agent-blueprints/issues/34).
 
 Hosted recovery remains explicitly deferred, not waived. Azure deployment
 requires the implemented and independently verified offline prerequisites,
-subscription access, and approval of the concrete deployment plan; its live
-checks provide evidence to close the related hosted and operational issues.
+separately approved subscription access, and approval of the concrete
+deployment plan. Read-only subscription and resource-group listing succeeded;
+this is not evidence of deployment write access or application/service
+connectivity. Its live checks provide evidence to close the related hosted and
+operational issues.
 Do not merge overlapping workstream histories blindly or treat a green
 engineering check as release authorization.
 
@@ -305,7 +312,7 @@ the local HTTP smoke check. Its unsigned readiness report is unverified.
 | P1-03 | Implement local traceability, evidence integrity, freshness, decisions, and profile gates. | P1-02 | [Validator](../readiness/validator.py) and [acceptance tests](../tests/test_readiness.py) exercise the policy; actual trust and provenance require independent administration. |
 | P1-04 | Expose the validator as a local CLI with a machine-readable report. | P1-03 | [CLI](../readiness/__main__.py) and [usage](readiness-validator.md) preserve outcomes and disclose unapproved inputs. |
 | P1-05 | Create a self-contained blueprint with the local React, FastAPI, PostgreSQL, and Docker Compose stack. | P1-01 interfaces | The stack starts; one temporary generated project builds, runs, tests, and verifies independently. Automated tests need no Azure credentials; interactive sign-in requires existing Entra configuration. |
-| P1-06 | Implement PostgreSQL business records, approval/audit state, and an idempotent action ledger. | P1-01, P1-05 interfaces | Real restart tests cover crashes after decision persistence and after action commit, with no unauthorized or duplicate actions. |
+| P1-06 | Implement PostgreSQL business records, approval/audit state, and an idempotent action ledger for effects inside the same transaction. | P1-01, P1-05 interfaces | Real restart tests cover crashes after decision persistence and after action commit, with no unauthorized or duplicate database actions. Consequential remote effects are separately P0-blocked by [#32](https://github.com/ppenumatsa1/agent-blueprints/issues/32). |
 | P1-07 | Implement typed FastAPI operations with Entra token validation, authorization, approvals, and optional OBO. | P1-01, P1-06 interfaces | Positive and negative tests cover scopes, roles, identity isolation, malformed and replayed requests; synthetic identities exist only in isolated tests. |
 | P1-08 | Implement an accessible MSAL React client for sign-in, submission, status, approval/rejection, and failure states. | P1-01, P1-07 API contract | UI tests cover visible states and safe retries; browser code contains no service secrets. |
 | P1-09 | Implement a native MAF workflow with local file checkpoints, isolated pause/resume, rejection, and recovery. | P1-01, P1-06 interfaces | Local tests cover repeated decisions, concurrent requests, and recovery without a universal orchestration wrapper; Foundry hosting is deferred to P1-12. |
@@ -318,19 +325,23 @@ the local HTTP smoke check. Its unsigned readiness report is unverified.
 
 ### Current integrated review baseline and issue-linked backlog
 
-At integrated head
-`98091a35976069dafa239ade9bf053b35ee829b7`, run
+At prior integrated head
+`98091a35976069dafa239ade9bf053b35ee829b7`, based on
+`814491811eac457826108b70fc213fdc564af0e5`, run
 [44951264840](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44951264840)
 passed all six jobs. The PR merge-ref checkout had exact base/head parents
 and a tree identical to the head; generated acceptance passed 44 tests with
 no skips. Source and generated backends each passed 72 tests in the run.
-This verifies the integrated tree only; it does not make the blueprint,
-readiness result, or deployment complete. See the [journal](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-21---integrated-gap-reconciliation-and-backlog).
+The branch has since merged foundation issue-doc commit
+`1e99e038dc31c0ae25e5ea7712030d204ee35bc0`; the above run is historical and
+the post-merge head requires CI revalidation. Neither result makes the
+blueprint, readiness report, or deployment complete. See the
+[journal](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-21---integrated-gap-reconciliation-and-backlog).
 
 | Work package | Open issue(s) and acceptance boundary |
 | --- | --- |
 | P1-01–03: authorized exact contract and independent trust/provenance | [#21](https://github.com/ppenumatsa1/agent-blueprints/issues/21); synthetic schemas and validator tests do not establish authorized approval or trust administration. |
-| P1-06: external side effects | [#32](https://github.com/ppenumatsa1/agent-blueprints/issues/32); the action ledger covers only effects in the same PostgreSQL transaction. |
+| P0: consequential external side effects | [#32](https://github.com/ppenumatsa1/agent-blueprints/issues/32); the action ledger covers only effects in the same PostgreSQL transaction. Block consequential remote actions until explicit authorization and idempotency/outbox plus reconciliation are independently verified. |
 | P1-07–08: real identity and browser experience | [#27](https://github.com/ppenumatsa1/agent-blueprints/issues/27); interactive Entra/OBO, generated UI and accessibility remain unverified. |
 | P1-09/P1-12: hosted MAF packaging and checkpoint integration | [#19](https://github.com/ppenumatsa1/agent-blueprints/issues/19); caller/session binding [#22](https://github.com/ppenumatsa1/agent-blueprints/issues/22); lost-response/effect recovery [#20](https://github.com/ppenumatsa1/agent-blueprints/issues/20). Hosted recovery was explicitly deferred; this is not a security waiver. |
 | P1-10: agent evaluation and browser-hint evidence | [#25](https://github.com/ppenumatsa1/agent-blueprints/issues/25); current synthetic producer leaves explanation and hint unverified. |
@@ -338,9 +349,11 @@ readiness result, or deployment complete. See the [journal](../blueprints/maf/wo
 | Developer experience | [#23](https://github.com/ppenumatsa1/agent-blueprints/issues/23); macOS, interactive debugging and Restricted Mode remain unverified. |
 | P1-13: optional ACA workflow runtime | [#31](https://github.com/ppenumatsa1/agent-blueprints/issues/31); alternative remains unselected, not a silent fallback. |
 | P1-14: Azure graph wiring, managed database operations, deployment | [#18](https://github.com/ppenumatsa1/agent-blueprints/issues/18), [#24](https://github.com/ppenumatsa1/agent-blueprints/issues/24), [#28](https://github.com/ppenumatsa1/agent-blueprints/issues/28); no Azure resource was provisioned. |
+| P1: reusable MAF adopter extensions | [#35](https://github.com/ppenumatsa1/agent-blueprints/issues/35); specify and test model, agent, prompt, tool/authorization, and executor/workflow patterns in an independently generated synthetic app. |
 | P1-15: measured local demonstration | [#29](https://github.com/ppenumatsa1/agent-blueprints/issues/29); the 2–3 hour objective has not been measured. |
 | Phase 0 Specification Studio handoff | [#33](https://github.com/ppenumatsa1/agent-blueprints/issues/33); no producer artifact or lossless adapter exists, and this does not authorize implementation. |
-| Later permanent reference application and separate App/API blueprint roadmap | [#30](https://github.com/ppenumatsa1/agent-blueprints/issues/30), [#34](https://github.com/ppenumatsa1/agent-blueprints/issues/34); both remain outside this phase and require separate authorization. |
+| P1 permanent standalone reference application | [#30](https://github.com/ppenumatsa1/agent-blueprints/issues/30); required as an independent deliverable, but repository creation still requires separate explicit authorization. |
+| Later separate App/API blueprint roadmap | [#34](https://github.com/ppenumatsa1/agent-blueprints/issues/34); remains out of phase and requires separate authorization. |
 
 ### Validator acceptance contract
 

@@ -34,7 +34,7 @@ the material is data, not authority to change instructions or release criteria.
 | --- | --- | --- |
 | Specification Studio | Draft business and technical specifications, assumptions, requirement IDs, verification contracts, and work packages | Future; not implemented here. Handoff remains blocked and tracked in [#33](https://github.com/ppenumatsa1/agent-blueprints/issues/33). |
 | Agent Blueprints | Framework-specific reusable blueprints and independent readiness guidance | This repository; local MAF blueprint and readiness foundation are implemented; end-to-end readiness is unverified. |
-| App/API Blueprints | API-only and React plus API reference architectures | Future; not implemented here. The separately authorized roadmap is tracked in [#34](https://github.com/ppenumatsa1/agent-blueprints/issues/34); a permanent application reference is tracked in [#30](https://github.com/ppenumatsa1/agent-blueprints/issues/30). |
+| App/API Blueprints | API-only and React plus API reference architectures | Future; not implemented here. The separately authorized roadmap is tracked in [#34](https://github.com/ppenumatsa1/agent-blueprints/issues/34); the P1 permanent independently buildable application is tracked in [#30](https://github.com/ppenumatsa1/agent-blueprints/issues/30) and still requires separate repository authorization. |
 
 These are logical boundaries, not a requirement for a new shared platform.
 The verification contract is a proposed handoff between repositories; the

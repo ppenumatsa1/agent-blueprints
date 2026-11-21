@@ -17,6 +17,12 @@ includes [hosted caller binding #22](https://github.com/ppenumatsa1/agent-bluepr
 [external effects #32](https://github.com/ppenumatsa1/agent-blueprints/issues/32),
 [independent trust #21](https://github.com/ppenumatsa1/agent-blueprints/issues/21),
 and [deployment integration #18](https://github.com/ppenumatsa1/agent-blueprints/issues/18).
+Reusable MAF extension contracts for model, agent, prompt, tool, and executor
+patterns are tracked in [#35](https://github.com/ppenumatsa1/agent-blueprints/issues/35).
+The permanent standalone reference application is a P1 deliverable with
+separate repository authorization [#30](https://github.com/ppenumatsa1/agent-blueprints/issues/30);
+consequential external effects are P0-blocked pending authorization and
+idempotency evidence [#32](https://github.com/ppenumatsa1/agent-blueprints/issues/32).
 See the [master checklist](master-checklist.md#reconciled-engineering-backlog)
 for the complete issue-linked backlog, including live identity, telemetry,
 database operations, evaluations, and separately authorized alternatives.

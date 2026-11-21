@@ -96,6 +96,10 @@ returns a request-scoped `X-Correlation-ID`; the case's `correlation_id` is
 the case UUID. These IDs aid support but do not grant access. Live sign-in,
 role assignment, and optional OBO are not verified by synthetic test
 identities.
+Track live Entra/OBO and accessible sign-in verification in
+[#27](https://github.com/ppenumatsa1/agent-blueprints/issues/27); hosted
+caller-to-session binding is a distinct unresolved requirement in
+[#22](https://github.com/ppenumatsa1/agent-blueprints/issues/22).
 
 ## Failure and retry behavior
 
@@ -119,7 +123,11 @@ identities.
 - **Action/checkpoint/recovery failure:** the API returns an explicit failure
   status (`503` for unavailable action/checkpoint infrastructure); the public
   body remains generic and logs omit tokens and payloads. Do not delete
-  checkpoints or blindly repeat an external side effect.
+  checkpoints or blindly repeat an external side effect. Consequential remote
+  actions remain blocked pending the P0 authorization/idempotency contract in
+  [#32](https://github.com/ppenumatsa1/agent-blueprints/issues/32); hosted
+  ambiguous-response recovery is tracked in
+  [#20](https://github.com/ppenumatsa1/agent-blueprints/issues/20).
 - **Telemetry export failure:** fixed sanitized failure signals are logged;
   the workflow result is unaffected. Missing Azure configuration instead
   stops startup. Neither signal proves cloud delivery.

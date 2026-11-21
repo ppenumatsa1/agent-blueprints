@@ -33,8 +33,11 @@ Managed database operations and live backup/restore remain unverified
 ([#24](https://github.com/ppenumatsa1/agent-blueprints/issues/24)). No Azure
 resource or permanent repository creation is authorized by this PRD.
 
-The integrated review tree passed final six-job CI, but that does not make
-the blueprint or a generated application complete or deployment-ready.
+The prior integrated review tree at `98091a3`, based on foundation `8144918`,
+passed six-job CI; this is historical after the foundation documentation
+update `1e99e03` was merged into the integration branch. Revalidate the
+resulting head. Neither result makes the blueprint or a generated application
+complete or deployment-ready.
 Track hosted implementation, trust, and evidence work in
 [#18](https://github.com/ppenumatsa1/agent-blueprints/issues/18),
 [#19](https://github.com/ppenumatsa1/agent-blueprints/issues/19),
@@ -46,6 +49,19 @@ Track hosted implementation, trust, and evidence work in
 [#28](https://github.com/ppenumatsa1/agent-blueprints/issues/28).
 Hosted recovery was explicitly deferred to a separate scoped follow-up; this
 is not a security waiver.
+Other tracked verification and separately authorized work includes
+reusable MAF extension patterns [#35](https://github.com/ppenumatsa1/agent-blueprints/issues/35),
+cross-platform tooling [#23](https://github.com/ppenumatsa1/agent-blueprints/issues/23),
+managed database operations [#24](https://github.com/ppenumatsa1/agent-blueprints/issues/24),
+the measured local demo [#29](https://github.com/ppenumatsa1/agent-blueprints/issues/29),
+the permanent application reference [#30](https://github.com/ppenumatsa1/agent-blueprints/issues/30),
+the optional ACA runtime [#31](https://github.com/ppenumatsa1/agent-blueprints/issues/31),
+P0 authorization and idempotency for consequential external effects [#32](https://github.com/ppenumatsa1/agent-blueprints/issues/32),
+the out-of-phase Specification Studio handoff [#33](https://github.com/ppenumatsa1/agent-blueprints/issues/33),
+and later App/API blueprints [#34](https://github.com/ppenumatsa1/agent-blueprints/issues/34).
+The P1 permanent reference application requires separate repository
+authorization; #33 and #34 remain out of phase and do not authorize
+implementation.
 
 ## Users and needs
 

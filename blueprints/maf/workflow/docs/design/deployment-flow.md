@@ -4,10 +4,12 @@
 
 **Implemented:** local development, Docker Compose, source tests, generated
 project tests, staged Bicep/azd definitions and credential-free static checks.
-Final integrated PR #17 head `98091a35976069dafa239ade9bf053b35ee829b7`
-passed all six jobs in [run 44951264840](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44951264840).
-The tested merge-ref tree was verified identical to the head; this is not
-readiness or deployment evidence.
+Historical integrated PR #17 head `98091a35976069dafa239ade9bf053b35ee829b7`
+on base `8144918` passed all six jobs in
+[run 44951264840](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44951264840);
+its merge-ref tree equaled that head. Foundation issue-doc commit `1e99e03`
+has since been merged into #17; rerun CI for the resulting head. These checks
+are not readiness or deployment evidence.
 
 **Planned and unverified:** azd provisioning/deployment, Foundry-hosted MAF,
 managed identity binding, Azure resource validation, cloud telemetry ingestion,
@@ -17,11 +19,18 @@ document does not authorize a cloud deployment command. Track infrastructure
 wiring [#18](https://github.com/ppenumatsa1/agent-blueprints/issues/18),
 managed database operations [#24](https://github.com/ppenumatsa1/agent-blueprints/issues/24),
 and deployment [#28](https://github.com/ppenumatsa1/agent-blueprints/issues/28).
+Cross-platform debugging [#23](https://github.com/ppenumatsa1/agent-blueprints/issues/23),
+live Entra/OBO and accessibility [#27](https://github.com/ppenumatsa1/agent-blueprints/issues/27),
+and cloud telemetry [#26](https://github.com/ppenumatsa1/agent-blueprints/issues/26)
+remain separate verification work.
 Deployment's offline prerequisites are wired IaC, selected versions, reviewed
 identity/network/secret configuration, static validation and separate human
 authorization. An authorized live deployment is intended to produce evidence
 for hosted/cloud issues; it need not wait for every live-verification issue to
 be closed. No resource has been provisioned.
+Read-only Azure subscription and resource-group listing returned HTTP 200;
+no resources were changed. This does not verify write permission, private
+service connectivity, application identity, or a deployment.
 
 ## Local development and Compose
 
