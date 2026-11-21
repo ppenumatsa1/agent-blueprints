@@ -54,6 +54,14 @@ completion and replay. Local source/generated backend suites passed 36 tests
 each; the selected-adapter root suite passed 46 and the generated verifier
 passed 44 without skips. Reconcile dependent PRs and verify the combined
 revision separately. Hosted checks do not prove live hosting.
+An independent CI regression exposed that the generated-verifier command's
+failure could be masked by `tee`. The workflow now propagates pipeline
+failures and the [regression test](../tests/test_ci_workflow.py) exercises
+failure, skip and success behavior. Prior CI job status alone is not proof
+that the verifier passed; logs for the prior PR heads recorded 44 tests and
+`OK`. [Run 44939172266](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44939172266)
+passed all five jobs for foundation head `d0e1727`; reconcile and verify the
+dependent PRs and combined revision separately.
 The copied evidence producer observed approval and recovery passing while
 explanation and browser hint remained unverified; the independent unsigned
 readiness report remained unverified. The first local container build could

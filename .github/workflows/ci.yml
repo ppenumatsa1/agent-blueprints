@@ -179,6 +179,7 @@ jobs:
           npm run check-csp
       - name: Run generated contracts and golden acceptance without skips
         run: |
+          set -o pipefail
           cd "$GENERATED_DIR/verification"
           export SCENARIO_ADAPTER="$GENERATED_DIR/backend/tests/order_adjustment_adapter.py"
           uv run --locked --project "$GENERATED_DIR/backend" python -m unittest discover -s tests -v 2>&1 | tee "$RUNNER_TEMP/maf-verification-tests.log"

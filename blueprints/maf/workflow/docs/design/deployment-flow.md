@@ -59,7 +59,10 @@ and permission checks, and `maf-independent`. The independent job creates the
 project outside the checkout, checks its own imports and build contexts, runs
 generated backend/frontend/verification tests, validates evidence
 disclosures, and builds the generated Compose stack. CI does not provision
-Azure or prove live Entra/Foundry behavior.
+Azure or prove live Entra/Foundry behavior. The generated-verifier pipeline
+propagates the test command's nonzero exit through `tee` and separately
+rejects skipped or expected-failure results; `tests/test_ci_workflow.py`
+exercises these failure paths against the actual CI step.
 
 Before PR approval:
 
