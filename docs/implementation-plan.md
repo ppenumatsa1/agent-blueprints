@@ -20,22 +20,24 @@ independently buildable generated project, with durable human approval and
 recovery and an independent Verification/Readiness Validator. Start locally
 with FastAPI, React, PostgreSQL, Docker Compose, tests, and evaluations.
 Business logic is supplied by the generated application; order adjustment is
-only a synthetic test fixture. Foundry Hosted Agents are the preferred later
-deployment target, subject to compatibility verification; Azure Container Apps
-(ACA) is the explicit fallback.
+only a synthetic test fixture. The primary deployment targets a Foundry
+Hosted Agent for the native workflow, with separate Azure Container Apps
+(ACA) for the UI and API. Hosting the workflow itself in ACA is a deferred
+alternative, not a verified fallback.
 
 The local workflow uses MAF-native file checkpoints on a persistent single-host
 volume, separate from PostgreSQL business state and approval records. A future
 Foundry host owns its managed checkpoint provider; the adapter and hosted
 pause/resume validation are P1-12, not local durability evidence. Interactive
 sign-in uses Entra ID and existing registrations, while isolated automated
-tests may use synthetic identities. Do not provision Azure resources.
+tests may use synthetic identities. Azure provisioning requires explicit
+approval of the resource inventory, estimated cost, and deployment plan.
 
 ### Execution sequence and work packages
 
 The modularity foundation reorganizes the local blueprint and generated
 copies into sibling backend/frontend contexts and separates backend
-responsibilities while preserving existing extension imports. Acceptance
+responsibilities using canonical imports and no compatibility aliases. Acceptance
 requires source and generated security/recovery tests, both crash windows,
 independent golden verification and exact contract bytes, credential-free
 CI and Compose smoke checks. Local evidence is recorded in the
@@ -45,10 +47,18 @@ explanation and browser hint remained unverified; the independent unsigned
 readiness report remained unverified. The first local container build could
 not reach the public Python package host; a retry using the operator-approved
 package proxies built and passed the generated Compose smoke checks.
-Next, review and publish this foundation before accepting it; later separate
-increments cover locked tooling, configuration, migrations, observability,
-Foundry hosting, infrastructure and integration evidence. No deployment,
-Azure provisioning or permanent reference application is authorized here.
+Independent workstreams cover locked tooling, migrations, observability,
+Foundry hosting, infrastructure and integration evidence. Do not merge PRs
+without approval. Azure deployment is a deliverable but requires prior
+approval of its resource inventory, estimated cost and deployment plan;
+permanent reference repository creation requires separate approval.
+
+Each PR must remove obsolete compatibility layers, use direct imports,
+update affected `docs/design` specifications and the cumulative engineering
+journal, and record actual regression, security, durability, independent
+verification and CI outcomes for its final revision. The design documents
+must accompany generated applications and distinguish planned work from
+verified behavior.
 
 P1-01 through P1-04 have an initial local foundation and a test-only
 application adapter, but the scenario has no authorized contract approval.

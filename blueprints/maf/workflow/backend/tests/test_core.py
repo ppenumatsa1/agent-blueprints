@@ -8,13 +8,13 @@ import unittest
 from pathlib import Path
 from uuid import uuid4
 
-from app.errors import AccessDenied, ActionError, CheckpointError, Conflict
-from app.host import LocalWorkflowHost
-from app.models import Principal
-from app.policy import CaseAccessPolicy, JsonObjectRules
-from app.service import WorkflowService
-from app.store import PostgresStore
-from app.workflow import create_workflow
+from app.domain.errors import AccessDenied, ActionError, CheckpointError, Conflict
+from app.workflows.host import LocalWorkflowHost
+from app.domain.models import Principal
+from app.domain.policy import CaseAccessPolicy, JsonObjectRules
+from app.usecases.service import WorkflowService
+from app.infrastructure.store import PostgresStore
+from app.workflows.workflow import create_workflow
 from tests.fixture_application import FixtureAction, action_count, initialize_fixture
 
 

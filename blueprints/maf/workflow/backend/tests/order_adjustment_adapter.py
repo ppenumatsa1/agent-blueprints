@@ -21,10 +21,10 @@ sys.path.insert(0, str(BLUEPRINT))
 from app.api import create_app
 from app.application import ApplicationComponents
 from app.config import Settings
-from app.errors import ActionError, CheckpointError, InvalidInput
-from app.identity import EntraIdentity
-from app.policy import CaseAccessPolicy, JsonObjectRules
-from app.store import PostgresStore
+from app.domain.errors import ActionError, CheckpointError, InvalidInput
+from app.infrastructure.identity import EntraIdentity
+from app.domain.policy import CaseAccessPolicy, JsonObjectRules
+from app.infrastructure.store import PostgresStore
 from tests.fixture_application import FixtureAction, action_count, initialize_fixture
 from tests.test_security import API, OWNER, REVIEWER, STRANGER, TENANT, TokenFixture, scoped_url
 

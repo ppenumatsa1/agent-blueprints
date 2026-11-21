@@ -7,11 +7,11 @@ import time
 from pathlib import Path
 from uuid import UUID
 
-from app.host import LocalWorkflowHost
-from app.models import Principal
-from app.policy import CaseAccessPolicy, JsonObjectRules
-from app.service import WorkflowService
-from app.store import PostgresStore
+from app.workflows.host import LocalWorkflowHost
+from app.domain.models import Principal
+from app.domain.policy import CaseAccessPolicy, JsonObjectRules
+from app.usecases.service import WorkflowService
+from app.infrastructure.store import PostgresStore
 from tests.fixture_application import FixtureAction
 
 

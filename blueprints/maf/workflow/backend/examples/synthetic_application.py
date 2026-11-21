@@ -1,8 +1,8 @@
 from psycopg import Connection
 
 from app.application import ApplicationComponents
-from app.models import Case, StateRepository
-from app.policy import CaseAccessPolicy, JsonObjectRules
+from app.domain.models import Case, StateRepository
+from app.domain.policy import CaseAccessPolicy, JsonObjectRules
 
 
 class SyntheticAction:

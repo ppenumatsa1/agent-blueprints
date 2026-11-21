@@ -18,6 +18,15 @@ recovery are deferred to P1-12. The local store is not a shared-store or
 hosted-recovery solution. Do not mount a local checkpoint provider into a
 future host that supplies its own provider.
 
+## Design and operations
+
+The [design index](docs/design/projectstructure.md) links the component
+structure and extension points. The design documents include the
+[requirements](docs/design/prd.md), [technology stack](docs/design/techstack.md),
+[specifications](docs/design/specs.md), [architecture](docs/design/architecture.md),
+[user journeys](docs/design/userflow.md), [deployment flow](docs/design/deployment-flow.md),
+and [engineering journal](docs/design/issues-changes-fixes.md).
+
 ## Local stack
 
 Use Docker Compose and existing, authorized Microsoft Entra SPA and API
@@ -84,8 +93,8 @@ The project has sibling `backend` and `frontend` directories. The backend
 contains API composition (`app/api.py`), application coordination
 (`app/application.py` and `app/usecases`), generic domain types and policy
 (`app/domain`), native MAF workflow and local host (`app/workflows`), and
-PostgreSQL and identity adapters (`app/infrastructure`). Existing `app.*`
-module paths remain compatibility aliases for application extensions.
+PostgreSQL and identity adapters (`app/infrastructure`). Import these
+canonical modules directly when implementing application extensions.
 
 - Supply `ApplicationComponents` from a `module:function` factory: replace
   `BusinessRules`, `AccessPolicy`, `TransactionalAction`, initialization,
@@ -113,7 +122,7 @@ Use Python 3.12 and an isolated PostgreSQL database. Install
 `MAF_TEST_DATABASE_URL` to the test database, and run from `backend`:
 
 ```text
-python -m unittest -v tests.test_core tests.test_security tests.test_evidence_runner tests.test_modularity
+python -m unittest -v tests.test_core tests.test_security tests.test_evidence_runner
 ```
 
 These tests fail rather than skip if the database is unavailable. They use
@@ -155,7 +164,7 @@ $env:SCENARIO_ADAPTER = (Resolve-Path .\backend\tests\order_adjustment_adapter.p
 Set-Location .\verification
 python -m unittest discover -s tests -v
 Set-Location ..\backend
-python -m unittest -v tests.test_core tests.test_security tests.test_evidence_runner tests.test_modularity
+python -m unittest -v tests.test_core tests.test_security tests.test_evidence_runner
 ```
 
 The golden adapter exercises the API, local MAF host, and synthetic database

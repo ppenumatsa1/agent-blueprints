@@ -21,11 +21,11 @@ from psycopg import sql
 from app.api import create_app
 from app.application import ApplicationComponents
 from app.config import Settings
-from app.delegation import OnBehalfOf
-from app.errors import AuthenticationFailed, AuthenticationUnavailable, DelegationError
-from app.identity import EntraIdentity
-from app.policy import CaseAccessPolicy, JsonObjectRules
-from app.store import PostgresStore
+from app.infrastructure.delegation import OnBehalfOf
+from app.domain.errors import AuthenticationFailed, AuthenticationUnavailable, DelegationError
+from app.infrastructure.identity import EntraIdentity
+from app.domain.policy import CaseAccessPolicy, JsonObjectRules
+from app.infrastructure.store import PostgresStore
 from tests.fixture_application import FixtureAction, action_count, initialize_fixture
 
 

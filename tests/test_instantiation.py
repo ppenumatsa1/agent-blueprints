@@ -1,9 +1,11 @@
 import os
+import re
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from urllib.parse import unquote, urlsplit
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -27,6 +29,21 @@ class InstantiationTests(unittest.TestCase):
             self.assertTrue((target / "backend" / "tests" / "order_adjustment_adapter.py").is_file())
             self.assertTrue((target / "backend" / "Dockerfile").is_file())
             self.assertTrue((target / "backend" / "requirements-dev.txt").is_file())
+            source_docs = ROOT / "blueprints" / "maf" / "workflow" / "docs"
+            for source in source_docs.rglob("*.md"):
+                copied = target / "docs" / source.relative_to(source_docs)
+                with self.subTest(document=source.relative_to(source_docs)):
+                    self.assertEqual(source.read_bytes(), copied.read_bytes())
+            for markdown in (target / "README.md", *sorted((target / "docs").rglob("*.md"))):
+                links = re.findall(r"\[[^\]]+\]\(([^)]+)\)", markdown.read_text(encoding="utf-8"))
+                for destination in links:
+                    link = urlsplit(destination)
+                    if link.scheme or destination.startswith("//"):
+                        continue
+                    linked_path = unquote(link.path)
+                    resolved = (markdown.parent / linked_path).resolve() if linked_path else markdown.resolve()
+                    with self.subTest(document=markdown.relative_to(target), link=destination):
+                        self.assertTrue(resolved.is_file(), f"Broken generated-project link: {destination}")
             self.assertFalse((target / "frontend" / "node_modules").exists())
             self.assertFalse((target / "frontend" / "dist").exists())
             self.assertFalse((target / ".env").exists())

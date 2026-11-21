@@ -1,6 +1,6 @@
 from psycopg import Connection
 
-from app.models import Case
+from app.domain.models import Case
 
 
 class FixtureAction:

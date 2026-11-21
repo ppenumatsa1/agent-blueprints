@@ -13,8 +13,8 @@ Generated projects must not import this repository at runtime.
 The local blueprint and its generated copy now have sibling `backend` and
 `frontend` build contexts. The backend separates API composition, use cases,
 generic domain ports and policy, native MAF workflow/host, and PostgreSQL and
-identity infrastructure. Existing `app.*` extension imports remain aliases;
-application factories and transactional-action interfaces are unchanged.
+identity infrastructure. Application factories and transactional-action
+interfaces remain the extension boundaries; use canonical module imports.
 Requirements, examples, schema and backend tests are owned by `backend`.
 The verifier and exact contract bytes remain independent of the runtime.
 
