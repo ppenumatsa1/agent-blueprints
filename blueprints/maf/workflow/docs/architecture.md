@@ -36,7 +36,8 @@ checkpoint is a human approval.
 4. A database action and ledger entry can commit together; this does not
    prevent the application callback from making remote calls. The opt-in
    [external-effect pattern](../backend/examples/external_effect_boundary.py)
-   checks application-supplied authorization for the approved case and uses
+   checks application-supplied authorization for the approved case and exact
+   request before reconciliation or sending, and uses
    a stable case key and digest of the case, tenant, owner, reviewer,
    operation, destination identity and payload. The application must pin the
    actual destination, operation and encoding across the full recovery horizon;

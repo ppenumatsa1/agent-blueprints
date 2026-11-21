@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 import sqlite3
 import subprocess
@@ -24,11 +25,14 @@ from tests.test_core import OWNER, REVIEWER
 class FixtureAuthorizer:
     def __init__(self, allowed=True):
         self.allowed = allowed
+        self.operation = "fixture-v1"
+        self.return_value = True
 
-    def authorize(self, connection, case):
+    def authorize(self, connection, case, request):
         decision = connection.execute(
             "SELECT decision, actor_id FROM wf_decisions WHERE case_id = %s", (case.id,)
         ).fetchone()
+        intent = json.loads(request.body)
         if (
             not self.allowed
             or case.decision != "approved"
@@ -36,8 +40,12 @@ class FixtureAuthorizer:
             or decision["decision"] != "approved"
             or decision["actor_id"] != case.reviewer_id
             or case.owner_id == case.reviewer_id
+            or request.key != f"case:{case.id}:action"
+            or intent["operation"] != self.operation
+            or intent["destination_id"] != "fixture"
         ):
             raise AccessDenied("Effect not authorized.")
+        return self.return_value
 
 
 class DurableDestination:
@@ -123,6 +131,14 @@ class ExternalEffectTests(unittest.IsolatedAsyncioTestCase):
         await self.host.resume(case.id)
         self.assertEqual(self.destination.count(), 1)
 
+    async def test_nonaffirmative_authorizer_result_fails_closed(self):
+        case = await self.submit()
+        self.authorizer.return_value = False
+        with self.assertRaises(ActionError):
+            await self.service.decide(REVIEWER, case.id, "approved")
+        self.assertEqual(self.destination.count(), 0)
+        self.assertFalse(self.store.get(case.id).execution_complete)
+
     async def test_fault_windows_retry_with_one_effect(self):
         for fault in ("before-effect", "after-effect", "after-ack"):
             with self.subTest(fault=fault):
@@ -187,12 +203,14 @@ class ExternalEffectTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(ActionError):
             await self.service.decide(REVIEWER, case.id, "approved")
         self.destination.fault = None
+        self.authorizer.operation = "different"
         self.host.action = ExternalEffectAction(
             self.authorizer, self.destination, operation="different", destination_id="fixture"
         )
         with self.assertRaises(ActionError):
             await self.host.resume(case.id)
         self.assertEqual(self.destination.count(), 1)
+        self.authorizer.operation = "fixture-v1"
         self.host.action = self.action
         await self.host.resume(case.id)
         self.assertTrue(self.store.get(case.id).execution_complete)

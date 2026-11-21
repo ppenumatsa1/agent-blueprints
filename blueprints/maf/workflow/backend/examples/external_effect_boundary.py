@@ -26,8 +26,8 @@ class EffectRequest:
 
 
 class Authorizer(Protocol):
-    def authorize(self, connection: Connection, case: Case) -> None:
-        """Raise unless this exact approved effect is authorized."""
+    def authorize(self, connection: Connection, case: Case, request: EffectRequest) -> bool:
+        """Return True only when this exact approved effect is authorized."""
         ...
 
 
@@ -62,7 +62,6 @@ class ExternalEffectAction:
     def apply(self, connection: Connection, case: Case) -> None:
         if case.decision != "approved":
             raise RuntimeError("An approved decision is required.")
-        self.authorizer.authorize(connection, case)
         body = json.dumps(
             {
                 "case_id": str(case.id),
@@ -83,6 +82,8 @@ class ExternalEffectAction:
             digest=hashlib.sha256(body).hexdigest(),
             body=body,
         )
+        if self.authorizer.authorize(connection, case, request) is not True:
+            raise RuntimeError("External effect is not authorized.")
         observation = self.destination.observe(request)
         if observation is Observation.APPLIED:
             return
