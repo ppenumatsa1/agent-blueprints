@@ -131,6 +131,38 @@ entries to hide failed attempts or gaps.
   rebased revision. Public-only local downloads, macOS, and interactive
   debugging remain unverified.
 
+### 2026-11-21 - Exercise generated-verifier failure propagation with locked uv
+
+- **Issue / cause:** The foundation added `set -o pipefail` and a regression
+  test for the generated-verifier pipeline. After reconciliation, the tooling
+  workflow invokes the test through `uv run --locked --project`, but the
+  regression harness forwarded those uv arguments directly to its Python
+  stub, so it did not model the actual locked command.
+- **Fix / decision:** Keep the foundation's workflow change and regression
+  coverage. Update the harness to assert the locked `uv run --locked
+  --project <generated backend> python` selector, then forward only the
+  Python arguments to the simulated test process. Failure, skipped,
+  expected-failure, and success outcomes are still exercised against the
+  extracted Actions step.
+- **Evidence:** On the reconciled tree based on foundation
+  `d0e172751a39bc6e3a072d80482b3581b7007413`, the root suite passed 47 tests
+  with one intentional unselected-adapter skip; the focused pipeline and
+  instantiation tests passed. Source and generated backend suites each passed
+  36 tests with isolated PostgreSQL. Ruff check and format-check passed for
+  both 28-file backend copies. Generated verification passed 44 tests with no
+  skips or expected failures. Generated frontend passed 8 tests, build, and
+  CSP check. Generated Compose configuration passed, but the local image build
+  could not download `uv==0.9.26` from the public Python package host because
+  of a TLS handshake failure; local Compose smoke is therefore unverified on
+  this revision. The foundation's
+  [run 44939172266](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44939172266)
+  passed all five jobs for its exact base revision, not this dependent PR.
+  Confirm Actions on the final PR head before approval.
+- **Lesson / limit:** CI regression tests must execute the real step shape,
+  including its package-manager selectors and shell pipeline semantics.
+  Public-only local package downloads, macOS, and interactive debugging remain
+  unverified; no Azure credentials or resources were used.
+
 ### PR #6 - Native MAF workflow and local recovery core
 
 - **Change:** Added a native MAF approval workflow, local checkpoint host,

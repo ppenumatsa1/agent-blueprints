@@ -92,6 +92,21 @@ Earlier runs apply only to their own revisions. macOS,
 interactive debugging and a clean public-only local installation remain
 unverified. Next confirm hosted CI on the final reviewed head.
 
+The foundation then added `set -o pipefail` and an executable regression for
+the generated verification step. On reconciliation to
+`d0e172751a39bc6e3a072d80482b3581b7007413`, the harness was aligned with the
+locked `uv run --locked --project` invocation and now checks failure, skipped,
+expected-failure, and success outcomes. The root suite passed 47 tests with
+one intentional adapter skip; source and generated backend suites passed 36
+each, generated verification passed 44 with no skips, and generated frontend
+passed 8 tests/build/CSP. Ruff passed in both backend copies. Compose config
+passed, but local image build and smoke are unverified because a public Python
+package download failed TLS. Foundation run
+[44939172266](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44939172266)
+passed all five jobs on the base SHA only. Confirm all checks on the final PR
+head; macOS, interactive debugging, and public-only local downloads remain
+unverified.
+
 P1-01 through P1-04 have an initial local foundation and a test-only
 application adapter, but the scenario has no authorized contract approval.
 Trusted result production and repository protection remain unverified. The

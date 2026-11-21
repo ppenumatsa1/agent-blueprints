@@ -23,8 +23,13 @@ The tooling branch adds a Python 3.12 uv lock, Ruff, portable development
 commands and editor configurations. CI uses the public lock; container
 installation exports its exact hashes and may use an operator-selected index.
 The copied project owns the same lock and does not import the source checkout.
-Local Windows and Linux-container checks do not prove macOS. Hosted CI passed
-for prior head `e1d9536` only; rerun checks on the reconciled revision.
+The generated-verifier Actions pipeline uses `pipefail`, and its regression
+test exercises the actual locked uv command and failure/skip outcomes. Local
+source and generated tests, Ruff, verification, and frontend build passed on
+the reconciliation to foundation `d0e1727`; the local generated Compose image
+build hit a public-package TLS failure. Foundation CI passed on its own
+revision, while the dependent PR still requires exact-head CI. Windows and
+Linux checks do not prove macOS.
 
 The longer-term target adds migrations, privacy-safe telemetry, a Foundry Responses
 adapter and host-managed checkpoints, and Foundry-first Bicep/azd for

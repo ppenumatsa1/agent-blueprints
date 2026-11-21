@@ -46,7 +46,17 @@ disclosures, and builds the generated Compose stack. CI does not provision
 Azure or prove live Entra/Foundry behavior. The generated-verifier pipeline
 propagates the test command's nonzero exit through `tee` and separately
 rejects skipped or expected-failure results; `tests/test_ci_workflow.py`
-exercises these failure paths against the actual CI step.
+extracts the actual step and exercises failure, skip, expected-failure, and
+success outcomes, including the locked `uv run --locked --project` selector.
+
+On the tooling PR reconciliation to foundation
+`d0e172751a39bc6e3a072d80482b3581b7007413`, local source and generated backend
+tests each passed 36 cases, generated verification passed 44 with no skips,
+Ruff passed in both backend copies, and generated frontend tests/build/CSP
+passed. The generated Compose configuration passed locally, but its image
+build could not fetch the pinned uv package from the public package host due
+to a TLS handshake failure. Treat local Compose smoke as unverified for that
+revision; the exact dependent PR head still requires hosted CI.
 
 Before PR approval:
 
