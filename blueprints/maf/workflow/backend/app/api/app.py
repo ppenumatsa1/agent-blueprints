@@ -49,7 +49,13 @@ def create_api_app(
             allow_origins=list(settings.cors_origins),
             allow_credentials=False,
             allow_methods=["GET", "POST"],
-            allow_headers=["Authorization", "Content-Type", "Idempotency-Key"],
+            allow_headers=[
+                "Authorization",
+                "Content-Type",
+                "Idempotency-Key",
+                "traceparent",
+            ],
+            expose_headers=["X-Correlation-ID"],
         )
 
     install_request_middleware(app, telemetry)

@@ -9,9 +9,10 @@ import textwrap
 import unittest
 from dataclasses import replace
 from pathlib import Path
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 from uuid import UUID
 
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from opentelemetry.sdk.metrics.export import (
     AggregationTemporality,
@@ -28,7 +29,8 @@ from app.infrastructure.telemetry import SafeExporter, SafeMetricExporter, Telem
 from app.infrastructure.delegation import OnBehalfOf
 from app.infrastructure.identity import AuthenticatedRequest
 from app.infrastructure.store import PostgresStore
-from app.domain.errors import DelegationError
+from app.domain.errors import ActionError, BlueprintError, Conflict, DelegationError
+from app.lifecycle import create_lifespan
 
 
 CANARY = "secret-canary-prompt-token-tool-result-sql-identifier"
@@ -42,7 +44,7 @@ def fake_metric_exporter():
 
 
 class TelemetryTests(unittest.TestCase):
-    def app(self, *, store=None, components=None):
+    def app(self, *, store=None, components=None, cors_origins=()):
         checkpoint_dir = tempfile.TemporaryDirectory(dir=".")
         self.addCleanup(checkpoint_dir.cleanup)
         store = store if store is not None else Mock()
@@ -53,6 +55,7 @@ class TelemetryTests(unittest.TestCase):
             "20000000-0000-4000-8000-000000000002",
             "postgresql://localhost/test",
             Path(checkpoint_dir.name),
+            cors_origins=cors_origins,
         )
         return create_app(settings, components, store=store, identity=Mock())
 
@@ -142,6 +145,39 @@ class TelemetryTests(unittest.TestCase):
         self.assertEqual(child.context.trace_id, int(trace_id, 16))
         self.assertTrue(any(s.context.span_id == child.parent.span_id for s in spans))
         self.assertNotIn(CANARY, str(records) + repr(spans) + "".join(s.to_json() for s in spans))
+
+    def test_cors_preflight_allows_traceparent_and_exposes_correlation_id(self):
+        origin = "https://client.example"
+        app = self.app(cors_origins=(origin,))
+        with TestClient(app) as client:
+            preflight = client.options(
+                "/healthz",
+                headers={
+                    "Origin": origin,
+                    "Access-Control-Request-Method": "GET",
+                    "Access-Control-Request-Headers": "authorization, traceparent",
+                },
+            )
+            response = client.get(
+                "/healthz",
+                headers={
+                    "Origin": origin,
+                    "traceparent": "00-1234567890abcdef1234567890abcdef-1234567890abcdef-01",
+                },
+            )
+
+        self.assertEqual(preflight.status_code, 200)
+        self.assertEqual(preflight.headers["access-control-allow-origin"], origin)
+        allowed_headers = {
+            value.strip().lower()
+            for value in preflight.headers["access-control-allow-headers"].split(",")
+        }
+        self.assertIn("traceparent", allowed_headers)
+        self.assertNotIn("*", allowed_headers)
+        self.assertEqual(response.status_code, 204)
+        self.assertEqual(response.headers["access-control-allow-origin"], origin)
+        self.assertEqual(response.headers["access-control-expose-headers"], "X-Correlation-ID")
+        self.assertTrue(response.headers["X-Correlation-ID"])
 
     def test_bad_trace_context_and_export_failures_are_safe(self):
         fake = Mock()
@@ -360,6 +396,48 @@ class TelemetryTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertNotIn(CANARY, result.stdout + result.stderr)
+        for canary in (
+            "private-prompt-canary",
+            "private-tool-canary",
+            "private-identity-canary",
+            "private-failure-canary",
+        ):
+            self.assertNotIn(canary, result.stdout + result.stderr)
+
+    def test_recovery_logs_omit_case_ids_and_exception_messages(self):
+        case_id = UUID("30000000-0000-4000-8000-000000000003")
+        for error, outcome, level in (
+            (Conflict(CANARY), "conflict", logging.WARNING),
+            (ActionError(CANARY), "action_failure", logging.ERROR),
+            (BlueprintError(CANARY), "failure", logging.ERROR),
+        ):
+            with self.subTest(outcome=outcome):
+                store = Mock()
+                store.recoverable.return_value = [(case_id, "pending")]
+                host = Mock()
+                host.resume = AsyncMock(side_effect=error)
+                telemetry = Telemetry()
+                lifespan = create_lifespan(
+                    store,
+                    Mock(),
+                    host,
+                    telemetry,
+                )
+
+                with (
+                    self.assertLogs("blueprint.lifecycle", level=level) as lifecycle_logs,
+                    self.assertLogs("blueprint.telemetry", level=logging.INFO) as telemetry_logs,
+                ):
+                    async def run_lifespan():
+                        async with lifespan(FastAPI(telemetry={"tracing": False})):
+                            pass
+
+                    asyncio.run(run_lifespan())
+
+                combined_logs = " ".join(lifecycle_logs.output + telemetry_logs.output)
+                self.assertNotIn(str(case_id), combined_logs)
+                self.assertNotIn(CANARY, combined_logs)
+                self.assertIn(f'"event":"recovery","outcome":"{outcome}"', combined_logs)
 
     def test_logging_failure_uses_fixed_stderr_signal_without_changing_operation(self):
         telemetry = Telemetry()

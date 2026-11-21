@@ -31,14 +31,14 @@ def create_lifespan(
                         await host.resume(case_id)
                 except Conflict:
                     _emit("recovery", outcome="conflict")
-                    logger.warning("Recovery is already in progress for case %s.", case_id)
+                    logger.warning("Recovery is already in progress.")
                 except ActionError:
                     _emit("recovery", outcome="action_failure")
-                    logger.error("The configured action failed during recovery for case %s.", case_id)
+                    logger.error("The configured action failed during recovery.")
                 except BlueprintError as exc:
                     store.mark_recovery_failed(case_id, "recovery_failed")
                     _emit("recovery", outcome="failure")
-                    logger.error("Recovery failed for case %s (%s).", case_id, type(exc).__name__)
+                    logger.error("Recovery failed (%s).", type(exc).__name__)
             yield
         finally:
             if telemetry is not None:
