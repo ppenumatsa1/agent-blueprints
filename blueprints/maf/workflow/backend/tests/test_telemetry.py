@@ -174,6 +174,39 @@ class TelemetryTests(unittest.TestCase):
         self.assertIn('"event":"telemetry.metric_export"', str(logs.output))
         self.assertNotIn(CANARY, str(logs.output))
 
+    def test_logging_failure_uses_fixed_stderr_signal_without_changing_operation(self):
+        telemetry = Telemetry()
+        self.addCleanup(telemetry.shutdown)
+        fallback = b'{"event":"telemetry.log","outcome":"failure"}\n'
+
+        with patch(
+            "app.infrastructure.telemetry._log.info", side_effect=RuntimeError(CANARY)
+        ), patch("app.infrastructure.telemetry.os.write") as write_stderr:
+            with telemetry.operation("workflow.resume"):
+                result = "completed"
+        self.assertEqual(result, "completed")
+        write_stderr.assert_called_once_with(2, fallback)
+        self.assertNotIn(CANARY, repr(write_stderr.call_args))
+
+        error = ValueError(CANARY)
+        with patch(
+            "app.infrastructure.telemetry._log.info", side_effect=RuntimeError(CANARY)
+        ), patch("app.infrastructure.telemetry.os.write") as write_stderr:
+            with self.assertRaises(ValueError) as caught:
+                with telemetry.operation("workflow.resume"):
+                    raise error
+        self.assertIs(caught.exception, error)
+        write_stderr.assert_called_once_with(2, fallback)
+
+        with patch(
+            "app.infrastructure.telemetry._log.info", side_effect=RuntimeError(CANARY)
+        ), patch(
+            "app.infrastructure.telemetry.os.write", side_effect=OSError(CANARY)
+        ):
+            with telemetry.operation("workflow.resume"):
+                result = "completed despite stderr failure"
+        self.assertEqual(result, "completed despite stderr failure")
+
     def test_instrumentation_failures_preserve_action_and_original_exception(self):
         class Action:
             def __init__(self, telemetry, error):

@@ -47,8 +47,10 @@ def _emit(event: str, **fields) -> None:
     try:
         _log.info(json.dumps({"event": event, **fields}, separators=(",", ":")))
     except Exception:
-        # Operational telemetry must not affect application execution.
-        pass
+        try:
+            os.write(2, b'{"event":"telemetry.log","outcome":"failure"}\n')
+        except OSError:
+            pass
 
 
 def _instrumentation_failure():
