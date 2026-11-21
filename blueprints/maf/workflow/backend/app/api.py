@@ -80,29 +80,43 @@ def create_app(
     store = store if store is not None else PostgresStore(settings.database_url)
     identity = identity if identity is not None else EntraIdentity(settings)
     telemetry = Telemetry(settings.telemetry_mode, settings.applicationinsights_connection_string)
-    host = LocalWorkflowHost(store, components.action, settings.checkpoint_root, components.workflow_factory, telemetry=telemetry)
+    try:
+        return _create_app(settings, components, store, identity, telemetry)
+    except BaseException:
+        telemetry.shutdown()
+        raise
+
+
+def _create_app(settings, components, store, identity, telemetry) -> FastAPI:
+    host = LocalWorkflowHost(
+        store,
+        components.action,
+        settings.checkpoint_root,
+        components.workflow_factory,
+        telemetry=telemetry,
+    )
     if isinstance(store, PostgresStore):
         store.telemetry = telemetry
     service = WorkflowService(store, host, components.rules, components.policy)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        store.initialize()
-        components.initialize(store)
-        for case_id, status in store.recoverable():
-            try:
-                if status == "created":
-                    await host.start(case_id)
-                else:
-                    await host.resume(case_id)
-            except Conflict:
-                _emit("recovery", outcome="conflict")
-            except ActionError:
-                _emit("recovery", outcome="action_failure")
-            except BlueprintError:
-                store.mark_recovery_failed(case_id, "recovery_failed")
-                _emit("recovery", outcome="failure")
         try:
+            store.initialize()
+            components.initialize(store)
+            for case_id, status in store.recoverable():
+                try:
+                    if status == "created":
+                        await host.start(case_id)
+                    else:
+                        await host.resume(case_id)
+                except Conflict:
+                    _emit("recovery", outcome="conflict")
+                except ActionError:
+                    _emit("recovery", outcome="action_failure")
+                except BlueprintError:
+                    store.mark_recovery_failed(case_id, "recovery_failed")
+                    _emit("recovery", outcome="failure")
             yield
         finally:
             telemetry.shutdown()
@@ -125,13 +139,17 @@ def create_app(
     async def safe_errors(request: Request, call_next):
         request_id = str(uuid4())
         with telemetry.operation(
-            "http.request", kind=SpanKind.SERVER,
-            parent=telemetry.parent_from_headers(request.headers), correlation_id=request_id,
+            "http.request",
+            kind=SpanKind.SERVER,
+            parent=telemetry.parent_from_headers(request.headers),
+            correlation_id=request_id,
         ) as span:
             try:
                 response = await call_next(request)
             except Exception:
-                response = JSONResponse(status_code=500, content={"detail": "Internal server error."})
+                response = JSONResponse(
+                    status_code=500, content={"detail": "Internal server error."}
+                )
             span.set_attribute("http.response.status_code", response.status_code)
             if response.status_code >= 500:
                 span.set_status(Status(StatusCode.ERROR))
@@ -140,11 +158,15 @@ def create_app(
 
     def register_error(error_type, status_code: int, detail: str, headers=None):
         async def handler(request: Request, exc: Exception):
-            return JSONResponse(status_code=status_code, content={"detail": detail}, headers=headers)
+            return JSONResponse(
+                status_code=status_code, content={"detail": detail}, headers=headers
+            )
 
         app.add_exception_handler(error_type, handler)
 
-    register_error(AuthenticationFailed, 401, "Authentication failed.", {"WWW-Authenticate": "Bearer"})
+    register_error(
+        AuthenticationFailed, 401, "Authentication failed.", {"WWW-Authenticate": "Bearer"}
+    )
     register_error(AuthenticationUnavailable, 503, "Authentication is temporarily unavailable.")
     register_error(AccessDenied, 403, "Access denied.")
     register_error(NotFound, 404, "Record not found.")
@@ -169,13 +191,19 @@ def create_app(
     async def submit(
         body: Submission,
         actor: Annotated[AuthenticatedRequest, Depends(current_identity)],
-        idempotency_key: Annotated[str, Header(alias="Idempotency-Key", min_length=1, max_length=128)],
+        idempotency_key: Annotated[
+            str, Header(alias="Idempotency-Key", min_length=1, max_length=128)
+        ],
     ) -> CaseOutput:
-        case = await service.submit(actor.principal, str(body.reviewer_id), body.payload, idempotency_key)
+        case = await service.submit(
+            actor.principal, str(body.reviewer_id), body.payload, idempotency_key
+        )
         return _output(case)
 
     @app.get("/api/cases/{case_id}", response_model=CaseOutput)
-    def read(case_id: UUID, actor: Annotated[AuthenticatedRequest, Depends(current_identity)]) -> CaseOutput:
+    def read(
+        case_id: UUID, actor: Annotated[AuthenticatedRequest, Depends(current_identity)]
+    ) -> CaseOutput:
         return _output(service.read(actor.principal, case_id))
 
     @app.post("/api/cases/{case_id}/decision", response_model=CaseOutput)

@@ -51,6 +51,10 @@ def _emit(event: str, **fields) -> None:
         pass
 
 
+def _instrumentation_failure():
+    _emit("telemetry.instrumentation", outcome="failure")
+
+
 def instrumented(name):
     def decorate(func):
         if inspect.iscoroutinefunction(func):
@@ -151,11 +155,19 @@ class _Operation:
     def set_attribute(self, name, value):
         if name == "http.response.status_code" and isinstance(value, int):
             self.http_status = value
-            self.span.set_attribute(name, value)
+            if self.span is not None:
+                try:
+                    self.span.set_attribute(name, value)
+                except Exception:
+                    _instrumentation_failure()
 
     def set_status(self, status):
-        self.status = status.status_code
-        self.span.set_status(status)
+        try:
+            self.status = status.status_code
+            if self.span is not None:
+                self.span.set_status(status)
+        except Exception:
+            _instrumentation_failure()
 
 
 class Telemetry:
@@ -185,8 +197,10 @@ class Telemetry:
             }
         )
         readers = [metric_reader] if metric_reader is not None else []
-        if mode == "azure-monitor":
-            try:
+        provider = meter_provider = azure_reader = processor = None
+        processor_attached = reader_attached = False
+        try:
+            if mode == "azure-monitor":
                 # Do not let exporter diagnostics collect environment identifiers.
                 for setting in (
                     "APPLICATIONINSIGHTS_STATSBEAT_DISABLED_ALL",
@@ -216,29 +230,67 @@ class Telemetry:
                     )
                 if getattr(metric_exporter, "_metrics_to_log_analytics", True) is False:
                     raise ValueError("Azure Monitor custom metric export is disabled.")
-                readers.append(PeriodicExportingMetricReader(SafeMetricExporter(metric_exporter)))
-            except Exception:
-                if metric_exporter is not None:
-                    try:
-                        metric_exporter.shutdown()
-                    except Exception:
-                        pass
-                if exporter is not None:
-                    try:
-                        exporter.shutdown()
-                    except Exception:
-                        pass
+            provider = TracerProvider(resource=resource)
+            tracer = provider.get_tracer("blueprint.manual")
+            if mode == "azure-monitor":
+                azure_reader = PeriodicExportingMetricReader(SafeMetricExporter(metric_exporter))
+                readers.append(azure_reader)
+            meter_provider = MeterProvider(
+                resource=resource, metric_readers=readers, exemplar_filter=AlwaysOffExemplarFilter()
+            )
+            reader_attached = True
+            meter = meter_provider.get_meter("blueprint.manual")
+            operations = meter.create_counter("blueprint.operations", unit="{operation}")
+            duration = meter.create_histogram("blueprint.operation.duration", unit="s")
+            if mode == "azure-monitor":
+                processor = BatchSpanProcessor(SafeExporter(exporter))
+                provider.add_span_processor(processor)
+                processor_attached = True
+        except Exception:
+            if provider is not None:
+                try:
+                    provider.shutdown()
+                except Exception:
+                    pass
+            if processor is not None and not processor_attached:
+                try:
+                    processor.shutdown()
+                except Exception:
+                    pass
+            elif exporter is not None and processor is None and mode == "azure-monitor":
+                try:
+                    exporter.shutdown()
+                except Exception:
+                    pass
+            if meter_provider is not None:
+                try:
+                    meter_provider.shutdown()
+                except Exception:
+                    pass
+            if azure_reader is not None and not reader_attached:
+                try:
+                    azure_reader.shutdown()
+                except Exception:
+                    pass
+            elif metric_reader is not None and not reader_attached and mode == "local":
+                try:
+                    metric_reader.shutdown()
+                except Exception:
+                    pass
+            elif metric_exporter is not None and azure_reader is None and mode == "azure-monitor":
+                try:
+                    metric_exporter.shutdown()
+                except Exception:
+                    pass
+            if mode == "azure-monitor":
                 raise RuntimeError("Azure Monitor telemetry initialization failed.") from None
-        self.provider = TracerProvider(resource=resource)
-        self.tracer = self.provider.get_tracer("blueprint.manual")
-        self.meter_provider = MeterProvider(
-            resource=resource, metric_readers=readers, exemplar_filter=AlwaysOffExemplarFilter()
-        )
-        meter = self.meter_provider.get_meter("blueprint.manual")
-        self._operations = meter.create_counter("blueprint.operations", unit="{operation}")
-        self._duration = meter.create_histogram("blueprint.operation.duration", unit="s")
+            raise RuntimeError("Telemetry initialization failed.") from None
+        self.provider = provider
+        self.tracer = tracer
+        self.meter_provider = meter_provider
+        self._operations = operations
+        self._duration = duration
         if mode == "azure-monitor":
-            self.provider.add_span_processor(BatchSpanProcessor(SafeExporter(exporter)))
             _emit("telemetry.export", outcome="configured")
         else:
             _emit("telemetry.export", outcome="disabled")
@@ -247,30 +299,53 @@ class Telemetry:
     def operation(self, name, *, kind=SpanKind.INTERNAL, parent=None, correlation_id=None):
         if name not in _OPERATIONS:
             name = "other"
-        start = time.monotonic()
-        # Exceptions are classified without message, stack, or automatic span events.
-        with self.tracer.start_as_current_span(
-            name, context=parent, kind=kind, record_exception=False, set_status_on_exception=False
-        ) as span:
-            operation = _Operation(span)
-            outcome = "success"
+        try:
+            start = time.monotonic()
+        except Exception:
+            start = None
+            _instrumentation_failure()
+        span_context = span = None
+        try:
+            span_context = self.tracer.start_as_current_span(
+                name,
+                context=parent,
+                kind=kind,
+                record_exception=False,
+                set_status_on_exception=False,
+            )
+            span = span_context.__enter__()
+        except Exception:
+            span_context = None
+            _instrumentation_failure()
+        operation = _Operation(span)
+        outcome = "success"
+        try:
+            yield operation
+        except BaseException:
+            outcome = "error"
             try:
-                yield operation
-            except BaseException:
-                outcome = "error"
                 operation.set_status(Status(StatusCode.ERROR))
-                raise
-            finally:
+            except Exception:
+                _instrumentation_failure()
+            raise
+        finally:
+            try:
                 if operation.status == StatusCode.ERROR:
                     outcome = "error"
-                ctx = span.get_span_context()
                 fields = dict(
                     operation=name,
                     outcome=outcome,
-                    duration_ms=round((time.monotonic() - start) * 1000, 3),
-                    trace_id=f"{ctx.trace_id:032x}",
-                    span_id=f"{ctx.span_id:016x}",
+                    duration_ms=round((time.monotonic() - start) * 1000, 3)
+                    if start is not None
+                    else 0,
                 )
+                if span is not None:
+                    try:
+                        ctx = span.get_span_context()
+                        fields["trace_id"] = f"{ctx.trace_id:032x}"
+                        fields["span_id"] = f"{ctx.span_id:016x}"
+                    except Exception:
+                        _instrumentation_failure()
                 status_code = operation.http_status
                 if isinstance(status_code, int):
                     fields["http_status_code"] = status_code
@@ -291,10 +366,22 @@ class Telemetry:
                     self._duration.record(fields["duration_ms"] / 1000, labels)
                 except Exception:
                     _emit("telemetry.metric", outcome="failure")
+            except Exception:
+                _instrumentation_failure()
+            finally:
+                if span_context is not None:
+                    try:
+                        span_context.__exit__(None, None, None)
+                    except Exception:
+                        _instrumentation_failure()
 
     def parent_from_headers(self, headers):
         # Only the W3C traceparent field is accepted: no baggage or tracestate.
-        return _propagator.extract({"traceparent": headers.get("traceparent", "")})
+        try:
+            return _propagator.extract({"traceparent": headers.get("traceparent", "")})
+        except Exception:
+            _instrumentation_failure()
+            return None
 
     def shutdown(self):
         try:
