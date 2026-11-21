@@ -240,6 +240,25 @@ entries to hide failed attempts or gaps.
   `backend/app/`, `frontend/`, `backend/Dockerfile`, and
   `tests/test_instantiation.py`.
 
+### 2026-11-21 - Reconcile documentation with checkpoint foundation
+
+- **Change / decision:** Rebase the documentation work onto foundation
+  `9efeef0`, preserving its checkpoint timestamp-tie and hosted caller-binding
+  investigations, canonical imports, and the documentation and copy/link
+  checks. The foundation also rejects incomplete terminal checkpoint state
+  during completion and replay.
+- **Evidence:** Foundation PR #11 run
+  [44936094798](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44936094798)
+  passed all five checks for exact commit
+  `9efeef01101b176a1a10627c654eff0ca5150b6b`. The two
+  `tests.test_instantiation` tests pass locally after rebasing this branch.
+  Documentation PR #12 run
+  [44936739123](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44936739123)
+  passed all five checks for exact head `60458d9951bec3066dd92dc779714539007f7fd5`.
+- **Limit:** This is documentation reconciliation and regression evidence; it
+  does not verify Azure hosting, interactive debugging on macOS, live
+  Entra/OBO, or hosted checkpoint recovery.
+
 ## 2026-11-21 - Reconcile dependent documentation with cleaned foundation
 
 - **Change / decision:** Rebase the documentation work onto foundation
@@ -258,7 +277,7 @@ entries to hide failed attempts or gaps.
 
 - **Status and revision:** Open, based on `modularity-foundation`; head
   `e1d953662e615e547fa641ad0831907c363318e3`. It is a parallel workstream and
-  is not included in cleaned foundation commit `61d44ed`.
+  is not included in cleaned foundation commit `9efeef0`.
 - **Proposed changes:** Python 3.12, uv 0.9.26, public-PyPI `uv.lock` and
   hash-pinned backend/image installs, Ruff 0.14.13, Node 22 with `npm ci`,
   and VS Code task/debug configurations.
@@ -290,7 +309,7 @@ entries to hide failed attempts or gaps.
 
 | Item | Status | Evidence needed / next action |
 | --- | --- | --- |
-| Eight design documents and generated inclusion | Open in PR #12 | Focused instantiation tests and run 44931269846 passed on prior head `476e43a`; verify the revised and combined revisions separately. |
+| Eight design documents and generated inclusion | Open in PR #12 | Focused instantiation tests and run 44936739123 passed on head `60458d9`; verify the combined revision separately. |
 | Canonical imports and legacy-shim removal | Implemented in open PR #11 | Foundation run 44936094798 passed all five checks on `9efeef0`; preserve direct imports in later changes. |
 | Locked developer tooling | Open in PR #13 | Run 44931514554 passed all five checks on prior head `edfd572`; verify the revised and combined revisions separately. macOS, interactive debugging and public-only local downloads remain unverified. |
 | Combined revision CI | Not run | Passing checks on individual PRs do not establish checks for their combined revision. |

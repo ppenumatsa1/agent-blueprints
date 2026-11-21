@@ -73,8 +73,8 @@ Windows/Linux Compose verification used an approved mirror after public TLS
 failures; macOS and interactive debugger verification remain unverified.
 These results do not establish that tooling in PR #13 is merged or validate
 any combined revision. Documentation [PR #12](https://github.com/ppenumatsa1/agent-blueprints/pull/12)
-head `476e43a51df9647d80baa63a8b315d6fddaa3f1e` passed all five checks in
-[run 44931269846](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44931269846);
+head `60458d9951bec3066dd92dc779714539007f7fd5` passed all five checks in
+[run 44936739123](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44936739123);
 it also remains open.
 
 Each PR must remove obsolete compatibility layers, use direct imports,
@@ -109,7 +109,6 @@ Live Entra/OBO, Foundry-hosted recovery, cloud telemetry, and Azure deployment
 remain unverified until separately implemented and evidenced. Azure
 provisioning and permanent repository creation still require separate
 authorization; never merge automatically.
-
 The dependent developer-tooling branch adds `backend/pyproject.toml` and a
 public-registry `uv.lock`, locked development and container installs, Ruff,
 portable development commands and VS Code configurations. Acceptance requires

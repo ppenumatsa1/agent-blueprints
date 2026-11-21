@@ -34,12 +34,12 @@ alternative requiring its own verified checkpoint strategy. Neither topology
 is a verified deployment; provisioning requires separate authorization.
 
 [PR #11](https://github.com/ppenumatsa1/agent-blueprints/pull/11) remains open.
-Its cleaned foundation commit `61d44ed` removes the compatibility aliases and
-uses canonical imports; [hosted CI run 44930591252](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44930591252)
+Its cleaned foundation commit `9efeef0` removes the compatibility aliases and
+uses canonical imports; [hosted CI run 44936094798](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44936094798)
 passed all five checks on that exact commit. This is not a merge or live
 hosting result. The copied
 [project guides](../blueprints/maf/workflow/README.md#project-guide) describe
-the current local boundaries and planned deployment designs.
+the current local boundaries and planned deployment/observability designs.
 Their [design baseline](../blueprints/maf/workflow/docs/design/architecture.md)
 maps requirements to source and evidence; its engineering journal records
 verified findings and remaining work. The generated-copy tests include the
