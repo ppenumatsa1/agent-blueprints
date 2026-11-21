@@ -19,12 +19,20 @@ Requirements, examples, schema and backend tests are owned by `backend`.
 The verifier and exact contract bytes remain independent of the runtime.
 
 The longer-term target adds separately reviewed dependency locking and
-developer tooling, migrations, privacy-safe telemetry, a Foundry Responses
+developer tooling, migrations, a Foundry Responses
 adapter and host-managed checkpoints, and Foundry-first Bicep/azd for
 separately hosted frontend and API services. These are not implemented by
 this modularity increment. Hosting the workflow runtime in ACA is a deferred
 alternative requiring its own verified checkpoint strategy. Neither topology
 is a verified deployment; provisioning requires separate authorization.
+
+The observability increment adds an independently owned manual OTel provider
+in the MAF backend, JSON operational signals, incoming W3C trace context, and
+explicit Azure Monitor trace export configuration. It does not export locally
+by default, configure cloud resources, or establish hosted ingestion. Browser
+requests create a trace context without exporting a browser span. Outbound and
+Foundry-host propagation remain unverified; operational logs are
+not business audit or authorization evidence. See the [blueprint guidance](../blueprints/maf/workflow/README.md#operational-telemetry).
 
 | Layer | Responsibility | Examples |
 | --- | --- | --- |
