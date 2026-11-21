@@ -258,14 +258,25 @@ propagation or a telemetry exporter.
 
 - `ApplicationComponents` supplies application-owned business rules, access
   policy, transactional action, optional initialization, and optionally a
-  workflow factory. Reusable typed patterns for models, agents, prompts,
-  tools, and executors remain to be specified and verified in
-  [#35](https://github.com/ppenumatsa1/agent-blueprints/issues/35).
+  workflow factory. `app/extensions/` defines typed provider selection,
+  versioned prompt assets, native MAF `Agent` construction, and an
+  authorization-aware MAF tool registry. Provider factories, policy, and
+  tools remain application-owned; the generated synthetic fixture tests
+  construction and denial paths without calling a model.
+- `WorkflowFactory` retains its native MAF `Executor`/`WorkflowBuilder`
+  signature and passes host-owned checkpoint storage through unchanged.
+  Preserve workflow/executor identity, pending request and response
+  semantics, and host checkpoint ownership; the local native workflow test
+  does not verify Foundry hosting or recovery.
 - `StateRepository` and `WorkflowHost` are narrow domain boundaries. Replacing
   either requires preserving identity isolation, decision ordering,
   idempotency, recovery, and failure semantics.
 - MAF input and application payloads are untrusted. A model/tool response is
   not authorization; no model recommendation can approve an action.
+- Tool factories bind a trusted principal per request, and handlers must
+  authorize again at invocation using application policy and the supplied
+  resource identifier. This read-only synthetic tool is not evidence of
+  external-effect authorization, idempotency, or human approval.
 - Entra identities are validated by the API. Test providers and signing keys
   are not runtime authentication modes.
 - Optional OBO is server-side, explicitly configured and scope-allowlisted;

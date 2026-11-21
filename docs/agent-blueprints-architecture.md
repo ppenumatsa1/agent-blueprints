@@ -114,6 +114,15 @@ causes of earlier intermittent evidence failures remain unproven. Local
 source and generated tests passed on PostgreSQL 16.15 and 17.12 at `7cd99ac`;
 this does not verify Azure database configuration or live restoration.
 
+The #35 MAF extension pattern work adds typed model selection, versioned
+prompt assets, native MAF `Agent` construction, authorization-bound tools,
+and the existing MAF-native executor/workflow factory seam under
+`blueprints/maf/workflow/backend/app/extensions/`. The synthetic generated
+fixture exercises these construction and denial boundaries without a model
+call or fake response. Provider credentials and behavior, live hosted identity
+and recovery, trusted readiness evidence, and consequential external effects
+remain unverified or blocked; see the [MAF extension guidance](../blueprints/maf/workflow/docs/architecture.md#typed-maf-extension-patterns).
+
 The local integration at `af3955a` combined the engineering layers. Source and
 independently generated backends each passed 68 tests on PostgreSQL 16.15 and
 17.12, generated verification passed 44 without skips, and both Compose stacks

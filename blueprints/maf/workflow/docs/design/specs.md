@@ -44,7 +44,7 @@ test is evidence only for the behavior it exercises.
 | Prototype demonstration and optional runtime alternatives | [#29](https://github.com/ppenumatsa1/agent-blueprints/issues/29), [#31](https://github.com/ppenumatsa1/agent-blueprints/issues/31). |
 | Specification Studio producer handoff | [#33](https://github.com/ppenumatsa1/agent-blueprints/issues/33); no producer or adapter is authorized by this phase. |
 | Later App/API blueprint roadmap | [#34](https://github.com/ppenumatsa1/agent-blueprints/issues/34); out of phase and requires separate authorization. The P1 permanent application is tracked separately in [#30](https://github.com/ppenumatsa1/agent-blueprints/issues/30). |
-| Reusable model, agent, prompt, tool and executor extension contracts | [#35](https://github.com/ppenumatsa1/agent-blueprints/issues/35); typed MAF-native patterns and a clean generated synthetic example are not yet available. |
+| Reusable model, agent, prompt, tool and executor extension contracts | Implemented as typed application-owned boundaries in `backend/app/extensions/`, the native `WorkflowFactory`, and generated synthetic fixture/tests. See [architecture](../architecture.md#typed-maf-extension-patterns) and [#35](https://github.com/ppenumatsa1/agent-blueprints/issues/35). Model invocation, trusted provenance, hosted identity/recovery, and external effects are not established by these tests. |
 | Consequential external effects | P0 [#32](https://github.com/ppenumatsa1/agent-blueprints/issues/32); block remote actions pending explicit authorization, downstream idempotency/outbox, reconciliation, and fault-injection evidence. |
 
 ```mermaid

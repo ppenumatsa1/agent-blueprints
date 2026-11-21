@@ -49,8 +49,11 @@ Track hosted implementation, trust, and evidence work in
 [#28](https://github.com/ppenumatsa1/agent-blueprints/issues/28).
 Hosted recovery was explicitly deferred to a separate scoped follow-up; this
 is not a security waiver.
+The reusable MAF extension patterns tracked in
+[#35](https://github.com/ppenumatsa1/agent-blueprints/issues/35) now have
+typed blueprint contracts and a generated synthetic fixture; exact test/CI
+evidence is pending. No live model call or hosted capability is implied.
 Other tracked verification and separately authorized work includes
-reusable MAF extension patterns [#35](https://github.com/ppenumatsa1/agent-blueprints/issues/35),
 cross-platform tooling [#23](https://github.com/ppenumatsa1/agent-blueprints/issues/23),
 managed database operations [#24](https://github.com/ppenumatsa1/agent-blueprints/issues/24),
 the measured local demo [#29](https://github.com/ppenumatsa1/agent-blueprints/issues/29),

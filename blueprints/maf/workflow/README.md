@@ -236,7 +236,7 @@ instrumentation or unrestricted SDK logging without a privacy review.
 ## Application extension points
 
 The project has sibling `backend` and `frontend` directories. The backend
-contains API composition (`app/api.py`), application coordination
+contains API composition (`app/api/app.py`), application coordination
 (`app/application.py` and `app/usecases`), generic domain types and policy
 (`app/domain`), native MAF workflow and local host (`app/workflows`), and
 PostgreSQL and identity adapters (`app/infrastructure`). Import these
@@ -255,6 +255,12 @@ canonical modules directly when implementing application extensions.
 - `WorkflowWorkspace` accepts a `WorkflowClient` and `renderCase` for UI
   composition. Applications own any domain-specific views and evaluation
   fixtures; the order-adjustment scenario belongs only in tests.
+- Typed MAF model, agent, prompt, tool/authorization, and executor/workflow
+  patterns are in [architecture and extensions](docs/architecture.md#typed-maf-extension-patterns)
+  and `backend/app/extensions/`. The synthetic fixture builds a native
+  `Agent` without invoking a model; provider calls, hosted identity and
+  recovery, trusted readiness evidence, and consequential external effects
+  remain unverified or blocked.
 
 The native local host expects a workflow producing one request with `case_id`
 and one matching outcome. A different graph must preserve that contract or

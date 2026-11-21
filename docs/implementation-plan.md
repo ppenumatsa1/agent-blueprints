@@ -71,6 +71,19 @@ operational issues.
 Do not merge overlapping workstream histories blindly or treat a green
 engineering check as release authorization.
 
+The #35 extension workstream adds typed application-owned contracts for
+explicit model-provider selection (`SupportsChatGetResponse`), versioned prompt
+assets, MAF `Agent` construction, principal-bound MAF tool registration,
+and native `Executor`/`WorkflowBuilder` composition through the existing
+`WorkflowFactory`. The generated synthetic example demonstrates construction,
+configuration rejection, and unauthorized tool denial; it does not call a
+model or synthesize a model response. Exact source/generated test results and
+the draft PR's head-specific CI are recorded in the corresponding checklist
+row and engineering journal after verification. Provider credentials and live
+model behavior, hosted identity/checkpoints/recovery (#19/#20/#22), trusted
+readiness evidence (#21), and consequential external effects (#32) remain
+unverified or blocked.
+
 ### Execution sequence and work packages
 
 The modularity foundation reorganizes the local blueprint and generated
@@ -349,7 +362,7 @@ blueprint, readiness report, or deployment complete. See the
 | Developer experience | [#23](https://github.com/ppenumatsa1/agent-blueprints/issues/23); macOS, interactive debugging and Restricted Mode remain unverified. |
 | P1-13: optional ACA workflow runtime | [#31](https://github.com/ppenumatsa1/agent-blueprints/issues/31); alternative remains unselected, not a silent fallback. |
 | P1-14: Azure graph wiring, managed database operations, deployment | [#18](https://github.com/ppenumatsa1/agent-blueprints/issues/18), [#24](https://github.com/ppenumatsa1/agent-blueprints/issues/24), [#28](https://github.com/ppenumatsa1/agent-blueprints/issues/28); no Azure resource was provisioned. |
-| P1: reusable MAF adopter extensions | [#35](https://github.com/ppenumatsa1/agent-blueprints/issues/35); specify and test model, agent, prompt, tool/authorization, and executor/workflow patterns in an independently generated synthetic app. |
+| P1: reusable MAF adopter extensions | [#35](https://github.com/ppenumatsa1/agent-blueprints/issues/35); typed model, agent, prompt, tool/authorization and native workflow patterns are implemented in the blueprint and generated synthetic fixture. Source/generated tests and exact-head CI are the acceptance evidence; no live model, hosted identity/recovery, trust attestation or external-effect capability is implied. |
 | P1-15: measured local demonstration | [#29](https://github.com/ppenumatsa1/agent-blueprints/issues/29); the 2–3 hour objective has not been measured. |
 | Phase 0 Specification Studio handoff | [#33](https://github.com/ppenumatsa1/agent-blueprints/issues/33); no producer artifact or lossless adapter exists, and this does not authorize implementation. |
 | P1 permanent standalone reference application | [#30](https://github.com/ppenumatsa1/agent-blueprints/issues/30); required as an independent deliverable, but repository creation still requires separate explicit authorization. |
