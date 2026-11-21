@@ -11,6 +11,12 @@ from uuid import UUID
 
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.metrics import AlwaysOffExemplarFilter, MeterProvider
+from opentelemetry.sdk.metrics.export import (
+    MetricExporter,
+    MetricExportResult,
+    PeriodicExportingMetricReader,
+)
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, SpanExportResult, SpanExporter
 from opentelemetry.trace import SpanKind, Status, StatusCode
 from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
@@ -101,6 +107,41 @@ class SafeExporter(SpanExporter):
         return ok
 
 
+class SafeMetricExporter(MetricExporter):
+    """Report metric exporter failures without exposing payload or exception text."""
+
+    def __init__(self, exporter):
+        super().__init__(
+            preferred_temporality=exporter._preferred_temporality,
+            preferred_aggregation=exporter._preferred_aggregation,
+        )
+        self._exporter = exporter
+
+    def export(self, metrics_data, timeout_millis=10000, **kwargs):
+        try:
+            result = self._exporter.export(metrics_data, timeout_millis=timeout_millis, **kwargs)
+        except Exception:
+            result = MetricExportResult.FAILURE
+        if result != MetricExportResult.SUCCESS:
+            _emit("telemetry.metric_export", outcome="failure")
+        return result
+
+    def shutdown(self, timeout_millis=30000, **kwargs):
+        try:
+            self._exporter.shutdown(timeout_millis=timeout_millis, **kwargs)
+        except Exception:
+            _emit("telemetry.metric_shutdown", outcome="failure")
+
+    def force_flush(self, timeout_millis=10000):
+        try:
+            ok = self._exporter.force_flush(timeout_millis=timeout_millis)
+        except Exception:
+            ok = False
+        if not ok:
+            _emit("telemetry.metric_flush", outcome="failure")
+        return ok
+
+
 class _Operation:
     def __init__(self, span):
         self.span = span
@@ -118,49 +159,87 @@ class _Operation:
 
 
 class Telemetry:
-    def __init__(self, mode="local", connection_string=None, *, exporter=None):
-        self.provider = TracerProvider(
-            resource=Resource(
-                {
-                    "service.name": "maf-workflow",
-                    "service.instance.id": "not-collected",
-                    "device.id": "not-collected",
-                }
-            )
-        )
-        self.tracer = self.provider.get_tracer("blueprint.manual")
+    def __init__(
+        self,
+        mode="local",
+        connection_string=None,
+        *,
+        exporter=None,
+        metric_exporter=None,
+        metric_reader=None,
+    ):
         if mode not in ("local", "azure-monitor"):
             raise ValueError("TELEMETRY_MODE must be local or azure-monitor.")
+        if mode == "azure-monitor" and (
+            not isinstance(connection_string, str) or not connection_string.strip()
+        ):
+            raise ValueError("APPLICATIONINSIGHTS_CONNECTION_STRING is required for azure-monitor.")
+        if mode == "azure-monitor" and metric_reader is not None:
+            raise ValueError("A custom metric reader cannot replace Azure Monitor export.")
+
+        resource = Resource(
+            {
+                "service.name": "maf-workflow",
+                "service.instance.id": "not-collected",
+                "device.id": "not-collected",
+            }
+        )
+        readers = [metric_reader] if metric_reader is not None else []
         if mode == "azure-monitor":
             try:
-                if exporter is None:
-                    if not connection_string:
-                        raise ValueError("Missing connection string.")
-                    # Do not let exporter diagnostics collect environment identifiers.
-                    for setting in (
-                        "APPLICATIONINSIGHTS_STATSBEAT_DISABLED_ALL",
-                        "APPLICATIONINSIGHTS_SDKSTATS_DISABLED",
-                        "APPLICATIONINSIGHTS_CONTROLPLANE_DISABLED",
+                # Do not let exporter diagnostics collect environment identifiers.
+                for setting in (
+                    "APPLICATIONINSIGHTS_STATSBEAT_DISABLED_ALL",
+                    "APPLICATIONINSIGHTS_SDKSTATS_DISABLED",
+                    "APPLICATIONINSIGHTS_CONTROLPLANE_DISABLED",
+                ):
+                    os.environ[setting] = "true"
+                for namespace in ("azure.monitor.opentelemetry.exporter", "azure.core.pipeline"):
+                    sdk_log = logging.getLogger(namespace)
+                    if not any(
+                        isinstance(handler, logging.NullHandler) for handler in sdk_log.handlers
                     ):
-                        os.environ[setting] = "true"
-                    # The SDK can log exception messages and endpoints; failures
-                    # are instead reported by SafeExporter without their text.
-                    for namespace in (
-                        "azure.monitor.opentelemetry.exporter",
-                        "azure.core.pipeline",
-                    ):
-                        sdk_log = logging.getLogger(namespace)
                         sdk_log.addHandler(logging.NullHandler())
-                        sdk_log.propagate = False
-                    from azure.monitor.opentelemetry.exporter import AzureMonitorTraceExporter
+                    sdk_log.propagate = False
+                from azure.monitor.opentelemetry.exporter import (
+                    AzureMonitorMetricExporter,
+                    AzureMonitorTraceExporter,
+                )
 
+                if exporter is None:
                     exporter = AzureMonitorTraceExporter(
                         connection_string=connection_string, disable_offline_storage=True
                     )
-                self.provider.add_span_processor(BatchSpanProcessor(SafeExporter(exporter)))
-                _emit("telemetry.export", outcome="configured")
+                if metric_exporter is None:
+                    metric_exporter = AzureMonitorMetricExporter(
+                        connection_string=connection_string, disable_offline_storage=True
+                    )
+                if getattr(metric_exporter, "_metrics_to_log_analytics", True) is False:
+                    raise ValueError("Azure Monitor custom metric export is disabled.")
+                readers.append(PeriodicExportingMetricReader(SafeMetricExporter(metric_exporter)))
             except Exception:
-                _emit("telemetry.export", outcome="unavailable")
+                if metric_exporter is not None:
+                    try:
+                        metric_exporter.shutdown()
+                    except Exception:
+                        pass
+                if exporter is not None:
+                    try:
+                        exporter.shutdown()
+                    except Exception:
+                        pass
+                raise RuntimeError("Azure Monitor telemetry initialization failed.") from None
+        self.provider = TracerProvider(resource=resource)
+        self.tracer = self.provider.get_tracer("blueprint.manual")
+        self.meter_provider = MeterProvider(
+            resource=resource, metric_readers=readers, exemplar_filter=AlwaysOffExemplarFilter()
+        )
+        meter = self.meter_provider.get_meter("blueprint.manual")
+        self._operations = meter.create_counter("blueprint.operations", unit="{operation}")
+        self._duration = meter.create_histogram("blueprint.operation.duration", unit="s")
+        if mode == "azure-monitor":
+            self.provider.add_span_processor(BatchSpanProcessor(SafeExporter(exporter)))
+            _emit("telemetry.export", outcome="configured")
         else:
             _emit("telemetry.export", outcome="disabled")
 
@@ -206,6 +285,12 @@ class Telemetry:
                     "operation",
                     **fields,
                 )
+                try:
+                    labels = {"operation": name, "outcome": fields["outcome"]}
+                    self._operations.add(1, labels)
+                    self._duration.record(fields["duration_ms"] / 1000, labels)
+                except Exception:
+                    _emit("telemetry.metric", outcome="failure")
 
     def parent_from_headers(self, headers):
         # Only the W3C traceparent field is accepted: no baggage or tracestate.
@@ -216,3 +301,7 @@ class Telemetry:
             self.provider.shutdown()
         except Exception:
             _emit("telemetry.shutdown", outcome="failure")
+        try:
+            self.meter_provider.shutdown()
+        except Exception:
+            _emit("telemetry.metric_shutdown", outcome="failure")
