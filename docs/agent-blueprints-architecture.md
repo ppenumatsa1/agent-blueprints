@@ -138,8 +138,11 @@ assets; it does not install a shared factory runtime. A test-only adapter
 drives the actual API and native workflow. Its evidence producer retains
 per-case results and both worker-kill outcomes, but its unsigned output and
 synthetic approval records do not establish trusted provenance or human
-authorization. Fixture-formatted explanations and hints are not agent
-evaluation or browser end-to-end evidence, so those checks remain unverified.
+authorization. The generated-verifier CI step propagates failures through
+its evidence-capture pipeline and rejects skips; see the
+[pipeline regression](../tests/test_ci_workflow.py). Fixture-formatted
+explanations and hints are not agent evaluation or browser end-to-end
+evidence, so those checks remain unverified.
 The temporary generated copy builds, runs, and tests locally without source
 imports or bind mounts; live identity and browser end-to-end verification
 remain in progress.

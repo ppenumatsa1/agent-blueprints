@@ -27,6 +27,24 @@ entries to hide failed attempts or gaps.
 
 ## Prior implementation evidence
 
+### 2026-11-21 - Generated verifier pipeline exit status
+
+- **Issue / reproduction:** GitHub Actions used `bash -e` for the generated
+  verifier step. A failing `python -m unittest` piped through `tee` returned
+  the successful `tee` status; a focused reproduction returned zero after a
+  simulated verifier exit of 37. The separate skip check did not detect it.
+- **Fix / decision:** Enable Bash `pipefail` in that step. A regression test
+  executes the actual workflow step with a simulated failing verifier,
+  skipped and expected-failure outputs, and a clean success.
+- **Evidence / limit:** The test failed against the earlier workflow and
+  passed after the fix. CI logs for prior heads of PRs #11 through #16 each
+  explicitly recorded 44 passing verifier tests, rather than relying solely
+  on the CI job status.
+  Verify the revised foundation and dependent PRs on their actual heads;
+  earlier green job status alone cannot prove verifier success.
+- **Lesson:** Preserving evidence output with `tee` must not mask the
+  producer's nonzero exit status.
+
 ### 2026-11-21 - Local checkpoint timestamp ties
 
 - **Observed issue:** During migration acceptance, an intermittent submission
