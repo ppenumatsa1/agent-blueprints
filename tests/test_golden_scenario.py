@@ -1,9 +1,10 @@
-"""The application adapter is intentionally absent until later Phase 1 work."""
+"""Validate the synthetic scenario and, when selected, the real application adapter."""
 
 import hashlib
 import json
 import os
 import subprocess
+import sys
 import unittest
 from pathlib import Path
 
@@ -43,15 +44,17 @@ class GoldenScenarioTests(unittest.TestCase):
                          hashlib.sha256((SCENARIO / "verification-contract.json").read_bytes()).hexdigest())
         self.assertEqual(trust["keys"], [])
 
-    @unittest.skipUnless(os.environ.get("SCENARIO_ADAPTER"), "Synthetic application adapter is not implemented.")
+    @unittest.skipUnless(os.environ.get("SCENARIO_ADAPTER"), "Synthetic application adapter was not selected.")
     def test_application_against_golden_cases(self):
-        # Adapter is one executable path; it consumes one case JSON on stdin.
         adapter = os.environ["SCENARIO_ADAPTER"]
+        command = [sys.executable, adapter] if Path(adapter).suffix.lower() == ".py" else [adapter]
+        self.case_actuals = {}
         for case in CASES:
             with self.subTest(case=case["id"]):
-                process = subprocess.run([adapter], input=json.dumps(case["input"]), text=True,
+                process = subprocess.run(command, input=json.dumps(case["input"]), text=True,
                                          capture_output=True, timeout=60, check=True)
                 actual = json.loads(process.stdout)
+                self.case_actuals[case["id"]] = actual
                 for key, value in case["expected"].items():
                     self.assertEqual(actual[key], value)
                 explanation = actual["explanation"].lower()

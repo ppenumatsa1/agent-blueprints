@@ -119,9 +119,11 @@ the normalized result:
  "environment":"local-test","recorded_at":"2026-01-02T00:00:00Z"}
 ```
 
-The normalizer must derive that object and the outcome from the actual
-per-check runner output; this repository does not yet include a JUnit or
-evaluation adapter. Other artifact types are checked for bytes, scope and
+The synthetic MAF evidence runner derives these objects from individual
+golden-case observations and both real worker-kill tests; it retains the
+underlying outcomes and failure details. It is a fixture-specific producer,
+not a general JUnit or model-evaluation adapter. Other artifact types are
+checked for bytes, scope and
 freshness, not semantically interpreted. An `approval_record` artifact is not
 a signed human authorization. Digests and signatures bind what the producer
 reported; they do not prove that the claimed time, revision, environment, test
@@ -129,6 +131,29 @@ execution, or contents are truthful. Protect the producer and retain underlying
 runner logs, trace IDs, errors, and privacy-safe supporting artifacts for
 debugging. Do not use a builder-controlled key to attest its own unreviewed
 claims. These integration and operational controls remain future work.
+
+### Generated synthetic project
+
+From a generated project's root, after installing both test requirements and
+setting `MAF_TEST_DATABASE_URL`, run `tests.evidence_runner` as shown in the
+project README. Use the generated project's actual source revision and a new
+output directory. Then run the verifier from its `verification` directory:
+
+```powershell
+python -m readiness --contract .\scenarios\order-adjustment\verification-contract.json --baseline .\scenarios\order-adjustment\verification-contract.json --input .\evidence\run\readiness-input.json --trust .\scenarios\order-adjustment\example-trust.json --evidence-root .\evidence\run --output .\evidence\run\readiness-report.json
+```
+
+The runner preserves failed and missing observations as failed or unverified.
+Fixture-formatted explanations and hints do not prove the contract's agent
+evaluation or browser end-to-end check, so both checks remain **unverified**.
+The runner may return exit 0 when the executable fixture and crash tests pass
+with only those disclosed limitations; that exit code is not a readiness
+gate. Unexpected failures or missing observations make the runner nonzero.
+It records a synthetic approval observation, not an authorized decision, and
+does not sign result attestations. With the provided empty trust store the CLI
+must return exit 1 and **unverified**, even if every local test passed.
+Independent trust administration and reviewed, signed decisions remain
+prerequisites for any release claim.
 
 An explicit failed result stays failed even if its evidence is invalid; a
 purported pass with missing, invalid, stale, or mismatched evidence becomes

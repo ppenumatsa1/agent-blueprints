@@ -91,8 +91,21 @@ database effects in the same transaction, not arbitrary external services.
 Missing or corrupt checkpoints fail visibly. The application increment
 adds the Entra API, MSAL UI, and a loopback-only Compose stack with a
 non-root API and a private persistent checkpoint volume. Local HTTP smoke
-checks are not live identity verification. The generated application and
-end-to-end verification remain in progress.
+checks are not live identity verification.
+
+The [generator](../scripts/instantiate_maf.py) copies the blueprint, license,
+independent verifier, contract bytes, and synthetic acceptance fixtures into a
+new directory outside the source checkout. The copy owns its dependencies,
+build contexts, framework host, application extension points, and verification
+assets; it does not install a shared factory runtime. A test-only adapter
+drives the actual API and native workflow. Its evidence producer retains
+per-case results and both worker-kill outcomes, but its unsigned output and
+synthetic approval records do not establish trusted provenance or human
+authorization. Fixture-formatted explanations and hints are not agent
+evaluation or browser end-to-end evidence, so those checks remain unverified.
+The temporary generated copy builds, runs, and tests locally without source
+imports or bind mounts; live identity and browser end-to-end verification
+remain in progress.
 
 Interactive local and hosted access uses Microsoft Entra ID: React uses MSAL,
 and FastAPI validates access tokens, scopes, roles, and record-level access.
@@ -139,7 +152,7 @@ agent-blueprints/
   components/              # only proven framework-neutral material
   templates/               # composable local, deployment, CI and docs assets
   examples/                # synthetic, independently usable examples
-  scripts/                 # future generation or verification utilities
+  scripts/                 # blueprint instantiation utilities
   .github/                 # Copilot instructions and GitHub-hosted CI
 ```
 
