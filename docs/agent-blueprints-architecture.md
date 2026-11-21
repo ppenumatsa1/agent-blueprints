@@ -26,6 +26,18 @@ this modularity increment. Hosting the workflow runtime in ACA is a deferred
 alternative requiring its own verified checkpoint strategy. Neither topology
 is a verified deployment; provisioning requires separate authorization.
 
+[PR #11](https://github.com/ppenumatsa1/agent-blueprints/pull/11) remains open;
+its [hosted CI run](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44926437469)
+passed all five checks, including independent verification. This is not a
+merge or live hosting result. The copied
+[project guides](../blueprints/maf/workflow/README.md#project-guide) describe
+the current local boundaries and planned deployment/observability designs;
+their own PR and hosted CI remain pending. Parallel tooling, migrations,
+documentation, telemetry and Foundry-host work build on the foundation.
+Reconcile their interfaces before IaC and integrated verification; prepare
+inventory, cost and a deployment plan for separate approval before any
+provisioning or live validation.
+
 | Layer | Responsibility | Examples |
 | --- | --- | --- |
 | Agent definition | Instructions, goal, tools, skills, permissions | A bounded diagnostic agent |

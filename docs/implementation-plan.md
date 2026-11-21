@@ -41,22 +41,23 @@ responsibilities using canonical imports and no compatibility aliases. Acceptanc
 requires source and generated security/recovery tests, both crash windows,
 independent golden verification and exact contract bytes, credential-free
 CI and Compose smoke checks. Local evidence is recorded in the
-[checklist](master-checklist.md); PR review and hosted CI for the revised
-head remain pending. An intermittent local restore failure was observed during
-migration testing. A deterministic equal-timestamp reproduction showed that
-the previous host could select an earlier checkpoint; it does not prove the
-unretained original failure had the same cause. The foundation now selects
-MAF-native persisted checkpoints and rejects incomplete terminal state on
-completion and replay. Local source/generated backend suites passed 36 tests
+[checklist](master-checklist.md). An intermittent local restore failure was
+observed during migration testing. A deterministic equal-timestamp reproduction
+showed that the previous host could select an earlier checkpoint; it does not
+prove the unretained original failure had the same cause. The foundation now
+selects MAF-native persisted checkpoints and rejects incomplete terminal state
+on completion and replay. Local source/generated backend suites passed 36 tests
 each; the selected-adapter root suite passed 46 and the generated verifier
-passed 44 without skips. Confirm actual-head CI and reconcile dependent PRs
-without treating prior-head CI as evidence.
-An independent CI regression exposed that the generated-verifier command's
-failure could be masked by `tee`. The workflow now propagates pipeline
-failures and the [regression test](../tests/test_ci_workflow.py) exercises
-failure, skip and success behavior. Prior CI job status alone is not proof
-that the verifier passed; confirm actual logs and revised-head CI before
-review.
+passed 44 without skips. Foundation PR #11 remains open; its
+[actual-head run](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44936094798)
+passed all five checks on `9efeef0`. This is CI evidence, not proof of live
+hosting. Confirm CI on the revised dependent PR head; do not treat prior-head
+CI as evidence. An independent CI regression exposed that the generated
+verifier command's failure could be masked by `tee`. The workflow now
+propagates pipeline failures, and the [regression test](../tests/test_ci_workflow.py)
+exercises failure, skip, expected-failure, and success behavior. Prior CI job
+status alone is not proof that the verifier passed; confirm actual logs and
+revised-head CI before review.
 The copied evidence producer observed approval and recovery passing while
 explanation and browser hint remained unverified; the independent unsigned
 readiness report remained unverified. The first local container build could
