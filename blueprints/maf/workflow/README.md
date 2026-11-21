@@ -7,7 +7,7 @@ included synthetic action is an explicit example, not a customer scenario
 or a replacement for a failed model or tool call.
 
 See the [design documents](docs/design/architecture.md) and
-[engineering journal](docs/engineering-journal.md) for evidence and open work.
+[engineering journal](docs/design/issues-changes-fixes.md) for evidence and open work.
 
 The local host uses MAF `FileCheckpointStorage` on a private, persistent
 single-host volume. PostgreSQL separately holds business records, decisions,

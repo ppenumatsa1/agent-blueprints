@@ -50,7 +50,7 @@ class InstantiationTests(unittest.TestCase):
             for name in ("prd", "techstack", "specs", "architecture", "projectstructure", "userflow",
                          "deployment-flow", "issues-changes-fixes"):
                 self.assertTrue((target / "docs" / "design" / f"{name}.md").is_file())
-            self.assertTrue((target / "docs" / "engineering-journal.md").is_file())
+            self.assertFalse((target / "docs" / "engineering-journal.md").exists())
             self.assertFalse((target / "frontend" / "node_modules").exists())
             self.assertFalse((target / "frontend" / "dist").exists())
             self.assertFalse((target / ".env").exists())

@@ -78,9 +78,12 @@ after rebasing; source and generated Compose smokes each returned UI 200,
 health 204 and protected API 401. The
 [migration tests](../blueprints/maf/workflow/backend/tests/test_migrations.py),
 [operations guide](../blueprints/maf/workflow/README.md#business-database-migrations)
-and [journal](../blueprints/maf/workflow/docs/engineering-journal.md) record
-the acceptance evidence and limitations. Next: reconcile parallel dependencies
-and run credential-free actual PR CI
+and [journal](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md) record
+the acceptance evidence and limitations. Two later local evidence runs failed;
+their subprocess stderr was not retained. Investigation reproduced an HTTP 503
+from native checkpoint restoration, but cannot establish whether the original
+failures had the same cause. Next: resolve this evidence blocker, reconcile
+parallel dependencies and run credential-free actual PR CI
 on the integrated head. No hosted CI or live backup/restore is claimed.
 
 P1-01 through P1-04 have an initial local foundation and a test-only
