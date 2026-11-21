@@ -1,9 +1,8 @@
 # Technology stack
 
-This is the checked-in local-prototype baseline. Direct dependencies are
-version-pinned in the manifests; that does not hash-lock the complete Python
-dependency graph. Versions below are source configuration, not a claim about a
-deployed environment.
+This is the checked-in local-prototype baseline. Python dependencies are
+locked with artifact hashes; versions below are source configuration, not a
+claim about a deployed environment.
 
 ## Runtime and dependencies
 
@@ -18,19 +17,19 @@ deployed environment.
 | Frontend | React/React DOM `19.3.1`, TypeScript `7.0.2`, Vite `8.3.8` | Component UI, static typing, and a production build; a different UI framework would need its own client contract and tests. |
 | Browser auth | `@azure/msal-browser` `5.29.1`, `@azure/msal-react` `5.8.2` | Browser obtains scoped delegated access tokens. Secrets and OBO credentials remain server-side. |
 | Frontend tests | Vitest `5.1.0`, Testing Library, jsdom `31.0.1`, axe-core `4.14.0` | Exercise UI and API client behavior. Automated accessibility checks do not assess color contrast. |
+| Developer tooling | uv `0.9.26`, Ruff `0.14.13`, Node 22, VS Code tasks | Locked backend installs and consistent lint/format checks; editor debugging remains unverified. |
 | Packaging | Docker Compose; sibling `backend` and `frontend` build contexts | The checked-in topology is local and loopback-bound. Kubernetes, ACA, and Foundry hosting are not current alternatives selected by configuration. |
 
-The exact Python requirements are in
-[`backend/requirements.txt`](../../backend/requirements.txt) and
-[`backend/requirements-dev.txt`](../../backend/requirements-dev.txt); the
+The Python direct dependencies are in
+[`backend/pyproject.toml`](../../backend/pyproject.toml), with the resolved
+graph and hashes in [`backend/uv.lock`](../../backend/uv.lock); the
 frontend's direct dependency manifest and lock are
 [`frontend/package.json`](../../frontend/package.json) and
 [`frontend/package-lock.json`](../../frontend/package-lock.json).
 Compose declares the PostgreSQL image in
 [`compose.yaml`](../../compose.yaml). GitHub Actions pins action revisions in
-`.github/workflows/ci.yml` in the source repository pins GitHub Actions
-revisions; that source-repository CI file is not copied into a generated
-project.
+the source repository's `.github/workflows/ci.yml` pins GitHub Actions
+revisions; that CI file is not copied into a generated project.
 
 ## State and identity choices
 
@@ -47,23 +46,22 @@ project.
 
 ## Dependency and alternative status
 
-Direct Python pins are not a fully locked or hash-verified graph. uv lockfiles,
-Ruff, migrations, Foundry host integration, managed identity deployment,
-OpenTelemetry export, Bicep, and azd are planned work; no version or command
+The backend image exports the lock and verifies artifact hashes during install.
+Migrations, Foundry host integration, managed identity deployment,
+OpenTelemetry export, Bicep, and azd remain planned; no version or command
 should be inferred for them. The current local image uses tags rather than
 immutable image digests, so supply-chain hardening is still an acceptance
 concern. See [deployment flow](deployment-flow.md) and
 the source repository's `docs/engineering-standards.md`.
 
-The separate, **open** developer-tooling proposal is PR
+The **open** developer-tooling change is PR
 [#13](https://github.com/ppenumatsa1/agent-blueprints/pull/13), head
-`e1d953662e615e547fa641ad0831907c363318e3`. It proposes Python 3.12, uv
+`e1d953662e615e547fa641ad0831907c363318e3` before reconciliation. It added Python 3.12, uv
 0.9.26 with a public-PyPI `uv.lock` and hash-pinned backend/image installs,
 Ruff 0.14.13, Node 22 with `npm ci`, and VS Code task/debug configurations.
 Its hosted run
 [44928260607](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44928260607)
-passed five checks for that exact prior tooling revision. This tooling is not
-part of this document's baseline commit until merged and reconciled. The
+passed five checks for that exact prior tooling revision, not this revision. The
 workstream reports Windows and Linux Compose verification with an approved
 package mirror after public TLS failures; macOS and interactive debugger
 verification remain unverified. See the [journal](issues-changes-fixes.md).
@@ -77,6 +75,8 @@ verification remain unverified. See the [journal](issues-changes-fixes.md).
 - [Docker Compose documentation](https://docs.docker.com/compose/)
 - [React documentation](https://react.dev/learn)
 - [Vite documentation](https://vite.dev/guide/)
+- [uv documentation](https://docs.astral.sh/uv/)
+- [Ruff documentation](https://docs.astral.sh/ruff/)
 
 These references describe upstream products, not proof that an unimplemented
 hosting or telemetry integration works.

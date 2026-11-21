@@ -102,6 +102,25 @@ entries to hide failed attempts or gaps.
   bridge, and validate the actual service only with separate authorization.
   Do not persist bearer credentials or silently retry ambiguous side effects.
 
+### 2026-11-21 - Reconcile developer tooling with canonical imports
+
+- **Issue / cause:** The tooling branch and the foundation independently
+  changed CI, generation tests, and setup guidance. The foundation removed
+  forwarding modules and `tests.test_modularity`, while the tooling branch
+  replaced requirements files with a locked environment.
+- **Fix / decision:** Retain canonical imports, remove references to deleted
+  tests and requirements files, copy the design docs in generated projects,
+  and run evidence-normalization tests in both source and generated CI.
+- **Evidence:** Previous tooling revisions passed local source/generated
+  backend tests, independent verification, frontend checks, and hosted CI as
+  recorded below. This reconciliation incorporates the foundation's
+  checkpoint selection/replay tests; run the applicable suites and hosted CI
+  on the final rebased head before approval.
+- **Lesson / limit:** Integrate environment instructions with the canonical
+  source layout; a successful earlier CI run cannot establish the result of a
+  rebased revision. Public-only local downloads, macOS, and interactive
+  debugging remain unverified.
+
 ### PR #6 - Native MAF workflow and local recovery core
 
 - **Change:** Added a native MAF approval workflow, local checkpoint host,
@@ -197,7 +216,7 @@ entries to hide failed attempts or gaps.
 | --- | --- | --- |
 | Eight design documents and generated inclusion | In progress | Run the focused instantiation tests and verify copied Markdown links. |
 | Canonical imports and legacy-shim removal | Open in foundation workstream | Inspect final diff across imports, tests, Docker, CI, docs, and generator; do not approve while forwarding paths remain. |
-| Locked developer tooling | Open in parallel PR #13 | Reconcile only after review/merge; verify any resulting revision and platform matrix independently. |
+| Locked developer tooling | Open in PR #13 | Verify reconciled source/generated checks and actual-head CI; macOS and interactive debugging remain unverified. |
 | Current dependent PR CI | Pending on updated revision | Confirm all required checks correspond to the pushed PR head. |
 | Foundry host caller binding and lost-response recovery | Blocked | Establish supported identity and reconciliation guarantees before implementing a hosted bridge. |
 | Live Entra/OBO, cloud telemetry, Azure deployment | Unverified | Separate scoped implementation, authorization where required, and live evidence. |
