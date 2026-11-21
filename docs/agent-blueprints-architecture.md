@@ -8,6 +8,21 @@ contracts and documented engineering patterns where they have demonstrated
 value; do not hide MAF, LangGraph, or a harness behind a universal runtime.
 Generated projects must not import this repository at runtime.
 
+## Open architecture and verification gaps
+
+The engineering foundation is not a deployment-readiness claim. Open work
+includes [hosted caller binding #22](https://github.com/ppenumatsa1/agent-blueprints/issues/22),
+[native hosting and checkpoints #19](https://github.com/ppenumatsa1/agent-blueprints/issues/19),
+[hosted recovery #20](https://github.com/ppenumatsa1/agent-blueprints/issues/20),
+[external effects #32](https://github.com/ppenumatsa1/agent-blueprints/issues/32),
+[independent trust #21](https://github.com/ppenumatsa1/agent-blueprints/issues/21),
+and [deployment integration #18](https://github.com/ppenumatsa1/agent-blueprints/issues/18).
+See the [master checklist](master-checklist.md#reconciled-engineering-backlog)
+for the complete issue-linked backlog, including live identity, telemetry,
+database operations, evaluations, and separately authorized alternatives.
+Do not conflate an approved engineering merge with verified hosted execution,
+human approval, or production readiness.
+
 ## MAF modularity foundation and target
 
 The local blueprint and its generated copy now have sibling `backend` and

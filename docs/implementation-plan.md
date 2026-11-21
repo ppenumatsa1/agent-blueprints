@@ -33,6 +33,37 @@ sign-in uses Entra ID and existing registrations, while isolated automated
 tests may use synthetic identities. Azure provisioning requires explicit
 approval of the resource inventory, estimated cost, and deployment plan.
 
+### Reconciled gaps and sequencing
+
+The engineering foundation and [integrated review #17](https://github.com/ppenumatsa1/agent-blueprints/pull/17)
+are not proof of completed hosted or deployment capabilities. Track the
+remaining acceptance criteria, dependencies and evidence in these issues:
+
+- Hosted security and durability: [#22](https://github.com/ppenumatsa1/agent-blueprints/issues/22),
+  [#19](https://github.com/ppenumatsa1/agent-blueprints/issues/19),
+  [#20](https://github.com/ppenumatsa1/agent-blueprints/issues/20), and
+  [#32](https://github.com/ppenumatsa1/agent-blueprints/issues/32).
+- Independent trust and evaluation: [#21](https://github.com/ppenumatsa1/agent-blueprints/issues/21)
+  and [#25](https://github.com/ppenumatsa1/agent-blueprints/issues/25).
+- Azure, data, telemetry and identity: [#18](https://github.com/ppenumatsa1/agent-blueprints/issues/18),
+  [#24](https://github.com/ppenumatsa1/agent-blueprints/issues/24),
+  [#26](https://github.com/ppenumatsa1/agent-blueprints/issues/26),
+  [#27](https://github.com/ppenumatsa1/agent-blueprints/issues/27), and
+  [#28](https://github.com/ppenumatsa1/agent-blueprints/issues/28).
+- Developer experience and demonstration: [#23](https://github.com/ppenumatsa1/agent-blueprints/issues/23)
+  and [#29](https://github.com/ppenumatsa1/agent-blueprints/issues/29).
+- Separately authorized or future work: [#30](https://github.com/ppenumatsa1/agent-blueprints/issues/30),
+  [#31](https://github.com/ppenumatsa1/agent-blueprints/issues/31),
+  [#33](https://github.com/ppenumatsa1/agent-blueprints/issues/33), and
+  [#34](https://github.com/ppenumatsa1/agent-blueprints/issues/34).
+
+Hosted recovery remains explicitly deferred, not waived. Azure deployment
+requires the implemented and independently verified offline prerequisites,
+subscription access, and approval of the concrete deployment plan; its live
+checks provide evidence to close the related hosted and operational issues.
+Do not merge overlapping workstream histories blindly or treat a green
+engineering check as release authorization.
+
 ### Execution sequence and work packages
 
 The modularity foundation reorganizes the local blueprint and generated
