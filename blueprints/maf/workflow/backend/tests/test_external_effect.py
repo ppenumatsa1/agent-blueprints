@@ -11,6 +11,7 @@ import unittest
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
 from pathlib import Path
+from threading import Barrier
 from uuid import uuid4
 
 from app.domain.errors import ActionError, AccessDenied, Conflict
@@ -124,6 +125,14 @@ class DurableDestination:
     def count(self):
         with closing(sqlite3.connect(self.path)) as db, db:
             return db.execute("SELECT count(*) FROM effects").fetchone()[0]
+
+    def effect(self, key):
+        with closing(sqlite3.connect(self.path)) as db, db:
+            return db.execute(
+                "SELECT b.digest, b.body, e.value FROM effects e "
+                "JOIN bindings b ON b.key = e.key WHERE e.key = ?",
+                (key,),
+            ).fetchone()
 
 
 class ExternalEffectTests(unittest.IsolatedAsyncioTestCase):
@@ -343,11 +352,41 @@ class ExternalEffectTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn(final.status, ("completed", "rejected"))
         self.assertEqual(self.destination.count(), int(final.status == "completed"))
 
+    async def test_threaded_conflicting_decisions_commit_one_matching_outcome(self):
+        case = await self.submit()
+        barrier = Barrier(2)
+
+        def decide(decision):
+            barrier.wait(timeout=10)
+            try:
+                return self.store.record_decision(case.id, REVIEWER, decision)
+            except Conflict as exc:
+                return exc
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(decide, ("approved", "rejected")))
+        self.assertEqual(sum(isinstance(result, Conflict) for result in results), 1)
+        with self.store.connect() as connection:
+            decisions = connection.execute(
+                "SELECT decision, actor_id FROM wf_decisions WHERE case_id = %s", (case.id,)
+            ).fetchall()
+        self.assertEqual(len(decisions), 1)
+        self.assertEqual(decisions[0]["actor_id"], REVIEWER.subject)
+        await self.host.resume(case.id)
+        final = self.store.get(case.id)
+        self.assertTrue(final.execution_complete)
+        self.assertEqual(final.decision, decisions[0]["decision"])
+        self.assertEqual(final.status, "completed" if final.decision == "approved" else "rejected")
+        self.assertEqual(self.destination.count(), int(final.decision == "approved"))
+
     async def test_process_death_after_effect_and_acknowledgment(self):
         for barrier in ("after-effect", "after-ack"):
             with self.subTest(barrier=barrier):
                 case = await self.submit()
                 self.store.record_decision(case.id, REVIEWER, "approved")
+                key = f"case:{case.id}:action"
+                before = self.destination.count()
+                self.assertIsNone(self.destination.effect(key))
                 marker = Path(self.temp.name) / f"{barrier}.marker"
                 worker = subprocess.Popen(
                     [
@@ -374,9 +413,16 @@ class ExternalEffectTests(unittest.IsolatedAsyncioTestCase):
                 finally:
                     worker.kill()
                     worker.communicate(timeout=10)
-                before = self.destination.count()
+                self.assertEqual(self.destination.count(), before + 1)
+                effect = self.destination.effect(key)
+                self.assertIsNotNone(effect)
+                digest, body, value = effect
+                self.assertEqual(digest, hashlib.sha256(body).hexdigest())
+                self.assertEqual(json.loads(body)["case_id"], str(case.id))
+                self.assertEqual(json.loads(value), {"value": 42})
                 await self.host.resume(case.id)
-                self.assertEqual(self.destination.count(), before)
+                self.assertEqual(self.destination.count(), before + 1)
+                self.assertEqual(self.destination.effect(key), effect)
                 self.assertTrue(self.store.get(case.id).execution_complete)
 
 

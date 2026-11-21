@@ -26,7 +26,9 @@ fixed synthetic policy to the exact request, not a real human authorization.
 The tests exercise authorization,
 rejection, concurrent sends and retries, conflicting bindings, ambiguous
 reconciliation, failures before and after the effect and acknowledgment, and
-worker termination before the local ledger commits. They do not prove any
+worker termination before the local ledger commits. Conflicting database
+decisions race in synchronized threads; each crash barrier verifies the exact
+downstream effect before and after recovery. They do not prove any
 real service's durability, retention, authorization, or reconciliation
 guarantees; the fixture's policy is not a production authorizer.
 
