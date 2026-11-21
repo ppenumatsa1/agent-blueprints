@@ -19,6 +19,15 @@ normalization, and actual worker termination after decision persistence and
 after a database action commits. They do not prove live Entra/OBO, external
 effect exactly-once delivery, or hosted recovery.
 
+The official PostgreSQL container's initialization server can accept Unix
+socket connections before its final TCP server starts. Source/generated CI
+waits and the Compose health check probe loopback TCP with bounded failure.
+Issue [#38](https://github.com/ppenumatsa1/agent-blueprints/issues/38)
+records the transient socket-ready/TCP-unready observation on disposable
+PostgreSQL 16.15 and 17 and an initial failed `createdb`; a TCP-gated retry
+passed 72 source and 72 generated backend tests on historical head `8b3c357`.
+These local checks do not establish managed PostgreSQL readiness.
+
 From `frontend`:
 
 ```text
