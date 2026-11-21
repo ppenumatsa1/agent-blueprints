@@ -23,8 +23,8 @@ The tooling branch adds a Python 3.12 uv lock, Ruff, portable development
 commands and editor configurations. CI uses the public lock; container
 installation exports its exact hashes and may use an operator-selected index.
 The copied project owns the same lock and does not import the source checkout.
-Local Windows and Linux-container checks do not prove macOS or hosted CI.
-Review the branch and re-run checks after integration.
+Local Windows and Linux-container checks do not prove macOS. Hosted CI passed
+for prior head `e1d9536` only; rerun checks on the reconciled revision.
 
 The longer-term target adds migrations, privacy-safe telemetry, a Foundry Responses
 adapter and host-managed checkpoints, and Foundry-first Bicep/azd for
