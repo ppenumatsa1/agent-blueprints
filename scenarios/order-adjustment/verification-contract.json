@@ -1,0 +1,58 @@
+{
+  "schema_version": "0.3.0",
+  "contract_id": "SYNTHETIC-ORDER-ADJUSTMENT",
+  "contract_version": "1.0.0",
+  "title": "Synthetic order adjustment approval",
+  "production_controls": {
+    "security": {"applicability": "required"},
+    "integration": {"applicability": "required"},
+    "operations": {"applicability": "required"},
+    "evaluation": {"applicability": "required"}
+  },
+  "requirements": [
+    {
+      "id": "REQ-APPROVAL",
+      "statement": "A simulated order adjustment over 100 units requires a scoped human approval before application.",
+      "success_criteria": "A pending or rejected adjustment has zero simulated actions; an approved adjustment applies once.",
+      "failure_criteria": "An action occurs before approval, after rejection, or more than once.",
+      "critical": true,
+      "security_critical": true,
+      "domains": ["security", "integration"],
+      "checks": [{"id": "CHECK-APPROVAL", "method": "integration", "procedure": "Run the golden approval, rejection, and unauthorized-decision cases.", "evidence_types": ["test_report", "approval_record"], "evidence_max_age_seconds": 86400}],
+      "gates": {"prototype": "blocking", "production_candidate": "blocking", "customer_validated": "blocking"}
+    },
+    {
+      "id": "REQ-RECOVERY",
+      "statement": "A simulated action remains idempotent after a retry or process restart.",
+      "success_criteria": "Repeated approval and resume for the same case produce exactly one action.",
+      "failure_criteria": "A retry or restart produces a duplicate action or loses the recorded decision.",
+      "critical": true,
+      "security_critical": false,
+      "domains": ["integration", "operations"],
+      "checks": [{"id": "CHECK-RECOVERY", "method": "integration", "procedure": "Run the golden repeated-resume and restart cases.", "evidence_types": ["test_report", "trace"], "evidence_max_age_seconds": 86400}],
+      "gates": {"prototype": "blocking", "production_candidate": "blocking", "customer_validated": "blocking"}
+    },
+    {
+      "id": "REQ-EXPLANATION",
+      "statement": "A human can understand the proposed adjustment and its decision from safe recorded facts.",
+      "success_criteria": "Each golden explanation identifies the case, amount, policy reason, decision, and correlation ID, without prohibited secrets or invented facts.",
+      "failure_criteria": "A required fact is absent, a prohibited value appears, or the explanation contradicts the recorded decision.",
+      "critical": true,
+      "security_critical": false,
+      "domains": ["evaluation", "operations"],
+      "checks": [{"id": "CHECK-EXPLANATION", "method": "agent_evaluation", "procedure": "Evaluate all golden cases against their explicit expected and prohibited facts.", "evidence_types": ["evaluation_result", "trace"], "evidence_max_age_seconds": 86400}],
+      "gates": {"prototype": "blocking", "production_candidate": "blocking", "customer_validated": "blocking"}
+    },
+    {
+      "id": "REQ-OPTIONAL-HINT",
+      "statement": "The interface can show an optional help hint.",
+      "success_criteria": "The hint is present and consistent with the decision.",
+      "failure_criteria": "The hint is missing or misleading.",
+      "critical": false,
+      "security_critical": false,
+      "domains": ["functional"],
+      "checks": [{"id": "CHECK-HINT", "method": "e2e", "procedure": "Request the optional synthetic hint and compare it with the decision.", "evidence_types": ["test_report"], "evidence_max_age_seconds": 86400}],
+      "gates": {"prototype": "non_blocking", "production_candidate": "non_blocking", "customer_validated": "non_blocking"}
+    }
+  ]
+}

@@ -48,7 +48,8 @@ the host's checkpoint provider. Do not also configure an independent workflow
 checkpoint store for host-managed recovery. Application-owned PostgreSQL
 records remain separate from host-managed workflow state. The Python hosting
 integration is documented as prerelease; package versions and the complete
-approval/recovery path must be validated in Phase 1.
+hosted approval/recovery path must be validated in P1-12 before claiming
+hosted durability.
 
 The fallback hosts the framework runtime in Azure Container Apps and selects a
 tested framework-compatible checkpoint strategy. Do not assume that its
@@ -62,6 +63,29 @@ authentication for protected APIs, authorization for sensitive operations,
 managed identity where applicable, restrictive CORS, and safe secret handling.
 Private networking and self-hosted CI are deferred, not prohibited forever.
 No Azure provisioning is authorized by this design.
+
+## Blueprint-to-application boundary
+
+The Phase 1 deliverable is a reusable, independently runnable MAF workflow
+blueprint, not a customer-specific application. A generated project owns its
+application, framework runtime, dependencies, tests, configuration, and a
+copied independent readiness validator and contracts. It must build and run
+without importing or mounting this repository. The order-adjustment scenario is
+only a synthetic test fixture; business rules and tools are application-owned.
+
+The local design uses MAF's native `FileCheckpointStorage` on a persistent
+single-host volume and keeps business records, decisions, audit history, and
+idempotency in PostgreSQL. Local checkpoints and database transactions are
+not atomic; recovery must reconcile them without unauthorized or duplicate
+actions. The future Foundry host owns its own checkpoint provider and must
+not attach the local store. The Foundry adapter and managed recovery remain
+unverified P1-12 work; ACA checkpoint selection is separate.
+
+Interactive local and hosted access uses Microsoft Entra ID: React uses MSAL,
+and FastAPI validates access tokens, scopes, roles, and record-level access.
+Synthetic identities are confined to automated tests. Existing registrations
+and authorized sign-in are prerequisites for interactive use; no registration
+or Azure resource is created by this blueprint.
 
 ## Shared versus framework-specific
 
@@ -79,13 +103,16 @@ before copying anything; preserve any applicable license notices.
 
 ## Proposed future structure
 
-Only the documentation, contracts, examples, tests, and CI currently exist.
-The following directories are a proposed structure, not implemented templates:
+Documentation, contracts, a synthetic scenario, an independent readiness
+validator, tests, and CI currently exist. Blueprint directories below remain
+proposed, not implemented templates:
 
 ```text
 agent-blueprints/
   docs/                    # architecture, standards, catalog, backlog
   contracts/               # proposed manifests, verification and readiness
+  readiness/               # independent local verification CLI
+  scenarios/               # synthetic contract and acceptance fixtures
   blueprints/
     maf/workflow/          # first future golden path
     maf/harness/
@@ -100,6 +127,6 @@ agent-blueprints/
   .github/                 # Copilot instructions and GitHub-hosted CI
 ```
 
-An eventual project-generation step copies or renders the selected assets into
-the customer project. It must not create a runtime dependency on this
-repository. Generation and Specification Studio integration are Phase 6 work.
+Phase 1 will copy the selected blueprint and verification assets into an
+independently buildable project. Specification Studio integration remains
+Phase 6 work.

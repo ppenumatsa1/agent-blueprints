@@ -5,8 +5,9 @@
 The [foundation PR](https://github.com/ppenumatsa1/agent-blueprints/pull/1)
 established the architecture, reference analysis, catalog, engineering
 standards, initial contracts, and GitHub-hosted validation under the MIT
-License. The follow-up proposes profile-aware contracts, the supplied
-architecture source, and the [living checklist](master-checklist.md).
+License. The [follow-up](https://github.com/ppenumatsa1/agent-blueprints/pull/2)
+added profile-aware contracts, the supplied architecture source, and the
+[living checklist](master-checklist.md).
 Specification Studio has not yet produced an artifact, so the proposed
 handoff is not an end-to-end compatibility claim. Phase 0 does not implement
 the validator or an agent template, integrate Specification Studio, deploy
@@ -14,30 +15,41 @@ Azure resources, or establish production/customer approval.
 
 ## Phase 1: MAF workflow golden path
 
-**Goal:** an independently runnable synthetic application with a native MAF
-workflow, durable human approval and recovery, and an executable
-Verification/Readiness Validator. Start locally with FastAPI, React,
-PostgreSQL, Docker Compose, tests, and evaluations. Foundry Hosted Agents are
-the preferred later deployment target, subject to compatibility verification;
-Azure Container Apps (ACA) is the explicit fallback.
+**Goal:** a reusable, independently runnable MAF workflow blueprint and an
+independently buildable generated project, with durable human approval and
+recovery and an independent Verification/Readiness Validator. Start locally
+with FastAPI, React, PostgreSQL, Docker Compose, tests, and evaluations.
+Business logic is supplied by the generated application; order adjustment is
+only a synthetic test fixture. Foundry Hosted Agents are the preferred later
+deployment target, subject to compatibility verification; Azure Container Apps
+(ACA) is the explicit fallback.
+
+The local workflow uses MAF-native file checkpoints on a persistent single-host
+volume, separate from PostgreSQL business state and approval records. A future
+Foundry host owns its managed checkpoint provider; the adapter and hosted
+pause/resume validation are P1-12, not local durability evidence. Interactive
+sign-in uses Entra ID and existing registrations, while isolated automated
+tests may use synthetic identities. Do not provision Azure resources.
 
 ### Execution sequence and work packages
 
-The packages are future implementation work, not completed functionality.
-Inputs and interfaces can be agreed in parallel; integrations wait on the
-dependencies listed.
+P1-01 through P1-04 have an initial local foundation, but the scenario has no
+authorized contract approval, the application adapter is absent, and trusted
+result production and repository protection remain unverified. The blueprint
+work follows the foundation in smaller reviewable changes. See the
+[checklist](master-checklist.md) for status and evidence.
 
 | ID | Bounded work package | Dependencies | Independently verifiable outcome |
 | --- | --- | --- | --- |
-| P1-01 | Define a synthetic, non-destructive scenario and approve requirement/check IDs, criticality, domains, criteria, evidence, freshness, profile gates, and applicable production controls. | None | An authorized approval binds the exact contract digest; fixtures cover success, failure, approval, rejection, recovery, and both readiness profiles without customer data. |
-| P1-02 | Define normalized test-result, evidence, baseline-contract, and human-decision inputs, including IDs, outcomes, revision, environment, timestamps, references, digests, and acceptance scope. Map local test/evaluation output explicitly. | P1-01 | Synthetic input fixtures cover multiple checks, evidence types, contract changes, and decision scopes; unknown or unmappable results cannot be silently ignored. |
-| P1-03 | Implement the validator's contract, traceability, evidence-integrity, freshness, decision, and profile-gate logic as a small local Python component. | P1-02 | Tests reject invalid evidence as proof of a pass, protect blocking/security-critical gates, disclose prototype non-blocking failures, and require verified production risk acceptance. |
-| P1-04 | Expose the validator as a CLI that consumes the approved contract, test results, and supporting evidence and writes a machine-readable readiness report. | P1-03 | CLI tests verify profile-appropriate exit codes, actionable diagnostics, preserved per-check outcomes and disclosures, and no fabricated approval. |
-| P1-05 | Create the local Docker Compose development stack and documented setup for React, FastAPI, PostgreSQL, and the selected local workflow mode. | P1-01 interfaces | A clean-machine setup starts and stops the stack with synthetic configuration; no Azure credentials are needed. |
-| P1-06 | Implement PostgreSQL business records, approval/audit state, and an idempotent action ledger. | P1-01, P1-05 interfaces | Transaction, uniqueness, concurrency, restart, and duplicate-action tests pass; business records are separate from workflow checkpoints. |
-| P1-07 | Implement typed FastAPI operations, authenticated identity, per-record authorization, approvals, and explicit error responses. | P1-01, P1-06 interfaces | Positive and negative tests cover anonymous, unauthorized, malformed, replayed, and cross-user requests. Local mock identity is explicit and cannot become production security. |
-| P1-08 | Implement an accessible React client for sign-in, scenario submission, status, approval/rejection, and failure states. | P1-01, P1-07 API contract | UI tests cover visible states and safe retries; browser code contains no service secrets. |
-| P1-09 | Implement the framework-native MAF workflow with bounded executors, request isolation, pause, resume, rejection, and safe recovery. | P1-01, P1-06 interfaces | Local tests cover repeated decisions, concurrent requests, and recovery without a universal orchestration wrapper. |
+| P1-01 | Define the synthetic scenario, golden acceptance tests, and contract; obtain authorized approval. | None | [Scenario and golden cases](../scenarios/order-adjustment/README.md) exist; the application adapter and authorized approval remain outstanding. |
+| P1-02 | Define normalized result, evidence, baseline, and signed-decision inputs; map actual runner output. | P1-01 | [Input and trust schemas](../contracts/) and synthetic [validator tests](../tests/test_readiness.py) exist; trusted real result production remains outstanding. |
+| P1-03 | Implement local traceability, evidence integrity, freshness, decisions, and profile gates. | P1-02 | [Validator](../readiness/validator.py) and [acceptance tests](../tests/test_readiness.py) exercise the policy; actual trust and provenance require independent administration. |
+| P1-04 | Expose the validator as a local CLI with a machine-readable report. | P1-03 | [CLI](../readiness/__main__.py) and [usage](readiness-validator.md) preserve outcomes and disclose unapproved inputs. |
+| P1-05 | Create a self-contained blueprint with the local React, FastAPI, PostgreSQL, and Docker Compose stack. | P1-01 interfaces | The stack starts; one temporary generated project builds, runs, tests, and verifies independently. Automated tests need no Azure credentials; interactive sign-in requires existing Entra configuration. |
+| P1-06 | Implement PostgreSQL business records, approval/audit state, and an idempotent action ledger. | P1-01, P1-05 interfaces | Real restart tests cover crashes after decision persistence and after action commit, with no unauthorized or duplicate actions. |
+| P1-07 | Implement typed FastAPI operations with Entra token validation, authorization, approvals, and optional OBO. | P1-01, P1-06 interfaces | Positive and negative tests cover scopes, roles, identity isolation, malformed and replayed requests; synthetic identities exist only in isolated tests. |
+| P1-08 | Implement an accessible MSAL React client for sign-in, submission, status, approval/rejection, and failure states. | P1-01, P1-07 API contract | UI tests cover visible states and safe retries; browser code contains no service secrets. |
+| P1-09 | Implement a native MAF workflow with local file checkpoints, isolated pause/resume, rejection, and recovery. | P1-01, P1-06 interfaces | Local tests cover repeated decisions, concurrent requests, and recovery without a universal orchestration wrapper; Foundry hosting is deferred to P1-12. |
 | P1-10 | Add integration/E2E tests, synthetic agent evaluations, and GitHub Actions; connect actual results and artifacts to the validator. | P1-04 through P1-09 | A local or CI run produces a report from real artifacts; blocking failures cannot pass, non-blocking outcomes follow the selected profile, and rubric/threshold decisions are recorded. |
 | P1-11 | Add privacy-safe logs, traces, correlation, and operational signals across API, workflow, approvals, and side effects. | P1-07, P1-09 interfaces | Tests verify redaction and correlation; actual export remains environment-specific. |
 | P1-15 | Demonstrate the local prototype from a synthetic specification through approval, evaluation, and its readiness report. | P1-10, P1-11 | Record the scenario, evidence, limitations, and observed elapsed time; the 2–3 hour objective is a target until a representative run demonstrates it. |
@@ -75,7 +87,10 @@ require an explicit authorized decision for any downgrade. For production
 and customer validation, enforce the declared security, integration,
 operations, and evaluation domain coverage or a verified applicable
 not-applicable decision. Missing production controls or unverifiable approval
-cannot support a pass.
+cannot support a pass. Signed decisions and result attestations use an
+independently administered, baseline-pinned trust store. Signatures establish
+key possession, not human identity or actual execution; trust administration
+and protected result production remain operator responsibilities.
 
 For a valid contract and assessment context, write a machine-readable
 readiness report even when checks fail or evidence is unverified. Exit zero

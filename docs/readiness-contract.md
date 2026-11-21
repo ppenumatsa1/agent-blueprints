@@ -1,10 +1,10 @@
 # Verification and readiness contract
 
-This is a proposed contract for future projects. Phase 0 provides schemas and
-synthetic fixtures, not a verification service, release authorization system,
-or evidence that any agent has passed these gates. The goal is a verified
-customer prototype in 2–3 hours when feasible, without concealing risk or
-claiming production readiness.
+This is a proposed contract for future projects. A local validator and
+synthetic fixtures exist, but they are not a verification service, release
+authorization system, or evidence that any agent has passed these gates. The
+goal is a verified customer prototype in 2–3 hours when feasible, without
+concealing risk or claiming production readiness.
 
 ## Profiles and maturity
 
@@ -24,11 +24,13 @@ is allowed only for a genuinely inapplicable scope, with the authorized human
 review described below; it is not a waiver.
 
 The approved contract and its security classifications must not be silently
-weakened. The planned validator must compare an updated contract against the
-previously approved baseline and require a separate, authenticated human
-decision with rationale for any critical or security-critical downgrade,
-removal, or change to `not_applicable`. Initial classifications also require
-human contract review. A new approval must bind the changed contract bytes;
+weakened. The local validator compares an updated contract against the
+previously approved baseline and requires a separately signed decision from
+an independently administered trust store for any critical or security-critical
+downgrade, removal, or change to `not_applicable`. The organization must
+authenticate the human and protect that trust. The decision must include a
+rationale. Initial classifications also require human contract review. A new
+approval must bind the changed contract bytes;
 an extension or a changed flag alone cannot authorize a downgrade.
 
 `production_controls` declares whether security, integration, operations, and
@@ -57,7 +59,7 @@ Each requirement retains one distinct outcome:
   requirement does not apply to this scope. Record the reviewer, rationale,
   and decision reference.
 
-The planned validator computes results from the approved contract and actual
+The validator computes results from the approved contract and actual
 inputs; it does not trust a submitted gate or relabel a failed check. Invalid,
 missing, stale, failed, or mismatched evidence cannot establish a passing
 check. For every profile, a failed blocking requirement makes the gate
@@ -97,9 +99,10 @@ target exists, is current, or is trustworthy.
 
 The report's `contract_sha256` identifies the exact bytes of the approved
 contract, not just its ID and version. A passing report records an approval
-reference for that contract. The future validator must independently verify
-that the approval binds those bytes and is authorized; a reviewer string or
-schema-valid approval record alone cannot establish approval. Preserve the
+reference for that contract. The validator verifies that a signed decision
+binds those bytes and matches its configured trust store; independently
+administering that store and establishing human authority remain necessary. A
+reviewer string or schema-valid record alone cannot establish approval. Preserve the
 approved file's encoding and line endings when distributing it: reserializing
 the contract changes its digest and requires a new approval. The decision must
 be valid and unrevoked at assessment time.
@@ -144,11 +147,11 @@ cannot determine whether a risk reviewer is authorized, a decision is valid,
 a contract changed classifications, a control has appropriate coverage, or the
 report matches its contract.
 
-**Schema validation is not readiness verification.** The executable Phase 1
-validator must check all cross-file relationships, unique IDs, all required
-checks and evidence types, evidence bytes and freshness, authorized decisions,
-and the profile-specific gate; see the [work packages](implementation-plan.md).
-The focused tests check relationships in the included synthetic fixtures only.
+**Schema validation is not readiness verification.** The local
+[validator](readiness-validator.md) checks cross-file relationships, IDs,
+evidence bytes and freshness, signed decisions, and profile gates. Its trust
+store, producer, assessment time, and human authority must be independently
+controlled; synthetic tests do not establish readiness of an application.
 
 ## Specification Studio handoff
 
