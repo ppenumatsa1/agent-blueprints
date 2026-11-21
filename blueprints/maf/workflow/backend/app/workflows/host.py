@@ -11,7 +11,9 @@ from app.domain.models import StateRepository, TransactionalAction
 from app.workflows.workflow import WORKFLOW_NAME, create_workflow
 
 
-WorkflowFactory = Callable[[StateRepository, TransactionalAction, CheckpointStorage | None], Workflow]
+WorkflowFactory = Callable[
+    [StateRepository, TransactionalAction, CheckpointStorage | None], Workflow
+]
 
 
 class LocalWorkflowHost:
@@ -38,7 +40,9 @@ class LocalWorkflowHost:
         if not path.is_dir():
             raise CheckpointError("The checkpoint path is not a directory.")
         if os.name != "nt" and stat.S_IMODE(path.stat().st_mode) & 0o077:
-            raise CheckpointError("The checkpoint directory must be private to the service account.")
+            raise CheckpointError(
+                "The checkpoint directory must be private to the service account."
+            )
 
     def _storage(self, case_id: UUID) -> FileCheckpointStorage:
         directory = self.root / str(case_id)
@@ -96,7 +100,8 @@ class LocalWorkflowHost:
                 raise CheckpointError("The pending workflow checkpoint was not saved.")
             pending = max(checkpoints, key=lambda item: item.timestamp)
             restored = await self._requests(
-                self._workflow(storage).run(checkpoint_id=pending.checkpoint_id, stream=True), case_id
+                self._workflow(storage).run(checkpoint_id=pending.checkpoint_id, stream=True),
+                case_id,
             )
             if restored != requests:
                 raise CheckpointError("The pending request could not be restored.")
@@ -119,7 +124,9 @@ class LocalWorkflowHost:
                 workflow.run(checkpoint_id=case.checkpoint_id, stream=True), case_id
             )
             if requests != [case.request_id]:
-                raise CheckpointError("The checkpoint does not contain the recorded pending request.")
+                raise CheckpointError(
+                    "The checkpoint does not contain the recorded pending request."
+                )
             if case.decision is None:
                 return
             expected = {"case_id": str(case_id), "decision": case.decision}

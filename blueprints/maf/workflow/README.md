@@ -106,15 +106,26 @@ and one matching outcome. A different graph must preserve that contract or
 provide its own host. Keep conversation, workflow checkpoints, business
 records, and human decisions separate.
 
-## Tests
+## Development and tests
 
-Use Python 3.12 and an isolated PostgreSQL database. Install
-`backend/requirements-dev.txt` in a virtual environment, set
-`MAF_TEST_DATABASE_URL` to the test database, and run from `backend`:
+Install Python 3.12, uv 0.9.26, Node 22 and Docker Compose. From `backend`,
+the same commands work in PowerShell, macOS and Linux shells:
 
 ```text
-python -m unittest -v tests.test_core tests.test_security tests.test_evidence_runner tests.test_modularity
+uv sync --locked
+uv run --locked ruff check .
+uv run --locked ruff format --check .
+uv run --locked python -m unittest -v tests.test_core tests.test_security tests.test_evidence_runner tests.test_modularity
 ```
+
+Set `MAF_TEST_DATABASE_URL` to an isolated PostgreSQL database first. The lock
+uses public PyPI and includes the verifier test dependencies. If direct
+artifact downloads are blocked, use an approved mirror per command without
+changing the committed lock: run `uv venv`, then `uv export --locked
+--no-emit-project --output-file dev-locked.txt`, followed by `uv pip sync
+--python .venv --require-hashes --default-index <approved-index-url>
+dev-locked.txt`. Delete `dev-locked.txt` afterwards. A mirror must supply
+the exact locked hashes. Do not put credentials in the index URL.
 
 These tests fail rather than skip if the database is unavailable. They use
 test-only identities and terminate real worker processes after decision
@@ -136,6 +147,28 @@ The local run passed 8 frontend tests, the build, and the CSP check. The basic
 automated accessibility check does not assess color contrast. The CSP check
 binds the inline theme script to the reverse-proxy policy.
 
+For interactive development, configure a local PostgreSQL connection,
+`CHECKPOINT_ROOT`, `BLUEPRINT_APPLICATION`, `ENTRA_TENANT_ID` and
+`ENTRA_API_CLIENT_ID` in the environment. From `backend`, run
+`uv run --locked uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+--no-access-log`. From `frontend`, set `VITE_ENTRA_TENANT_ID`,
+`VITE_ENTRA_SPA_CLIENT_ID` and `VITE_ENTRA_API_APP_ID_URI`, then run
+`npm run dev`; the dev server proxies `/api` to the backend. Register the
+actual local redirect URI separately with Entra. These interactive paths
+require real registrations and authorized identities; automated synthetic
+tests do not. No test identity is enabled in the application.
+
+Open the blueprint or generated project root as a VS Code workspace, install
+the Python and Python Debugger extensions, run the locked sync task and select
+`backend/.venv` as the Python interpreter. Put backend variables in an
+untracked root `.env` file and frontend `VITE_` variables in the terminal
+environment (or an untracked `frontend/.env.local`). Use **Backend: FastAPI**
+for breakpoints, and **Frontend: Chrome** to start Vite and debug the browser.
+The backend debugger does not reload automatically. Keep secrets out of
+version control and browser settings. Database connection, private checkpoint
+permissions and authentication remain required; debugger configuration does
+not bypass them.
+
 ## Independent project and verification
 
 The source repository's `scripts/instantiate_maf.py` copies this blueprint,
@@ -145,17 +178,12 @@ contexts, contracts, test fixtures, and readiness CLI; it does not import or
 mount the original checkout. It is an initial project, not a synchronization
 mechanism: maintain and review subsequent changes in the copied project.
 
-In the generated project, install both `backend/requirements-dev.txt` and
-`verification/requirements-dev.txt` in an isolated Python environment. Set
+In the generated project, run `uv sync --locked` in `backend`. Set
 `MAF_TEST_DATABASE_URL` to an isolated PostgreSQL database and select the
-test-only adapter. For example, in PowerShell:
+test-only adapter. From the generated `verification` directory:
 
-```powershell
-$env:SCENARIO_ADAPTER = (Resolve-Path .\backend\tests\order_adjustment_adapter.py).Path
-Set-Location .\verification
-python -m unittest discover -s tests -v
-Set-Location ..\backend
-python -m unittest -v tests.test_core tests.test_security tests.test_evidence_runner tests.test_modularity
+```text
+uv run --locked --project ../backend python -c "import os,pathlib,unittest,sys; os.environ['SCENARIO_ADAPTER']=str(pathlib.Path('../backend/tests/order_adjustment_adapter.py').resolve()); sys.exit(not unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.discover('tests')).wasSuccessful())"
 ```
 
 The golden adapter exercises the API, local MAF host, and synthetic database
@@ -168,8 +196,8 @@ To retain per-case observations, both crash results, normalized check
 results, and an unsigned readiness input, run from the generated project's
 `backend` directory:
 
-```powershell
-python -m tests.evidence_runner --verification-root ..\verification --output ..\verification\evidence\run --revision <source-revision> --environment local-synthetic
+```text
+uv run --locked python -m tests.evidence_runner --verification-root ../verification --output ../verification/evidence/run --revision <source-revision> --environment local-synthetic
 ```
 
 Replace `<source-revision>` with the actual generated-project revision; use a

@@ -38,7 +38,9 @@ class OrderFixtureRules(JsonObjectRules):
             or type(value.get("amount")) is not int
             or value["amount"] <= 100
         ):
-            raise InvalidInput("The synthetic fixture requires a case and an adjustment over 100 units.")
+            raise InvalidInput(
+                "The synthetic fixture requires a case and an adjustment over 100 units."
+            )
         return value
 
 
@@ -47,7 +49,9 @@ def run_case(data):
         raise ValueError("Invalid synthetic scenario input.")
     dsn = os.environ.get("MAF_TEST_DATABASE_URL")
     if not dsn:
-        raise RuntimeError("MAF_TEST_DATABASE_URL must point to an isolated PostgreSQL test database.")
+        raise RuntimeError(
+            "MAF_TEST_DATABASE_URL must point to an isolated PostgreSQL test database."
+        )
     schema = "golden_" + uuid4().hex
     with psycopg.connect(dsn, autocommit=True) as connection:
         connection.execute(sql.SQL("CREATE SCHEMA {}").format(sql.Identifier(schema)))
@@ -65,7 +69,10 @@ def _run_case(data, dsn, checkpoint_root):
     store = PostgresStore(dsn)
     action_fails = "simulate_action_failure" in data["steps"]
     components = ApplicationComponents(
-        OrderFixtureRules(), CaseAccessPolicy(), FixtureAction(fail=action_fails), initialize_fixture
+        OrderFixtureRules(),
+        CaseAccessPolicy(),
+        FixtureAction(fail=action_fails),
+        initialize_fixture,
     )
     identity = EntraIdentity(settings, tokens.client())
     owner = tokens.token(subject=OWNER)
@@ -93,7 +100,11 @@ def _run_case(data, dsn, checkpoint_root):
             headers=headers(owner, str(uuid4())),
             json={
                 "reviewer_id": assigned_reviewer,
-                "payload": {"case_id": data["case_id"], "amount": data["amount"], "private": "SECRET-CANARY"},
+                "payload": {
+                    "case_id": data["case_id"],
+                    "amount": data["amount"],
+                    "private": "SECRET-CANARY",
+                },
             },
         )
         if response.status_code != 200:
@@ -115,25 +126,41 @@ def _run_case(data, dsn, checkpoint_root):
             path = f"/api/cases/{case_id}/decision"
             if step in ("approve", "reject"):
                 decision = "approved" if step == "approve" else "rejected"
-                if step == "approve" and "restart" in data["steps"] and store.get(case_id).decision is None:
+                if (
+                    step == "approve"
+                    and "restart" in data["steps"]
+                    and store.get(case_id).decision is None
+                ):
                     # The API persists the decision, then reports the injected interruption.
                     with patch.object(
                         client.app.state.service.host,
                         "resume",
                         new=AsyncMock(side_effect=CheckpointError("Synthetic interruption.")),
                     ):
-                        response = client.post(path, headers=headers(reviewer), json={"decision": decision})
+                        response = client.post(
+                            path, headers=headers(reviewer), json={"decision": decision}
+                        )
                     if response.status_code != 503:
-                        raise AssertionError(f"Interrupted approval returned HTTP {response.status_code}.")
+                        raise AssertionError(
+                            f"Interrupted approval returned HTTP {response.status_code}."
+                        )
                 else:
-                    response = client.post(path, headers=headers(reviewer), json={"decision": decision})
+                    response = client.post(
+                        path, headers=headers(reviewer), json={"decision": decision}
+                    )
                     expected = 503 if action_fails and decision == "approved" else 200
                     if response.status_code != expected:
-                        raise AssertionError(f"Decision returned HTTP {response.status_code}, expected {expected}.")
+                        raise AssertionError(
+                            f"Decision returned HTTP {response.status_code}, expected {expected}."
+                        )
             elif step == "unauthorized_approve":
-                response = client.post(path, headers=headers(stranger), json={"decision": "approved"})
+                response = client.post(
+                    path, headers=headers(stranger), json={"decision": "approved"}
+                )
                 if response.status_code != 403:
-                    raise AssertionError(f"Unauthorized approval returned HTTP {response.status_code}.")
+                    raise AssertionError(
+                        f"Unauthorized approval returned HTTP {response.status_code}."
+                    )
             elif step == "approve_other_case":
                 other = post_case(client, STRANGER)
                 response = client.post(
@@ -155,7 +182,14 @@ def _run_case(data, dsn, checkpoint_root):
                 environment = os.environ.copy()
                 environment["MAF_TEST_DATABASE_URL"] = dsn
                 subprocess.run(
-                    [sys.executable, "-m", "tests.crash_worker", "resume", str(case_id), str(checkpoint_root)],
+                    [
+                        sys.executable,
+                        "-m",
+                        "tests.crash_worker",
+                        "resume",
+                        str(case_id),
+                        str(checkpoint_root),
+                    ],
                     cwd=BLUEPRINT,
                     env=environment,
                     capture_output=True,

@@ -45,10 +45,21 @@ explanation and browser hint remained unverified; the independent unsigned
 readiness report remained unverified. The first local container build could
 not reach the public Python package host; a retry using the operator-approved
 package proxies built and passed the generated Compose smoke checks.
-Next, review and publish this foundation before accepting it; later separate
-increments cover locked tooling, configuration, migrations, observability,
+Next, review and publish this foundation before accepting it; separate
+increments cover configuration, migrations, observability,
 Foundry hosting, infrastructure and integration evidence. No deployment,
 Azure provisioning or permanent reference application is authorized here.
+
+The dependent developer-tooling branch adds `backend/pyproject.toml` and a
+public-registry `uv.lock`, locked development and container installs, Ruff,
+portable development commands and VS Code configurations. Acceptance requires
+source and generated lint/tests and locked builds without Azure credentials,
+then passing hosted CI on the actual reviewed head. Local Windows source and
+generated backend tests, Ruff, generated UI tests/build and Linux Compose
+204/401 smoke passed using an approved temporary mirror; public artifact downloads failed locally with
+a TLS handshake error. macOS, clean public-only installation and hosted CI
+remain unverified. Next reconcile shared CI, generator, backend formatting and
+living docs with parallel branches, review, and run hosted CI.
 
 P1-01 through P1-04 have an initial local foundation and a test-only
 application adapter, but the scenario has no authorized contract approval.

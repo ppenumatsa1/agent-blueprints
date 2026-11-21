@@ -5,8 +5,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 ARG PYTHON_PACKAGE_INDEX=https://pypi.org/simple
-COPY requirements.txt .
-RUN python -m pip install --no-cache-dir --index-url "$PYTHON_PACKAGE_INDEX" -r requirements.txt \
+COPY pyproject.toml uv.lock .python-version ./
+RUN python -m pip install --no-cache-dir --index-url "$PYTHON_PACKAGE_INDEX" uv==0.9.26 \
+    && uv export --locked --no-dev --no-emit-project --no-header --no-annotate > /app/requirements-lock.txt \
+    && uv pip install --system --no-cache --require-hashes --default-index "$PYTHON_PACKAGE_INDEX" -r /app/requirements-lock.txt \
+    && python -m pip uninstall -y uv \
+    && rm /app/requirements-lock.txt \
     && groupadd --system --gid 10001 blueprint \
     && useradd --system --uid 10001 --gid blueprint --no-create-home blueprint \
     && mkdir -p /var/lib/blueprint/checkpoints \

@@ -15,14 +15,20 @@ The local blueprint and its generated copy now have sibling `backend` and
 generic domain ports and policy, native MAF workflow/host, and PostgreSQL and
 identity infrastructure. Existing `app.*` extension imports remain aliases;
 application factories and transactional-action interfaces are unchanged.
-Requirements, examples, schema and backend tests are owned by `backend`.
+Python project metadata, lock, examples, schema and backend tests are owned by `backend`.
 The verifier and exact contract bytes remain independent of the runtime.
 
-The longer-term target adds separately reviewed dependency locking and
-developer tooling, migrations, privacy-safe telemetry, a Foundry Responses
+The tooling branch adds a Python 3.12 uv lock, Ruff, portable development
+commands and editor configurations. CI uses the public lock; container
+installation exports its exact hashes and may use an operator-selected index.
+The copied project owns the same lock and does not import the source checkout.
+Local Windows and Linux-container checks do not prove macOS or hosted CI.
+Review the branch and re-run checks after integration.
+
+The longer-term target adds migrations, privacy-safe telemetry, a Foundry Responses
 adapter and host-managed checkpoints, and Foundry-first Bicep/azd for
 separately hosted frontend and API services. These are not implemented by
-this modularity increment. Hosting the workflow runtime in ACA is a deferred
+this tooling increment. Hosting the workflow runtime in ACA is a deferred
 alternative requiring its own verified checkpoint strategy. Neither topology
 is a verified deployment; provisioning requires separate authorization.
 

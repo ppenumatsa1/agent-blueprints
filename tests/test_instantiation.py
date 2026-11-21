@@ -26,7 +26,16 @@ class InstantiationTests(unittest.TestCase):
             self.assertTrue((target / "compose.yaml").is_file())
             self.assertTrue((target / "backend" / "tests" / "order_adjustment_adapter.py").is_file())
             self.assertTrue((target / "backend" / "Dockerfile").is_file())
-            self.assertTrue((target / "backend" / "requirements-dev.txt").is_file())
+            for path in ("backend/pyproject.toml", "backend/uv.lock", "backend/.python-version",
+                         ".vscode/launch.json", ".vscode/tasks.json"):
+                self.assertTrue((target / path).is_file(), path)
+            self.assertEqual(
+                (ROOT / "blueprints" / "maf" / "workflow" / "backend" / "uv.lock").read_bytes(),
+                (target / "backend" / "uv.lock").read_bytes(),
+            )
+            self.assertFalse((target / "backend" / ".venv").exists())
+            self.assertFalse((target / "backend" / ".uv-cache").exists())
+            self.assertFalse((target / "backend" / ".ruff_cache").exists())
             self.assertFalse((target / "frontend" / "node_modules").exists())
             self.assertFalse((target / "frontend" / "dist").exists())
             self.assertFalse((target / ".env").exists())

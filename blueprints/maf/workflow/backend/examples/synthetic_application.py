@@ -23,4 +23,6 @@ def initialize(store: StateRepository) -> None:
 
 
 def build_application() -> ApplicationComponents:
-    return ApplicationComponents(JsonObjectRules(), CaseAccessPolicy(), SyntheticAction(), initialize)
+    return ApplicationComponents(
+        JsonObjectRules(), CaseAccessPolicy(), SyntheticAction(), initialize
+    )

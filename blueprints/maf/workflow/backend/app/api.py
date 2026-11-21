@@ -79,7 +79,9 @@ def create_app(
 ) -> FastAPI:
     store = store if store is not None else PostgresStore(settings.database_url)
     identity = identity if identity is not None else EntraIdentity(settings)
-    host = LocalWorkflowHost(store, components.action, settings.checkpoint_root, components.workflow_factory)
+    host = LocalWorkflowHost(
+        store, components.action, settings.checkpoint_root, components.workflow_factory
+    )
     service = WorkflowService(store, host, components.rules, components.policy)
 
     @asynccontextmanager
@@ -126,11 +128,15 @@ def create_app(
 
     def register_error(error_type, status_code: int, detail: str, headers=None):
         async def handler(request: Request, exc: Exception):
-            return JSONResponse(status_code=status_code, content={"detail": detail}, headers=headers)
+            return JSONResponse(
+                status_code=status_code, content={"detail": detail}, headers=headers
+            )
 
         app.add_exception_handler(error_type, handler)
 
-    register_error(AuthenticationFailed, 401, "Authentication failed.", {"WWW-Authenticate": "Bearer"})
+    register_error(
+        AuthenticationFailed, 401, "Authentication failed.", {"WWW-Authenticate": "Bearer"}
+    )
     register_error(AuthenticationUnavailable, 503, "Authentication is temporarily unavailable.")
     register_error(AccessDenied, 403, "Access denied.")
     register_error(NotFound, 404, "Record not found.")
@@ -155,13 +161,19 @@ def create_app(
     async def submit(
         body: Submission,
         actor: Annotated[AuthenticatedRequest, Depends(current_identity)],
-        idempotency_key: Annotated[str, Header(alias="Idempotency-Key", min_length=1, max_length=128)],
+        idempotency_key: Annotated[
+            str, Header(alias="Idempotency-Key", min_length=1, max_length=128)
+        ],
     ) -> CaseOutput:
-        case = await service.submit(actor.principal, str(body.reviewer_id), body.payload, idempotency_key)
+        case = await service.submit(
+            actor.principal, str(body.reviewer_id), body.payload, idempotency_key
+        )
         return _output(case)
 
     @app.get("/api/cases/{case_id}", response_model=CaseOutput)
-    def read(case_id: UUID, actor: Annotated[AuthenticatedRequest, Depends(current_identity)]) -> CaseOutput:
+    def read(
+        case_id: UUID, actor: Annotated[AuthenticatedRequest, Depends(current_identity)]
+    ) -> CaseOutput:
         return _output(service.read(actor.principal, case_id))
 
     @app.post("/api/cases/{case_id}/decision", response_model=CaseOutput)
