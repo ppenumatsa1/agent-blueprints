@@ -4,12 +4,15 @@
 
 **Implemented:** local development, Docker Compose, source tests, generated
 project tests, staged Bicep/azd definitions and credential-free static checks.
-Historical integrated PR #17 head `98091a35976069dafa239ade9bf053b35ee829b7`
-on base `8144918` passed all six jobs in
-[run 44951264840](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44951264840);
-its merge-ref tree equaled that head. Foundation issue-doc commit `1e99e03`
-has since been merged into #17; rerun CI for the resulting head. These checks
-are not readiness or deployment evidence.
+The latest verified integrated snapshot is PR #17 head
+`b63353944372f2b6dcd91546cca3a350250be78b`, based on
+`1e99e038dc31c0ae25e5ea7712030d204ee35bc0`; all six jobs passed in
+[run 44955776238](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44955776238).
+Merge ref `0a54717118879bab6be56633dc29c313178d9081` had exact base/head
+parents and a tree identical to the head. This documentation correction is
+newer than that tested snapshot and needs its own exact-head CI. Any later
+tree or base change also requires revalidation. These checks are not readiness
+or deployment evidence.
 
 **Planned and unverified:** azd provisioning/deployment, Foundry-hosted MAF,
 managed identity binding, Azure resource validation, cloud telemetry ingestion,
