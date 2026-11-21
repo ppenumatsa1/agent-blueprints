@@ -31,11 +31,15 @@ its [hosted CI run](https://github.com/ppenumatsa1/agent-blueprints/actions/runs
 passed all five checks, including independent verification. This is not a
 merge or live hosting result. The copied
 [project guides](../blueprints/maf/workflow/README.md#project-guide) describe
-the current local boundaries and planned deployment/observability designs;
-their own PR and hosted CI remain pending. Parallel tooling, migrations,
+the current local boundaries and planned deployment/observability designs.
+Their [design baseline](../blueprints/maf/workflow/docs/design/architecture.md)
+maps requirements to source and evidence; its engineering journal records
+verified findings and open cleanup. The generated-copy tests include all
+design documents and validate local links. Parallel tooling, migrations,
 documentation, telemetry and Foundry-host work build on the foundation.
-Reconcile their interfaces before IaC and integrated verification; prepare
-inventory, cost and a deployment plan for separate approval before any
+Reconcile interfaces and remove compatibility shims before finalizing; run
+independent verification and confirm hosted CI against the exact PR revision.
+Prepare inventory, cost and a deployment plan for separate approval before
 provisioning or live validation.
 
 | Layer | Responsibility | Examples |

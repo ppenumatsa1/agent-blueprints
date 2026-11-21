@@ -67,14 +67,49 @@ Independent workstreams cover locked tooling, migrations, observability,
 Foundry hosting, infrastructure and integration evidence. Do not merge PRs
 without approval. Azure deployment is a deliverable but requires prior
 approval of its resource inventory, estimated cost and deployment plan;
-permanent reference repository creation requires separate approval.
+permanent reference repository creation requires separate approval. As of
+2026-11-21, locked tooling is proposed in open
+[PR #13](https://github.com/ppenumatsa1/agent-blueprints/pull/13), head
+`e1d953662e615e547fa641ad0831907c363318e3`; its
+[hosted run](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44928260607)
+passed five checks for that exact revision. The proposal's reported
+Windows/Linux Compose verification used an approved mirror after public TLS
+failures; macOS and interactive debugger verification remain unverified.
+These results do not establish that tooling in PR #13 is merged or validated
+on this branch.
 
 Each PR must remove obsolete compatibility layers, use direct imports,
 update affected `docs/design` specifications and the cumulative engineering
 journal, and record actual regression, security, durability, independent
 verification and CI outcomes for its final revision. The design documents
 must accompany generated applications and distinguish planned work from
-verified behavior.
+verified behavior. The six generated-project guides and eight documents under
+`blueprints/maf/workflow/docs/design/` must evolve alongside implementation,
+remain in generated applications, and use actual source/configuration
+references, meaningful Mermaid diagrams, and accurate implemented/planned
+labels. Maintain the engineering journal without inventing historical
+findings. For each meaningful PR update this plan, `docs/master-checklist.md`,
+and relevant architecture documentation with acceptance criteria, evidence,
+status, and next action.
+
+### Cross-cutting PR acceptance gates
+
+Before any PR is ready for approval, keep one canonical implementation and
+use direct imports. Remove compatibility shims, forwarding modules, legacy
+import aliases, obsolete directories, duplicate code, unused dependencies,
+and stale configuration; backward compatibility with prior internal
+implementations is not required for this greenfield blueprint. Update
+dependent call sites, tests, Dockerfiles/build contexts, CI, documentation,
+and instantiation scripts in the same coherent change while preserving
+functional behavior and verification contracts.
+
+Before requesting approval, run applicable regression, security, durability,
+and independent verification tests; do not weaken or relabel failed or
+unverified checks. Confirm GitHub Actions for the actual PR head revision.
+Live Entra/OBO, Foundry-hosted recovery, cloud telemetry, and Azure deployment
+remain unverified until separately implemented and evidenced. Azure
+provisioning and permanent repository creation still require separate
+authorization; never merge automatically.
 
 P1-01 through P1-04 have an initial local foundation and a test-only
 application adapter, but the scenario has no authorized contract approval.

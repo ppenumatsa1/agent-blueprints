@@ -18,6 +18,18 @@ local prototype, not a production deployment:
 - [Deployment design](docs/deployment.md)
 - [Observability design and troubleshooting](docs/operations.md)
 
+The design baseline is in [docs/design](docs/design/architecture.md):
+[PRD](docs/design/prd.md),
+[technology stack](docs/design/techstack.md),
+[specifications](docs/design/specs.md),
+[architecture](docs/design/architecture.md),
+[project structure](docs/design/projectstructure.md),
+[user flow](docs/design/userflow.md),
+[deployment flow](docs/design/deployment-flow.md), and the cumulative
+[engineering journal](docs/design/issues-changes-fixes.md). These documents
+are maintained with the implementation and copied into every generated
+project; planned hosting and cloud behavior remain unverified.
+
 The local host uses MAF `FileCheckpointStorage` on a private, persistent
 single-host volume. PostgreSQL separately holds business records, decisions,
 audit events, and the action ledger. A per-case database lock coordinates
