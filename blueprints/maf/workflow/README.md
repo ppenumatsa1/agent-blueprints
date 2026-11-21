@@ -34,8 +34,12 @@ The local host uses MAF `FileCheckpointStorage` on a private, persistent
 single-host volume. PostgreSQL separately holds business records, decisions,
 audit events, and the action ledger. A per-case database lock coordinates
 file and database transitions. Database effects committed with the ledger
-can be replayed safely; external effects need their own idempotency contract
-or a transactional outbox.
+can be replayed safely. Consequential external effects require service-specific
+authorization, verified downstream idempotency and authoritative reconciliation;
+otherwise fail closed and use manual resolution rather than retry an ambiguous
+effect. A transactional outbox only persists intent; it cannot deduplicate an
+external effect after a lost acknowledgment. These controls remain blocked under
+[#32](https://github.com/ppenumatsa1/agent-blueprints/issues/32).
 
 The Foundry Responses adapter and Foundry-managed checkpoint storage and
 recovery are deferred to P1-12. The local store is not a shared-store or

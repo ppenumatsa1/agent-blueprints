@@ -163,8 +163,11 @@ The per-case PostgreSQL advisory lock serializes host operations across
 checkpoint and SQL transitions. It does not make checkpoint writes atomic with
 database commits; startup recovery reconciles durable records and checkpoints.
 The same-transaction action ledger applies only to database effects performed
-through the supplied transaction. External side effects require downstream
-idempotency or a transactional outbox.
+through the supplied transaction. Consequential external side effects require
+service-specific authorization, verified downstream idempotency and
+authoritative reconciliation; otherwise fail closed and use manual resolution
+instead of retrying an ambiguous effect. A transactional outbox only persists
+intent; it cannot deduplicate an external effect after a lost acknowledgment.
 Their authorization and retry/idempotency boundary is tracked in
 [#32](https://github.com/ppenumatsa1/agent-blueprints/issues/32).
 Consequential remote actions are blocked until the P0 authorization,
