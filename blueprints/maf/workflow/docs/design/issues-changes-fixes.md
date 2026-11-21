@@ -87,6 +87,31 @@ entries to hide failed attempts or gaps.
 - **Limit:** This does not verify Azure configuration, cloud ingestion, or
   hosted trace/metric propagation.
 
+## 2026-11-21 - Native telemetry privacy gate
+
+- **Finding:** With `agent-framework-core==1.26.0` and
+  `fastapi==0.162.7`, conflicting enablement settings produced
+  `fastapi.dependencies`, `fastapi.endpoint`, `fastapi.serialization`, and
+  `GET /private` spans; the request span included `url.query` with prompt and
+  identity canaries. A failing request also emitted FastAPI endpoint/request
+  spans. This bypassed the blueprint's manual allowlist.
+- **Decision:** Keep Agent Framework instrumentation sticky-disabled, explicitly
+  disable FastAPI traces, metrics, logs, operation spans, and auto-configuration,
+  and avoid process-global OpenTelemetry provider registration. Retain only the
+  manual allowlisted spans and payload-free failure signals.
+- **Evidence:** On feature revision `3aa389f`, the isolated
+  `python -m unittest tests.test_telemetry -v` run passed 23 tests. The
+  subprocess regression set `ENABLE_INSTRUMENTATION`,
+  `ENABLE_SENSITIVE_DATA`, and `ENABLE_MESSAGE_EVENTS` to `true`, exercised two
+  app instances and normal/failing HTTP and MAF workflow paths, and found no
+  global spans, metrics, or prompt/tool/identity/failure canaries. Exactly two
+  manual `http.request` spans remained, with no events or canaries. Focused
+  checks also cover recovery-log ID/message redaction and CORS trace propagation.
+- **Limit:** This verifies the pinned local stack and blueprint app factory,
+  not public hosted configuration, cloud ingestion, or a separately configured
+  third-party instrumentor. Native MAF instrumentation remains disabled, so
+  native prompt/tool/identity span attributes are intentionally not captured.
+
 ## Prior implementation evidence
 
 ### 2026-11-21 - Generated verifier pipeline exit status

@@ -13,8 +13,11 @@ unavailable; do not point them at production data. They use synthetic
 identities and no Azure credentials or model. This matches the source
 `maf-core` CI selection and exercises authorization, native checkpoint
 recovery, privacy-safe telemetry and actual worker termination after decision
-persistence and after a database action commits. It does not prove live
-Entra/OBO, external effect exactly-once delivery, or hosted recovery.
+persistence and after a database action commits. `tests.test_telemetry` also
+checks conflicting MAF instrumentation settings, FastAPI auto-telemetry
+disablement, canary-free manual spans, recovery log redaction, and CORS trace
+propagation. It does not prove live Entra/OBO, external effect exactly-once
+delivery, or hosted recovery.
 
 The generated-project CI additionally runs evidence-runner normalization
 tests. From its `backend` directory, run:
