@@ -1,0 +1,7 @@
+# CODEOWNERS requires repository rules that enforce code-owner review.
+/.github/CODEOWNERS @ppenumatsa1
+/.github/workflows/ @ppenumatsa1
+/contracts/ @ppenumatsa1
+/scenarios/ @ppenumatsa1
+/tests/ @ppenumatsa1
+/readiness/ @ppenumatsa1

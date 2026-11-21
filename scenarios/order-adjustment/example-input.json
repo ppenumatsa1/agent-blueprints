@@ -1,0 +1,14 @@
+{
+  "schema_version": "1.0.0",
+  "context": {
+    "target_maturity": "prototype",
+    "source_revision": "synthetic-only",
+    "environment": "synthetic-local",
+    "assessed_at": "2026-01-02T00:00:00Z"
+  },
+  "assumptions": ["All case data and identities are synthetic."],
+  "incomplete_integrations": ["No application or application adapter has been implemented."],
+  "limitations": ["This input contains no results or human approvals."],
+  "results": [],
+  "decisions": []
+}

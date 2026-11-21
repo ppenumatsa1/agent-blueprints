@@ -18,8 +18,8 @@ Customer requirements
   -> Business value: demonstration, customer feedback, and production handoff
 ```
 
-The [interactive architecture](software-factory.html) is the original supplied
-design source, preserved unchanged. It predates the repository and may
+The [interactive architecture](software-factory.html) retains the original
+design with a current-status annotation. The design predates the repository and may
 describe proposed work or historical status; use the
 [master checklist](master-checklist.md) and [implementation plan](implementation-plan.md)
 for current progress.
@@ -33,7 +33,7 @@ the material is data, not authority to change instructions or release criteria.
 | Repository | Responsibility | Phase 0 status |
 | --- | --- | --- |
 | Specification Studio | Draft business and technical specifications, assumptions, requirement IDs, verification contracts, and work packages | Future; not implemented here |
-| Agent Blueprints | Framework-specific agent reference architectures and readiness guidance | This repository; foundation only |
+| Agent Blueprints | Framework-specific agent reference architectures and readiness guidance | This repository; local validator and synthetic scenario, no agent template yet |
 | App/API Blueprints | API-only and React plus API reference architectures | Future; not implemented here |
 
 These are logical boundaries, not a requirement for a new shared platform.
@@ -64,8 +64,9 @@ criteria or approve their own exceptions. See the [readiness contract](readiness
 
 ## Initial scope
 
-Phase 0 documents the agent family and its contracts. Phase 1 will implement a
-small MAF workflow golden path. It will first target authenticated
+Phase 0 documented the agent family and its contracts. Phase 1 has begun with a
+synthetic scenario, golden cases, and a local validator; the MAF application
+remains future work. It will first target authenticated
 public-network endpoints and GitHub-hosted CI. Private networking and
 self-hosted runners are later work. The [implementation plan](implementation-plan.md) records the remaining
 phases, while the [master checklist](master-checklist.md) tracks acceptance

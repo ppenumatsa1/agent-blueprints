@@ -79,13 +79,16 @@ before copying anything; preserve any applicable license notices.
 
 ## Proposed future structure
 
-Only the documentation, contracts, examples, tests, and CI currently exist.
-The following directories are a proposed structure, not implemented templates:
+Documentation, contracts, a synthetic scenario, tests, a local readiness
+validator, and CI currently exist. Blueprint directories below remain proposed,
+not implemented templates:
 
 ```text
 agent-blueprints/
   docs/                    # architecture, standards, catalog, backlog
   contracts/               # proposed manifests, verification and readiness
+  readiness/               # local verification CLI, not an orchestration service
+  scenarios/               # synthetic contract and golden acceptance cases
   blueprints/
     maf/workflow/          # first future golden path
     maf/harness/

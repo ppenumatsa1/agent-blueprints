@@ -1,0 +1,65 @@
+[
+  {
+    "id": "pending", "checks": ["CHECK-APPROVAL", "CHECK-EXPLANATION"],
+    "input": {"case_id": "CASE-PENDING", "amount": 120, "steps": ["submit"]},
+    "expected": {"state": "pending", "action_count": 0, "decision": "pending"},
+    "explanation_contains": ["CASE-PENDING", "120", "approval", "pending"],
+    "explanation_excludes": ["SECRET-CANARY"]
+  },
+  {
+    "id": "approved", "checks": ["CHECK-APPROVAL", "CHECK-EXPLANATION"],
+    "input": {"case_id": "CASE-APPROVED", "amount": 120, "steps": ["submit", "approve", "resume"]},
+    "expected": {"state": "completed", "action_count": 1, "decision": "approved"},
+    "explanation_contains": ["CASE-APPROVED", "120", "approval", "approved"],
+    "explanation_excludes": ["SECRET-CANARY"]
+  },
+  {
+    "id": "rejected", "checks": ["CHECK-APPROVAL", "CHECK-EXPLANATION"],
+    "input": {"case_id": "CASE-REJECTED", "amount": 120, "steps": ["submit", "reject", "resume"]},
+    "expected": {"state": "rejected", "action_count": 0, "decision": "rejected"},
+    "explanation_contains": ["CASE-REJECTED", "120", "approval", "rejected"],
+    "explanation_excludes": ["SECRET-CANARY"]
+  },
+  {
+    "id": "unauthorized", "checks": ["CHECK-APPROVAL", "CHECK-EXPLANATION"],
+    "input": {"case_id": "CASE-UNAUTHORIZED", "amount": 120, "steps": ["submit", "unauthorized_approve", "resume"]},
+    "expected": {"state": "pending", "action_count": 0, "decision": "pending"},
+    "explanation_contains": ["CASE-UNAUTHORIZED", "120", "approval", "pending"],
+    "explanation_excludes": ["SECRET-CANARY"]
+  },
+  {
+    "id": "wrong-case-approval", "checks": ["CHECK-APPROVAL", "CHECK-EXPLANATION"],
+    "input": {"case_id": "CASE-WRONG", "amount": 120, "steps": ["submit", "approve_other_case", "resume"]},
+    "expected": {"state": "pending", "action_count": 0, "decision": "pending"},
+    "explanation_contains": ["CASE-WRONG", "120", "approval", "pending"],
+    "explanation_excludes": ["SECRET-CANARY"]
+  },
+  {
+    "id": "replay", "checks": ["CHECK-APPROVAL", "CHECK-RECOVERY", "CHECK-EXPLANATION"],
+    "input": {"case_id": "CASE-REPLAY", "amount": 120, "steps": ["submit", "approve", "resume", "approve", "resume"]},
+    "expected": {"state": "completed", "action_count": 1, "decision": "approved"},
+    "explanation_contains": ["CASE-REPLAY", "120", "approval", "approved"],
+    "explanation_excludes": ["SECRET-CANARY"]
+  },
+  {
+    "id": "restart", "checks": ["CHECK-RECOVERY", "CHECK-EXPLANATION"],
+    "input": {"case_id": "CASE-RESTART", "amount": 120, "steps": ["submit", "approve", "restart", "resume", "restart", "resume"]},
+    "expected": {"state": "completed", "action_count": 1, "decision": "approved"},
+    "explanation_contains": ["CASE-RESTART", "120", "approval", "approved"],
+    "explanation_excludes": ["SECRET-CANARY"]
+  },
+  {
+    "id": "action-failure", "checks": ["CHECK-RECOVERY", "CHECK-EXPLANATION"],
+    "input": {"case_id": "CASE-FAILURE", "amount": 120, "steps": ["submit", "approve", "simulate_action_failure", "resume"]},
+    "expected": {"state": "failed", "action_count": 0, "decision": "approved"},
+    "explanation_contains": ["CASE-FAILURE", "120", "approval", "approved", "failed"],
+    "explanation_excludes": ["SECRET-CANARY"]
+  },
+  {
+    "id": "optional-hint", "checks": ["CHECK-HINT", "CHECK-EXPLANATION"],
+    "input": {"case_id": "CASE-HINT", "amount": 120, "steps": ["submit", "request_hint"]},
+    "expected": {"state": "pending", "action_count": 0, "decision": "pending", "hint": "Approval is pending."},
+    "explanation_contains": ["CASE-HINT", "120", "approval", "pending"],
+    "explanation_excludes": ["SECRET-CANARY"]
+  }
+]

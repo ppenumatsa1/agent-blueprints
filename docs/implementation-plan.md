@@ -23,16 +23,18 @@ Azure Container Apps (ACA) is the explicit fallback.
 
 ### Execution sequence and work packages
 
-The packages are future implementation work, not completed functionality.
-Inputs and interfaces can be agreed in parallel; integrations wait on the
+P1-01 through P1-04 have an initial implementation in this change, but the
+scenario is **not yet human-approved**, the golden application adapter is
+absent, and repository protection and trusted CI result production remain
+unverified. Other packages are future work. Integrations wait on the
 dependencies listed.
 
 | ID | Bounded work package | Dependencies | Independently verifiable outcome |
 | --- | --- | --- | --- |
-| P1-01 | Define a synthetic, non-destructive scenario and approve requirement/check IDs, criticality, domains, criteria, evidence, freshness, profile gates, and applicable production controls. | None | An authorized approval binds the exact contract digest; fixtures cover success, failure, approval, rejection, recovery, and both readiness profiles without customer data. |
-| P1-02 | Define normalized test-result, evidence, baseline-contract, and human-decision inputs, including IDs, outcomes, revision, environment, timestamps, references, digests, and acceptance scope. Map local test/evaluation output explicitly. | P1-01 | Synthetic input fixtures cover multiple checks, evidence types, contract changes, and decision scopes; unknown or unmappable results cannot be silently ignored. |
-| P1-03 | Implement the validator's contract, traceability, evidence-integrity, freshness, decision, and profile-gate logic as a small local Python component. | P1-02 | Tests reject invalid evidence as proof of a pass, protect blocking/security-critical gates, disclose prototype non-blocking failures, and require verified production risk acceptance. |
-| P1-04 | Expose the validator as a CLI that consumes the approved contract, test results, and supporting evidence and writes a machine-readable readiness report. | P1-03 | CLI tests verify profile-appropriate exit codes, actionable diagnostics, preserved per-check outcomes and disclosures, and no fabricated approval. |
+| P1-01 | Define the synthetic scenario, golden acceptance tests, and contract; obtain authorized approval. | None | [Scenario and golden cases](../scenarios/order-adjustment/README.md) exist; the adapter is skipped and an authorized approval of the exact digest is still required. |
+| P1-02 | Define normalized test-result, evidence, baseline-contract, and signed-decision inputs. Map actual local test/evaluation output explicitly. | P1-01 | [Input and trust schemas](../contracts/) and synthetic [validator tests](../tests/test_readiness.py) cover multiple checks and scopes. A trusted real runner adapter is still needed in P1-10. |
+| P1-03 | Implement local traceability, evidence-integrity, freshness, decision, baseline and profile gates. | P1-02 | [Validator](../readiness/validator.py) and [acceptance tests](../tests/test_readiness.py) exercise the policy. Actual authority, trusted result provenance and branch protections require independent configuration and verification. |
+| P1-04 | Expose the validator as a local CLI with machine-readable report and diagnostics. | P1-03 | [CLI](../readiness/__main__.py), [instructions](readiness-validator.md), and acceptance tests exercise exit codes and disclosures; the unapproved scenario is unverified. |
 | P1-05 | Create the local Docker Compose development stack and documented setup for React, FastAPI, PostgreSQL, and the selected local workflow mode. | P1-01 interfaces | A clean-machine setup starts and stops the stack with synthetic configuration; no Azure credentials are needed. |
 | P1-06 | Implement PostgreSQL business records, approval/audit state, and an idempotent action ledger. | P1-01, P1-05 interfaces | Transaction, uniqueness, concurrency, restart, and duplicate-action tests pass; business records are separate from workflow checkpoints. |
 | P1-07 | Implement typed FastAPI operations, authenticated identity, per-record authorization, approvals, and explicit error responses. | P1-01, P1-06 interfaces | Positive and negative tests cover anonymous, unauthorized, malformed, replayed, and cross-user requests. Local mock identity is explicit and cannot become production security. |
@@ -50,7 +52,7 @@ dependencies listed.
 The validator consumes the approved, versioned verification contract; actual
 normalized test/evaluation results; and supporting evidence artifacts. Its
 assessment context supplies the target maturity, source revision, environment,
-and assessment time. The first implementation reads bounded local artifacts,
+and assessment time. The implementation reads bounded local artifacts,
 not arbitrary remote URLs, and verifies their bytes and SHA-256 digests. It runs
 locally or in CI with the generated project, not as a shared factory runtime.
 
@@ -75,7 +77,11 @@ require an explicit authorized decision for any downgrade. For production
 and customer validation, enforce the declared security, integration,
 operations, and evaluation domain coverage or a verified applicable
 not-applicable decision. Missing production controls or unverifiable approval
-cannot support a pass.
+cannot support a pass. Signed decisions and result attestations use an
+independently administered, baseline-pinned trust store. Signatures establish
+key possession, not human identity or actual execution; trust administration,
+current assessment time, and protected result production are operator
+responsibilities. See [validator usage and limits](readiness-validator.md).
 
 For a valid contract and assessment context, write a machine-readable
 readiness report even when checks fail or evidence is unverified. Exit zero

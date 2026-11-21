@@ -59,8 +59,9 @@ dependencies, infrastructure, evidence, and operations.
 
 - Pin and review dependencies and GitHub Actions, keep dependency manifests
   current, and evaluate vulnerability, license, and provenance findings. The
-  current Phase 0 CI validates contracts only; it is not a security scan or an
-  application deployment. Its direct validator dependencies and actions are
+  current CI validates contracts, the local validator, and golden fixture
+  structure; the application acceptance adapter is not implemented. CI is not
+  a security scan or an application deployment. Its validator dependencies and actions are
   pinned, but transitive Python dependencies are not locked.
 - GitHub offers [secret scanning](https://docs.github.com/en/code-security/secret-scanning/introduction/about-secret-scanning),
   [Dependabot alerts](https://docs.github.com/en/code-security/dependabot/dependabot-alerts/about-dependabot-alerts),
