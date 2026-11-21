@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Local readiness assessment input",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "context", "assumptions", "incomplete_integrations", "limitations", "results", "decisions"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target_maturity", "source_revision", "environment", "assessed_at"],
+      "properties": {
+        "target_maturity": {"enum": ["prototype", "production_candidate", "customer_validated"]},
+        "source_revision": {"$ref": "#/$defs/text"},
+        "environment": {"$ref": "#/$defs/text"},
+        "assessed_at": {"type": "string", "format": "date-time"}
+      }
+    },
+    "assumptions": {"$ref": "#/$defs/notes"},
+    "incomplete_integrations": {"$ref": "#/$defs/notes"},
+    "limitations": {"$ref": "#/$defs/notes"},
+    "results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["check_id", "outcome", "evidence"],
+        "properties": {
+          "check_id": {"$ref": "#/$defs/id"},
+          "outcome": {"enum": ["passed", "failed", "unverified"]},
+          "reason": {"$ref": "#/$defs/text"},
+          "implementation_refs": {"$ref": "#/$defs/notes"},
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["kind", "reference", "revision", "environment", "recorded_at", "sha256"],
+              "properties": {
+                "kind": {"enum": ["test_report", "evaluation_result", "trace", "approval_record", "human_review", "security_report", "other"]},
+                "reference": {"$ref": "#/$defs/text"},
+                "revision": {"$ref": "#/$defs/text"},
+                "environment": {"$ref": "#/$defs/text"},
+                "recorded_at": {"type": "string", "format": "date-time"},
+                "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+              }
+            }
+          }
+        }
+      }
+    },
+    "decisions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["payload", "signature"],
+        "properties": {
+          "signature": {"type": "string", "minLength": 1},
+          "payload": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["key_id", "kind", "decision", "reference", "decided_at", "expires_at", "scope"],
+            "properties": {
+              "key_id": {"$ref": "#/$defs/id"},
+              "kind": {"enum": ["contract", "risk", "applicability", "classification", "customer", "result"]},
+              "decision": {"enum": ["approved", "rejected", "accepted", "attested"]},
+              "reference": {"$ref": "#/$defs/text"},
+              "decided_at": {"type": "string", "format": "date-time"},
+              "expires_at": {"type": "string", "format": "date-time"},
+              "scope": {"type": "object"},
+              "rationale": {"$ref": "#/$defs/text"},
+              "compensating_controls": {"$ref": "#/$defs/notes"}
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "id": {"type": "string", "pattern": "^[A-Za-z][A-Za-z0-9._-]{0,63}$"},
+    "text": {"type": "string", "minLength": 1, "pattern": "\\S"},
+    "notes": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/text"}}
+  }
+}

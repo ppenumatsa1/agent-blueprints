@@ -1,2 +1,5 @@
 # Preserve the supplied architecture source exactly across checkouts.
 docs/software-factory.html -text
+
+# The readiness trust anchor hashes the exact scenario contract bytes.
+scenarios/order-adjustment/verification-contract.json -text
