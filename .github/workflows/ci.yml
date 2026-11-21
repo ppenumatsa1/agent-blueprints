@@ -54,7 +54,7 @@ jobs:
           exit 1
       - name: Run workflow, worker recovery, API security, and evidence tests
         working-directory: blueprints/maf/workflow/backend
-        run: uv run --locked python -m unittest -v tests.test_core tests.test_security tests.test_evidence_runner tests.test_telemetry
+        run: uv run --locked python -m unittest -v tests.test_core tests.test_security tests.test_evidence_runner tests.test_telemetry tests.test_migrations
       - name: Stop isolated PostgreSQL
         if: always()
         run: docker stop maf-core-test || true
@@ -96,7 +96,11 @@ jobs:
           echo "::add-mask::$password"
           echo "POSTGRES_PASSWORD=$password" >> "$GITHUB_ENV"
       - name: Build and start local stack
-        run: docker compose -p maf-app-ci up --build --wait --wait-timeout 300
+        run: |
+          docker compose -p maf-app-ci build api
+          docker compose -p maf-app-ci run --rm api python -m app.infrastructure.migrations upgrade
+          docker compose -p maf-app-ci run --rm api python -m examples.synthetic_application
+          docker compose -p maf-app-ci up --build --wait --wait-timeout 300
       - name: Verify HTTP boundaries and container permissions
         run: |
           html="$(curl --fail --silent http://127.0.0.1:18080/)"
@@ -168,7 +172,7 @@ jobs:
           uv run --locked ruff check .
           uv run --locked ruff format --check .
           uv run --locked python -c "import app, pathlib; assert pathlib.Path(app.__file__).resolve().is_relative_to(pathlib.Path.cwd())"
-          uv run --locked python -m unittest -v tests.test_core tests.test_security tests.test_evidence_runner tests.test_telemetry
+          uv run --locked python -m unittest -v tests.test_core tests.test_security tests.test_evidence_runner tests.test_telemetry tests.test_migrations
           cd ../frontend
           npm test
           npm run build
@@ -208,6 +212,9 @@ jobs:
           cd "$GENERATED_DIR"
           docker compose -p maf-generated-ci config --format json > "$RUNNER_TEMP/maf-compose.json"
           python -c "import json,os,pathlib; c=json.load(open(os.path.join(os.environ['RUNNER_TEMP'],'maf-compose.json'))); root=pathlib.Path(os.environ['GENERATED_DIR']).resolve(); assert all(pathlib.Path(s['build']['context']).resolve().is_relative_to(root) for s in c['services'].values() if 'build' in s); assert all(v.get('type') != 'bind' for s in c['services'].values() for v in s.get('volumes',[]))"
+          docker compose -p maf-generated-ci build api
+          docker compose -p maf-generated-ci run --rm api python -m app.infrastructure.migrations upgrade
+          docker compose -p maf-generated-ci run --rm api python -m examples.synthetic_application
           docker compose -p maf-generated-ci up --build --wait --wait-timeout 300
           curl --fail --silent http://127.0.0.1:18080/ >/dev/null
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:18080/healthz)" = 204

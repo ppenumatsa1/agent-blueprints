@@ -53,6 +53,13 @@ class InstantiationTests(unittest.TestCase):
             self.assertFalse((target / "backend" / ".venv").exists())
             self.assertFalse((target / "backend" / ".uv-cache").exists())
             self.assertFalse((target / "backend" / ".ruff_cache").exists())
+            for name in ("baseline.sql", "env.py", "versions/0001_baseline.py", "manifests/0001.json"):
+                source = ROOT / "blueprints" / "maf" / "workflow" / "backend" / "migrations" / name
+                self.assertEqual(source.read_bytes(), (target / "backend" / "migrations" / name).read_bytes())
+            for name in ("prd", "techstack", "specs", "architecture", "projectstructure", "userflow",
+                         "deployment-flow", "issues-changes-fixes"):
+                self.assertTrue((target / "docs" / "design" / f"{name}.md").is_file())
+            self.assertFalse((target / "docs" / "engineering-journal.md").exists())
             self.assertFalse((target / "frontend" / "node_modules").exists())
             self.assertFalse((target / "frontend" / "dist").exists())
             self.assertFalse((target / ".env").exists())

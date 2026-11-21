@@ -38,6 +38,7 @@ are synthetic fixtures, not a business application.
 | FR-08 | Provide a React/MSAL UI for sign-in, request submission, record reads, decisions, and visible failure states. |
 | FR-09 | Include independently generated documentation, tests, exact contract bytes, and readiness verification without repository imports or bind mounts. |
 | FR-10 | Provide privacy-safe operational correlation, traces and metrics, with explicit opt-in Azure Monitor export and safe failure signals. |
+| FR-11 | Upgrade known business schemas explicitly, reject drift, and validate the installed revision at startup without DDL. |
 
 ## Non-functional requirements
 
@@ -60,13 +61,14 @@ are synthetic fixtures, not a business application.
 ## Scope and exclusions
 
 **Current scope:** local single-host prototype, selected application factory,
-Entra integration points, PostgreSQL records and action ledger, MAF native
+Entra integration points, PostgreSQL records, action ledger and versioned
+business migrations, MAF native
 workflow with `FileCheckpointStorage`, React/MSAL client, Compose packaging,
 generated project, local telemetry, configurable Azure exporters, and local/hosted regression tests.
 
 **Not implemented or verified:** live Entra sign-in and OBO, production
-secrets management, external side-effect exactly-once behavior, versioned
-database migrations, actual cloud telemetry ingestion, Foundry-hosted execution and
+secrets management, external side-effect exactly-once behavior,
+actual cloud telemetry ingestion, Foundry-hosted execution and
 managed checkpoint recovery, ACA recovery, Bicep/azd provisioning, and a
 production deployment. Azure resource creation and permanent repository
 creation require separate approval.

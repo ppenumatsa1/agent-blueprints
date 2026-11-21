@@ -13,6 +13,7 @@ claim about a deployed environment.
 | API | FastAPI `0.162.7`, Uvicorn `0.54.0` | Typed HTTP boundary, dependency-based bearer auth, and an ASGI server. |
 | Observability | OpenTelemetry SDK `1.45.2`, Azure Monitor exporter `1.0.0b59` | Manual traces and metrics, explicit Azure export; local mode exports nothing. Hosted ingestion remains unverified. |
 | Persistence | PostgreSQL `17-alpine`, Psycopg binary `3.3.9` | Relational transactions and uniqueness constraints support the decision/action ledger; MAF file checkpoints remain separate. |
+| Schema evolution | Alembic `1.16.5`, SQLAlchemy `2.1.8`, revision manifests | Explicit schema-owner migration; runtime validates without schema creation. Local PostgreSQL 16.15 and 17.12 are tested; managed-service behavior is unverified. |
 | Identity | MSAL `1.39.0`, PyJWT crypto `2.15.1` | MSAL is used in the browser; the API verifies Entra v2 access tokens, scopes, roles, and record access. Test identities are isolated to tests. |
 | API models | Pydantic provided by the pinned FastAPI graph | Request/response parsing rejects extra fields. A separate direct version pin is not currently declared. |
 | Frontend | React/React DOM `19.3.1`, TypeScript `7.0.2`, Vite `8.3.8` | Component UI, static typing, and a production build; a different UI framework would need its own client contract and tests. |
@@ -48,7 +49,7 @@ not copied into a generated project.
 ## Dependency and alternative status
 
 The backend image exports the lock and verifies artifact hashes during install.
-Migrations, Foundry host integration, managed identity deployment,
+Foundry host integration, managed identity deployment,
 Bicep, and azd remain planned; no version or command
 should be inferred for them. The current local image uses tags rather than
 immutable image digests, so supply-chain hardening is still an acceptance

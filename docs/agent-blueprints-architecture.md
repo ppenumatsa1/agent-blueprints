@@ -15,7 +15,7 @@ The local blueprint and its generated copy now have sibling `backend` and
 generic domain ports and policy, native MAF workflow/host, and PostgreSQL and
 identity infrastructure. Application factories and transactional-action
 interfaces remain the extension boundaries; use canonical module imports.
-Python project metadata, lock, examples, schema and backend tests are owned by
+Python project metadata, lock, examples, migrations and backend tests are owned by
 `backend`.
 The verifier and exact contract bytes remain independent of the runtime.
 
@@ -27,7 +27,7 @@ Local Windows and Linux-container checks do not prove macOS. Hosted
 [run 44937692067](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44937692067)
 passed all five checks for tooling head `543b137`, not this combined revision.
 
-The longer-term target adds migrations, a Foundry Responses
+The longer-term target adds a Foundry Responses
 adapter and host-managed checkpoints, and Foundry-first Bicep/azd for
 separately hosted frontend and API services. These are not implemented by
 this tooling increment. Hosting the workflow runtime in ACA is a deferred
@@ -60,6 +60,22 @@ by default, configure cloud resources, or establish hosted ingestion. Browser
 requests create a trace context without exporting a browser span. Outbound and
 Foundry-host propagation remain unverified; operational logs are
 not business audit or authorization evidence. See the [blueprint guidance](../blueprints/maf/workflow/README.md#operational-telemetry).
+
+The migration increment adds an Alembic `0001` baseline for PostgreSQL
+business tables. An explicit schema-owner migration initializes empty schemas
+or adopts exact unversioned baselines, then upgrades to head. A catalog
+manifest per revision detects drift before and after the upgrade, and the API
+validates head without DDL. Migration and validation coordinate through
+transaction-scoped advisory locks; manual DDL and running old binaries still
+require operational quiescence. Identity requirements, backup and rollback limits,
+and scope of drift detection are in the [blueprint](../blueprints/maf/workflow/README.md#business-database-migrations).
+These migrations do not own MAF checkpoints or independently authorize
+business approvals. This branch is stacked on the modularity foundation;
+hosted CI and live operational recovery remain unverified. A deterministic
+checkpoint timestamp-tie defect was fixed in foundation `9efeef0`; the exact
+causes of earlier intermittent evidence failures remain unproven. Local
+source and generated tests passed on PostgreSQL 16.15 and 17.12 at `7cd99ac`;
+this does not verify Azure database configuration or live restoration.
 
 | Layer | Responsibility | Examples |
 | --- | --- | --- |

@@ -20,9 +20,9 @@ uv sync --locked
 From `frontend`, run `npm ci`. The locked backend development environment
 also includes the generated verifier's dependencies. For restricted package
 downloads, see the approved-mirror instructions in the [README](../README.md).
-No migration tool is provided; startup uses the
-existing schema initialization. Do not assume it upgrades arbitrary old or
-drifted schemas.
+Alembic migrations run explicitly before startup; the API validates but does
+not migrate the schema. See
+[migration operations](../README.md#business-database-migrations).
 
 ## Compose inputs
 
@@ -43,7 +43,17 @@ root. Values must be application-owned; never commit secrets.
 | `OBO_ALLOWED_SCOPES` | Empty by default; comma-separated resource-qualified scopes required when OBO is enabled | Configuration |
 | `ENTRA_API_CLIENT_SECRET` | Required only when OBO enabled | Secret; never send to browser |
 
-After setting these values, run `docker compose up --build --wait` and open
+After setting these values, run:
+
+```text
+docker compose build api
+docker compose run --rm api python -m app.infrastructure.migrations upgrade
+docker compose run --rm api python -m examples.synthetic_application
+docker compose up --build --wait
+```
+
+The third command prepares only the selected synthetic example; applications
+own preparation of their own tables. Then open
 `http://localhost:8080` (or your selected port). The web build embeds only
 public SPA configuration; rebuild after changes. Compose supplies the API
 database URL and checkpoint path. `docker compose down` stops services but

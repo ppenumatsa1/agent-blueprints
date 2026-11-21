@@ -24,6 +24,7 @@ from app.config import Settings
 from app.infrastructure.delegation import OnBehalfOf
 from app.domain.errors import AuthenticationFailed, AuthenticationUnavailable, DelegationError
 from app.infrastructure.identity import EntraIdentity
+from app.infrastructure.migrations import upgrade
 from app.domain.policy import CaseAccessPolicy, JsonObjectRules
 from app.infrastructure.store import PostgresStore
 from tests.fixture_application import FixtureAction, action_count, initialize_fixture
@@ -224,6 +225,7 @@ class ApiSecurityTests(unittest.TestCase):
             cors_origins=("http://localhost:3000",),
         )
         self.store = PostgresStore(self.settings.database_url)
+        upgrade(self.settings.database_url)
         self.components = ApplicationComponents(
             JsonObjectRules(), CaseAccessPolicy(), FixtureAction(), initialize_fixture
         )

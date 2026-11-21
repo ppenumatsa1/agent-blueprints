@@ -126,6 +126,34 @@ passed all five jobs for PR head `543b137`, not for any combined revision.
 macOS, interactive debugging and a clean public-only local installation
 remain unverified. Next verify integrated work and review the separate PRs.
 
+The migration workstream, based on `modularity-foundation`, adds Alembic
+baseline `0001`, per-revision catalog manifests, an explicit schema-owner
+upgrade and read-only startup validation. Local PostgreSQL 17 evidence:
+12 migration tests including a test-only second revision, 43 source and 43
+generated backend tests, 44 generated verifier tests, and two generator tests
+after rebasing; source and generated Compose smokes each returned UI 200,
+health 204 and protected API 401. The
+[migration tests](../blueprints/maf/workflow/backend/tests/test_migrations.py),
+[operations guide](../blueprints/maf/workflow/README.md#business-database-migrations)
+and [journal](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md) record
+the acceptance evidence and limitations. Two later local evidence runs failed;
+their subprocess stderr was not retained. An independently reproduced native
+checkpoint timestamp-tie defect was fixed in foundation `9efeef0`, whose
+[CI run](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44936094798)
+passed all five jobs. The original failures' causes remain unproven. Local
+PostgreSQL 16.15 migration tests passed at `031fdb4`, after an initial
+auxiliary readiness probe failed before tests.
+At `7cd99ac`, local source and independently generated backend suites passed
+48 tests each on both PostgreSQL 16.15 and 17.12; the generated verifier
+passed 44 and generator tests passed two. The generated evidence producer
+passed approval/recovery observations but left explanation/hint unverified;
+the independent unsigned readiness report remained unverified.
+[PR #16](https://github.com/ppenumatsa1/agent-blueprints/pull/16) remains open;
+[run 44938122124](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44938122124)
+passed all five jobs on its final head `0364721`, not on the combined
+revision. Next verify the integrated revision; live backup/restore remains
+unverified.
+
 P1-01 through P1-04 have an initial local foundation and a test-only
 application adapter, but the scenario has no authorized contract approval.
 Trusted result production and repository protection remain unverified. The

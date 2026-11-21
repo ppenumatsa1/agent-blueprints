@@ -72,6 +72,9 @@ For example, after supplying the four Entra values in PowerShell:
 ```powershell
 $env:POSTGRES_PASSWORD = [Convert]::ToHexString([System.Security.Cryptography.RandomNumberGenerator]::GetBytes(24)).ToLowerInvariant()
 $env:BLUEPRINT_APPLICATION = "examples.synthetic_application:build_application"
+docker compose build api
+docker compose run --rm api python -m app.infrastructure.migrations upgrade
+docker compose run --rm api python -m examples.synthetic_application
 docker compose up --build --wait
 ```
 
@@ -94,6 +97,68 @@ service account and its
 checkpoint directory must remain private to that account. On Windows outside
 the container, enforce equivalent filesystem ACLs. MAF's restricted
 checkpoint deserialization remains enabled.
+
+## Business database migrations
+
+`backend/migrations` contains Alembic revisions, immutable baseline SQL and
+revision-specific catalog manifests. **Run migrations explicitly before
+starting the API**, using `python -m app.infrastructure.migrations upgrade`
+from `backend` with `DATABASE_URL` set to the intended database. This is a
+controlled schema-owner operation; it creates an empty baseline or adopts an
+unversioned database only if its business tables exactly match revision
+`0001`, then upgrades to head. Existing rows, including decisions, audit and
+action ledger, are not rewritten by the baseline.
+
+API startup validates the recorded revision and its manifest without DDL or
+stamping. It fails if the database is unversioned, outdated or divergent;
+unknown revisions and changed baseline/manifest bytes also fail visibly.
+Migrations and startup validation take exclusive and shared PostgreSQL
+advisory transaction locks respectively. A migration failure rolls back the
+DDL and version update.
+
+The comparison covers table/column shape, defaults, constraints, indexes,
+triggers, rules, policies, inheritance and identity-sequence settings, not
+ownership, grants, other tables, data correctness, or external dependencies.
+Manifests list all migration-owned tables; application-owned tables remain
+outside the baseline. PostgreSQL 16.15 and 17.12 have local test evidence;
+other versions and managed-service configurations remain unverified and may
+fail comparison.
+Tables owned by a different known revision must not pre-exist; adoption of an
+application-owned table requires a separate reviewed migration design.
+
+The configured search path must select the intended business schema first.
+The migration identity needs ownership or DDL rights in that schema and rights
+to manage the version table; no database-level `CREATE SCHEMA` is needed.
+The runtime identity needs schema `USAGE`, read access to `alembic_version`
+and the application's ordinary data privileges, but not schema/database
+creation privileges for baseline validation. The synthetic example has its
+own explicit preparation command above; a custom application's initializer and
+tables need separately reviewed provisioning and permissions. Local Compose
+uses the same PostgreSQL account for migration and runtime for convenience,
+not as a production least-privilege model. Production operators must supply
+separate identities and protect their connection settings.
+
+Before upgrading, quiesce old application versions and writers and take a
+verified, consistent database and checkpoint backup. The advisory lock only
+coordinates cooperating migration and startup checks; it does not protect
+against manual DDL, ongoing requests or old binaries. Review drift, then
+restore or explicitly repair under change control and retry; never stamp an
+unknown revision to bypass checks. Recover database and native checkpoints as
+a coordinated pair and reconcile external effects separately.
+
+There is **no automatic downgrade** from the baseline; restore a verified
+compatible backup if recovery requires reverting. For each future revision,
+add a reviewed manifest named `manifests/<revision>.json` and its UTF-8
+newline-normalized SHA-256 as `schema_manifest_sha256` on the revision.
+Produce and review the manifest from a clean, disposable PostgreSQL 17 schema
+after applying that revision: capture `_snapshot(connection, schema, tables)`
+with the complete migration-owned table list, serialize
+`{"tables": [...], "snapshot": ...}` as JSON, and hash the exact file.
+Never derive it from a production database or auto-accept observed drift.
+Review the migration and manifest together and test fresh, previous-revision,
+drift, recovery, privilege and rollback behavior. The test-only second
+revision under `backend/tests/migration_fixtures` demonstrates the contract.
+Alembic versions business tables, not MAF checkpoints or human authorization.
 
 Optional server-side OBO requires `OBO_ENABLED=true`, an existing
 `ENTRA_API_CLIENT_SECRET`, and comma-separated `OBO_ALLOWED_SCOPES`.
@@ -195,11 +260,13 @@ the same commands work in PowerShell, macOS and Linux shells:
 uv sync --locked
 uv run --locked ruff check .
 uv run --locked ruff format --check .
-uv run --locked python -m unittest -v tests.test_core tests.test_security tests.test_evidence_runner tests.test_telemetry
+uv run --locked python -m unittest -v tests.test_core tests.test_security tests.test_evidence_runner tests.test_telemetry tests.test_migrations
 ```
 
-Set `MAF_TEST_DATABASE_URL` to an isolated PostgreSQL database first. The lock
-uses public PyPI and includes the verifier test dependencies. If direct
+Set `MAF_TEST_DATABASE_URL` to an isolated PostgreSQL database first. Its test
+identity must be able to create and drop schemas and roles; the restricted-role
+startup test requires `CREATEROLE`. Never use production credentials or data.
+The lock uses public PyPI and includes the verifier test dependencies. If direct
 artifact downloads are blocked, use an approved mirror per command without
 changing the committed lock: run `uv venv`, then `uv export --locked
 --no-emit-project --output-file dev-locked.txt`, followed by `uv pip sync
@@ -266,7 +333,8 @@ test-only adapter. From the generated `verification` directory:
 uv run --locked --project ../backend python -c "import os,pathlib,unittest,sys; os.environ['SCENARIO_ADAPTER']=str(pathlib.Path('../backend/tests/order_adjustment_adapter.py').resolve()); sys.exit(not unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.discover('tests')).wasSuccessful())"
 ```
 
-From `backend`, run the locked backend suite shown above, including telemetry.
+From `backend`, run the locked backend suite shown above, including telemetry
+and migrations.
 
 The golden adapter exercises the API, local MAF host, and synthetic database
 action. The two worker-kill tests cover crashes after decision persistence

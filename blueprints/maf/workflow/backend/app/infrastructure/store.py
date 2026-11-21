@@ -1,5 +1,4 @@
 from contextlib import contextmanager
-from pathlib import Path
 from typing import Iterator
 from uuid import UUID, uuid4
 
@@ -51,9 +50,9 @@ class PostgresStore:
         return psycopg.connect(self._dsn, row_factory=dict_row)
 
     def initialize(self) -> None:
-        schema = Path(__file__).with_name("schema.sql").read_text(encoding="utf-8")
-        with self.connect() as connection:
-            connection.execute(schema)
+        from app.infrastructure.migrations import validate
+
+        validate(self._dsn)
 
     @instrumented("database.read")
     def get(self, case_id: UUID) -> Case:

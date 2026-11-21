@@ -7,11 +7,12 @@ Install dependencies as described in [setup](setup.md). Set
 ```text
 uv run --locked ruff check .
 uv run --locked ruff format --check .
-uv run --locked python -m unittest -v tests.test_core tests.test_security tests.test_evidence_runner
+uv run --locked python -m unittest -v tests.test_core tests.test_security tests.test_evidence_runner tests.test_telemetry tests.test_migrations
 ```
 
-Tests create and drop isolated schemas and fail if the database is
-unavailable; do not point them at production data. They use synthetic
+Tests create and drop isolated schemas and roles; the test identity requires
+`CREATEROLE`. They fail if the database is unavailable; do not point them at
+production data. They use synthetic
 identities and no Azure credentials or model. They exercise authorization,
 native workflow and actual worker termination after decision persistence and
 after a database action commits. They do not prove live Entra/OBO, external
