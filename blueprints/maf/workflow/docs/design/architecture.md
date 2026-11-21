@@ -236,8 +236,12 @@ For hosted caller binding, the documented direction is for the authenticated
 API to authorize the user and send Foundry workload Authorization together
 with `x-ms-user-identity` set from the trusted user OID. The hosted container
 receives platform-injected `x-agent-user-id`; protocol 2.0.0 exposes that
-identity through `get_request_context().user_id`. The caller needs Foundry
-Agent Consumer and custom `UserIdentityImpersonation/action` authorization.
+platform-generated global per-user identifier through
+`get_request_context().user_id`. It is distinct from the service-supplied,
+opaque `x-ms-user-identity`; do not assume the raw values match. The bridge
+must verify an explicit mapping to the already validated application
+principal. The caller needs Foundry Agent Consumer and custom
+`UserIdentityImpersonation/action` authorization.
 This avoids forwarding or persisting an end-user bearer/OBO token when the
 hosted workflow does not need to call a downstream API as that user. The
 bridge, role assignment, and network path remain unimplemented and unverified.
@@ -273,6 +277,41 @@ creation has the same lost-ack ambiguity, and a per-operation lock cannot
 make the remote create atomic with the application database. The local
 database idempotency ledger cannot recover a hosted response identity. Do not
 silently retry an ambiguous hosted request.
+
+The AgentServer
+[long-running API reference](https://learn.microsoft.com/azure/foundry/agents/concepts/long-running-agent-reference)
+documents one-shot resilient tasks with durable task IDs, a possible
+business-operation recovery building block. The PR #15 owner reports local
+testing where completed one-shot task IDs ran fresh again, so this alone is
+not persistent completed-result deduplication. It does not establish
+idempotency for the outer Responses create call or hosted behavior. Task
+namespace, different-input behavior, completed-result retention and reuse,
+cross-session storage, authorization association, and recovery of external
+effects remain unverified; this candidate does not unblock hosted retries.
+
+Inspection of the public
+`agent-framework-foundry-hosting==1.0.0b261112`
+(public PyPI wheel SHA-256
+`9609ca758dd7f9e45542e2407b473acb7514ec6c0fd4dad3189068fd4ee2e55c`):
+`HostedResponseRequest.response_id` is exposed in `_request.py:150-164`, and
+`_workflow_responses.py:425-434` resolves the request-aware factory before
+checkpoint preparation, parsing, and run claim. The parser is skipped on
+recovery while the factory still runs. This establishes hook availability in
+that exact source version only; safe caller binding, a separately linked
+reservation for each continuation, pending-reply/action ordering, idempotent
+side effects, same-response recovery, and hosted behavior remain unverified.
+
+## Telemetry privacy boundary
+
+The local blueprint documents no hosted telemetry as verified. Separately,
+the PR #14 owner reports that an opt-in native-global instrumentation probe
+on its pinned stack emitted duplicate FastAPI spans
+(`fastapi.dependencies`, `fastapi.endpoint`, `fastapi.serialization`, and
+`GET /secret`) alongside manual HTTP telemetry and leaked a synthetic query
+canary into exported span JSON. The owner is removing the opt-in or explicitly
+disabling auto-instrumentation until prompt/tool/identity and failure-path
+privacy are proven. The exact fix revision and regression evidence are
+pending; do not claim native MAF auto-instrumentation is safe.
 
 Configuration is deliberately local-only: `Settings` validates tenant/API
 UUIDs, a PostgreSQL URL, explicit CORS origins, and optional OBO allowlisted

@@ -444,6 +444,54 @@ entries to hide failed attempts or gaps.
   implemented and tested. Keep debugger UI, Restricted Mode, and macOS
   checks explicitly unverified.
 
+## 2026-11-21 - Hosted recovery and telemetry evidence updates
+
+- **One-shot task negative evidence (PR #15 owner report):** In a disposable
+  environment, the owner installed AgentServer Core 2.3.0 and Responses 2.4.0;
+  Core 2.4.0 was unavailable. With the SDK's real local filesystem
+  TaskManager, concurrent calls using the same task ID raised
+  `TaskConflictError`. After terminal completion, that ID ran fresh for both
+  same and different inputs, including after manager restart; a different
+  session also ran fresh. The inspected one-shot `@task` is always ephemeral,
+  is deleted at terminal completion, and rejects `ephemeral=False`; local
+  storage partitions by agent/session/task. This is scoped to the tested
+  local SDK/version and does not establish hosted behavior. Native one-shot
+  task identity is not persistent completed-result deduplication.
+- **Exact hosted source correction:** Inspection of the public
+  `agent-framework-foundry-hosting==1.0.0b261112` wheel (SHA-256
+  `9609ca758dd7f9e45542e2407b473acb7514ec6c0fd4dad3189068fd4ee2e55c`) found
+  that `HostedResponseRequest.response_id` is exposed in `_request.py:150-164`;
+  `_workflow_responses.py:425-434` resolves the request-aware factory before
+  checkpoint preparation, parsing, and run claim. The parser is skipped on
+  recovery, but the factory still runs. This corrects the earlier docs-only
+  uncertainty about hook availability in that exact source version. It does
+  not prove safe identity binding, a durable reservation per continuation,
+  pending-reply/action ordering, idempotent side effects, same-response
+  recovery, authorization, or hosted runtime behavior. A Postgres
+  owner/digest-bound compare-and-set reservation remains only a candidate:
+  the host's public docs do not establish that the hook can safely control
+  every action and pending-reply consumption, and every continuation creates
+  a new outer response requiring a separately linked reservation. Lost claim
+  visibility, user/session mapping, duplicate side-effect/checkpoint windows,
+  and expiry remain unproven.
+- **Native telemetry failure (PR #14 owner report):** Opt-in native-global
+  instrumentation on the pinned stack emitted duplicate FastAPI spans
+  (`fastapi.dependencies`, `fastapi.endpoint`, `fastapi.serialization`, and
+  `GET /secret`) alongside manual HTTP telemetry and leaked a synthetic
+  query canary into exported span JSON. The owner is removing that opt-in or
+  explicitly disabling auto-instrumentation until prompt/tool/identity and
+  failure-path privacy are proven. The exact fix revision and regression
+  results are pending; this is a concrete failure, not evidence that native
+  MAF instrumentation is safe. It is separate from the local workflow's
+  unverified telemetry plan.
+- **Next actions / limits:** Keep hosted recovery blocked until the
+  request-aware hook is exercised against an explicit authorization and
+  durable-reconciliation design, including each continuation and external
+  effect failure window. Keep telemetry safety unverified until the PR #14
+  fix is tied to an exact revision and privacy regression evidence. Do not
+  treat the local task probe, candidate reservation, or source-level hook
+  finding as hosted acceptance.
+
 ## Current acceptance queue
 
 | Item | Status | Evidence needed / next action |
