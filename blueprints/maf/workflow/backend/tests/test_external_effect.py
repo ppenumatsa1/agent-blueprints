@@ -420,6 +420,13 @@ class ExternalEffectTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(digest, hashlib.sha256(body).hexdigest())
                 self.assertEqual(json.loads(body)["case_id"], str(case.id))
                 self.assertEqual(json.loads(value), {"value": 42})
+                self.assertEqual(self.store.get(case.id).status, "approved")
+                with self.store.connect() as connection:
+                    self.assertIsNone(
+                        connection.execute(
+                            "SELECT 1 FROM wf_action_ledger WHERE case_id = %s", (case.id,)
+                        ).fetchone()
+                    )
                 await self.host.resume(case.id)
                 self.assertEqual(self.destination.count(), before + 1)
                 self.assertEqual(self.destination.effect(key), effect)
