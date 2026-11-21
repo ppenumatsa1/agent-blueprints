@@ -109,6 +109,11 @@ workflow outcomes. Configuration is not proof of successful ingestion.
 Export failure can lose spans or metrics; monitor signals and validate the
 hosted pipeline separately.
 
+Span creation, metadata, context extraction and closure failures also emit a
+fixed `telemetry.instrumentation` failure signal without retrying the
+instrumented operation or replacing its exception. Initialization and
+pre-startup failures release created providers and exporters where possible.
+
 The `blueprint.operations` counter and `blueprint.operation.duration`
 histogram measure each instrumented operation independently of trace sampling.
 Their only dimensions are allowlisted operation and outcome; they contain no
