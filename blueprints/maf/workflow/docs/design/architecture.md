@@ -363,9 +363,9 @@ with an opaque app-supplied `x-ms-user-identity` scoping value derived from
 the validated principal. The hosted container receives platform-injected
 `x-agent-user-id`; protocol 2.0.0 exposes that
 platform-generated global per-user identifier through
-`get_request_context().user_id`. It is distinct from the service-supplied,
-opaque `x-ms-user-identity`; do not assume the raw values match. Their
-equivalence or binding to the validated application principal is unsupported
+`get_request_context().user_id`. This is a different header from the
+app-supplied opaque `x-ms-user-identity`; do not assume their raw values match.
+Their equivalence or binding to the validated application principal is unsupported
 and unverified. The bridge must verify an explicit mapping to that principal
 and authorize each principal's session. The caller needs Foundry Agent Consumer
 and custom `UserIdentityImpersonation/action` authorization.

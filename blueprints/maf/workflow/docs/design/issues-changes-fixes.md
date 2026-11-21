@@ -384,9 +384,10 @@ entries to hide failed attempts or gaps.
   trusted user OID. **Superseded/unverified:** this historical OID and identity
   equivalence claim is not safe current guidance. The later
   [delegated-isolation clarification](#2026-11-21---delegated-session-isolation-and-debugger-evidence)
-  treats `x-ms-user-identity` as an opaque app-supplied scoping value distinct
-  from platform-generated `x-agent-user-id`; neither its binding to the validated
-  principal nor their equivalence is established. A trusted app must authorize
+  treats `x-ms-user-identity` as an opaque app-supplied scoping value and
+  `x-agent-user-id` as a different platform-generated header; neither binding
+  to the validated principal nor equivalence of their values is established.
+  A trusted app must authorize
   each principal's session, map callers to distinct sessions, and reject
   unchecked session IDs. Neither header is authorization, and bearer/OBO tokens
   must not be persisted. The bridge and mapping remain unimplemented and
@@ -859,9 +860,9 @@ entries to hide failed attempts or gaps.
   session, they can see each other's data. The trusted application must
   authenticate each caller, maintain a server-side caller-to-session
   mapping, issue distinct session IDs, and reject unchecked client-supplied
-  session IDs. The platform-generated global `x-agent-user-id` and
-  service-supplied opaque `x-ms-user-identity` are distinct values; do not
-  assume their raw strings match. The bridge must verify an explicit mapping
+  session IDs. Platform-generated global `x-agent-user-id` and app-supplied
+  opaque `x-ms-user-identity` are different headers; do not assume their raw
+  values match. The bridge must verify an explicit mapping
   from the validated application principal. `x-ms-user-identity` is an
   identity-scoping assertion, not authorization. This hosted bridge and
   mapping are not implemented or tested.

@@ -180,7 +180,7 @@ verification before claiming durability.
 The proposed caller-binding direction requires the authenticated API to
 authorize the caller and send Foundry workload Authorization plus an opaque
 app-supplied `x-ms-user-identity` scoping value derived from the validated
-principal. The hosted container receives distinct platform-injected
+principal. The hosted container receives a different, platform-injected header,
 `x-agent-user-id`; protocol 2.0.0 exposes that platform identity as
 `get_request_context().user_id`. Neither header establishes authorization,
 and their equivalence or mapping to the validated principal is unsupported and
