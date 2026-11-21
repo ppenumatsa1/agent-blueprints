@@ -13,6 +13,34 @@ GENERATOR = ROOT / "scripts" / "instantiate_maf.py"
 
 
 class InstantiationTests(unittest.TestCase):
+    def test_external_effect_guidance_does_not_treat_outbox_as_deduplication(self):
+        workflow = ROOT / "blueprints" / "maf" / "workflow"
+        passages = (
+            (workflow / "README.md", "The local host uses", "The Foundry Responses adapter"),
+            (workflow / "docs" / "architecture.md", "4. A database action", "The [testing guide]"),
+            (workflow / "docs" / "design" / "architecture.md", "The per-case PostgreSQL", "For an interrupted start"),
+            (workflow / "docs" / "design" / "specs.md", "| SPEC-05 |", "| SPEC-06 |"),
+            (workflow / "docs" / "design" / "specs.md", "| Consequential external effects |", "```mermaid"),
+            (workflow / "docs" / "design" / "issues-changes-fixes.md", "- **Priority/extension decisions:**", "- **Next verification:**"),
+            (ROOT / "docs" / "implementation-plan.md", "| P0: consequential external side effects |", "| P1-07"),
+            (ROOT / "docs" / "master-checklist.md", "| Consequential external side-effect authorization", "| Authenticated FastAPI"),
+        )
+        for document, start, end in passages:
+            with self.subTest(document=document.relative_to(ROOT), passage=start):
+                text = document.read_text(encoding="utf-8").split(start, 1)[1].split(end, 1)[0]
+                text = " ".join(text.lower().split())
+                for phrase in (
+                    "service-specific authorization",
+                    "downstream idempotency",
+                    "authoritative reconciliation",
+                    "fail closed",
+                    "manual resolution",
+                    "outbox only persists intent",
+                    "deduplicat",
+                    "lost acknowledgment",
+                ):
+                    self.assertIn(phrase, text)
+
     def test_hosted_identity_guidance_rejects_unverified_oid_binding(self):
         documents = (
             ROOT / "docs" / "agent-blueprints-architecture.md",

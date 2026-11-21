@@ -1022,7 +1022,7 @@ entries to hide failed attempts or gaps.
 
 | Item | Status | Evidence needed / next action |
 | --- | --- | --- |
-| Eight design documents and generated inclusion | Passed at exact tested head `5d71842` | `maf-independent` passed in run 44959327591 after copying and checking the issue-linked documentation. |
+| Eight design documents and generated inclusion | Passed at exact tested head `8b3c357` | `maf-independent` passed in run 44960731511 after copying and checking the issue-linked documentation. |
 | Canonical imports, API module boundaries and legacy-shim removal | Implemented in foundation head `1e99e03` | PR #11 run [44954168348](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44954168348) passed five checks for that exact head. Preserve direct imports and canonical route/composition/lifecycle boundaries. |
 | Generated-verifier pipeline failure propagation | Implemented in foundation commit `d0e1727`, retained at `1e99e03` | `tests/test_ci_workflow.py` covers failed, skipped, expected-failure, and successful outputs; PR #11 run 44954168348 passed all five checks at head `1e99e03`. |
 | Locked developer tooling | Passed source/generated installs and Ruff at exact tested head `b633539` | Run 44955776238 passed the locked source/generated jobs. Earlier run 44955210922 applies to `152743a` only. macOS, interactive debugging and Restricted Mode remain unverified; track [#23](https://github.com/ppenumatsa1/agent-blueprints/issues/23). |
@@ -1030,8 +1030,8 @@ entries to hide failed attempts or gaps.
 | Versioned database migrations | Integrated; exact-head source/generated CI passed | Run 44955776238 passed `maf-core` and `maf-independent` on `b633539`. Managed PostgreSQL version alignment, backup/restore and operational evidence remain in [#24](https://github.com/ppenumatsa1/agent-blueprints/issues/24); historical PG16 tests were on separate revisions. |
 | Foundry-first infrastructure staging | Static validation passed; application graph not wired or deployed | Run 44955776238 passed `maf-infrastructure` and generated infrastructure checks on `b633539`. Private paths, database identity, auth/proxy wiring and service contracts remain in [#18](https://github.com/ppenumatsa1/agent-blueprints/issues/18); deployment requires separate authorization under [#28](https://github.com/ppenumatsa1/agent-blueprints/issues/28). |
 | PostgreSQL major-version alignment | Local integrated runtime tested on PostgreSQL 17.12 | Azure template selects 16; earlier 16.15 migration checks were on separate revisions. Resolve target and verify managed behavior under [#24](https://github.com/ppenumatsa1/agent-blueprints/issues/24). |
-| Combined PR #17 revision CI | Six-check pass on exact head `5d71842931446a5fe1cd2566c5d32f77e6ed4d5d`, base `1e99e038dc31c0ae25e5ea7712030d204ee35bc0` | Run [44959327591](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44959327591) passed all six checks. Merge ref `206a4aa9ab37cf0b8983ae4cea3b081d34ac784b` had exact base/head parents and identical tree `f537c547e3529c25cac5658cd3a8808b5b1a3c57`. Generated verifier passed 44 tests with no skips or expected failures. Synthetic producer continues to report approval/recovery passed, explanation/hint unverified, and unsigned validator exit 1/unverified. |
-| Reusable MAF extension contracts (#35) | Implemented locally; [draft PR #37](https://github.com/ppenumatsa1/agent-blueprints/pull/37) exact-head CI pending | Added typed provider/model selection, explicit versioned prompt assets with source-byte digests, MAF `Agent` construction, principal-bound `FunctionTool` registration with affirmative authorization, and an application-owned native `Executor`/`WorkflowBuilder` factory using the existing host contract. Local integration exercises approval, rejection, restart, and both crash-recovery windows. Tests cover invalid configuration and false/None authorization before the example's data read. The generated synthetic example does not call a model or return synthetic model output. Arbitrary trusted Python callbacks are not sandboxed; the absolute "extensions cannot bypass" criterion remains unverified. No live model, hosted identity/checkpoint/recovery (#19/#20/#22), trusted readiness (#21), or consequential external effect (#32) is verified. |
+| Combined PR #17 revision CI | Six-check pass on exact head `8b3c3578f36c30f32f4539ef1d181e1ff3984ab4`, base `1e99e038dc31c0ae25e5ea7712030d204ee35bc0` | Run [44960731511](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44960731511) passed all six checks. Merge ref `2ab8f3c92ebde95aa5c0bfb2cd33b0e5ab558c52` had exact base/head parents and identical tree `304b2b02432bc8bf9a63b641c853e7f07467e860`. Generated verifier passed 44 tests with no skips or expected failures. Synthetic producer continues to report approval/recovery passed, explanation/hint unverified, and unsigned validator exit 1/unverified. |
+| Reusable MAF extension contracts (#35) | Implemented locally; [draft PR #37](https://github.com/ppenumatsa1/agent-blueprints/pull/37) | Added typed provider/model selection, explicit versioned prompt assets with source-byte digests, MAF `Agent` construction, principal-bound `FunctionTool` registration with affirmative authorization, and an application-owned native `Executor`/`WorkflowBuilder` factory using the existing host contract. Source and generated backend suites each passed 83 tests (8 extension tests); generated acceptance passed 44 tests without skips; the root suite passed 49 tests with one expected adapter-not-selected skip, including #17's outbox documentation regression. Integration exercises approval, rejection, restart, and both crash-recovery windows. Tests cover invalid configuration and false/None authorization before the example's data read, and assert the authorized tool content. The generated synthetic example does not call a model or return synthetic model output. Arbitrary trusted Python callbacks are not sandboxed; the absolute "extensions cannot bypass" criterion remains unverified. No live model, hosted identity/checkpoint/recovery (#19/#20/#22), trusted readiness (#21), or consequential external effect (#32) is verified. |
 | Foundry host identity, per-user isolation, checkpoints and lost-response recovery | Blocked and explicitly deferred | No trusted host bridge, per-caller session map, managed checkpoint integration or safe ambiguous-create recovery. Preserve distinction between `x-agent-user-id` and opaque `x-ms-user-identity`; never persist end-user bearer/OBO tokens. Track host/checkpoints [#19](https://github.com/ppenumatsa1/agent-blueprints/issues/19), recovery [#20](https://github.com/ppenumatsa1/agent-blueprints/issues/20), caller binding [#22](https://github.com/ppenumatsa1/agent-blueprints/issues/22). Deferral is not a security waiver. |
 | Independent readiness trust, evaluations and browser hints | Incomplete/unverified | Synthetic approval/recovery passed; explanation/hint remain unverified and unsigned validator exits 1. Track trust [#21](https://github.com/ppenumatsa1/agent-blueprints/issues/21), evaluations/hints [#25](https://github.com/ppenumatsa1/agent-blueprints/issues/25). |
 | Live Entra/OBO, accessible UI, external effects and local demo | Unverified or not exercised | Track [#27](https://github.com/ppenumatsa1/agent-blueprints/issues/27), P0 consequential effects [#32](https://github.com/ppenumatsa1/agent-blueprints/issues/32), and [#29](https://github.com/ppenumatsa1/agent-blueprints/issues/29). Block consequential remote actions until #32 is verified. |
@@ -1072,8 +1072,11 @@ available PR or test record does not establish one.
   the permanent independent application is P1 [#30](https://github.com/ppenumatsa1/agent-blueprints/issues/30)
   but still requires separate repository authorization. Consequential
   external effects are P0 [#32](https://github.com/ppenumatsa1/agent-blueprints/issues/32):
-  block them until authorization, downstream idempotency/outbox, reconciliation
-  and fault-injection evidence pass.
+  block them until service-specific authorization, verified downstream
+  idempotency, authoritative reconciliation and fault-injection evidence pass;
+  otherwise fail closed and use manual resolution. A transactional outbox only
+  persists intent; it cannot deduplicate an external effect after a lost
+  acknowledgment.
 - **Next verification:** Run focused documentation/instantiation and CI
   workflow tests, push without force, verify the exact #17 head, base and merge
   tree, and inspect every combined Actions check including `maf-infrastructure`
@@ -1094,22 +1097,23 @@ available PR or test record does not establish one.
   builds the existing native approval workflow. Invalid provider/prompt
   configuration and unauthorized tool requests are covered. The unavailable
   test client raises if invoked; no response is fabricated.
-- **Verification:** At stacked revision `287e9b5` (base
-  `5d71842931446a5fe1cd2566c5d32f77e6ed4d5d`), source and independently
-  generated backend suites each passed 79 tests, including all 7 extension
+- **Verification:** After integrating #17 head
+  `8b3c3578f36c30f32f4539ef1d181e1ff3984ab4`, source and independently
+  generated backend suites each passed 83 tests, including all 8 extension
   tests; Ruff check and format passed in both. Generated acceptance passed 44
-  tests with no skips or expected failures. The isolated root suite passed 48
-  tests with one expected adapter-not-selected skip. The generated project was
+  tests with no skips or expected failures. The isolated root suite passed 49
+  tests with one expected adapter-not-selected skip, including #17's outbox
+  guidance regression. The generated project was
   imported from its independent copy and used its own locked virtual
   environment. The local transactional action fixture is not a remote-effect
   boundary; neither the tool registry nor the database ledger sandboxes Python
   or proves external authorization/idempotency. Consequential remote effects
   remain blocked pending #32. PR #17's base snapshot is independently verified by run
-  [44959327591](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44959327591):
-  all six jobs passed for exact head `5d71842931446a5fe1cd2566c5d32f77e6ed4d5d`
+  [44960731511](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44960731511):
+  all six jobs passed for exact head `8b3c3578f36c30f32f4539ef1d181e1ff3984ab4`
   and base `1e99e038dc31c0ae25e5ea7712030d204ee35bc0`; merge ref
-  `206a4aa9ab37cf0b8983ae4cea3b081d34ac784b` had exact parents and tree
-  `f537c547e3529c25cac5658cd3a8808b5b1a3c57`, identical to the head.
+  `2ab8f3c92ebde95aa5c0bfb2cd33b0e5ab558c52` had exact parents and tree
+  `304b2b02432bc8bf9a63b641c853e7f07467e860`, identical to the head.
 - **Install attempt and workaround:** Direct `uv sync --locked` for the
   generated copy hit a TLS handshake failure fetching `cffi` from
   `files.pythonhosted.org`. No lock or dependency files were changed. Exporting

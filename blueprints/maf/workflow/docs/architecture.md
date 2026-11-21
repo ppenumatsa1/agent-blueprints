@@ -97,8 +97,12 @@ remain blocked by [#32](https://github.com/ppenumatsa1/agent-blueprints/issues/3
    transaction. The transaction callback is arbitrary application code, not a
    sandbox; it can make external calls that the database ledger cannot roll
    back or deduplicate. Do not put consequential remote effects in that path.
-   Keep them blocked until #32 is independently verified. The local ledger
-   proves neither external idempotency nor a general exactly-once guarantee.
+   Such effects require service-specific authorization, verified downstream
+   idempotency and authoritative reconciliation; otherwise fail closed and
+   use manual resolution instead of retrying an ambiguous effect. A transactional
+   outbox only persists intent; it cannot deduplicate an external effect after
+   a lost acknowledgment. Test retries and recovery windows; no general
+   exactly-once guarantee is implied. Model and tool input remain untrusted.
 
 The [testing guide](testing.md) describes the synthetic evidence and its
 limits. Foundry-managed checkpoints and hosting are planned and unverified;

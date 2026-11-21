@@ -87,9 +87,9 @@ canary into exported span JSON. The integrated fix from `3aa389f` removes the
 opt-in and disables auto-instrumentation; all 23 focused telemetry regressions
 passed locally, including recovery redaction and restricted-origin CORS.
 Public metric APIs replace private SDK fields. Exact PR #17 head
-`5d71842931446a5fe1cd2566c5d32f77e6ed4d5d`, based on
+`8b3c3578f36c30f32f4539ef1d181e1ff3984ab4`, based on
 `1e99e038dc31c0ae25e5ea7712030d204ee35bc0`, passed all six jobs in run
-`44959327591`; its merge ref `206a4aa9ab37cf0b8983ae4cea3b081d34ac784b`
+`44960731511`; its merge ref `2ab8f3c92ebde95aa5c0bfb2cd33b0e5ab558c52`
 had the exact base/head parents and identical tree. Cloud ingestion remains
 unverified and native auto-instrumentation is not approved. Any later tree or
 base change also requires revalidation.
@@ -161,8 +161,11 @@ The per-case PostgreSQL advisory lock serializes host operations across
 checkpoint and SQL transitions. It does not make checkpoint writes atomic with
 database commits; startup recovery reconciles durable records and checkpoints.
 The same-transaction action ledger applies only to database effects performed
-through the supplied transaction. External side effects require downstream
-idempotency or a transactional outbox.
+through the supplied transaction. Consequential external side effects require
+service-specific authorization, verified downstream idempotency and
+authoritative reconciliation; otherwise fail closed and use manual resolution
+instead of retrying an ambiguous effect. A transactional outbox only persists
+intent; it cannot deduplicate an external effect after a lost acknowledgment.
 Their authorization and retry/idempotency boundary is tracked in
 [#32](https://github.com/ppenumatsa1/agent-blueprints/issues/32).
 Consequential remote actions are blocked until the P0 authorization,
