@@ -60,8 +60,8 @@ failures and the [regression test](../tests/test_ci_workflow.py) exercises
 failure, skip and success behavior. Prior CI job status alone is not proof
 that the verifier passed; logs for the prior PR heads recorded 44 tests and
 `OK`. [Run 44939172266](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44939172266)
-passed all five jobs for foundation head `d0e1727`; reconcile and verify the
-dependent PRs and combined revision separately.
+passed all five jobs for foundation head `d0e1727`. The dependent PRs now
+target that foundation and have their own successful head-specific runs.
 The copied evidence producer observed approval and recovery passing while
 explanation and browser hint remained unverified; the independent unsigned
 readiness report remained unverified. The first local container build could
@@ -74,15 +74,15 @@ approval of its resource inventory, estimated cost and deployment plan;
 permanent reference repository creation requires separate approval. As of
 2026-11-21, locked tooling is proposed in open
 [PR #13](https://github.com/ppenumatsa1/agent-blueprints/pull/13), head
-`543b137a432ca054920d629b943fc42a729df676`; its
-[hosted run](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44937692067)
+`b78634b3b746c7adbf5f8500e4b7023c96c67963`; its
+[hosted run](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44940616666)
 passed five checks for that exact revision. The proposal's reported
 Windows/Linux Compose verification used an approved mirror after public TLS
 failures; macOS and interactive debugger verification remain unverified.
 These results do not establish that tooling in PR #13 is merged or validate
 any combined revision. Documentation [PR #12](https://github.com/ppenumatsa1/agent-blueprints/pull/12)
-head `60458d9951bec3066dd92dc779714539007f7fd5` passed all five checks in
-[run 44936739123](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44936739123);
+head `58369ad5339b78ffb1f353773065fe30e7f2b155` passed all five checks in
+[run 44939850338](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44939850338);
 it also remains open.
 
 Each PR must remove obsolete compatibility layers, use direct imports,
@@ -129,8 +129,8 @@ downloads failed locally with a TLS handshake error. On foundation `9efeef0`,
 source and generated backend suites passed 36 tests each, independent
 verification passed 44 without skips, generated frontend passed 8 tests/build/
 CSP, and Ruff passed in both backends. Hosted run
-[44937692067](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44937692067)
-passed all five jobs for PR head `543b137`, not for any combined revision.
+[44940616666](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44940616666)
+passed all five jobs for PR head `b78634b`, not for any combined revision.
 macOS, interactive debugging and a clean public-only local installation
 remain unverified. Next verify integrated work and review the separate PRs.
 
@@ -157,8 +157,8 @@ passed 44 and generator tests passed two. The generated evidence producer
 passed approval/recovery observations but left explanation/hint unverified;
 the independent unsigned readiness report remained unverified.
 [PR #16](https://github.com/ppenumatsa1/agent-blueprints/pull/16) remains open;
-[run 44938122124](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44938122124)
-passed all five jobs on its final head `0364721`, not on the combined
+[run 44940559106](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44940559106)
+passed all five jobs for head `eb898f6`, not on the combined
 revision. Next verify the integrated revision; live backup/restore remains
 unverified.
 
@@ -170,12 +170,14 @@ resources would still incur cost. Foundry and monitoring private connectivity,
 PostgreSQL Entra token use, API/UI binding and the hosted-agent contract are
 not implemented or verified. Source and independent generated static checks
 and nine infrastructure security/configuration tests per copy passed locally
-on the rebased working tree; two instantiation tests also passed. Confirm the
-exact proposed head and actual PR CI, followed by separately authorized
+on the rebased working tree; two instantiation tests also passed.
+[PR #15](https://github.com/ppenumatsa1/agent-blueprints/pull/15)
+[run 44939817209](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44939817209)
+passed all six jobs for head `2023e16`. Follow with separately authorized
 network, identity, cost and deployment review; no cloud mutation has occurred.
 
-The staged PostgreSQL server selects 16 while Compose and the parallel
-migration catalog tests use 17. The pinned API's documented enum and examples
+The staged PostgreSQL server selects 16 while Compose uses 17. The pinned
+API's documented enum and examples
 conflict, and the compiler accepts arbitrary version strings; neither resolves
 17 support for that API. The [version-gap review](../blueprints/maf/workflow/infra/README.md#open-postgresql-version-gap)
 records a newer API as an unverified candidate. Separately, migration revision
@@ -183,9 +185,17 @@ records a newer API as an unverified candidate. Separately, migration revision
 PostgreSQL 16.15 after an initial auxiliary locale probe failed and was
 corrected. The integration worktree combines the migrations and infrastructure,
 but that result belongs to the separate migration revision. Resolve the target
-major and rerun clean, upgrade and drift tests on the exact combined revision before
-deployment; local evidence does not prove Azure compatibility or safe
-downgrade.
+major before deployment; local evidence does not prove Azure compatibility or
+safe downgrade.
+
+The local combined code revision `af3955a85036d3a6a01465648437a184a790309c`
+passed 68 source and 68 generated backend tests on each of PostgreSQL 16.15
+and 17.12, 47 selected-adapter root tests, 44 generated verification tests
+without skips, Ruff, frontend tests/build/CSP, offline IaC checks, and source
+and generated Compose smoke. Its unsigned readiness report remained
+unverified. The [integration journal](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-21---combined-engineering-layer-integration)
+records failed attempts and limitations. Exact final combined-revision CI
+and review are still required; none of these open PRs has been merged.
 
 P1-01 through P1-04 have an initial local foundation and a test-only
 application adapter, but the scenario has no authorized contract approval.

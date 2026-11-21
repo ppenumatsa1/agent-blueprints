@@ -23,7 +23,12 @@ class VerificationWorkflowTests(unittest.TestCase):
         script = textwrap.dedent(step.split("\n", 1)[1])
         stub = (
             'python() { printf "%s\\n" "$TEST_OUTPUT"; return "$TEST_STATUS"; }\n'
-            'uv() { python "$@"; }\n'
+            'uv() {\n'
+            '  [[ "$1" == run && "$2" == --locked && "$3" == --project && '
+            '"$4" == "$GENERATED_DIR/backend" && "$5" == python ]] || return 99\n'
+            '  shift 5\n'
+            '  python "$@"\n'
+            '}\n'
         )
 
         with tempfile.TemporaryDirectory() as temporary:

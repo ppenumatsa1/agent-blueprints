@@ -24,8 +24,8 @@ commands and editor configurations. CI uses the public lock; container
 installation exports its exact hashes and may use an operator-selected index.
 The copied project owns the same lock and does not import the source checkout.
 Local Windows and Linux-container checks do not prove macOS. Hosted
-[run 44937692067](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44937692067)
-passed all five checks for tooling head `543b137`, not this combined revision.
+[run 44940616666](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44940616666)
+passed all five checks for tooling head `b78634b`, not this combined revision.
 
 The longer-term target adds a Foundry Responses adapter and host-managed
 checkpoints, neither of which is implemented. Staged Foundry-first Bicep/azd describes
@@ -36,18 +36,18 @@ verified checkpoint strategy. Neither topology is a verified deployment;
 provisioning requires separate authorization.
 
 [PR #11](https://github.com/ppenumatsa1/agent-blueprints/pull/11) remains open.
-Its cleaned foundation commit `9efeef0` removes the compatibility aliases and
-uses canonical imports; [hosted CI run 44936094798](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44936094798)
+Its foundation commit `d0e1727` removes compatibility aliases, uses canonical
+imports, and propagates generated-verifier failures; [hosted CI run 44939172266](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44939172266)
 passed all five checks on that exact commit. This is not a merge or live
 hosting result. The copied
 [project guides](../blueprints/maf/workflow/README.md#project-guide) describe
-the current local boundaries and planned deployment/observability designs.
+the current local boundaries and staged deployment design.
 Their [design baseline](../blueprints/maf/workflow/docs/design/architecture.md)
 maps requirements to source and evidence; its engineering journal records
 verified findings and remaining work. The generated-copy tests include the
 design documents and validate local links. Parallel tooling, migrations,
-telemetry and Foundry-host work build on the foundation. Reconcile their
-interfaces and validate each resulting revision independently. Prepare
+telemetry and Foundry-host work build on the foundation. Validate each
+resulting revision independently. Prepare
 inventory, cost and a deployment plan for separate approval before
 provisioning or live validation.
 
@@ -71,12 +71,20 @@ transaction-scoped advisory locks; manual DDL and running old binaries still
 require operational quiescence. Identity requirements, backup and rollback limits,
 and scope of drift detection are in the [blueprint](../blueprints/maf/workflow/README.md#business-database-migrations).
 These migrations do not own MAF checkpoints or independently authorize
-business approvals. This branch is stacked on the modularity foundation;
-hosted CI and live operational recovery remain unverified. A deterministic
+business approvals. The migration PR is stacked on the modularity foundation;
+live operational recovery remains unverified. A deterministic
 checkpoint timestamp-tie defect was fixed in foundation `9efeef0`; the exact
 causes of earlier intermittent evidence failures remain unproven. Local
 source and generated tests passed on PostgreSQL 16.15 and 17.12 at `7cd99ac`;
 this does not verify Azure database configuration or live restoration.
+
+The local integration at `af3955a` combined the engineering layers. Source and
+independently generated backends each passed 68 tests on PostgreSQL 16.15 and
+17.12, generated verification passed 44 without skips, and both Compose stacks
+and offline infrastructure checks passed. The unsigned independent readiness
+report remained unverified. See the [integration journal](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-21---combined-engineering-layer-integration)
+for failed attempts and scope. Final combined-revision CI and cloud behavior
+remain separate checks; the individual PRs are still open.
 
 | Layer | Responsibility | Examples |
 | --- | --- | --- |
@@ -138,10 +146,9 @@ working topology. The optional registry remains publicly network-reachable
 with anonymous and admin access disabled. The API's project-wide
 agent-consumer grant is optional and disabled by default; review narrower
 agent scope, inherited grants, and actual caller restrictions.
-The staged PostgreSQL server selects major 16 while local Compose and the
-parallel migration baseline use 17. A separate migration revision passed 12
-local PostgreSQL 16.15 tests, including upgrade and drift; the combined
-application and Azure target remain unverified. The
+The staged PostgreSQL server selects major 16 while local Compose uses 17.
+A separate migration revision passed 12 local PostgreSQL 16.15 tests,
+including upgrade and drift; the Azure target remains unverified. The
 [version-gap review](../blueprints/maf/workflow/infra/README.md#open-postgresql-version-gap)
 does not claim live Azure support.
 Any future public API still requires Entra-backed authentication,

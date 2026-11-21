@@ -25,6 +25,54 @@ entries to hide failed attempts or gaps.
   migrations, telemetry export, Foundry hosting, cloud deployment, or live
   identity verification.
 
+## 2026-11-21 - Combined engineering-layer integration
+
+- **Decision:** Integrate the independently reviewed tooling, documentation,
+  observability, migration, infrastructure, and foundation changes in an
+  isolated worktree without merging their PRs. Retain the verifier pipeline
+  failure fix, the native checkpoint and hosted caller-binding investigations,
+  exact copied contracts, and each workstream's evidence and limitations.
+  The tooling reconciliation additionally makes the pipeline regression
+  assert the generated backend's `uv run --locked --project` selector.
+- **Local evidence:** At combined code revision `af3955a85036d3a6a01465648437a184a790309c`,
+  source and independently generated backends each passed 68 tests without
+  skips against both PostgreSQL 16.15 and 17.12, including authorization,
+  telemetry, migration, approval, rejection, and both worker-kill recovery
+  windows. The selected-adapter root suite passed 47 tests, and generated
+  independent verification passed 44 without skips. Both copies passed Ruff,
+  nine frontend tests, build and CSP checks, and offline Bicep/configuration
+  validation plus nine infrastructure tests. Source and generated Compose
+  ran explicit migrations and synthetic preparation, then returned UI 200,
+  health 204 and protected API 401. The generated Compose contexts stayed in
+  the copy, with no bind mounts; its API ran non-root with private checkpoints.
+  Focused instantiation and pipeline tests also passed after adding generated
+  infrastructure-document link coverage and the locked selector assertion.
+- **Readiness evidence:** The generated producer observed synthetic approval
+  and recovery passing, while explanation and browser hint remained unverified.
+  The independent unsigned validator returned exit 1 and `unverified`; none
+  of these observations is human release approval or trusted attestation.
+- **Failed attempts retained:** An offline generated `uv sync` failed because
+  the locked Ruff artifact was not cached. A hash-checked lock export was
+  installed through an approved temporary mirror; a subsequent offline locked
+  sync passed, and no mirror URL was committed. PR #13's reconciled local
+  public-only Compose build separately failed on a TLS download; its hosted
+  Compose check passed. The first combined generated Compose smoke reached
+  healthy services but our PowerShell asset check falsely reported a missing
+  script because it applied `-notmatch` to a multiline array. The built image
+  contained the script; a corrected string-based check and full retry passed.
+- **PR evidence:** Against foundation `d0e1727`, current open heads and
+  successful PR runs are #12 `58369ad` / 44939850338, #13 `b78634b` /
+  44940616666, #14 `cb4ff78` / 44940364995, #15 `2023e16` / 44939817209,
+  and #16 `eb898f6` / 44940559106. These individual runs are not combined
+  CI evidence.
+- **Next / limits:** Confirm CI for the final combined revision and review
+  the open PRs. Local results do not prove Azure PostgreSQL compatibility,
+  live identity, telemetry ingestion, Foundry caller binding or hosted
+  checkpoint recovery. Earlier intermittent evidence failures remain of
+  unproven cause; macOS, interactive debugging, and public-only local package
+  downloads remain unverified. No Azure resource or permanent application
+  repository was created.
+
 ## 2026-11-21 - Local tooling and observability integration
 
 - **Decision:** Preserve both open PR histories and merge observability locally
@@ -589,14 +637,14 @@ entries to hide failed attempts or gaps.
 
 | Item | Status | Evidence needed / next action |
 | --- | --- | --- |
-| Eight design documents and generated inclusion | Open in PR #12 | Focused instantiation tests and run 44936739123 passed on head `60458d9`; verify the combined revision separately. |
-| Canonical imports and legacy-shim removal | Implemented in open PR #11 | Foundation run 44936094798 passed all five checks on `9efeef0`; preserve direct imports in later changes. |
-| Locked developer tooling | Open in PR #13 | Run 44937692067 passed all five checks on head `543b137`; verify the combined revision separately. macOS, interactive debugging and public-only local downloads remain unverified. |
-| Privacy-safe observability | Open in PR #14 | Run 44938368000 passed all five checks on head `8c643df`; verify the combined revision separately. Hosted telemetry remains unverified. |
+| Eight design documents and generated inclusion | Open in PR #12 | Run 44939850338 passed on head `58369ad`; combined copy and link tests passed locally. |
+| Canonical imports and legacy-shim removal | Implemented in open PR #11 | Foundation run 44939172266 passed all five checks on `d0e1727`; preserve direct imports in later changes. |
+| Locked developer tooling | Open in PR #13 | Run 44940616666 passed on head `b78634b`; macOS, interactive debugging and public-only local downloads remain unverified. |
+| Privacy-safe observability | Open in PR #14 | Run 44940364995 passed on head `cb4ff78`; hosted telemetry remains unverified. |
 | Combined revision CI | Not run | Passing checks on individual PRs do not establish checks for their combined revision. |
-| Foundry-first infrastructure | In progress | Source and generated offline checks passed locally; confirm final-revision checks and actual PR-head CI, then coordinate live host, networking, identity and cost review. |
-| PostgreSQL major-version alignment | Open | Local migration checks passed on 16.15 and 17.12 at an intermediate combined revision; the staged 16/17 mismatch, final integrated revision, live API and Azure compatibility remain unverified. |
-| Current dependent PR CI | Pending on updated revision | Confirm all required checks correspond to the pushed PR head. |
+| Foundry-first infrastructure | Open in PR #15 | Run 44939817209 passed on head `2023e16`; combined source/generated offline checks passed locally. Resolve host, networking, identity and cost gaps. |
+| PostgreSQL major-version alignment | Open | Combined code `af3955a` passed source/generated suites on 16.15 and 17.12; the staged 16/17 mismatch, live API and Azure compatibility remain unverified. PR #16 run 44940559106 passed on head `eb898f6`. |
+| Current dependent PR CI | Passed on individual heads | Confirm combined-revision CI independently; none of the PRs has been merged. |
 | Foundry host caller binding and lost-response recovery | Blocked | Establish supported identity and reconciliation guarantees before implementing a hosted bridge. |
 | Live Entra/OBO, cloud telemetry, Azure deployment | Unverified | Separate scoped implementation, authorization where required, and live evidence. |
 

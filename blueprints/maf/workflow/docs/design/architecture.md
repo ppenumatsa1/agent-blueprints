@@ -164,7 +164,7 @@ flowchart LR
     API -. agent contract not verified .-> Project[Foundry account and project]
     Project -. no hosted service declared .-> Workflow[Future native MAF host]
     API -. Entra token flow not implemented .-> DB[Private PostgreSQL]
-    API -. export and private path not implemented .-> Monitor[App Insights and Log Analytics]
+    API -. private export path not configured .-> Monitor[App Insights and Log Analytics]
     Registry[Optional authenticated registry] -. scoped image pull .-> API
     Registry -. scoped image pull .-> UI
 ```
@@ -176,9 +176,10 @@ does not provide their private endpoints or verify any runtime connection.
 PostgreSQL uses a delegated subnet, private DNS and Entra-only authentication;
 the existing API does not acquire a database token. The staged server selects
 PostgreSQL 16, whereas local Compose uses 17. Twelve tests on a separate
-migration revision passed against local PostgreSQL 16.15; that revision is not
-integrated here and application compatibility with the Azure target remains
-unverified. Container Apps platform
+migration revision passed against local PostgreSQL 16.15; the integration
+worktree includes the migration changes, but that result belongs to the
+separate revision and compatibility with the Azure target remains unverified.
+Container Apps platform
 auth is a separately applied resource; application-level authentication and
 record authorization remain mandatory even if it fails. The optional registry
 is publicly network-reachable but disallows anonymous and admin access.

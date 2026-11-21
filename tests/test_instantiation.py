@@ -33,7 +33,11 @@ class InstantiationTests(unittest.TestCase):
                 copied = target / "docs" / source.relative_to(source_docs)
                 with self.subTest(document=source.relative_to(source_docs)):
                     self.assertEqual(source.read_bytes(), copied.read_bytes())
-            for markdown in (target / "README.md", *sorted((target / "docs").rglob("*.md"))):
+            for markdown in (
+                target / "README.md",
+                *sorted((target / "docs").rglob("*.md")),
+                *sorted((target / "infra").rglob("*.md")),
+            ):
                 links = re.findall(r"\[[^\]]+\]\(([^)]+)\)", markdown.read_text(encoding="utf-8"))
                 for destination in links:
                     link = urlsplit(destination)
