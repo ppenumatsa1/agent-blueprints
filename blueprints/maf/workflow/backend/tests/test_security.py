@@ -368,7 +368,7 @@ class ApiSecurityTests(unittest.TestCase):
             reviewer = self.identity.authenticate(self.reviewer_token).principal
             self.store.record_decision(case_id, reviewer, "approved")
             (self.settings.checkpoint_root / str(case_id) / f"{record.checkpoint_id}.json").unlink()
-        with self.assertLogs("blueprint.api", level=logging.ERROR) as logs:
+        with self.assertLogs("blueprint.telemetry", level=logging.INFO) as logs:
             with self.client() as restarted:
                 response = restarted.get(
                     f"/api/cases/{case_id}", headers=self.headers(self.owner_token)
@@ -376,6 +376,7 @@ class ApiSecurityTests(unittest.TestCase):
                 self.assertEqual(response.json()["failure_code"], "recovery_failed")
                 self.assertEqual(action_count(self.store, case_id), 0)
         self.assertNotIn(self.owner_token, " ".join(logs.output))
+        self.assertIn('"event":"recovery","outcome":"failure"', " ".join(logs.output))
 
     def test_startup_recovery_preserves_action_failure(self):
         with self.client() as client:
@@ -383,7 +384,7 @@ class ApiSecurityTests(unittest.TestCase):
             reviewer = self.identity.authenticate(self.reviewer_token).principal
             self.store.record_decision(case_id, reviewer, "approved")
         self.components = replace(self.components, action=FixtureAction(fail=True))
-        with self.assertLogs("blueprint.api", level=logging.ERROR):
+        with self.assertLogs("blueprint.telemetry", level=logging.INFO) as logs:
             with self.client() as restarted:
                 response = restarted.get(
                     f"/api/cases/{case_id}", headers=self.headers(self.owner_token)
@@ -393,6 +394,7 @@ class ApiSecurityTests(unittest.TestCase):
                     ("failed", "action_failed"),
                 )
                 self.assertEqual(action_count(self.store, case_id), 0)
+        self.assertIn('"event":"recovery","outcome":"action_failure"', " ".join(logs.output))
 
     def test_rejection_and_failed_action_remain_explicit(self):
         with self.client() as client:

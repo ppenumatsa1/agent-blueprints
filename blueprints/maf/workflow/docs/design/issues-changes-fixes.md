@@ -25,6 +25,67 @@ entries to hide failed attempts or gaps.
   migrations, telemetry export, Foundry hosting, cloud deployment, or live
   identity verification.
 
+## 2026-11-21 - Local tooling and observability integration
+
+- **Decision:** Preserve both open PR histories and merge observability locally
+  into the locked tooling/documentation baseline. Keep the public lock and
+  hash-checked installs, canonical imports, all backend CI selectors, and both
+  workstreams' prior evidence. The two telemetry pins and public lock additions
+  match tooling workstream revision `8a5b3b3`.
+- **Local evidence:** The combined tree passed offline lock validation, full
+  Ruff checks, 50 source and 50 generated backend tests, 44 generated verifier
+  tests, two generation tests, and nine frontend tests per copy with builds
+  and CSP checks. Source and generated backend images built and imported
+  telemetry with an approved mirror and hash-checked dependencies.
+- **Evidence boundary:** Direct public Python downloads failed locally with
+  TLS errors; the public-only lock contains no mirror URLs. Passing CI on the
+  separate PR heads is not evidence for this combined revision. Hosted CI,
+  public hosted configuration and cloud ingestion remain unverified.
+- **Next:** Reconcile independently developed migration and infrastructure
+  changes only after review; no PR is merged and no Azure resource is created.
+
+## 2026-11-21 - Instrumentation failure isolation
+
+- **Finding:** Span entry, annotation, context reads and closure could raise
+  into application execution, and a pre-yield startup failure bypassed
+  telemetry shutdown.
+- **Decision:** Isolate SDK operations individually, emit fixed failure
+  signals, never rerun the business action or replace its exception, and
+  clean up initialized telemetry on construction or startup failure.
+- **Evidence:** Focused injected-failure tests exercise synchronous and
+  asynchronous actions, HTTP status and propagation, exporter/provider
+  cleanup, and original exception identity. On implementation revision
+  `fe4550a`, source and generated backend suites passed 50 tests each, the
+  generated verifier passed 44, instantiation passed two, and changed Python
+  files passed the tooling branch's Ruff checks. Exact PR CI remains pending.
+- **Limit / lesson:** Public hosted configuration and cloud ingestion remain
+  unverified. A fixed signal is diagnostic, not delivery evidence; failures
+  can lose spans. Failure isolation must cover instrumentation
+  setup and teardown as well as export, without catching business errors.
+
+## 2026-11-21 - Privacy-safe observability
+
+- **Issue:** Trace-only export omitted required metrics, and silently accepting
+  missing Azure configuration obscured a nonfunctional hosted exporter.
+- **Decision:** Add manual allowlisted spans, JSON logs, counter and histogram,
+  explicit Azure trace and metric exporters, no metric exemplars, static
+  non-identifying exporter resource fields, fail-fast configuration and fixed
+  failure signals. Local mode has no exporter or collector.
+- **Evidence:** `backend/tests/test_telemetry.py` exercises in-memory signals,
+  redaction canaries, converted Azure envelopes and failure handling;
+  `frontend/src/test/api.test.ts` exercises browser trace context. Earlier
+  reconciled source and generated backend suites passed 45 tests each;
+  generated independent verification passed 44, instantiation passed two,
+  and both frontend suites passed nine with build and CSP checks. Earlier
+  revisions passed 46 backend tests each. Check exact PR CI before approval.
+- **Limits / lesson:** Export initialization is not ingestion evidence.
+  Hosted trace/metric delivery, outgoing and Foundry propagation, and Azure
+  operations remain unverified. A privacy review must cover exporter-generated
+  metadata and failure logs as well as application attributes.
+- **Coordination:** The independent tooling branch moves requirements into
+  `pyproject.toml` and `uv.lock`; its reported pins are SDK `1.45.2` and Azure
+  exporter `1.0.0b59`. Reconcile manifests and the public lock on integration.
+
 ## Prior implementation evidence
 
 ### 2026-11-21 - Reconcile developer tooling with canonical imports

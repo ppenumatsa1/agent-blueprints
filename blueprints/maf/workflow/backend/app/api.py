@@ -1,4 +1,3 @@
-import logging
 from contextlib import asynccontextmanager
 from typing import Annotated, Any, Literal
 from uuid import UUID, uuid4
@@ -29,9 +28,10 @@ from app.infrastructure.identity import AuthenticatedRequest, EntraIdentity, Ide
 from app.domain.models import Case, StateRepository
 from app.usecases.service import WorkflowService
 from app.infrastructure.store import PostgresStore
+from app.infrastructure.telemetry import Telemetry, _emit
+from opentelemetry.trace import SpanKind, Status, StatusCode
 
 
-logger = logging.getLogger("blueprint.api")
 bearer = HTTPBearer(auto_error=False)
 
 
@@ -79,50 +79,80 @@ def create_app(
 ) -> FastAPI:
     store = store if store is not None else PostgresStore(settings.database_url)
     identity = identity if identity is not None else EntraIdentity(settings)
+    telemetry = Telemetry(settings.telemetry_mode, settings.applicationinsights_connection_string)
+    try:
+        return _create_app(settings, components, store, identity, telemetry)
+    except BaseException:
+        telemetry.shutdown()
+        raise
+
+
+def _create_app(settings, components, store, identity, telemetry) -> FastAPI:
     host = LocalWorkflowHost(
-        store, components.action, settings.checkpoint_root, components.workflow_factory
+        store,
+        components.action,
+        settings.checkpoint_root,
+        components.workflow_factory,
+        telemetry=telemetry,
     )
+    if isinstance(store, PostgresStore):
+        store.telemetry = telemetry
     service = WorkflowService(store, host, components.rules, components.policy)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        store.initialize()
-        components.initialize(store)
-        for case_id, status in store.recoverable():
-            try:
-                if status == "created":
-                    await host.start(case_id)
-                else:
-                    await host.resume(case_id)
-            except Conflict:
-                logger.warning("Recovery is already in progress for case %s.", case_id)
-            except ActionError:
-                logger.error("The configured action failed during recovery for case %s.", case_id)
-            except BlueprintError as exc:
-                store.mark_recovery_failed(case_id, "recovery_failed")
-                logger.error("Recovery failed for case %s (%s).", case_id, type(exc).__name__)
-        yield
+        try:
+            store.initialize()
+            components.initialize(store)
+            for case_id, status in store.recoverable():
+                try:
+                    if status == "created":
+                        await host.start(case_id)
+                    else:
+                        await host.resume(case_id)
+                except Conflict:
+                    _emit("recovery", outcome="conflict")
+                except ActionError:
+                    _emit("recovery", outcome="action_failure")
+                except BlueprintError:
+                    store.mark_recovery_failed(case_id, "recovery_failed")
+                    _emit("recovery", outcome="failure")
+            yield
+        finally:
+            telemetry.shutdown()
 
     app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
     app.state.service = service
-    app.state.obo = OnBehalfOf(settings)
+    app.state.telemetry = telemetry
+    app.state.obo = OnBehalfOf(settings, telemetry=telemetry)
     if settings.cors_origins:
         app.add_middleware(
             CORSMiddleware,
             allow_origins=list(settings.cors_origins),
             allow_credentials=False,
             allow_methods=["GET", "POST"],
-            allow_headers=["Authorization", "Content-Type", "Idempotency-Key"],
+            allow_headers=["Authorization", "Content-Type", "Idempotency-Key", "traceparent"],
+            expose_headers=["X-Correlation-ID"],
         )
 
     @app.middleware("http")
     async def safe_errors(request: Request, call_next):
         request_id = str(uuid4())
-        try:
-            response = await call_next(request)
-        except Exception as exc:
-            logger.error("Request %s failed (%s).", request_id, type(exc).__name__)
-            response = JSONResponse(status_code=500, content={"detail": "Internal server error."})
+        with telemetry.operation(
+            "http.request",
+            kind=SpanKind.SERVER,
+            parent=telemetry.parent_from_headers(request.headers),
+            correlation_id=request_id,
+        ) as span:
+            try:
+                response = await call_next(request)
+            except Exception:
+                response = JSONResponse(
+                    status_code=500, content={"detail": "Internal server error."}
+                )
+            span.set_attribute("http.response.status_code", response.status_code)
+            if response.status_code >= 500:
+                span.set_status(Status(StatusCode.ERROR))
         response.headers["X-Correlation-ID"] = request_id
         return response
 

@@ -5,8 +5,9 @@
 This is the source map for the local MAF workflow blueprint. The implemented
 topology is React/MSAL, FastAPI, a native MAF workflow, PostgreSQL, private
 local file checkpoints, and Docker Compose. The synthetic application is an
-explicit example. Foundry hosting, cloud telemetry, and Azure deployment are
-planned and unverified. CI or local tests do not prove a live deployment.
+explicit example. Manual telemetry and opt-in Azure exporters are implemented;
+hosted ingestion, Foundry hosting, and Azure deployment remain unverified.
+CI or local tests do not prove a live deployment.
 
 ## Component view
 
@@ -34,6 +35,27 @@ flowchart LR
     Store --> DB
     Store --> Action
 ```
+
+## Telemetry boundary
+
+```mermaid
+flowchart LR
+    Browser[Browser request with optional traceparent] --> API[HTTP and workflow operations]
+    API --> Signals[Allowlisted spans, metrics and JSON logs]
+    Signals --> Local[Local logs only]
+    Signals -->|Explicit Azure mode| Export[Azure trace and metric exporters]
+    Export -.->|Ingestion unverified| AI[Existing Application Insights]
+```
+
+Only allowlisted operation/outcome dimensions are recorded in metrics, with
+no exemplars. Identifiers, payloads and exception details are excluded from
+telemetry; static device and instance values prevent host-name fallback.
+No collector is provisioned. Export failures are sanitized and do not alter
+workflow outcomes; configuration or initialization failures stop startup.
+Instrumented work is not retried when span setup, annotation or closure
+fails. SDK failures emit a sanitized signal and cannot replace an application
+exception. Startup failure cleanup includes initialized exporters and
+pre-lifespan service initialization.
 
 The browser is not authoritative for identity or permission. FastAPI validates
 the token and derives the principal; application policy controls record access

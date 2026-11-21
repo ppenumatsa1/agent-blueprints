@@ -7,9 +7,10 @@ project tests, and GitHub Actions on GitHub-hosted runners.
 
 **Planned and unverified:** Bicep infrastructure, azd provisioning/deployment,
 Foundry-hosted MAF, managed identity binding, Azure resource validation, cloud
-telemetry, ACA alternative, and live sign-in. This document describes
-acceptance gates for future work; it does not provide or authorize a cloud
-deployment command.
+telemetry ingestion, ACA alternative, and live sign-in. Explicit Azure trace
+and metric exporter configuration is implemented but not cloud-verified.
+This document describes acceptance gates for future work; it does not provide
+or authorize a cloud deployment command.
 
 ## Local development and Compose
 
@@ -24,7 +25,7 @@ deployment command.
    uv sync --locked
    uv run --locked ruff check .
    uv run --locked ruff format --check .
-   uv run --locked python -m unittest -v tests.test_core tests.test_security tests.test_evidence_runner
+   uv run --locked python -m unittest -v tests.test_core tests.test_security tests.test_evidence_runner tests.test_telemetry
    ```
 
 3. From `frontend`, run `npm ci`, `npm test`, `npm run build`, and

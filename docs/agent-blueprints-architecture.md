@@ -26,7 +26,7 @@ The copied project owns the same lock and does not import the source checkout.
 Local Windows and Linux-container checks do not prove macOS. Hosted CI passed
 for prior head `e1d9536` only; rerun checks on the reconciled revision.
 
-The longer-term target adds migrations, privacy-safe telemetry, a Foundry Responses
+The longer-term target adds migrations, a Foundry Responses
 adapter and host-managed checkpoints, and Foundry-first Bicep/azd for
 separately hosted frontend and API services. These are not implemented by
 this tooling increment. Hosting the workflow runtime in ACA is a deferred
@@ -39,7 +39,7 @@ uses canonical imports; [hosted CI run 44930591252](https://github.com/ppenumats
 passed all five checks on that exact commit. This is not a merge or live
 hosting result. The copied
 [project guides](../blueprints/maf/workflow/README.md#project-guide) describe
-the current local boundaries and planned deployment/observability designs.
+the current local boundaries and planned deployment designs.
 Their [design baseline](../blueprints/maf/workflow/docs/design/architecture.md)
 maps requirements to source and evidence; its engineering journal records
 verified findings and remaining work. The generated-copy tests include the
@@ -48,6 +48,17 @@ telemetry and Foundry-host work build on the foundation. Reconcile their
 interfaces and validate each resulting revision independently. Prepare
 inventory, cost and a deployment plan for separate approval before
 provisioning or live validation.
+
+The observability increment adds independently owned OTel trace and metric providers
+in the MAF backend, JSON operational signals, incoming W3C trace context, and
+explicit Azure Monitor trace and metric export configuration. Metrics have only
+allowlisted operation/outcome dimensions and no exemplars. Missing or invalid
+hosted exporter configuration fails startup; transient export failure is
+reported without changing workflow outcomes. It does not export locally
+by default, configure cloud resources, or establish hosted ingestion. Browser
+requests create a trace context without exporting a browser span. Outbound and
+Foundry-host propagation remain unverified; operational logs are
+not business audit or authorization evidence. See the [blueprint guidance](../blueprints/maf/workflow/README.md#operational-telemetry).
 
 | Layer | Responsibility | Examples |
 | --- | --- | --- |

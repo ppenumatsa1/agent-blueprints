@@ -11,6 +11,7 @@ claim about a deployed environment.
 | Python | Python 3.12; `python:3.12-slim` backend image | Matches the source and GitHub Actions runtime. A different Python minor requires package and CI verification. |
 | Agent workflow | `agent-framework-core==1.26.0` | Uses MAF `WorkflowBuilder`, `Executor`, `WorkflowContext`, and `CheckpointStorage` natively. LangGraph or an SDK harness would be a separate blueprint, not a hidden runtime switch. |
 | API | FastAPI `0.162.7`, Uvicorn `0.54.0` | Typed HTTP boundary, dependency-based bearer auth, and an ASGI server. |
+| Observability | OpenTelemetry SDK `1.45.2`, Azure Monitor exporter `1.0.0b59` | Manual traces and metrics, explicit Azure export; local mode exports nothing. Hosted ingestion remains unverified. |
 | Persistence | PostgreSQL `17-alpine`, Psycopg binary `3.3.9` | Relational transactions and uniqueness constraints support the decision/action ledger; MAF file checkpoints remain separate. |
 | Identity | MSAL `1.39.0`, PyJWT crypto `2.15.1` | MSAL is used in the browser; the API verifies Entra v2 access tokens, scopes, roles, and record access. Test identities are isolated to tests. |
 | API models | Pydantic provided by the pinned FastAPI graph | Request/response parsing rejects extra fields. A separate direct version pin is not currently declared. |
@@ -48,7 +49,7 @@ not copied into a generated project.
 
 The backend image exports the lock and verifies artifact hashes during install.
 Migrations, Foundry host integration, managed identity deployment,
-OpenTelemetry export, Bicep, and azd remain planned; no version or command
+Bicep, and azd remain planned; no version or command
 should be inferred for them. The current local image uses tags rather than
 immutable image digests, so supply-chain hardening is still an acceptance
 concern. See [deployment flow](deployment-flow.md) and

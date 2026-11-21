@@ -102,6 +102,62 @@ Only explicitly allowlisted downstream scopes may be requested; the supplied
 example does not call a downstream service. Use an appropriate secret manager
 and deployment identity in a real environment.
 
+## Operational telemetry
+
+The backend uses manual OpenTelemetry tracing and metrics for HTTP requests, workflow
+start/resume, selected PostgreSQL operations and OBO exchange. The
+`blueprint.telemetry` logger emits JSON operations with outcome, duration,
+trace/span IDs and a server-generated request correlation ID. It does not
+inspect payloads, tokens, claims, SQL, URLs, exception text or tool/model
+inputs and outputs. No auto-instrumentation or local telemetry stack is enabled.
+These operational logs are not approval or audit evidence.
+
+`TELEMETRY_MODE=local` is the default: local structured logs are emitted and
+cloud export is explicitly disabled. For a hosted service, explicitly set
+`TELEMETRY_MODE=azure-monitor` and supply an existing
+`APPLICATIONINSIGHTS_CONNECTION_STRING` through a secret manager. The
+prerelease Azure Monitor trace and metric exporters use batching and no offline
+disk storage. Missing or invalid configuration or exporter initialization
+fails startup with a sanitized error. Once initialized, trace or metric
+export/flush failures produce fixed, non-sensitive signals and do not change
+workflow outcomes. Configuration is not proof of successful ingestion.
+Export failure can lose spans or metrics; monitor signals and validate the
+hosted pipeline separately.
+
+Span creation, metadata, context extraction and closure failures also emit a
+fixed `telemetry.instrumentation` failure signal without retrying the
+instrumented operation or replacing its exception. Initialization and
+pre-startup failures release created providers and exporters where possible.
+
+The `blueprint.operations` counter and `blueprint.operation.duration`
+histogram measure each instrumented operation independently of trace sampling.
+Their only dimensions are allowlisted operation and outcome; they contain no
+business identifiers or payloads. Metric exemplars are disabled. The hosted
+metric reader exports periodically (SDK default 60 seconds; configurable via
+`OTEL_METRIC_EXPORT_INTERVAL` in milliseconds); local mode has no metric
+exporter. The pinned Azure exporter uses its preferred aggregation temporality.
+If the Azure SDK configuration disables custom metric export, startup fails
+rather than claiming metrics are enabled.
+Azure exporter and Azure core pipeline log propagation is suppressed in this
+mode because SDK exception logs can contain endpoints or other sensitive data;
+the exporter wrapper instead reports a fixed failure signal.
+Azure exporter Statsbeat, SDK statistics and remote configuration are disabled
+process-wide; static non-identifying device and service-instance values prevent
+the exporter from defaulting to the host name.
+
+Only valid W3C `traceparent` is accepted from clients; baggage and tracestate
+are discarded. The header is untrusted and never authorizes operations. The
+response's `X-Correlation-ID` is newly generated, is not a business ID, and
+matches the request log. The browser sends a random `traceparent` for each API
+request without exporting a browser span; if secure randomness is unavailable,
+the request proceeds without it. Outbound propagation and Foundry-host
+correlation are not yet implemented or verified. Recovery outside a request
+starts a new trace. Span sampling follows
+the SDK's parent-based default. Configure retention, access, ingestion region,
+and appropriate sampling in the hosted environment; none is verified here.
+Applications and deployment agents must not turn on additional automatic
+instrumentation or unrestricted SDK logging without a privacy review.
+
 ## Application extension points
 
 The project has sibling `backend` and `frontend` directories. The backend
@@ -139,7 +195,7 @@ the same commands work in PowerShell, macOS and Linux shells:
 uv sync --locked
 uv run --locked ruff check .
 uv run --locked ruff format --check .
-uv run --locked python -m unittest -v tests.test_core tests.test_security tests.test_evidence_runner
+uv run --locked python -m unittest -v tests.test_core tests.test_security tests.test_evidence_runner tests.test_telemetry
 ```
 
 Set `MAF_TEST_DATABASE_URL` to an isolated PostgreSQL database first. The lock
@@ -209,6 +265,8 @@ test-only adapter. From the generated `verification` directory:
 ```text
 uv run --locked --project ../backend python -c "import os,pathlib,unittest,sys; os.environ['SCENARIO_ADAPTER']=str(pathlib.Path('../backend/tests/order_adjustment_adapter.py').resolve()); sys.exit(not unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.discover('tests')).wasSuccessful())"
 ```
+
+From `backend`, run the locked backend suite shown above, including telemetry.
 
 The golden adapter exercises the API, local MAF host, and synthetic database
 action. The two worker-kill tests cover crashes after decision persistence
