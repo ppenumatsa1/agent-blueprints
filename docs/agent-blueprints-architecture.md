@@ -8,6 +8,24 @@ contracts and documented engineering patterns where they have demonstrated
 value; do not hide MAF, LangGraph, or a harness behind a universal runtime.
 Generated projects must not import this repository at runtime.
 
+## MAF modularity foundation and target
+
+The local blueprint and its generated copy now have sibling `backend` and
+`frontend` build contexts. The backend separates API composition, use cases,
+generic domain ports and policy, native MAF workflow/host, and PostgreSQL and
+identity infrastructure. Existing `app.*` extension imports remain aliases;
+application factories and transactional-action interfaces are unchanged.
+Requirements, examples, schema and backend tests are owned by `backend`.
+The verifier and exact contract bytes remain independent of the runtime.
+
+The longer-term target adds separately reviewed dependency locking and
+developer tooling, migrations, privacy-safe telemetry, a Foundry Responses
+adapter and host-managed checkpoints, and Foundry-first Bicep/azd for
+separately hosted frontend and API services. These are not implemented by
+this modularity increment. Hosting the workflow runtime in ACA is a deferred
+alternative requiring its own verified checkpoint strategy. Neither topology
+is a verified deployment; provisioning requires separate authorization.
+
 | Layer | Responsibility | Examples |
 | --- | --- | --- |
 | Agent definition | Instructions, goal, tools, skills, permissions | A bounded diagnostic agent |

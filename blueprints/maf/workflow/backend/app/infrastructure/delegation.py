@@ -2,9 +2,9 @@ from collections.abc import Callable, Sequence
 
 import msal
 
-from .config import Settings
-from .errors import DelegationError
-from .identity import AuthenticatedRequest
+from app.config import Settings
+from app.domain.errors import DelegationError
+from app.infrastructure.identity import AuthenticatedRequest
 
 
 class OnBehalfOf:

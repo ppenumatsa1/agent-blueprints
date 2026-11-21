@@ -4,9 +4,9 @@ from uuid import UUID
 
 import jwt
 
-from .config import Settings
-from .errors import AuthenticationFailed, AuthenticationUnavailable
-from .models import Principal
+from app.config import Settings
+from app.domain.errors import AuthenticationFailed, AuthenticationUnavailable
+from app.domain.models import Principal
 
 
 @dataclass(frozen=True)

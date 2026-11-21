@@ -2,8 +2,8 @@ import json
 import re
 from typing import Any
 
-from .errors import AccessDenied, InvalidInput
-from .models import Case, Principal
+from app.domain.errors import AccessDenied, InvalidInput
+from app.domain.models import Case, Principal
 
 
 class CaseAccessPolicy:

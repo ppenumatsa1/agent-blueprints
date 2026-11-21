@@ -7,8 +7,8 @@ import psycopg
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
-from .errors import ActionError, Conflict, NotFound
-from .models import Case, Decision, Principal, TransactionalAction
+from app.domain.errors import ActionError, Conflict, NotFound
+from app.domain.models import Case, Decision, Principal, TransactionalAction
 
 
 _CASE_QUERY = """

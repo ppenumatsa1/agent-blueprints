@@ -2,9 +2,9 @@ import importlib
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from .host import WorkflowFactory
-from .models import AccessPolicy, BusinessRules, StateRepository, TransactionalAction
-from .workflow import create_workflow
+from app.workflows.host import WorkflowFactory
+from app.domain.models import AccessPolicy, BusinessRules, StateRepository, TransactionalAction
+from app.workflows.workflow import create_workflow
 
 
 def _no_initialization(store: StateRepository) -> None:

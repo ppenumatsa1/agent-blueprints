@@ -12,8 +12,8 @@ from pydantic import BaseModel, ConfigDict
 
 from .application import ApplicationComponents
 from .config import Settings
-from .delegation import OnBehalfOf
-from .errors import (
+from app.infrastructure.delegation import OnBehalfOf
+from app.domain.errors import (
     AccessDenied,
     ActionError,
     AuthenticationFailed,
@@ -24,11 +24,11 @@ from .errors import (
     InvalidInput,
     NotFound,
 )
-from .host import LocalWorkflowHost
-from .identity import AuthenticatedRequest, EntraIdentity, IdentityProvider
-from .models import Case, StateRepository
-from .service import WorkflowService
-from .store import PostgresStore
+from app.workflows.host import LocalWorkflowHost
+from app.infrastructure.identity import AuthenticatedRequest, EntraIdentity, IdentityProvider
+from app.domain.models import Case, StateRepository
+from app.usecases.service import WorkflowService
+from app.infrastructure.store import PostgresStore
 
 
 logger = logging.getLogger("blueprint.api")

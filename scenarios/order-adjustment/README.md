@@ -18,8 +18,8 @@ amounts and identities are synthetic.
 
 The application acceptance test is skipped unless an adapter is explicitly
 selected; a skip is not acceptance evidence. The test-only MAF adapter lives
-in `blueprints/maf/workflow/tests/order_adjustment_adapter.py` in the source
-repository and is copied into generated projects. Set `SCENARIO_ADAPTER` to an
+in `blueprints/maf/workflow/backend/tests/order_adjustment_adapter.py` in the
+source repository and is copied into generated projects. Set `SCENARIO_ADAPTER` to an
 executable that reads one case's `input`
 JSON from stdin and emits JSON with `state`, integer `action_count`, `decision`,
 `explanation`, nonempty `correlation_id`, and any additional fields specified

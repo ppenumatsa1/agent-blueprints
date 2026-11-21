@@ -10,7 +10,7 @@ from agent_framework import (
     response_handler,
 )
 
-from .models import StateRepository, TransactionalAction
+from app.domain.models import StateRepository, TransactionalAction
 
 
 WORKFLOW_NAME = "approval-workflow-v1"

@@ -18,14 +18,21 @@ class InstantiationTests(unittest.TestCase):
             source_contract = ROOT / "scenarios" / "order-adjustment" / "verification-contract.json"
             copied_contract = target / "verification" / "scenarios" / "order-adjustment" / "verification-contract.json"
             self.assertEqual(source_contract.read_bytes(), copied_contract.read_bytes())
+            for source in (ROOT / "contracts").rglob("*"):
+                if source.is_file():
+                    copied = target / "verification" / "contracts" / source.relative_to(ROOT / "contracts")
+                    with self.subTest(contract=source.name):
+                        self.assertEqual(source.read_bytes(), copied.read_bytes())
             self.assertTrue((target / "compose.yaml").is_file())
-            self.assertTrue((target / "tests" / "order_adjustment_adapter.py").is_file())
+            self.assertTrue((target / "backend" / "tests" / "order_adjustment_adapter.py").is_file())
+            self.assertTrue((target / "backend" / "Dockerfile").is_file())
+            self.assertTrue((target / "backend" / "requirements-dev.txt").is_file())
             self.assertFalse((target / "frontend" / "node_modules").exists())
             self.assertFalse((target / "frontend" / "dist").exists())
             self.assertFalse((target / ".env").exists())
             environment = os.environ.copy()
             environment.pop("PYTHONPATH", None)
-            for cwd, module in ((target, "app"), (target / "verification", "readiness")):
+            for cwd, module in ((target / "backend", "app"), (target / "verification", "readiness")):
                 result = subprocess.run(
                     [sys.executable, "-c", f"import {module}; print({module}.__file__)"],
                     cwd=cwd,

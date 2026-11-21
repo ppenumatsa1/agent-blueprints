@@ -33,6 +33,23 @@ tests may use synthetic identities. Do not provision Azure resources.
 
 ### Execution sequence and work packages
 
+The modularity foundation reorganizes the local blueprint and generated
+copies into sibling backend/frontend contexts and separates backend
+responsibilities while preserving existing extension imports. Acceptance
+requires source and generated security/recovery tests, both crash windows,
+independent golden verification and exact contract bytes, credential-free
+CI and Compose smoke checks. Local evidence is recorded in the
+[checklist](master-checklist.md); PR review and hosted CI remain pending.
+The copied evidence producer observed approval and recovery passing while
+explanation and browser hint remained unverified; the independent unsigned
+readiness report remained unverified. The first local container build could
+not reach the public Python package host; a retry using the operator-approved
+package proxies built and passed the generated Compose smoke checks.
+Next, review and publish this foundation before accepting it; later separate
+increments cover locked tooling, configuration, migrations, observability,
+Foundry hosting, infrastructure and integration evidence. No deployment,
+Azure provisioning or permanent reference application is authorized here.
+
 P1-01 through P1-04 have an initial local foundation and a test-only
 application adapter, but the scenario has no authorized contract approval.
 Trusted result production and repository protection remain unverified. The
@@ -55,7 +72,7 @@ the local HTTP smoke check. Its unsigned readiness report is unverified.
 | ID | Bounded work package | Dependencies | Independently verifiable outcome |
 | --- | --- | --- | --- |
 | P1-01 | Define the synthetic scenario, golden acceptance tests, and contract; obtain authorized approval. | None | [Scenario, golden cases, and test-only adapter](../scenarios/order-adjustment/README.md) exist; independent authorized approval remains outstanding. |
-| P1-02 | Define normalized result, evidence, baseline, and signed-decision inputs; map actual runner output. | P1-01 | The [synthetic runner](../blueprints/maf/workflow/tests/evidence_runner.py) records actual observations; independent result attestation remains outstanding. |
+| P1-02 | Define normalized result, evidence, baseline, and signed-decision inputs; map actual runner output. | P1-01 | The [synthetic runner](../blueprints/maf/workflow/backend/tests/evidence_runner.py) records actual observations; independent result attestation remains outstanding. |
 | P1-03 | Implement local traceability, evidence integrity, freshness, decisions, and profile gates. | P1-02 | [Validator](../readiness/validator.py) and [acceptance tests](../tests/test_readiness.py) exercise the policy; actual trust and provenance require independent administration. |
 | P1-04 | Expose the validator as a local CLI with a machine-readable report. | P1-03 | [CLI](../readiness/__main__.py) and [usage](readiness-validator.md) preserve outcomes and disclose unapproved inputs. |
 | P1-05 | Create a self-contained blueprint with the local React, FastAPI, PostgreSQL, and Docker Compose stack. | P1-01 interfaces | The stack starts; one temporary generated project builds, runs, tests, and verifies independently. Automated tests need no Azure credentials; interactive sign-in requires existing Entra configuration. |

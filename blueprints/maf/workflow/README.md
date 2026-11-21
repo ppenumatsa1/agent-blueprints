@@ -80,6 +80,13 @@ and deployment identity in a real environment.
 
 ## Application extension points
 
+The project has sibling `backend` and `frontend` directories. The backend
+contains API composition (`app/api.py`), application coordination
+(`app/application.py` and `app/usecases`), generic domain types and policy
+(`app/domain`), native MAF workflow and local host (`app/workflows`), and
+PostgreSQL and identity adapters (`app/infrastructure`). Existing `app.*`
+module paths remain compatibility aliases for application extensions.
+
 - Supply `ApplicationComponents` from a `module:function` factory: replace
   `BusinessRules`, `AccessPolicy`, `TransactionalAction`, initialization,
   or the native workflow factory. Include application-owned modules in the
@@ -102,11 +109,11 @@ records, and human decisions separate.
 ## Tests
 
 Use Python 3.12 and an isolated PostgreSQL database. Install
-`requirements-dev.txt` in a virtual environment, set `MAF_TEST_DATABASE_URL`
-to the test database, and run from this directory:
+`backend/requirements-dev.txt` in a virtual environment, set
+`MAF_TEST_DATABASE_URL` to the test database, and run from `backend`:
 
 ```text
-python -m unittest -v tests.test_core tests.test_security tests.test_evidence_runner
+python -m unittest -v tests.test_core tests.test_security tests.test_evidence_runner tests.test_modularity
 ```
 
 These tests fail rather than skip if the database is unavailable. They use
@@ -138,17 +145,17 @@ contexts, contracts, test fixtures, and readiness CLI; it does not import or
 mount the original checkout. It is an initial project, not a synchronization
 mechanism: maintain and review subsequent changes in the copied project.
 
-In the generated project, install both `requirements-dev.txt` and
+In the generated project, install both `backend/requirements-dev.txt` and
 `verification/requirements-dev.txt` in an isolated Python environment. Set
 `MAF_TEST_DATABASE_URL` to an isolated PostgreSQL database and select the
 test-only adapter. For example, in PowerShell:
 
 ```powershell
-$env:SCENARIO_ADAPTER = (Resolve-Path .\tests\order_adjustment_adapter.py).Path
+$env:SCENARIO_ADAPTER = (Resolve-Path .\backend\tests\order_adjustment_adapter.py).Path
 Set-Location .\verification
 python -m unittest discover -s tests -v
-Set-Location ..
-python -m unittest -v tests.test_core tests.test_security tests.test_evidence_runner
+Set-Location ..\backend
+python -m unittest -v tests.test_core tests.test_security tests.test_evidence_runner tests.test_modularity
 ```
 
 The golden adapter exercises the API, local MAF host, and synthetic database
@@ -158,10 +165,11 @@ their own isolated schemas. Frontend and Compose instructions above also
 apply to the copy.
 
 To retain per-case observations, both crash results, normalized check
-results, and an unsigned readiness input, run from the generated project:
+results, and an unsigned readiness input, run from the generated project's
+`backend` directory:
 
 ```powershell
-python -m tests.evidence_runner --verification-root .\verification --output .\verification\evidence\run --revision <source-revision> --environment local-synthetic
+python -m tests.evidence_runner --verification-root ..\verification --output ..\verification\evidence\run --revision <source-revision> --environment local-synthetic
 ```
 
 Replace `<source-revision>` with the actual generated-project revision; use a
