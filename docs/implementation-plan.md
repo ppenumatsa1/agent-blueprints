@@ -88,6 +88,11 @@ PostgreSQL 16.15 migration tests passed at `031fdb4`, after an initial
 auxiliary readiness probe failed before tests. Next: verify this reconciled
 branch on both PostgreSQL versions and run credential-free actual PR CI
 on the integrated head. No hosted CI or live backup/restore is claimed.
+At `7cd99ac`, local source and independently generated backend suites passed
+48 tests each on both PostgreSQL 16.15 and 17.12; the generated verifier
+passed 44 and generator tests passed two. The generated evidence producer
+passed approval/recovery observations but left explanation/hint unverified;
+the independent unsigned readiness report remained unverified.
 
 P1-01 through P1-04 have an initial local foundation and a test-only
 application adapter, but the scenario has no authorized contract approval.

@@ -132,6 +132,14 @@ entries to hide failed attempts or gaps.
   unittest discover -s tests -v` in `backend` passed 48 tests without skips
   against each of isolated PostgreSQL 16.15 and 17.12. This covers migration,
   security and recovery tests but does not replace generated-app or hosted CI.
+- **Reconciled generated evidence:** At `7cd99ac`, the same backend command
+  passed 48 tests without skips in both source and independently generated
+  copies on each PostgreSQL version. Generated verifier tests passed 44;
+  generator/copy checks passed two. The generated real evidence producer
+  returned approval and recovery passed, explanation and hint unverified;
+  the independent validator returned an unverified gate (exit 1) because
+  the synthetic trust store is unsigned. This does not erase the earlier
+  failed runs or verify Azure, hosted identities or live restoration.
 
 ### Migration review - versioned schema and least privilege
 

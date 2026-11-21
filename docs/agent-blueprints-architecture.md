@@ -38,7 +38,9 @@ These migrations do not own MAF checkpoints or independently authorize
 business approvals. This branch is stacked on the modularity foundation;
 hosted CI and live operational recovery remain unverified. A deterministic
 checkpoint timestamp-tie defect was fixed in foundation `9efeef0`; the exact
-causes of earlier intermittent evidence failures remain unproven.
+causes of earlier intermittent evidence failures remain unproven. Local
+source and generated tests passed on PostgreSQL 16.15 and 17.12 at `7cd99ac`;
+this does not verify Azure database configuration or live restoration.
 
 | Layer | Responsibility | Examples |
 | --- | --- | --- |

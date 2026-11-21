@@ -16,7 +16,6 @@ from sqlalchemy.pool import NullPool
 
 ROOT = Path(__file__).resolve().parents[2] / "migrations"
 BASELINE_HASH = "62cfe442c655d149d773b41f18d5ae43288881eb0f63236023cbbb8342c349ce"
-TABLES = ("wf_cases", "wf_decisions", "wf_action_ledger", "wf_audit")
 
 
 class SchemaDriftError(RuntimeError):
