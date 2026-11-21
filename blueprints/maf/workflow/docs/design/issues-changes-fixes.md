@@ -1020,6 +1020,26 @@ entries to hide failed attempts or gaps.
 
 ## Current acceptance queue
 
+### PostgreSQL TCP readiness correction (#38)
+
+- **Observation:** The official PostgreSQL container's temporary initialization
+  server can accept Unix sockets while TCP is unavailable. The issue's
+  disposable 16.15/17 reproduction saw this transition; the first 16.15
+  `createdb` failed during restart, then a TCP-gated retry passed 72 source
+  and 72 generated tests on historical head `8b3c357`.
+- **Correction and evidence:** Both bounded CI waits and the Compose health
+  check probe `127.0.0.1`. In the correction's working tree, disposable 16/17
+  containers with a delayed initialization script reproduced socket-ready,
+  TCP-unready followed by TCP-ready. Focused workflow tests exercised delayed
+  success and the 60-attempt failure path; 72 source and 72 generated backend
+  tests passed on PostgreSQL 17. Source/generated Compose migrations, startup,
+  UI 200, health 204 and protected API 401 passed using cached integration
+  images with current backend files copied in. A fresh local Compose build
+  failed during dependency installation; an earlier unrelated cached image
+  lacked test/migration dependencies, so neither is fresh-build evidence.
+  Final-head CI must independently verify source/generated locked builds,
+  backend tests and Compose. Local checks do not prove managed PostgreSQL.
+
 | Item | Status | Evidence needed / next action |
 | --- | --- | --- |
 | Eight design documents and generated inclusion | Passed at exact tested head `b633539` | `maf-independent` passed in run 44955776238 after copying and checking the issue-linked documentation. Earlier run 44955210922 applies to `152743a`, not `b633539`. This documentation correction is newer than `b633539` and requires its own exact-head CI. |
