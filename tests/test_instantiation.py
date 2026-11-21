@@ -44,6 +44,14 @@ class InstantiationTests(unittest.TestCase):
                     resolved = (markdown.parent / linked_path).resolve() if linked_path else markdown.resolve()
                     with self.subTest(document=markdown.relative_to(target), link=destination):
                         self.assertTrue(resolved.is_file(), f"Broken generated-project link: {destination}")
+
+            self.assertTrue((target / "azure.yaml").is_file())
+            self.assertTrue((target / "infra" / "main.bicep").is_file())
+            self.assertTrue((target / "infra" / "validate.py").is_file())
+            self.assertTrue((target / "infra" / "modules" / "foundry.bicep").is_file())
+            self.assertTrue((target / "infra" / "tests" / "test_validation.py").is_file())
+            self.assertTrue((target / "infra" / "environments" / "dev.example.bicepparam").is_file())
+            self.assertTrue((target / "infra" / "environments" / "prod.example.bicepparam").is_file())
             self.assertFalse((target / "frontend" / "node_modules").exists())
             self.assertFalse((target / "frontend" / "dist").exists())
             self.assertFalse((target / ".env").exists())

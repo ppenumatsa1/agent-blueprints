@@ -10,7 +10,16 @@ separate `verification/` tree. It is not a shared runtime dependency.
 maf-workflow/
 ├── README.md
 ├── compose.yaml
+├── azure.yaml                  # staged API/UI descriptors, no hosted agent
 ├── .dockerignore
+├── infra/
+│   ├── main.bicep
+│   ├── main.parameters.json
+│   ├── bicepconfig.json
+│   ├── validate.py
+│   ├── environments/           # synthetic non-secret examples
+│   ├── modules/                # local Foundry, network, DB, monitoring, identities, registry, apps
+│   └── tests/
 ├── backend/
 │   ├── Dockerfile
 │   ├── requirements.txt
@@ -73,6 +82,7 @@ occurs in the generated directory.
 | `backend/examples/` | Explicitly selected synthetic application. | Never treat as a production fallback or customer example. |
 | `backend/tests/` | PostgreSQL integration, security, crash recovery, and synthetic evidence tests. | Use isolated test DB and test-only identity providers. |
 | `frontend/src/` | MSAL app, typed API client, reusable workspace and UI tests. | Keep access tokens transient and do not embed service secrets. |
+| `azure.yaml`, `infra/` | Staged Foundry-first resource graph, service paths and credential-free checks. | Keep each generated project self-contained; do not add a hosted service until its real interface is verified. |
 | `docs/` | Maintainer, adopter, operator, design, and journal documentation. | Update affected docs with each meaningful implementation change. |
 | Generated `verification/` | Independent readiness contracts, verifier, tests, and fixture evidence. | Never import the source checkout or claim unsigned fixtures authorize release. |
 

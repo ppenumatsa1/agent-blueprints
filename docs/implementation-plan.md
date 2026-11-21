@@ -41,9 +41,12 @@ responsibilities using canonical imports and no compatibility aliases. Acceptanc
 requires source and generated security/recovery tests, both crash windows,
 independent golden verification and exact contract bytes, credential-free
 CI and Compose smoke checks. Local evidence is recorded in the
-[checklist](master-checklist.md); PR review and hosted CI for the revised
-head remain pending. An intermittent local restore failure was observed during
-migration testing. A deterministic equal-timestamp reproduction showed that
+[checklist](master-checklist.md); PR review remains pending. Foundation
+[run 44936094798](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44936094798)
+passed five jobs on `9efeef01101b176a1a10627c654eff0ca5150b6b`; dependent
+branches require their own head-specific CI. An intermittent local restore
+failure was observed during migration testing. A deterministic equal-timestamp
+reproduction showed that
 the previous host could select an earlier checkpoint; it does not prove the
 unretained original failure had the same cause. The foundation now selects
 MAF-native persisted checkpoints and rejects incomplete terminal state on
@@ -74,6 +77,30 @@ journal, and record actual regression, security, durability, independent
 verification and CI outcomes for its final revision. The design documents
 must accompany generated applications and distinguish planned work from
 verified behavior.
+
+P1-14 now has a staged, independently copied
+[Foundry-first resource graph](../blueprints/maf/workflow/infra/README.md)
+and offline compiler/configuration tests. Optional model, project-wide API
+agent-consumer grant, registry and API/UI services default off; the remaining
+resources would still incur cost. Foundry and monitoring private connectivity,
+PostgreSQL Entra token use, API/UI binding and the hosted-agent contract are
+not implemented or verified. Source and independent generated static checks
+and nine infrastructure security/configuration tests per copy passed locally
+on the rebased working tree; two instantiation tests also passed. Confirm the
+exact proposed head and actual PR CI, followed by separately authorized
+network, identity, cost and deployment review; no cloud mutation has occurred.
+
+The staged PostgreSQL server selects 16 while Compose and the parallel
+migration catalog tests use 17. The pinned API's documented enum and examples
+conflict, and the compiler accepts arbitrary version strings; neither resolves
+17 support for that API. The [version-gap review](../blueprints/maf/workflow/infra/README.md#open-postgresql-version-gap)
+records a newer API as an unverified candidate. Separately, migration revision
+`031fdb440908092cf09801232fe7f5d15048f065` passed 12 migration tests on local
+PostgreSQL 16.15 after an initial auxiliary locale probe failed and was
+corrected. That revision is not integrated here. Resolve the target major and
+rerun clean, upgrade and drift tests on the exact combined revision before
+deployment; local evidence does not prove Azure compatibility or safe
+downgrade.
 
 P1-01 through P1-04 have an initial local foundation and a test-only
 application adapter, but the scenario has no authorized contract approval.
@@ -110,7 +137,7 @@ the local HTTP smoke check. Its unsigned readiness report is unverified.
 | P1-15 | Demonstrate the local prototype from a synthetic specification through approval, evaluation, and its readiness report. | P1-10, P1-11 | Record the scenario, evidence, limitations, and observed elapsed time; the 2–3 hour objective is a target until a representative run demonstrates it. |
 | P1-12 | Validate Foundry Hosted Agent compatibility for the selected MAF version, Responses protocol, request-aware workflow factory, identity, and host-managed checkpoints. | P1-09, P1-15 | Hosted caller binding and lost-response reconciliation are blocked; see the [investigation journal](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-21---hosted-caller-binding-and-lost-responses). Local checks alone are not a hosted deployment. No Azure resources are provisioned. |
 | P1-13 | Prepare the explicitly selected ACA fallback and a framework-compatible checkpoint strategy. | P1-09, P1-15 | Separate local/container recovery and idempotency checks pass; no claim that ACA shares Foundry checkpoint ownership or silently replaces a failed model call. |
-| P1-14 | Prepare Bicep, least-privilege identities, authenticated public endpoints, GitHub-hosted CI, and deployment/handoff instructions. Deploy only after separate Azure authorization. | P1-10, P1-11, P1-12; P1-13 if selected | Static checks work without Azure credentials; an authorized deployment later records its revision, versions, identity, network, evidence, cost, and teardown owner. |
+| P1-14 | Prepare Bicep, least-privilege identities, authenticated public endpoints, GitHub-hosted CI, and deployment/handoff instructions. Deploy only after separate Azure authorization. | P1-10, P1-11, P1-12; P1-13 if selected | Source and independently generated Bicep compilation and focused tests passed locally without Azure credentials; PR-head CI must be confirmed. Agent-scoped identity, private connectivity and application integration remain unverified. An authorized deployment later records its revision, versions, identity, network, evidence, cost, and teardown owner. |
 
 ### Validator acceptance contract
 

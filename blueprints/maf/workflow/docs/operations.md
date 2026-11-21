@@ -18,6 +18,11 @@ high-cardinality attributes, test redaction and exporter failure behavior,
 and verify actual cloud delivery separately. Local logs do not establish
 distributed tracing or cloud observability.
 
+The [staged monitoring resources](../infra/README.md) disable public
+ingestion/query, but include no private connectivity or application exporter.
+An ingestion cap may discard telemetry. Their presence does not establish
+cloud signal delivery or privacy-safe application instrumentation.
+
 ## Troubleshooting
 
 | Symptom | Check |

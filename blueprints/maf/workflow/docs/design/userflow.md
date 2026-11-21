@@ -80,6 +80,24 @@ sequenceDiagram
   checkpoints. The tested worker-kill windows cover decision persistence and
   database-action commit, not host failover or external systems.
 
+## Infrastructure adopter flow
+
+```mermaid
+flowchart TD
+    A[Generate independent project] --> B[Inspect staged IaC and limitations]
+    B --> C[Compile and test locally without Azure credentials]
+    C --> D{All static checks pass?}
+    D -- No --> E[Preserve and fix failure]
+    D -- Yes --> F[Review host, network, identity, cost and deployment gaps]
+    F --> G{Separately authorized and live prerequisites verified?}
+    G -- No --> H[Stop; no provisioning]
+    G -- Yes --> I[Follow separately reviewed delivery process]
+```
+
+This is an operator planning path, not a working cloud user journey. The
+current UI proxy, SPA build configuration, API host mode, PostgreSQL token
+authentication, private networking, and hosted-agent interface are not wired.
+
 ## Implementation references
 
 The browser journey is implemented by

@@ -37,6 +37,7 @@ are synthetic fixtures, not a business application.
 | FR-07 | Recover local work across the tested decision-persistence and action-commit crash windows using private local checkpoints and database reconciliation. |
 | FR-08 | Provide a React/MSAL UI for sign-in, request submission, record reads, decisions, and visible failure states. |
 | FR-09 | Include independently generated documentation, tests, exact contract bytes, and readiness verification without repository imports or bind mounts. |
+| FR-10 | Include independently owned Foundry-first Bicep/azd preparation with credential-free static checks and separately configurable API and UI services; do not treat it as a working hosted agent. |
 
 ## Non-functional requirements
 
@@ -52,6 +53,10 @@ are synthetic fixtures, not a business application.
   it does not import or mount this source repository.
 - **Evidence:** Keep failed and unverified outcomes distinct from passing
   checks. Schema validity or a synthetic approval is not release authorization.
+- **Infrastructure:** Default the optional model, project-wide API grant,
+  registry, and Container Apps off; avoid public unauthenticated API exposure.
+  Document network, identity, cost, and integration limitations rather than
+  assuming a working deployment.
 - **Maintainability:** Maintain one canonical implementation, direct imports,
   and design documents copied with the blueprint. Remove legacy forwarding
   modules and obsolete files before PR approval.
@@ -63,10 +68,15 @@ Entra integration points, PostgreSQL records and action ledger, MAF native
 workflow with `FileCheckpointStorage`, React/MSAL client, Compose packaging,
 generated project, and local/hosted regression tests.
 
+The staged Bicep resource graph, azd service descriptors, synthetic parameter
+examples, and offline checks are also included in generated projects. They
+describe infrastructure, not an authorized or verified Azure deployment.
+
 **Not implemented or verified:** live Entra sign-in and OBO, production
 secrets management, external side-effect exactly-once behavior, versioned
 database migrations, cloud telemetry export, Foundry-hosted execution and
-managed checkpoint recovery, ACA recovery, Bicep/azd provisioning, and a
+managed checkpoint recovery, ACA workflow recovery, actual Bicep/azd
+provisioning or resource connectivity, and a
 production deployment. Azure resource creation and permanent repository
 creation require separate approval.
 
@@ -84,6 +94,10 @@ creation require separate approval.
 5. CI results are checked on the actual PR head revision. No PR is finalized
    with compatibility shims, forwarding modules, unused dependencies, or
    obsolete configuration still present.
+6. Source and generated infrastructure compile and pass scoped security and
+   configuration tests without Azure credentials. Live authorization,
+   networking, image/runtime integration and cost still require separate
+   validation and authorization.
 
 ## Workflow at a glance
 

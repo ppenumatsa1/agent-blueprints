@@ -12,13 +12,15 @@ deployed environment.
 | Python | Python 3.12; `python:3.12-slim` backend image | Matches the source and GitHub Actions runtime. A different Python minor requires package and CI verification. |
 | Agent workflow | `agent-framework-core==1.26.0` | Uses MAF `WorkflowBuilder`, `Executor`, `WorkflowContext`, and `CheckpointStorage` natively. LangGraph or an SDK harness would be a separate blueprint, not a hidden runtime switch. |
 | API | FastAPI `0.162.7`, Uvicorn `0.54.0` | Typed HTTP boundary, dependency-based bearer auth, and an ASGI server. |
-| Persistence | PostgreSQL `17-alpine`, Psycopg binary `3.3.9` | Relational transactions and uniqueness constraints support the decision/action ledger; MAF file checkpoints remain separate. |
+| Persistence | Local PostgreSQL `17-alpine`, Psycopg binary `3.3.9`; staged Azure PostgreSQL 16 | Relational transactions and uniqueness constraints support the decision/action ledger; MAF file checkpoints remain separate. A separate migration revision passed local 16.15 tests; the major-version mismatch and Azure compatibility remain open. |
 | Identity | MSAL `1.39.0`, PyJWT crypto `2.15.1` | MSAL is used in the browser; the API verifies Entra v2 access tokens, scopes, roles, and record access. Test identities are isolated to tests. |
 | API models | Pydantic provided by the pinned FastAPI graph | Request/response parsing rejects extra fields. A separate direct version pin is not currently declared. |
 | Frontend | React/React DOM `19.3.1`, TypeScript `7.0.2`, Vite `8.3.8` | Component UI, static typing, and a production build; a different UI framework would need its own client contract and tests. |
 | Browser auth | `@azure/msal-browser` `5.29.1`, `@azure/msal-react` `5.8.2` | Browser obtains scoped delegated access tokens. Secrets and OBO credentials remain server-side. |
 | Frontend tests | Vitest `5.1.0`, Testing Library, jsdom `31.0.1`, axe-core `4.14.0` | Exercise UI and API client behavior. Automated accessibility checks do not assess color contrast. |
-| Packaging | Docker Compose; sibling `backend` and `frontend` build contexts | The checked-in topology is local and loopback-bound. Kubernetes, ACA, and Foundry hosting are not current alternatives selected by configuration. |
+| Packaging | Docker Compose; sibling `backend` and `frontend` build contexts | The runnable topology is local and loopback-bound. Optional ACA descriptors are staged only; neither ACA nor Foundry hosting is a verified runtime. |
+| Infrastructure | Local Bicep modules, azd service descriptors, Python static validator | Bicep 0.49.2 compiled and linted locally without Azure credentials. No external Bicep registry modules or shared runtime are required. |
+| Staged cloud resources | Foundry account/project, private PostgreSQL, Log Analytics/Application Insights, managed identities; optional model, project-wide consumer grant, registry and API/UI Container Apps | Development-oriented, restrictive defaults are not free or production-ready. Network paths and live service behavior remain unverified. |
 
 The exact Python requirements are in
 [`backend/requirements.txt`](../../backend/requirements.txt) and
@@ -27,10 +29,14 @@ frontend's direct dependency manifest and lock are
 [`frontend/package.json`](../../frontend/package.json) and
 [`frontend/package-lock.json`](../../frontend/package-lock.json).
 Compose declares the PostgreSQL image in
-[`compose.yaml`](../../compose.yaml). GitHub Actions pins action revisions in
-`.github/workflows/ci.yml` in the source repository pins GitHub Actions
-revisions; that source-repository CI file is not copied into a generated
-project.
+[`compose.yaml`](../../compose.yaml). The source repository's
+`.github/workflows/ci.yml` pins GitHub Actions revisions; that CI file is not
+copied into a generated project.
+
+The staged server's API/version evidence, local 16.15 migration result and
+remaining 16/17 mismatch are recorded in the
+[infrastructure guide](../../infra/README.md#open-postgresql-version-gap).
+Neither local tests nor Bicep compilation establish Azure compatibility.
 
 ## State and identity choices
 
@@ -48,9 +54,9 @@ project.
 ## Dependency and alternative status
 
 Direct Python pins are not a fully locked or hash-verified graph. uv lockfiles,
-Ruff, migrations, Foundry host integration, managed identity deployment,
-OpenTelemetry export, Bicep, and azd are planned work; no version or command
-should be inferred for them. The current local image uses tags rather than
+Ruff, migrations, Foundry host integration, live managed identity binding,
+and OpenTelemetry export are planned work. Staged Bicep and azd files do not
+establish a deployment or verified host integration. The current local image uses tags rather than
 immutable image digests, so supply-chain hardening is still an acceptance
 concern. See [deployment flow](deployment-flow.md) and
 the source repository's `docs/engineering-standards.md`.

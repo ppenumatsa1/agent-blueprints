@@ -27,6 +27,11 @@ structure and extension points. The design documents include the
 [user journeys](docs/design/userflow.md), [deployment flow](docs/design/deployment-flow.md),
 and [engineering journal](docs/design/issues-changes-fixes.md).
 
+The [Foundry-first infrastructure](infra/README.md) is staged for
+credential-free Bicep compilation and security checks only. Its hosted-agent
+service and end-to-end cloud integration are not implemented or verified;
+it is not authorization to provision or deploy.
+
 ## Local stack
 
 Use Docker Compose and existing, authorized Microsoft Entra SPA and API
