@@ -66,8 +66,8 @@ approval of its resource inventory, estimated cost and deployment plan;
 permanent reference repository creation requires separate approval. As of
 2026-11-21, locked tooling is proposed in open
 [PR #13](https://github.com/ppenumatsa1/agent-blueprints/pull/13), head
-`edfd5727e99c256f2c0267c5af614e566e2a12b5`; its
-[hosted run](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44931514554)
+`543b137a432ca054920d629b943fc42a729df676`; its
+[hosted run](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44937692067)
 passed five checks for that exact revision. The proposal's reported
 Windows/Linux Compose verification used an approved mirror after public TLS
 failures; macOS and interactive debugger verification remain unverified.
@@ -109,19 +109,22 @@ Live Entra/OBO, Foundry-hosted recovery, cloud telemetry, and Azure deployment
 remain unverified until separately implemented and evidenced. Azure
 provisioning and permanent repository creation still require separate
 authorization; never merge automatically.
+
 The dependent developer-tooling branch adds `backend/pyproject.toml` and a
 public-registry `uv.lock`, locked development and container installs, Ruff,
 portable development commands and VS Code configurations. Acceptance requires
 source and generated lint/tests and locked builds without Azure credentials,
 then passing hosted CI on the actual reviewed head. Local Windows source and
 generated backend tests, Ruff, generated UI tests/build and Linux Compose
-204/401 smoke passed using an approved temporary mirror; public artifact downloads failed locally with
-a TLS handshake error. Reconciled source/generated backend 31 tests each and
-independent verification 44 passed locally. Hosted
-[CI](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44931514554)
-passed for head `edfd572`, not any combined revision. macOS, interactive
-debugging and a clean public-only local installation remain unverified. Next
-verify integrated work and review the separate PRs.
+204/401 smoke passed using an approved temporary mirror after public artifact
+downloads failed locally with a TLS handshake error. On foundation `9efeef0`,
+source and generated backend suites passed 36 tests each, independent
+verification passed 44 without skips, generated frontend passed 8 tests/build/
+CSP, and Ruff passed in both backends. Hosted run
+[44937692067](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44937692067)
+passed all five jobs for PR head `543b137`, not for any combined revision.
+macOS, interactive debugging and a clean public-only local installation
+remain unverified. Next verify integrated work and review the separate PRs.
 
 P1-01 through P1-04 have an initial local foundation and a test-only
 application adapter, but the scenario has no authorized contract approval.

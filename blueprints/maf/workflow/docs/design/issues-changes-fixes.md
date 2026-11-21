@@ -170,6 +170,35 @@ entries to hide failed attempts or gaps.
   bridge, and validate the actual service only with separate authorization.
   Do not persist bearer credentials or silently retry ambiguous side effects.
 
+### 2026-11-21 - Reconcile developer tooling with canonical imports
+
+- **Issue / cause:** The tooling branch and the foundation independently
+  changed CI, generation tests, and setup guidance. The foundation removed
+  forwarding modules and `tests.test_modularity`, while the tooling branch
+  replaced requirements files with a locked environment.
+- **Fix / decision:** Retain canonical imports, remove references to deleted
+  tests and requirements files, copy the design docs in generated projects,
+  and run evidence-normalization tests in both source and generated CI.
+- **Evidence:** After rebasing onto checkpoint-fix foundation
+  `9efeef0`, source and generated backend suites each passed 36 tests with
+  isolated PostgreSQL, including timestamp ties, checkpoint selection,
+  terminal replay, security and worker recovery. Generated independent
+  verification passed 44 without skips; generated frontend passed 8 tests,
+  build and CSP check. Ruff passed in source and generated backends. The root
+  suite passed 46 with one intentional unselected-adapter skip. Generated
+  npm installation used the approved mirror. Public package downloads still
+  fail locally with TLS errors. Check hosted CI for the actual PR head before
+  approval.
+- **Hosted evidence:** Run
+  [44937433206](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44937433206)
+  passed all five jobs for code head `2a8fafdbcf5574d2a4e6cba59e8621bf1b3c0cd7`,
+  including the checkpoint regressions and generated Compose build. Check the
+  actual PR-head run after this documentation update before approval.
+- **Lesson / limit:** Integrate environment instructions with the canonical
+  source layout; a successful earlier CI run cannot establish the result of a
+  rebased revision. Public-only local downloads, macOS, and interactive
+  debugging remain unverified.
+
 ### PR #6 - Native MAF workflow and local recovery core
 
 - **Change:** Added a native MAF approval workflow, local checkpoint host,
@@ -275,9 +304,10 @@ entries to hide failed attempts or gaps.
 
 ### PR #13 - Locked developer tooling proposal
 
-- **Status and revision:** Open, based on `modularity-foundation`; head
-  `e1d953662e615e547fa641ad0831907c363318e3`. It is a parallel workstream and
-  is not included in cleaned foundation commit `9efeef0`.
+- **Historical status and revision:** At this entry, the parallel PR was open,
+  based on `modularity-foundation`, at head
+  `e1d953662e615e547fa641ad0831907c363318e3`. Tooling is not included in
+  cleaned foundation commit `9efeef0`.
 - **Proposed changes:** Python 3.12, uv 0.9.26, public-PyPI `uv.lock` and
   hash-pinned backend/image installs, Ruff 0.14.13, Node 22 with `npm ci`,
   and VS Code task/debug configurations.
@@ -290,7 +320,7 @@ entries to hide failed attempts or gaps.
 - **Unverified:** macOS Compose and interactive debugger operation.
 - **References:** [PR #13](https://github.com/ppenumatsa1/agent-blueprints/pull/13);
   `uv.lock`, backend image install, and developer task/debug configuration
-  are proposed in that PR, not present in the baseline documented here.
+  were proposed in that PR, not present in the foundation baseline.
 
 ## 2026-11-21 - Combine documentation and tooling for integration
 
@@ -311,7 +341,7 @@ entries to hide failed attempts or gaps.
 | --- | --- | --- |
 | Eight design documents and generated inclusion | Open in PR #12 | Focused instantiation tests and run 44936739123 passed on head `60458d9`; verify the combined revision separately. |
 | Canonical imports and legacy-shim removal | Implemented in open PR #11 | Foundation run 44936094798 passed all five checks on `9efeef0`; preserve direct imports in later changes. |
-| Locked developer tooling | Open in PR #13 | Run 44931514554 passed all five checks on prior head `edfd572`; verify the revised and combined revisions separately. macOS, interactive debugging and public-only local downloads remain unverified. |
+| Locked developer tooling | Open in PR #13 | Run 44937692067 passed all five checks on head `543b137`; verify the combined revision separately. macOS, interactive debugging and public-only local downloads remain unverified. |
 | Combined revision CI | Not run | Passing checks on individual PRs do not establish checks for their combined revision. |
 | Foundry host caller binding and lost-response recovery | Blocked | Establish supported identity and reconciliation guarantees before implementing a hosted bridge. |
 | Live Entra/OBO, cloud telemetry, Azure deployment | Unverified | Separate scoped implementation, authorization where required, and live evidence. |

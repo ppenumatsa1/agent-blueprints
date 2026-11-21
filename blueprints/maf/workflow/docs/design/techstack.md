@@ -57,8 +57,8 @@ the source repository's `docs/engineering-standards.md`.
 
 The **open** developer-tooling change is PR
 [#13](https://github.com/ppenumatsa1/agent-blueprints/pull/13), head
-`edfd5727e99c256f2c0267c5af614e566e2a12b5`. Its hosted
-[run 44931514554](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44931514554)
+`543b137a432ca054920d629b943fc42a729df676`. Its hosted
+[run 44937692067](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44937692067)
 passed five checks for that exact revision, not this combined revision. The
 workstream reports Windows and Linux Compose verification with an approved
 package mirror after public TLS failures; public-only local downloads, macOS
