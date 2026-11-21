@@ -18,8 +18,8 @@ from psycopg import sql
 BLUEPRINT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BLUEPRINT))
 
-from app.api import create_app
 from app.application import ApplicationComponents
+from app.composition import create_app
 from app.config import Settings
 from app.domain.errors import ActionError, CheckpointError, InvalidInput
 from app.infrastructure.identity import EntraIdentity

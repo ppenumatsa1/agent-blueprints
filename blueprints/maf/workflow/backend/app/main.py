@@ -1,6 +1,6 @@
 import os
 
-from .api import create_app
+from .composition import create_app
 from .application import load_application
 from .config import Settings
 

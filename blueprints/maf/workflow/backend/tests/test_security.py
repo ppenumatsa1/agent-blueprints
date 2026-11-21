@@ -15,11 +15,13 @@ from uuid import UUID, uuid4
 import jwt
 import psycopg
 from cryptography.hazmat.primitives.asymmetric import rsa
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from psycopg import sql
 
-from app.api import create_app
+from app.api.middleware import install_request_middleware
 from app.application import ApplicationComponents
+from app.composition import create_app
 from app.config import Settings
 from app.infrastructure.delegation import OnBehalfOf
 from app.domain.errors import AuthenticationFailed, AuthenticationUnavailable, DelegationError
@@ -234,6 +236,23 @@ class ApiSecurityTests(unittest.TestCase):
             result["Idempotency-Key"] = key
         return result
 
+    def test_unhandled_api_errors_are_generic_and_correlated(self):
+        app = FastAPI()
+        install_request_middleware(app)
+
+        @app.get("/failure")
+        def failure():
+            raise RuntimeError("PRIVATE-ERROR-CANARY")
+
+        with self.assertLogs("blueprint.api", level="ERROR") as captured:
+            response = TestClient(app, raise_server_exceptions=False).get("/failure")
+
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(response.json(), {"detail": "Internal server error."})
+        self.assertTrue(response.headers["X-Correlation-ID"])
+        self.assertNotIn("PRIVATE-ERROR-CANARY", response.text)
+        self.assertNotIn("PRIVATE-ERROR-CANARY", " ".join(captured.output))
+
     def submit(self, client, token=None, reviewer=REVIEWER, payload=None):
         return client.post(
             "/api/cases",
@@ -330,7 +349,7 @@ class ApiSecurityTests(unittest.TestCase):
             reviewer = self.identity.authenticate(self.reviewer_token).principal
             self.store.record_decision(case_id, reviewer, "approved")
             (self.settings.checkpoint_root / str(case_id) / f"{record.checkpoint_id}.json").unlink()
-        with self.assertLogs("blueprint.api", level=logging.ERROR) as logs:
+        with self.assertLogs("blueprint.lifecycle", level=logging.ERROR) as logs:
             with self.client() as restarted:
                 response = restarted.get(f"/api/cases/{case_id}", headers=self.headers(self.owner_token))
                 self.assertEqual(response.json()["failure_code"], "recovery_failed")
@@ -343,7 +362,7 @@ class ApiSecurityTests(unittest.TestCase):
             reviewer = self.identity.authenticate(self.reviewer_token).principal
             self.store.record_decision(case_id, reviewer, "approved")
         self.components = replace(self.components, action=FixtureAction(fail=True))
-        with self.assertLogs("blueprint.api", level=logging.ERROR):
+        with self.assertLogs("blueprint.lifecycle", level=logging.ERROR):
             with self.client() as restarted:
                 response = restarted.get(f"/api/cases/{case_id}", headers=self.headers(self.owner_token))
                 self.assertEqual(
