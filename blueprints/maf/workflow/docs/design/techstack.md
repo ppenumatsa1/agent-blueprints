@@ -12,7 +12,7 @@ claim about a deployed environment.
 | Agent workflow | `agent-framework-core==1.26.0` | Uses MAF `WorkflowBuilder`, `Executor`, `WorkflowContext`, and `CheckpointStorage` natively. LangGraph or an SDK harness would be a separate blueprint, not a hidden runtime switch. |
 | API | FastAPI `0.162.7`, Uvicorn `0.54.0` | Typed HTTP boundary, dependency-based bearer auth, and an ASGI server. |
 | Observability | OpenTelemetry SDK `1.45.2`, Azure Monitor exporter `1.0.0b59` | Manual traces and metrics, explicit Azure export; local mode exports nothing. Hosted ingestion remains unverified. |
-| Persistence | PostgreSQL `17-alpine`, Psycopg binary `3.3.9` | Relational transactions and uniqueness constraints support the decision/action ledger; MAF file checkpoints remain separate. |
+| Persistence | Local PostgreSQL `17-alpine`, Psycopg binary `3.3.9`; staged Azure PostgreSQL 16 | Relational transactions and uniqueness constraints support the decision/action ledger; MAF file checkpoints remain separate. The major-version mismatch and Azure compatibility remain open. |
 | Schema evolution | Alembic `1.16.5`, SQLAlchemy `2.1.8`, revision manifests | Explicit schema-owner migration; runtime validates without schema creation. Local PostgreSQL 16.15 and 17.12 are tested; managed-service behavior is unverified. |
 | Identity | MSAL `1.39.0`, PyJWT crypto `2.15.1` | MSAL is used in the browser; the API verifies Entra v2 access tokens, scopes, roles, and record access. Test identities are isolated to tests. |
 | API models | Pydantic provided by the pinned FastAPI graph | Request/response parsing rejects extra fields. A separate direct version pin is not currently declared. |
@@ -20,7 +20,9 @@ claim about a deployed environment.
 | Browser auth | `@azure/msal-browser` `5.29.1`, `@azure/msal-react` `5.8.2` | Browser obtains scoped delegated access tokens. Secrets and OBO credentials remain server-side. |
 | Frontend tests | Vitest `5.1.0`, Testing Library, jsdom `31.0.1`, axe-core `4.14.0` | Exercise UI and API client behavior. Automated accessibility checks do not assess color contrast. |
 | Developer tooling | uv `0.9.26`, Ruff `0.14.13`, Node 22, VS Code tasks | Locked backend installs and consistent lint/format checks; editor debugging remains unverified. |
-| Packaging | Docker Compose; sibling `backend` and `frontend` build contexts | The checked-in topology is local and loopback-bound. Kubernetes, ACA, and Foundry hosting are not current alternatives selected by configuration. |
+| Packaging | Docker Compose; sibling `backend` and `frontend` build contexts | The runnable topology is local and loopback-bound. Optional ACA descriptors are staged only; neither ACA nor Foundry hosting is a verified runtime. |
+| Infrastructure | Local Bicep modules, azd service descriptors, Python static validator | Bicep 0.49.2 compiled and linted locally without Azure credentials. No external Bicep registry modules or shared runtime are required. |
+| Staged cloud resources | Foundry account/project, private PostgreSQL, Log Analytics/Application Insights, managed identities; optional model, project-wide consumer grant, registry and API/UI Container Apps | Development-oriented, restrictive defaults are not free or production-ready. Network paths and live service behavior remain unverified. |
 
 The Python direct dependencies are in
 [`backend/pyproject.toml`](../../backend/pyproject.toml), with the resolved
@@ -32,6 +34,11 @@ Compose declares the PostgreSQL image in
 [`compose.yaml`](../../compose.yaml). The source repository's
 `.github/workflows/ci.yml` pins GitHub Actions revisions; that CI file is
 not copied into a generated project.
+
+The staged server's API/version evidence, local 16.15 migration result and
+remaining 16/17 mismatch are recorded in the
+[infrastructure guide](../../infra/README.md#open-postgresql-version-gap).
+Neither local tests nor Bicep compilation establish Azure compatibility.
 
 ## State and identity choices
 
@@ -49,9 +56,9 @@ not copied into a generated project.
 ## Dependency and alternative status
 
 The backend image exports the lock and verifies artifact hashes during install.
-Foundry host integration, managed identity deployment,
-Bicep, and azd remain planned; no version or command
-should be inferred for them. The current local image uses tags rather than
+Foundry host integration and live managed identity binding remain planned.
+Staged Bicep and azd files do not establish a deployment or verified host
+integration. The current local image uses tags rather than
 immutable image digests, so supply-chain hardening is still an acceptance
 concern. See [deployment flow](deployment-flow.md) and
 the source repository's `docs/engineering-standards.md`.

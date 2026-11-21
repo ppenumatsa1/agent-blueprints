@@ -41,3 +41,12 @@ checkpoint is a human approval.
 The [testing guide](testing.md) describes the synthetic evidence and its
 limits. Foundry-managed checkpoints and hosting are planned and unverified;
 they must not be conflated with local file storage.
+
+The [staged infrastructure](../infra/README.md) defines a Foundry
+account/project with public data-plane access disabled, a private PostgreSQL
+server, and monitoring resources with public ingestion/query disabled, plus
+optional separate API/UI Container Apps and an authenticated registry. It
+does not provide working Foundry or monitoring private connectivity, API database
+token authentication, or the hosted-agent service. A project-wide agent-consumer
+grant is opt-in and disabled; its eventual scope and inherited grants require
+review. Offline compilation is not cloud integration evidence.

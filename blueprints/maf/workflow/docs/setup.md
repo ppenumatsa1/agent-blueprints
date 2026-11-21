@@ -74,5 +74,6 @@ from the corresponding non-`VITE_` inputs. Use separate authorized
 registrations and never store a secret in a Vite variable.
 
 See [development](development.md), [testing](testing.md), and
-[troubleshooting](operations.md). Future azd/IaC configuration and precedence
-are planned, not current project settings.
+[troubleshooting](operations.md). The separate [offline infrastructure
+guide](../infra/README.md) describes staged azd/IaC inputs; these do not
+configure the local application or establish a working Azure deployment.

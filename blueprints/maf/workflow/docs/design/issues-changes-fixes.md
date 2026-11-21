@@ -107,6 +107,129 @@ entries to hide failed attempts or gaps.
 - **Limit:** This does not verify Azure configuration, cloud ingestion, or
   hosted trace/metric propagation.
 
+## 2026-11-21 - Staged Foundry-first infrastructure
+
+- **Issue / decision:** The local blueprint lacked independently copied IaC
+  and offline infrastructure checks. Add local Bicep modules and azd API/UI
+  descriptors, but do not guess an unimplemented Foundry hosted-service
+  contract or deploy resources. Keep the optional model, project-wide API
+  agent-consumer grant, registry and Container Apps disabled by default.
+- **Security boundary:** The graph configures private PostgreSQL with
+  Entra-only auth; Foundry and monitoring public access are disabled. The
+  optional API/UI are internal-only, while the optional authenticated registry
+  remains publicly network-reachable. Application authentication and
+  authorization remain required even if separately applied ACA platform auth
+  fails. An agent-scoped grant alone would not exclude inherited roles; caller
+  restrictions are unverified. No private Foundry/monitor endpoint or
+  database token flow is present.
+- **Attempt and evidence:** Bicep 0.37.4 lacked the selected Container Apps
+  type schema and the strict static check failed on its diagnostics. After
+  confirming the missing compiler capability, Bicep 0.49.2 was obtained and
+  verified. Source and independent
+  generated-copy compilation, lint, parameter examples and eight focused
+  compiled-resource/configuration tests each passed without Azure credentials.
+  The source repository suite passed 46 tests with the synthetic adapter
+  selected. Foundry's required local dependency preflight passed. Actual
+  PR-head CI is pending.
+- **Test-environment interruption:** An extended backend test run failed to
+  import `agent_framework` and `jwt` after its shared virtual environment
+  disappeared during execution. A task-owned isolated environment was then
+  created and dependencies restored. The subsequent isolated PostgreSQL run
+  passed 31 source backend, 31 independently generated backend, and 44
+  independently generated verification tests with the synthetic adapter
+  selected. The initial failure is not treated as a pass.
+- **Remaining gaps:** No hosted entrypoint, authenticated caller binding,
+  checkpoint/response recovery contract, Foundry private path, telemetry
+  private path, API database token acquisition, ACA proxy, or SPA cloud build
+  is verified. Forwarded workload-token retention, stripping, replay and
+  background recovery also require review. Static success is not a live
+  deployment, authorization, cost, telemetry-delivery, or recovery claim.
+- **Reusable lesson:** Compile a self-contained generated copy and preserve
+  separate application authorization even when platform authentication is
+  configured. Treat restrictive but unreachable services as blocked
+  integrations, not as evidence of a working secure deployment.
+
+## 2026-11-21 - PostgreSQL major-version alignment review
+
+- **Issue:** The staged server selects PostgreSQL 16, but Compose and the
+  parallel migration workstream's catalog tests use 17. Passing tests on 17
+  do not prove clean migration, upgrade, catalog-drift or application behavior
+  on 16. The migration workstream also reports separate unresolved local
+  checkpoint-evidence failures on its `031fdb4` revision; this review does
+  not resolve them.
+- **Investigation:** The
+  [Azure service](https://learn.microsoft.com/en-us/azure/postgresql/configure-maintain/concepts-supported-versions)
+  lists PostgreSQL 17, while the pinned
+  [2024-08-01 resource schema](https://learn.microsoft.com/en-us/azure/templates/microsoft.dbforpostgresql/2024-08-01/flexibleservers#serverproperties)
+  lists 11–16. The corresponding
+  [REST reference](https://learn.microsoft.com/en-us/rest/api/postgresql/servers/create?view=rest-postgresql-2024-08-01)
+  has the same enum but an example requesting 18. Bicep 0.49.2 emitted 17
+  without diagnostics; it also accepted a deliberately invalid version
+  string, so the compiler probe is not proof of API support. An Azure API
+  contributor [described 17 in later preview APIs](https://github.com/Azure/azure-rest-api-specs/issues/36451#issuecomment-3308512467)
+  in 2025, not a current guarantee for the pinned API.
+- **Decision:** Retain 16 under the pinned API and disclose the mismatch.
+  The stable 2025-08-01 API lists 17 and compiled in an isolated probe, but
+  its other semantics and live deployment are not verified; it is a candidate
+  for later review, not an implemented upgrade.
+- **Verification / next action:** The compiler prerequisite initially failed
+  because the required version was absent; the official 0.49.2 binary was
+  obtained in task-owned storage and SHA-256 verified. For this revision,
+  source and independently generated compilation, lint, parameter checks and
+  nine infrastructure tests each passed, including a new regression check
+  tying the disclosed majors to the compiled template and Compose. Both focused
+  generated-documentation tests passed. A deliberately stale disclosure in
+  the generated copy produced the expected assertion failure; the copy was
+  restored and the focused test passed. Actual PR-head CI is pending; rerun
+  checks after any rebase. Before deployment, choose and review a supported
+  target, then run clean, upgrade and drift tests on that major version;
+  separately authorize any live Azure test. Do not assume safe downgrade or
+  cross-major data compatibility.
+- **Reusable lesson:** An extensible API enum and permissive compiler can
+  accept a value syntactically even when version-specific support remains
+  ambiguous. Compare service, API-schema and migration-test evidence.
+
+## 2026-11-21 - Local PostgreSQL 16 migration and foundation reconciliation
+
+- **Separate migration evidence:** At migration workstream revision
+  `031fdb440908092cf09801232fe7f5d15048f065`, an isolated local
+  `postgres:16-alpine` server reported PostgreSQL 16.15. From that worktree's
+  backend, `python -B -m unittest -v tests.test_migrations` passed 12 tests
+  with no failures, errors or skips, covering fresh initialization, adoption,
+  upgrades, drift, rollback and downgrade refusal.
+- **Initial attempt:** An auxiliary `current_setting('lc_collate')` probe
+  failed with `UndefinedObject` before tests ran. A retry used database
+  catalog metadata and completed the suite; the failed attempt remains part
+  of the evidence. The test container and its task-owned volume were removed.
+- **Scope / next action:** That migration revision is separate from this
+  infrastructure branch. Its local result neither resolves the separately
+  reported checkpoint-evidence failures nor proves Azure Flexible Server,
+  Entra database authentication, network access, deployment or cross-major
+  data compatibility. After integration, rerun target-version migrations and
+  drift checks on the exact combined revision; live checks require separate
+  authorization.
+- **Reconciliation:** The infrastructure branch was rebased onto foundation
+  `9efeef01101b176a1a10627c654eff0ca5150b6b`. Its
+  [GitHub Actions run 44936094798](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44936094798)
+  passed five jobs for that foundation head, not for the rebased branch.
+  The checkpoint timestamp and hosted caller-binding entries below remain
+  unchanged. Recheck the final infrastructure revision and its own PR CI.
+- **Offline checks / prerequisite:** On the rebased working tree, source and
+  independent generated-project Bicep compilation, lint and configuration
+  checks passed, as did nine infrastructure security/configuration tests in
+  each copy and two instantiation tests. The compiler prerequisite initially
+  failed because no compatible Bicep executable was available; the official
+  0.49.2 release was then obtained and its SHA-256 verified before rerunning.
+  These checks used no Azure credentials or resources and do not replace
+  exact-head PR CI.
+- **Local recovery / security regression:** Source and generated
+  `tests.test_core`, `tests.test_security` and `tests.test_evidence_runner`
+  each passed 36 tests without skips on isolated local PostgreSQL 17.12 after
+  the rebase. These exercise the local workflow, not hosted recovery or live
+  identity.
+- **Reusable lesson:** Local engine-version evidence is useful but remains
+  scoped to the tested code and runtime; a passing retry does not erase the
+  earlier failed probe or establish cloud compatibility.
 ## Prior implementation evidence
 
 ### 2026-11-21 - Reconcile developer tooling with canonical imports
@@ -471,6 +594,9 @@ entries to hide failed attempts or gaps.
 | Locked developer tooling | Open in PR #13 | Run 44937692067 passed all five checks on head `543b137`; verify the combined revision separately. macOS, interactive debugging and public-only local downloads remain unverified. |
 | Privacy-safe observability | Open in PR #14 | Run 44938368000 passed all five checks on head `8c643df`; verify the combined revision separately. Hosted telemetry remains unverified. |
 | Combined revision CI | Not run | Passing checks on individual PRs do not establish checks for their combined revision. |
+| Foundry-first infrastructure | In progress | Source and generated offline checks passed locally; confirm final-revision checks and actual PR-head CI, then coordinate live host, networking, identity and cost review. |
+| PostgreSQL major-version alignment | Open | Local migration checks passed on 16.15 and 17.12 at an intermediate combined revision; the staged 16/17 mismatch, final integrated revision, live API and Azure compatibility remain unverified. |
+| Current dependent PR CI | Pending on updated revision | Confirm all required checks correspond to the pushed PR head. |
 | Foundry host caller binding and lost-response recovery | Blocked | Establish supported identity and reconciliation guarantees before implementing a hosted bridge. |
 | Live Entra/OBO, cloud telemetry, Azure deployment | Unverified | Separate scoped implementation, authorization where required, and live evidence. |
 

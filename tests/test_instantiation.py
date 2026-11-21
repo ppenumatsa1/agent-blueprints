@@ -60,6 +60,14 @@ class InstantiationTests(unittest.TestCase):
                          "deployment-flow", "issues-changes-fixes"):
                 self.assertTrue((target / "docs" / "design" / f"{name}.md").is_file())
             self.assertFalse((target / "docs" / "engineering-journal.md").exists())
+
+            self.assertTrue((target / "azure.yaml").is_file())
+            self.assertTrue((target / "infra" / "main.bicep").is_file())
+            self.assertTrue((target / "infra" / "validate.py").is_file())
+            self.assertTrue((target / "infra" / "modules" / "foundry.bicep").is_file())
+            self.assertTrue((target / "infra" / "tests" / "test_validation.py").is_file())
+            self.assertTrue((target / "infra" / "environments" / "dev.example.bicepparam").is_file())
+            self.assertTrue((target / "infra" / "environments" / "prod.example.bicepparam").is_file())
             self.assertFalse((target / "frontend" / "node_modules").exists())
             self.assertFalse((target / "frontend" / "dist").exists())
             self.assertFalse((target / ".env").exists())

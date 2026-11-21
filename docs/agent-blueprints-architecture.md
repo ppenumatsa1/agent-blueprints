@@ -27,12 +27,13 @@ Local Windows and Linux-container checks do not prove macOS. Hosted
 [run 44937692067](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44937692067)
 passed all five checks for tooling head `543b137`, not this combined revision.
 
-The longer-term target adds a Foundry Responses
-adapter and host-managed checkpoints, and Foundry-first Bicep/azd for
-separately hosted frontend and API services. These are not implemented by
-this tooling increment. Hosting the workflow runtime in ACA is a deferred
-alternative requiring its own verified checkpoint strategy. Neither topology
-is a verified deployment; provisioning requires separate authorization.
+The longer-term target adds a Foundry Responses adapter and host-managed
+checkpoints, neither of which is implemented. Staged Foundry-first Bicep/azd describes
+separately hosted frontend and API services and has credential-free static
+checks, but does not implement a hosted agent or a working cloud integration.
+Hosting the workflow runtime in ACA is a deferred alternative requiring its own
+verified checkpoint strategy. Neither topology is a verified deployment;
+provisioning requires separate authorization.
 
 [PR #11](https://github.com/ppenumatsa1/agent-blueprints/pull/11) remains open.
 Its cleaned foundation commit `9efeef0` removes the compatibility aliases and
@@ -90,7 +91,7 @@ Do not treat conversation history, workflow checkpoints, and business records
 as interchangeable. A model recommendation or remembered conversation is not
 human authorization.
 
-## First golden path: public-network MAF workflow
+## First golden path: Foundry-first MAF workflow
 
 This is a **design**, not a verified deployment:
 
@@ -127,10 +128,25 @@ remain independent components. Local development uses explicit local services
 and synthetic data; an offline scripted mode must be selected explicitly, never
 used as a silent replacement for a failed model call.
 
-The public-network choice is not public anonymous access: require Entra-backed
-authentication for protected APIs, authorization for sensitive operations,
-managed identity where applicable, restrictive CORS, and safe secret handling.
-Private networking and self-hosted CI are deferred, not prohibited forever.
+The staged resource graph chooses restrictive defaults rather than enabling
+the earlier public-network design: optional ACA UI/API ingress is internal,
+Foundry public access and monitoring public ingestion/query are disabled,
+and PostgreSQL uses private networking and Entra-only authentication.
+Foundry and monitoring private paths, application database token support,
+and the hosted-agent binding are missing; these services are not a connected,
+working topology. The optional registry remains publicly network-reachable
+with anonymous and admin access disabled. The API's project-wide
+agent-consumer grant is optional and disabled by default; review narrower
+agent scope, inherited grants, and actual caller restrictions.
+The staged PostgreSQL server selects major 16 while local Compose and the
+parallel migration baseline use 17. A separate migration revision passed 12
+local PostgreSQL 16.15 tests, including upgrade and drift; the combined
+application and Azure target remain unverified. The
+[version-gap review](../blueprints/maf/workflow/infra/README.md#open-postgresql-version-gap)
+does not claim live Azure support.
+Any future public API still requires Entra-backed authentication,
+application authorization, restrictive CORS, and safe secret handling.
+See the [infrastructure guide](../blueprints/maf/workflow/infra/README.md).
 No Azure provisioning is authorized by this design.
 
 ## Blueprint-to-application boundary

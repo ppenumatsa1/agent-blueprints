@@ -35,6 +35,11 @@ disabled as described in the [README](../README.md). Restrict log access and
 retention; review any additional instrumentation for privacy and duplication.
 Configuration and local in-memory tests do not prove hosted ingestion.
 
+The [staged monitoring resources](../infra/README.md) disable public
+ingestion/query, but include no private connectivity or application exporter.
+An ingestion cap may discard telemetry. Their presence does not establish
+cloud signal delivery or privacy-safe application instrumentation.
+
 ## Troubleshooting
 
 | Symptom | Check |

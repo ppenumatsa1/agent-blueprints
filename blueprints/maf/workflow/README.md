@@ -42,6 +42,11 @@ recovery are deferred to P1-12. The local store is not a shared-store or
 hosted-recovery solution. Do not mount a local checkpoint provider into a
 future host that supplies its own provider.
 
+The [Foundry-first infrastructure](infra/README.md) is staged for
+credential-free Bicep compilation and security checks only. Its hosted-agent
+service and end-to-end cloud integration are not implemented or verified;
+it is not authorization to provision or deploy.
+
 ## Local stack
 
 Use Docker Compose and existing, authorized Microsoft Entra SPA and API

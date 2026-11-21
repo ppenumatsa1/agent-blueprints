@@ -3,14 +3,15 @@
 ## Status boundary
 
 **Implemented:** local development, Docker Compose, source tests, generated
-project tests, and GitHub Actions on GitHub-hosted runners.
+project tests, staged Bicep/azd definitions and credential-free static checks.
+GitHub Actions contains source and generated-infrastructure jobs; the actual
+PR-head run remains a separate acceptance gate.
 
-**Planned and unverified:** Bicep infrastructure, azd provisioning/deployment,
-Foundry-hosted MAF, managed identity binding, Azure resource validation, cloud
-telemetry ingestion, ACA alternative, and live sign-in. Explicit Azure trace
-and metric exporter configuration is implemented but not cloud-verified.
-This document describes acceptance gates for future work; it does not provide
-or authorize a cloud deployment command.
+**Planned and unverified:** azd provisioning/deployment, Foundry-hosted MAF,
+managed identity binding, Azure resource validation, cloud telemetry ingestion,
+an ACA workflow alternative, and live sign-in. Explicit Azure trace and
+metric exporter configuration is implemented but not cloud-verified. This
+document does not authorize a cloud deployment command.
 
 ## Local development and Compose
 
@@ -55,14 +56,37 @@ separate review; no live deployment or backup recovery is claimed.
 
 `.github/workflows/ci.yml` (source repository) runs contract/readiness tests,
 PostgreSQL-backed backend tests, frontend tests/build/CSP checks, Compose HTTP
-and permission checks, and `maf-independent`. The independent job creates the
+and permission checks, static infrastructure checks, and `maf-independent`.
+The independent job creates the
 project outside the checkout, checks its own imports and build contexts, runs
-generated backend/frontend/verification tests, validates evidence
+generated infrastructure/backend/frontend/verification tests, validates evidence
 disclosures, and builds the generated Compose stack. CI does not provision
 Azure or prove live Entra/Foundry behavior. The generated-verifier pipeline
 propagates the test command's nonzero exit through `tee` and separately
 rejects skipped or expected-failure results; `tests/test_ci_workflow.py`
 exercises these failure paths against the actual CI step.
+
+From either the source blueprint or generated project root, with Python 3.12
+and Bicep 0.49.2 or newer installed:
+
+```text
+python infra/validate.py
+python -m unittest discover -s infra/tests -v
+```
+
+These compile and lint local modules, check synthetic parameter examples and
+local azd paths, and inspect compiled security properties. They cannot validate
+arbitrary future parameters or live Azure behavior. See
+[infrastructure preparation](../../infra/README.md).
+
+The staged server selects PostgreSQL 16 while Compose uses 17. A separate
+migration revision passed 12 tests on local PostgreSQL 16.15, including
+fresh, upgrade and drift cases; its initial auxiliary locale probe failed and
+was corrected. Bicep compilation and local tests do not verify Azure
+compatibility. Resolve the [version gap](../../infra/README.md#open-postgresql-version-gap)
+and repeat migration tests on the exact integrated revision and selected
+target before deployment; no automatic downgrade or cross-major data
+compatibility is assumed.
 
 Before PR approval:
 
@@ -83,8 +107,8 @@ Before PR approval:
 flowchart TD
     A[Local design and implementation] --> B[Static checks and generated-copy tests]
     B --> C[PR-specific CI and human review]
-    C --> D{Hosting interfaces and recovery verified?}
-    D -- No --> E[Stop; retain as planned and unverified]
+    C --> D{Hosting, target database version and recovery verified?}
+    D -- No --> E[Stop; keep host and cloud integration unverified]
     D -- Yes --> F[Prepare inventory, cost, identity, network, backup and rollback]
     F --> G[Explicit human authorization for Azure provisioning]
     G --> H[Reviewed Bicep/azd plan and least-privilege deployment identity]
@@ -93,12 +117,14 @@ flowchart TD
     J --> K[Record revision-scoped evidence in journal and checklist]
 ```
 
-No checked-in Bicep modules or `azure.yaml` deployment path is currently
-provided for this blueprint. A future Bicep/azd change must add credential-free
-CI validation, scoped identity and network review, cost and teardown ownership,
-and live verification. Foundry's host-managed checkpoint strategy and an
-ACA-compatible strategy are distinct; neither may silently fall back to local
-file checkpoints. A public endpoint must remain authenticated and authorized.
+The checked-in modules and `azure.yaml` are staged definitions, not a supported
+deployment path. Foundry and monitoring lack private endpoints; PostgreSQL
+Entra token authentication and the API/UI/host bindings are not implemented.
+Review scoped identity and network access, image provenance, cost and teardown
+ownership, and live behavior before requesting authorization. Foundry's
+host-managed checkpoint strategy and an ACA-compatible strategy are distinct;
+neither may silently fall back to local file checkpoints. A public endpoint
+must remain authenticated and authorized.
 
 See [deployment design](../deployment.md) for the current prototype boundary
 and [journal](issues-changes-fixes.md) for evidence and outstanding work.
