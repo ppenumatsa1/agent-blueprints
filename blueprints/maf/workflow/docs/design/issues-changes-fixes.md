@@ -119,11 +119,25 @@ entries to hide failed attempts or gaps.
   `backend/app/`, `frontend/`, `backend/Dockerfile`, and
   `tests/test_instantiation.py`.
 
+## 2026-11-21 - Reconcile dependent documentation with cleaned foundation
+
+- **Change / decision:** Rebase the documentation work onto foundation
+  `61d44ed`, retain its canonical imports and remove stale `test_modularity`
+  command references. Preserve the six generated-project guides, their README
+  navigation, the eight design documents, and copy/link verification.
+- **Evidence:** Both focused `tests.test_instantiation` tests passed after
+  rebasing onto `61d44ed`. Foundation PR #11 run
+  [44930591252](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44930591252)
+  passed all five checks on the exact foundation commit. Hosted checks for
+  this dependent PR remain pending until its rebased head is published.
+- **Limit:** This reconciliation does not verify Azure hosting, interactive
+  debugging on macOS, live Entra/OBO, or hosted checkpoint recovery.
+
 ### PR #13 - Locked developer tooling proposal
 
 - **Status and revision:** Open, based on `modularity-foundation`; head
   `e1d953662e615e547fa641ad0831907c363318e3`. It is a parallel workstream and
-  is not included in this branch's baseline commit `57d404c`.
+  is not included in cleaned foundation commit `61d44ed`.
 - **Proposed changes:** Python 3.12, uv 0.9.26, public-PyPI `uv.lock` and
   hash-pinned backend/image installs, Ruff 0.14.13, Node 22 with `npm ci`,
   and VS Code task/debug configurations.
@@ -138,14 +152,27 @@ entries to hide failed attempts or gaps.
   `uv.lock`, backend image install, and developer task/debug configuration
   are proposed in that PR, not present in the baseline documented here.
 
+## 2026-11-21 - Combine documentation and tooling for integration
+
+- **Issue / cause:** Both dependent PRs updated the technology summary,
+  journal acceptance queue, and master checklist independently.
+- **Decision:** Preserve both changes in an isolated integration worktree;
+  retain revision-specific evidence and avoid describing either open PR as
+  merged. Keep the individual PRs unchanged.
+- **Evidence:** On the combined working tree, both
+  `python -m unittest tests.test_instantiation -v` tests passed, including
+  documentation copy and relative-link checks.
+- **Limit:** This focused result is not a full integration, security,
+  durability, Compose, generated-runtime, or hosted-CI result.
+
 ## Current acceptance queue
 
 | Item | Status | Evidence needed / next action |
 | --- | --- | --- |
-| Eight design documents and generated inclusion | In progress | Run the focused instantiation tests and verify copied Markdown links. |
-| Canonical imports and legacy-shim removal | Open in foundation workstream | Inspect final diff across imports, tests, Docker, CI, docs, and generator; do not approve while forwarding paths remain. |
-| Locked developer tooling | Open in PR #13 | Verify reconciled source/generated checks and actual-head CI; macOS and interactive debugging remain unverified. |
-| Current dependent PR CI | Pending on updated revision | Confirm all required checks correspond to the pushed PR head. |
+| Eight design documents and generated inclusion | Open in PR #12 | Focused instantiation tests passed and run 44931269846 passed all five checks on head `476e43a`; verify the combined revision separately. |
+| Canonical imports and legacy-shim removal | Implemented in foundation commit `61d44ed` | Foundation PR #11 run 44930591252 passed all five checks; preserve direct imports in later changes. |
+| Locked developer tooling | Open in PR #13 | Run 44931514554 passed all five checks on head `edfd572`; verify the combined revision separately. macOS, interactive debugging and public-only local downloads remain unverified. |
+| Combined revision CI | Not run | Passing checks on the two individual PRs do not establish checks for their combined revision. |
 | Live Entra/OBO, Foundry host/recovery, cloud telemetry, Azure deployment | Unverified | Separate scoped implementation, authorization where required, and live evidence. |
 
 Future entries should use this form: date and scope; observed issue and

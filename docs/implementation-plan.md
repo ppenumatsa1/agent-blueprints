@@ -41,7 +41,11 @@ responsibilities using canonical imports and no compatibility aliases. Acceptanc
 requires source and generated security/recovery tests, both crash windows,
 independent golden verification and exact contract bytes, credential-free
 CI and Compose smoke checks. Local evidence is recorded in the
-[checklist](master-checklist.md); PR review and hosted CI remain pending.
+[checklist](master-checklist.md). [PR #11](https://github.com/ppenumatsa1/agent-blueprints/pull/11)
+remains open; cleaned foundation commit `61d44ed` removes compatibility
+aliases. Its [hosted run 44930591252](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44930591252)
+passed all five checks on that exact commit. Review and merge remain pending;
+hosted checks do not prove live hosting.
 The copied evidence producer observed approval and recovery passing while
 explanation and browser hint remained unverified; the independent unsigned
 readiness report remained unverified. The first local container build could
@@ -51,14 +55,52 @@ Independent workstreams cover locked tooling, migrations, observability,
 Foundry hosting, infrastructure and integration evidence. Do not merge PRs
 without approval. Azure deployment is a deliverable but requires prior
 approval of its resource inventory, estimated cost and deployment plan;
-permanent reference repository creation requires separate approval.
+permanent reference repository creation requires separate approval. As of
+2026-11-21, locked tooling is proposed in open
+[PR #13](https://github.com/ppenumatsa1/agent-blueprints/pull/13), head
+`edfd5727e99c256f2c0267c5af614e566e2a12b5`; its
+[hosted run](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44931514554)
+passed five checks for that exact revision. The proposal's reported
+Windows/Linux Compose verification used an approved mirror after public TLS
+failures; macOS and interactive debugger verification remain unverified.
+These results do not establish that tooling in PR #13 is merged or validate
+any combined revision. Documentation [PR #12](https://github.com/ppenumatsa1/agent-blueprints/pull/12)
+head `476e43a51df9647d80baa63a8b315d6fddaa3f1e` passed all five checks in
+[run 44931269846](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44931269846);
+it also remains open.
 
 Each PR must remove obsolete compatibility layers, use direct imports,
 update affected `docs/design` specifications and the cumulative engineering
 journal, and record actual regression, security, durability, independent
 verification and CI outcomes for its final revision. The design documents
 must accompany generated applications and distinguish planned work from
-verified behavior.
+verified behavior. The six generated-project guides and eight documents under
+`blueprints/maf/workflow/docs/design/` must evolve alongside implementation,
+remain in generated applications, and use actual source/configuration
+references, meaningful Mermaid diagrams, and accurate implemented/planned
+labels. Maintain the engineering journal without inventing historical
+findings. For each meaningful PR update this plan, `docs/master-checklist.md`,
+and relevant architecture documentation with acceptance criteria, evidence,
+status, and next action.
+
+### Cross-cutting PR acceptance gates
+
+Before any PR is ready for approval, keep one canonical implementation and
+use direct imports. Remove compatibility shims, forwarding modules, legacy
+import aliases, obsolete directories, duplicate code, unused dependencies,
+and stale configuration; backward compatibility with prior internal
+implementations is not required for this greenfield blueprint. Update
+dependent call sites, tests, Dockerfiles/build contexts, CI, documentation,
+and instantiation scripts in the same coherent change while preserving
+functional behavior and verification contracts.
+
+Before requesting approval, run applicable regression, security, durability,
+and independent verification tests; do not weaken or relabel failed or
+unverified checks. Confirm GitHub Actions for the actual PR head revision.
+Live Entra/OBO, Foundry-hosted recovery, cloud telemetry, and Azure deployment
+remain unverified until separately implemented and evidenced. Azure
+provisioning and permanent repository creation still require separate
+authorization; never merge automatically.
 
 The dependent developer-tooling branch adds `backend/pyproject.toml` and a
 public-registry `uv.lock`, locked development and container installs, Ruff,
@@ -69,10 +111,10 @@ generated backend tests, Ruff, generated UI tests/build and Linux Compose
 204/401 smoke passed using an approved temporary mirror; public artifact downloads failed locally with
 a TLS handshake error. Reconciled source/generated backend 31 tests each and
 independent verification 44 passed locally. Hosted
-[CI](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44931241591)
-passed for head `ad6a78a`, not subsequent revisions. macOS, interactive
+[CI](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44931514554)
+passed for head `edfd572`, not any combined revision. macOS, interactive
 debugging and a clean public-only local installation remain unverified. Next
-confirm hosted CI on the final reviewed head.
+verify integrated work and review the separate PRs.
 
 P1-01 through P1-04 have an initial local foundation and a test-only
 application adapter, but the scenario has no authorized contract approval.

@@ -27,9 +27,9 @@ frontend's direct dependency manifest and lock are
 [`frontend/package.json`](../../frontend/package.json) and
 [`frontend/package-lock.json`](../../frontend/package-lock.json).
 Compose declares the PostgreSQL image in
-[`compose.yaml`](../../compose.yaml). GitHub Actions pins action revisions in
-the source repository's `.github/workflows/ci.yml` pins GitHub Actions
-revisions; that CI file is not copied into a generated project.
+[`compose.yaml`](../../compose.yaml). The source repository's
+`.github/workflows/ci.yml` pins GitHub Actions revisions; that CI file is
+not copied into a generated project.
 
 ## State and identity choices
 
@@ -56,15 +56,13 @@ the source repository's `docs/engineering-standards.md`.
 
 The **open** developer-tooling change is PR
 [#13](https://github.com/ppenumatsa1/agent-blueprints/pull/13), head
-`e1d953662e615e547fa641ad0831907c363318e3` before reconciliation. It added Python 3.12, uv
-0.9.26 with a public-PyPI `uv.lock` and hash-pinned backend/image installs,
-Ruff 0.14.13, Node 22 with `npm ci`, and VS Code task/debug configurations.
-Its hosted run
-[44928260607](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44928260607)
-passed five checks for that exact prior tooling revision, not this revision. The
+`edfd5727e99c256f2c0267c5af614e566e2a12b5`. Its hosted
+[run 44931514554](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44931514554)
+passed five checks for that exact revision, not this combined revision. The
 workstream reports Windows and Linux Compose verification with an approved
-package mirror after public TLS failures; macOS and interactive debugger
-verification remain unverified. See the [journal](issues-changes-fixes.md).
+package mirror after public TLS failures; public-only local downloads, macOS
+and interactive debugger verification remain unverified. See the
+[journal](issues-changes-fixes.md).
 
 ## Official references
 
