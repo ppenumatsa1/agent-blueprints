@@ -28,9 +28,12 @@ is a verified deployment; provisioning requires separate authorization.
 
 [PR #11](https://github.com/ppenumatsa1/agent-blueprints/pull/11) remains open.
 Its cleaned foundation commit `9efeef0` removes the compatibility aliases and
-uses canonical imports; [hosted CI run 44936094798](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44936094798)
-passed all five checks on that exact commit. This is not a merge or live
-hosting result. The copied
+uses canonical imports. Follow-up foundation commit `d0e1727` fixes propagation
+of generated-verifier failures through CI's `tee` pipeline and adds regression
+coverage for failure, skipped, expected-failure, and success outputs; its
+[actual-head run 44939172266](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44939172266)
+passed all five checks on that exact commit. These are CI results, not a merge
+or live hosting result. The copied
 [project guides](../blueprints/maf/workflow/README.md#project-guide) describe
 the current local boundaries and planned deployment/observability designs.
 Their [design baseline](../blueprints/maf/workflow/docs/design/architecture.md)

@@ -49,14 +49,15 @@ selects MAF-native persisted checkpoints and rejects incomplete terminal state
 on completion and replay. Local source/generated backend suites passed 36 tests
 each; the selected-adapter root suite passed 46 and the generated verifier
 passed 44 without skips. Foundation PR #11 remains open; its
-[actual-head run](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44936094798)
-passed all five checks on `9efeef0`. This is CI evidence, not proof of live
+[actual-head run](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44939172266)
+passed all five checks on `d0e172751a39bc6e3a072d80482b3581b7007413`. This is CI evidence, not proof of live
 hosting. Confirm CI on the revised dependent PR head; do not treat prior-head
 CI as evidence. An independent CI regression exposed that the generated
 verifier command's failure could be masked by `tee`. The workflow now
 propagates pipeline failures, and the [regression test](../tests/test_ci_workflow.py)
-exercises failure, skip, expected-failure, and success behavior. Prior CI job
-status alone is not proof that the verifier passed; confirm actual logs and
+exercises failure, skip, expected-failure, and success behavior. Foundation
+run 44939172266 is the exact-head validation of that fix. Prior CI job status
+alone is not proof that the verifier passed; confirm actual logs and
 revised-head CI before review.
 The copied evidence producer observed approval and recovery passing while
 explanation and browser hint remained unverified; the independent unsigned

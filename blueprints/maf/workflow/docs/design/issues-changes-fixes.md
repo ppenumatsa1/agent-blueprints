@@ -190,6 +190,29 @@ entries to hide failed attempts or gaps.
   does not verify Azure hosting, interactive debugging on macOS, live
   Entra/OBO, or hosted checkpoint recovery.
 
+### 2026-11-21 - Reconcile documentation with generated-verifier CI fix
+
+- **Issue / cause:** The generated verifier test command was piped through
+  `tee`, which could hide the command's nonzero exit status without `pipefail`.
+  The resulting green job could not establish that the generated verifier
+  passed.
+- **Change / decision:** Rebase the documentation work onto foundation
+  `d0e172751a39bc6e3a072d80482b3581b7007413`, preserving its workflow fix,
+  the new `tests/test_ci_workflow.py` regression coverage, the checkpoint
+  selection correction, and the hosted caller-binding blocker. Update the
+  generated deployment guide, implementation plan, checklist, and architecture
+  overview to state the exact behavior and revision-scoped evidence.
+- **Evidence:** `tests/test_ci_workflow.py` exercises command failure, skipped
+  tests, expected failures, and success against the actual workflow step.
+  `python -m unittest tests.test_instantiation tests.test_ci_workflow -v`
+  verifies generated documentation copying/local links and the pipeline
+  regression. Foundation PR #11 run
+  [44939172266](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44939172266)
+  passed all five jobs for the exact foundation revision. This dependent PR's
+  hosted CI must be checked on its final pushed head.
+- **Limit:** CI validates the generated test step, not Azure hosting, live
+  identity, or hosted checkpoint recovery.
+
 ## 2026-11-21 - Reconcile dependent documentation with cleaned foundation
 
 - **Change / decision:** Rebase the documentation work onto foundation
@@ -208,7 +231,7 @@ entries to hide failed attempts or gaps.
 
 - **Status and revision:** Open, based on `modularity-foundation`; head
   `e1d953662e615e547fa641ad0831907c363318e3`. It is a parallel workstream and
-  is not included in cleaned foundation commit `9efeef0`.
+  is not included in cleaned foundation commit `d0e1727`.
 - **Proposed changes:** Python 3.12, uv 0.9.26, public-PyPI `uv.lock` and
   hash-pinned backend/image installs, Ruff 0.14.13, Node 22 with `npm ci`,
   and VS Code task/debug configurations.
@@ -227,8 +250,9 @@ entries to hide failed attempts or gaps.
 
 | Item | Status | Evidence needed / next action |
 | --- | --- | --- |
-| Eight design documents and generated inclusion | In progress | Focused instantiation tests passed after rebase; confirm this PR's hosted CI on its rebased head. |
-| Canonical imports and legacy-shim removal | Implemented in foundation commit `9efeef0` | Foundation PR #11 run 44936094798 passed all five checks; preserve direct imports in later changes. |
+| Eight design documents and generated inclusion | In progress | Focused instantiation and pipeline-regression tests pass after rebase; confirm this PR's hosted CI on its rebased head. |
+| Canonical imports and legacy-shim removal | Implemented in foundation commit `d0e1727` | Foundation PR #11 run 44939172266 passed all five checks; preserve direct imports in later changes. |
+| Generated-verifier pipeline failure propagation | Implemented in foundation commit `d0e1727` | `tests/test_ci_workflow.py` covers failed, skipped, expected-failure, and successful outputs; verify exact-head CI before relying on future runs. |
 | Locked developer tooling | Open in parallel PR #13 | Reconcile only after review/merge; verify any resulting revision and platform matrix independently. |
 | Current dependent PR CI | Pending on updated revision | Confirm all required checks correspond to the pushed PR head. |
 | Foundry host caller binding and lost-response recovery | Blocked | Establish supported identity and reconciliation guarantees before implementing a hosted bridge. |

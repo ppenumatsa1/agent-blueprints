@@ -62,7 +62,8 @@ Ruff 0.14.13, Node 22 with `npm ci`, and VS Code task/debug configurations.
 Its hosted run
 [44928260607](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44928260607)
 passed five checks for that exact prior tooling revision. This tooling is not
-part of cleaned foundation commit `9efeef0` until merged and reconciled. The
+part of the cleaned `modularity-foundation` branch at `d0e1727` until merged
+and reconciled. The
 workstream reports Windows and Linux Compose verification with an approved
 package mirror after public TLS failures; macOS and interactive debugger
 verification remain unverified. See the [journal](issues-changes-fixes.md).
