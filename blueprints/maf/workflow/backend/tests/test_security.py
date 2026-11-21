@@ -50,7 +50,15 @@ class TokenFixture:
         self.first = rsa.generate_private_key(public_exponent=65537, key_size=2048)
         self.second = rsa.generate_private_key(public_exponent=65537, key_size=2048)
 
-    def token(self, subject=OWNER, scopes="workflow.read workflow.write", roles=None, key=None, kid="one", **changes):
+    def token(
+        self,
+        subject=OWNER,
+        scopes="workflow.read workflow.write",
+        roles=None,
+        key=None,
+        kid="one",
+        **changes,
+    ):
         now = int(time.time())
         claims = {
             "iss": f"https://login.microsoftonline.com/{TENANT}/v2.0",
@@ -94,7 +102,9 @@ class IdentityTests(unittest.TestCase):
         cls.tokens = TokenFixture()
 
     def setUp(self):
-        self.settings = Settings(TENANT, API, "postgresql://localhost/test", Path("test-checkpoints"))
+        self.settings = Settings(
+            TENANT, API, "postgresql://localhost/test", Path("test-checkpoints")
+        )
         self.identity = EntraIdentity(self.settings, self.tokens.client())
 
     def test_signature_issuer_audience_tenant_lifetime_and_delegated_claims(self):
@@ -196,7 +206,9 @@ class ApiSecurityTests(unittest.TestCase):
     def setUpClass(cls):
         cls.dsn = os.environ.get("MAF_TEST_DATABASE_URL")
         if not cls.dsn:
-            raise RuntimeError("MAF_TEST_DATABASE_URL must point to an isolated PostgreSQL test database.")
+            raise RuntimeError(
+                "MAF_TEST_DATABASE_URL must point to an isolated PostgreSQL test database."
+            )
         cls.tokens = TokenFixture()
 
     def setUp(self):
@@ -207,7 +219,10 @@ class ApiSecurityTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.settings = Settings(
-            TENANT, API, scoped_url(self.dsn, self.schema), Path(self.temp.name) / "checkpoints",
+            TENANT,
+            API,
+            scoped_url(self.dsn, self.schema),
+            Path(self.temp.name) / "checkpoints",
             cors_origins=("http://localhost:3000",),
         )
         self.store = PostgresStore(self.settings.database_url)
@@ -222,10 +237,14 @@ class ApiSecurityTests(unittest.TestCase):
 
     def _drop_schema(self):
         with psycopg.connect(self.dsn, autocommit=True) as connection:
-            connection.execute(sql.SQL("DROP SCHEMA {} CASCADE").format(sql.Identifier(self.schema)))
+            connection.execute(
+                sql.SQL("DROP SCHEMA {} CASCADE").format(sql.Identifier(self.schema))
+            )
 
     def client(self):
-        return TestClient(create_app(self.settings, self.components, store=self.store, identity=self.identity))
+        return TestClient(
+            create_app(self.settings, self.components, store=self.store, identity=self.identity)
+        )
 
     @staticmethod
     def headers(token, key=None):
@@ -262,24 +281,37 @@ class ApiSecurityTests(unittest.TestCase):
         with self.client() as client:
             self.assertEqual(client.get("/healthz").status_code, 204)
             self.assertEqual(client.get("/api/cases/" + str(uuid4())).status_code, 401)
-            self.assertEqual(client.get("/api/cases/" + str(uuid4()), headers=self.headers("bad")).status_code, 401)
+            self.assertEqual(
+                client.get("/api/cases/" + str(uuid4()), headers=self.headers("bad")).status_code,
+                401,
+            )
             response = self.submit(client, payload={"value": 42, "private": "SECRET-CANARY"})
             self.assertEqual(response.status_code, 200, response.text)
             case_id = response.json()["id"]
             self.assertEqual(response.json()["status"], "pending")
             stranger = self.tokens.token(
-                subject=STRANGER, scopes="workflow.read workflow.approve", roles=["Workflow.Approver"]
+                subject=STRANGER,
+                scopes="workflow.read workflow.approve",
+                roles=["Workflow.Approver"],
             )
             path = f"/api/cases/{case_id}"
             self.assertEqual(client.get(path, headers=self.headers(stranger)).status_code, 403)
             self.assertEqual(
-                client.post(path + "/decision", headers=self.headers(stranger), json={"decision": "approved"}).status_code,
+                client.post(
+                    path + "/decision",
+                    headers=self.headers(stranger),
+                    json={"decision": "approved"},
+                ).status_code,
                 403,
             )
             self.assertEqual(action_count(self.store, UUID(case_id)), 0)
-            self.assertEqual(client.get(path, headers=self.headers(self.owner_token)).status_code, 200)
+            self.assertEqual(
+                client.get(path, headers=self.headers(self.owner_token)).status_code, 200
+            )
             approved = client.post(
-                path + "/decision", headers=self.headers(self.reviewer_token), json={"decision": "approved"}
+                path + "/decision",
+                headers=self.headers(self.reviewer_token),
+                json={"decision": "approved"},
             )
             self.assertEqual(approved.status_code, 200, approved.text)
             self.assertEqual(approved.json()["status"], "completed")
@@ -305,10 +337,15 @@ class ApiSecurityTests(unittest.TestCase):
             other = self.submit(client, reviewer=STRANGER).json()["id"]
             path = f"/api/cases/{case_id}/decision"
             no_role = self.tokens.token(subject=REVIEWER, scopes="workflow.approve")
-            no_scope = self.tokens.token(subject=REVIEWER, scopes="workflow.read", roles=["Workflow.Approver"])
+            no_scope = self.tokens.token(
+                subject=REVIEWER, scopes="workflow.read", roles=["Workflow.Approver"]
+            )
             for token in (no_role, no_scope):
                 self.assertEqual(
-                    client.post(path, headers=self.headers(token), json={"decision": "approved"}).status_code, 403
+                    client.post(
+                        path, headers=self.headers(token), json={"decision": "approved"}
+                    ).status_code,
+                    403,
                 )
             self.assertEqual(
                 client.post(
@@ -320,7 +357,8 @@ class ApiSecurityTests(unittest.TestCase):
             )
             self.assertEqual(
                 client.post(
-                    path, headers=self.headers(self.reviewer_token),
+                    path,
+                    headers=self.headers(self.reviewer_token),
                     json={"decision": "approved", "actor": REVIEWER},
                 ).status_code,
                 422,
@@ -335,7 +373,9 @@ class ApiSecurityTests(unittest.TestCase):
             self.store.record_decision(case_id, reviewer, "approved")
             self.assertEqual(action_count(self.store, case_id), 0)
         with self.client() as restarted:
-            response = restarted.get(f"/api/cases/{case_id}", headers=self.headers(self.owner_token))
+            response = restarted.get(
+                f"/api/cases/{case_id}", headers=self.headers(self.owner_token)
+            )
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.json()["status"], "completed")
             self.assertEqual(action_count(self.store, case_id), 1)
@@ -349,7 +389,9 @@ class ApiSecurityTests(unittest.TestCase):
             (self.settings.checkpoint_root / str(case_id) / f"{record.checkpoint_id}.json").unlink()
         with self.assertLogs("blueprint.lifecycle", level=logging.ERROR) as logs:
             with self.client() as restarted:
-                response = restarted.get(f"/api/cases/{case_id}", headers=self.headers(self.owner_token))
+                response = restarted.get(
+                    f"/api/cases/{case_id}", headers=self.headers(self.owner_token)
+                )
                 self.assertEqual(response.json()["failure_code"], "recovery_failed")
                 self.assertEqual(action_count(self.store, case_id), 0)
         self.assertNotIn(self.owner_token, " ".join(logs.output))
@@ -362,7 +404,9 @@ class ApiSecurityTests(unittest.TestCase):
         self.components = replace(self.components, action=FixtureAction(fail=True))
         with self.assertLogs("blueprint.lifecycle", level=logging.ERROR):
             with self.client() as restarted:
-                response = restarted.get(f"/api/cases/{case_id}", headers=self.headers(self.owner_token))
+                response = restarted.get(
+                    f"/api/cases/{case_id}", headers=self.headers(self.owner_token)
+                )
                 self.assertEqual(
                     (response.json()["status"], response.json()["failure_code"]),
                     ("failed", "action_failed"),
@@ -390,7 +434,9 @@ class ApiSecurityTests(unittest.TestCase):
             )
             self.assertEqual(failed.status_code, 503)
             state = client.get(f"/api/cases/{case_id}", headers=self.headers(self.owner_token))
-            self.assertEqual((state.json()["status"], state.json()["failure_code"]), ("failed", "action_failed"))
+            self.assertEqual(
+                (state.json()["status"], state.json()["failure_code"]), ("failed", "action_failed")
+            )
             self.assertEqual(action_count(self.store, case_id), 0)
 
     def test_errors_do_not_log_or_reflect_tokens_and_payload_canaries(self):

@@ -23,7 +23,9 @@ class ApplicationComponents:
 def load_application(specification: str) -> ApplicationComponents:
     module_name, separator, factory_name = specification.partition(":")
     if not module_name or not separator or not factory_name:
-        raise ValueError("BLUEPRINT_APPLICATION must name an application factory as module:function.")
+        raise ValueError(
+            "BLUEPRINT_APPLICATION must name an application factory as module:function."
+        )
     factory = getattr(importlib.import_module(module_name), factory_name)
     components = factory()
     if not isinstance(components, ApplicationComponents):

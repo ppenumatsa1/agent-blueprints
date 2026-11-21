@@ -2,7 +2,13 @@ import os
 import unittest
 from unittest.mock import patch
 
-from tests.evidence_runner import CRASH_TESTS, RecordedResult, _failure, grounded_explanation, summarize
+from tests.evidence_runner import (
+    CRASH_TESTS,
+    RecordedResult,
+    _failure,
+    grounded_explanation,
+    summarize,
+)
 
 
 class EvidenceNormalizationTests(unittest.TestCase):
@@ -14,22 +20,29 @@ class EvidenceNormalizationTests(unittest.TestCase):
     def test_failed_or_missing_evidence_is_never_promoted_to_pass(self):
         failed = {"restart": {"outcome": "failed", "failure": {"message": "actual failure"}}}
         self.assertEqual(
-            summarize(self.contract, self.cases, failed, self.crashes, [])["CHECK-RECOVERY"]["outcome"],
+            summarize(self.contract, self.cases, failed, self.crashes, [])["CHECK-RECOVERY"][
+                "outcome"
+            ],
             "failed",
         )
         observed = {"restart": {"outcome": "passed", "actual": {"state": "completed"}}}
         missing_crash = {CRASH_TESTS[0]: {"outcome": "passed"}}
         self.assertEqual(
-            summarize(self.contract, self.cases, observed, missing_crash, [])["CHECK-RECOVERY"]["outcome"],
+            summarize(self.contract, self.cases, observed, missing_crash, [])["CHECK-RECOVERY"][
+                "outcome"
+            ],
             "unverified",
         )
         self.assertEqual(
-            summarize(self.contract, self.cases, observed, self.crashes, [])["CHECK-RECOVERY"]["outcome"],
+            summarize(self.contract, self.cases, observed, self.crashes, [])["CHECK-RECOVERY"][
+                "outcome"
+            ],
             "passed",
         )
         self.assertEqual(
-            summarize(self.contract, self.cases, {"restart": {"outcome": "passed"}}, self.crashes, [])
-            ["CHECK-RECOVERY"]["outcome"],
+            summarize(
+                self.contract, self.cases, {"restart": {"outcome": "passed"}}, self.crashes, []
+            )["CHECK-RECOVERY"]["outcome"],
             "unverified",
         )
 
@@ -54,14 +67,15 @@ class EvidenceNormalizationTests(unittest.TestCase):
                     pass
 
         result = RecordedResult()
-        unittest.TestSuite([
-            Fixture("test_traceability"), Fixture("test_application_against_golden_cases")
-        ]).run(result)
+        unittest.TestSuite(
+            [Fixture("test_traceability"), Fixture("test_application_against_golden_cases")]
+        ).run(result)
         self.assertEqual(result.cases["restart"]["outcome"], "passed")
         self.assertEqual(result.suite_errors[0]["outcome"], "failed")
         self.assertEqual(
-            summarize(self.contract, self.cases, result.cases, self.crashes, result.suite_errors)
-            ["CHECK-RECOVERY"]["outcome"],
+            summarize(self.contract, self.cases, result.cases, self.crashes, result.suite_errors)[
+                "CHECK-RECOVERY"
+            ]["outcome"],
             "failed",
         )
 
@@ -98,13 +112,17 @@ class EvidenceNormalizationTests(unittest.TestCase):
             ),
             "hint": "Approval is pending.",
         }
-        contract = {"requirements": [{"checks": [{"id": "CHECK-EXPLANATION"}, {"id": "CHECK-HINT"}]}]}
+        contract = {
+            "requirements": [{"checks": [{"id": "CHECK-EXPLANATION"}, {"id": "CHECK-HINT"}]}]
+        }
         observed = {"hint": {"outcome": "passed", "actual": actual}}
         results = summarize(contract, [case], observed, {}, [])
         self.assertEqual(results["CHECK-EXPLANATION"]["outcome"], "unverified")
         self.assertEqual(results["CHECK-HINT"]["outcome"], "unverified")
         actual["explanation"] += " An invented fact."
-        self.assertEqual(summarize(contract, [case], observed, {}, [])["CHECK-EXPLANATION"]["outcome"], "failed")
+        self.assertEqual(
+            summarize(contract, [case], observed, {}, [])["CHECK-EXPLANATION"]["outcome"], "failed"
+        )
 
 
 if __name__ == "__main__":

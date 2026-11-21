@@ -58,7 +58,12 @@ class StateRepository(Protocol):
     def get(self, case_id: UUID) -> Case: ...
 
     def create(
-        self, actor: Principal, reviewer_id: str, payload: dict[str, Any], idempotency_key: str, input_digest: str
+        self,
+        actor: Principal,
+        reviewer_id: str,
+        payload: dict[str, Any],
+        idempotency_key: str,
+        input_digest: str,
     ) -> Case: ...
 
     def run_lock(self, case_id: UUID) -> ContextManager[None]: ...
