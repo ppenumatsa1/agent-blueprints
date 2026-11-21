@@ -77,7 +77,15 @@ class PostgresStore:
                 ON CONFLICT (tenant_id, owner_id, idempotency_key) DO NOTHING
                 RETURNING id
                 """,
-                (case_id, actor.tenant_id, actor.subject, reviewer_id, Jsonb(payload), idempotency_key, input_digest),
+                (
+                    case_id,
+                    actor.tenant_id,
+                    actor.subject,
+                    reviewer_id,
+                    Jsonb(payload),
+                    idempotency_key,
+                    input_digest,
+                ),
             ).fetchone()
             if inserted:
                 connection.execute(
@@ -171,9 +179,7 @@ class PostgresStore:
 
     def apply_once(self, case_id: UUID, approved: bool, action: TransactionalAction) -> None:
         with self.connect() as connection:
-            row = connection.execute(
-                _CASE_QUERY + " FOR UPDATE OF c", (case_id,)
-            ).fetchone()
+            row = connection.execute(_CASE_QUERY + " FOR UPDATE OF c", (case_id,)).fetchone()
             if row is None:
                 raise NotFound("Record not found.")
             case = _case(row)

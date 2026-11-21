@@ -1,6 +1,0 @@
-agent-framework-core==1.26.0
-fastapi==0.162.7
-msal==1.39.0
-psycopg[binary]==3.3.9
-PyJWT[crypto]==2.15.1
-uvicorn==0.54.0
