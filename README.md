@@ -7,10 +7,10 @@ another coding-agent platform.
 
 **Current state: Phase 1 in progress.** A local readiness validator, synthetic
 acceptance fixtures, and the local [MAF workflow blueprint](blueprints/maf/workflow/)
-are available. The authenticated application has local automated coverage and
-a Compose smoke check; independent generated-project verification, live
-Entra sign-in, and hosted compatibility remain unverified. No Azure resources
-are deployed.
+are available. The authenticated application and generated-project path have
+local automated coverage; live Entra sign-in, independently administered
+readiness trust, and hosted compatibility remain unverified. No Azure
+resources are deployed.
 
 The first planned golden path is a Microsoft Agent Framework (MAF) workflow:
 Foundry Hosted Agents are the preferred public-network hosting path, subject to
@@ -41,7 +41,20 @@ or customer approval**. Schema validation checks document shape; it does not
 authenticate reviewers, verify an evidence artifact, or replace a release gate.
 The local validator checks signed decisions and evidence, but its trust store
 and result producers require independent administration. The included scenario
-is unapproved, and its application acceptance adapter is not yet implemented.
+is unapproved; its application acceptance adapter is synthetic and test-only.
+
+## Instantiate the MAF blueprint
+
+Run the following from the source checkout, choosing a new directory outside
+the repository:
+
+```powershell
+python .\scripts\instantiate_maf.py ..\my-maf-project
+```
+
+The resulting project has its own runtime, build assets, license, tests,
+contracts, and verifier. See its README for isolated PostgreSQL tests, Compose,
+and independent readiness reporting. It does not depend on this checkout.
 
 ## Validate the contracts
 
@@ -55,8 +68,9 @@ python -m unittest discover -s tests -v
 
 OpenSSL is also required for the validator tests. GitHub Actions runs the same
 checks on GitHub-hosted runners without Azure credentials. The application
-acceptance test remains unverified until the blueprint adapter exists; a skipped
-test is not evidence that an application passed. Do not commit customer data,
+acceptance test is skipped unless `SCENARIO_ADAPTER` is selected; a skipped
+test is not evidence that an application passed. The generated-project CI job
+selects the adapter and rejects skipped checks. Do not commit customer data,
 credentials, tenant-specific configuration, or private evidence.
 
 ## License and reference projects

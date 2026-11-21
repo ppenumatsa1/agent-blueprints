@@ -33,25 +33,29 @@ tests may use synthetic identities. Do not provision Azure resources.
 
 ### Execution sequence and work packages
 
-P1-01 through P1-04 have an initial local foundation, but the scenario has no
-authorized contract approval, the application adapter is absent, and trusted
-result production and repository protection remain unverified. The blueprint
-work follows the foundation in smaller reviewable changes. See the
+P1-01 through P1-04 have an initial local foundation and a test-only
+application adapter, but the scenario has no authorized contract approval.
+Trusted result production and repository protection remain unverified. The
+blueprint work follows the foundation in smaller reviewable changes. See the
 [checklist](master-checklist.md) for status and evidence.
 
 The [first blueprint increment](https://github.com/ppenumatsa1/agent-blueprints/pull/6)
 contains a native MAF approval workflow, an explicit local host, PostgreSQL
 decision/audit/action records, and integration tests including both
-process-kill recovery windows. The next increment adds an Entra-secured API,
-MSAL UI, explicit synthetic application, and locally smoke-tested Compose
-stack. It does not establish live Entra/OBO or hosted recovery. Independent
-instantiation, the acceptance adapter, and the evidence pipeline remain to
-be verified in a separate stacked increment.
+process-kill recovery windows. [Draft PR #8](https://github.com/ppenumatsa1/agent-blueprints/pull/8)
+adds an Entra-secured API, MSAL UI, explicit synthetic application, and locally
+smoke-tested Compose stack. A separate stacked increment adds a generator,
+test-only golden adapter, fixture-specific evidence producer, and generated
+project CI. It does not establish independently trusted result provenance,
+live Entra/OBO, agent-generated explanation evaluation, browser hint
+end-to-end behavior, or hosted recovery. A temporary generated copy passed
+31 backend, 44 verification, and 8 frontend tests; its Compose stack passed
+the local HTTP smoke check. Its unsigned readiness report is unverified.
 
 | ID | Bounded work package | Dependencies | Independently verifiable outcome |
 | --- | --- | --- | --- |
-| P1-01 | Define the synthetic scenario, golden acceptance tests, and contract; obtain authorized approval. | None | [Scenario and golden cases](../scenarios/order-adjustment/README.md) exist; the application adapter and authorized approval remain outstanding. |
-| P1-02 | Define normalized result, evidence, baseline, and signed-decision inputs; map actual runner output. | P1-01 | [Input and trust schemas](../contracts/) and synthetic [validator tests](../tests/test_readiness.py) exist; trusted real result production remains outstanding. |
+| P1-01 | Define the synthetic scenario, golden acceptance tests, and contract; obtain authorized approval. | None | [Scenario, golden cases, and test-only adapter](../scenarios/order-adjustment/README.md) exist; independent authorized approval remains outstanding. |
+| P1-02 | Define normalized result, evidence, baseline, and signed-decision inputs; map actual runner output. | P1-01 | The [synthetic runner](../blueprints/maf/workflow/tests/evidence_runner.py) records actual observations; independent result attestation remains outstanding. |
 | P1-03 | Implement local traceability, evidence integrity, freshness, decisions, and profile gates. | P1-02 | [Validator](../readiness/validator.py) and [acceptance tests](../tests/test_readiness.py) exercise the policy; actual trust and provenance require independent administration. |
 | P1-04 | Expose the validator as a local CLI with a machine-readable report. | P1-03 | [CLI](../readiness/__main__.py) and [usage](readiness-validator.md) preserve outcomes and disclose unapproved inputs. |
 | P1-05 | Create a self-contained blueprint with the local React, FastAPI, PostgreSQL, and Docker Compose stack. | P1-01 interfaces | The stack starts; one temporary generated project builds, runs, tests, and verifies independently. Automated tests need no Azure credentials; interactive sign-in requires existing Entra configuration. |

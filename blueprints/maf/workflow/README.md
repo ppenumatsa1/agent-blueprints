@@ -106,7 +106,7 @@ Use Python 3.12 and an isolated PostgreSQL database. Install
 to the test database, and run from this directory:
 
 ```text
-python -m unittest -v tests.test_core tests.test_security
+python -m unittest -v tests.test_core tests.test_security tests.test_evidence_runner
 ```
 
 These tests fail rather than skip if the database is unavailable. They use
@@ -128,3 +128,51 @@ Configure npm to use an approved registry when direct access is restricted.
 The local run passed 8 frontend tests, the build, and the CSP check. The basic
 automated accessibility check does not assess color contrast. The CSP check
 binds the inline theme script to the reverse-proxy policy.
+
+## Independent project and verification
+
+The source repository's `scripts/instantiate_maf.py` copies this blueprint,
+its license, and independent verification assets into a **new directory
+outside** that repository. The copy owns its runtime, frontend, Docker build
+contexts, contracts, test fixtures, and readiness CLI; it does not import or
+mount the original checkout. It is an initial project, not a synchronization
+mechanism: maintain and review subsequent changes in the copied project.
+
+In the generated project, install both `requirements-dev.txt` and
+`verification/requirements-dev.txt` in an isolated Python environment. Set
+`MAF_TEST_DATABASE_URL` to an isolated PostgreSQL database and select the
+test-only adapter. For example, in PowerShell:
+
+```powershell
+$env:SCENARIO_ADAPTER = (Resolve-Path .\tests\order_adjustment_adapter.py).Path
+Set-Location .\verification
+python -m unittest discover -s tests -v
+Set-Location ..
+python -m unittest -v tests.test_core tests.test_security tests.test_evidence_runner
+```
+
+The golden adapter exercises the API, local MAF host, and synthetic database
+action. The two worker-kill tests cover crashes after decision persistence
+and after action commit. Use a disposable database: the tests create and drop
+their own isolated schemas. Frontend and Compose instructions above also
+apply to the copy.
+
+To retain per-case observations, both crash results, normalized check
+results, and an unsigned readiness input, run from the generated project:
+
+```powershell
+python -m tests.evidence_runner --verification-root .\verification --output .\verification\evidence\run --revision <source-revision> --environment local-synthetic
+```
+
+Replace `<source-revision>` with the actual generated-project revision; use a
+new output directory for each run. Run the independent CLI against those
+files as described in `verification/docs/readiness-validator.md`. The local
+producer, timestamps, and revision are not independently attested; its
+synthetic approval observations are not human contract approval. The included
+empty trust store must yield **unverified**, not a release authorization.
+The fixture formats its own explanation and hint from recorded case data; it
+does not exercise an agent-generated explanation or a browser hint end to
+end. Those contract checks remain **unverified**, even if the fixture's
+deterministic comparisons pass. Runner exit 0 means the executable fixture
+and crash tests completed without unexpected failures; it is not a readiness
+pass.

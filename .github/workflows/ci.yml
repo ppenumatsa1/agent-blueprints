@@ -109,3 +109,114 @@ jobs:
           if [ -n "${POSTGRES_PASSWORD:-}" ]; then
             docker compose -p maf-app-ci down --volumes --remove-orphans
           fi
+
+  maf-independent:
+    runs-on: ubuntu-latest
+    env:
+      ENTRA_TENANT_ID: 10000000-0000-4000-8000-000000000001
+      ENTRA_API_CLIENT_ID: 20000000-0000-4000-8000-000000000002
+      ENTRA_SPA_CLIENT_ID: 30000000-0000-4000-8000-000000000003
+      ENTRA_API_APP_ID_URI: api://20000000-0000-4000-8000-000000000002
+      BLUEPRINT_APPLICATION: examples.synthetic_application:build_application
+      BLUEPRINT_PORT: "18080"
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "22"
+      - name: Instantiate outside the checkout
+        run: |
+          test -z "$(git status --porcelain --untracked-files=no)"
+          echo "SOURCE_REVISION=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+          destination="$RUNNER_TEMP/maf-generated"
+          python scripts/instantiate_maf.py "$destination"
+          echo "GENERATED_DIR=$destination" >> "$GITHUB_ENV"
+      - name: Install generated project test dependencies
+        run: |
+          python -m pip install -r "$GENERATED_DIR/requirements-dev.txt" -r "$GENERATED_DIR/verification/requirements-dev.txt"
+          cd "$GENERATED_DIR/frontend"
+          npm ci --no-audit --no-fund
+      - name: Start isolated test PostgreSQL
+        run: |
+          password="$(openssl rand -hex 24)"
+          echo "::add-mask::$password"
+          docker run --rm -d --name maf-instance-test \
+            -e POSTGRES_USER=blueprint_test -e POSTGRES_DB=blueprint_test \
+            -e "POSTGRES_PASSWORD=$password" -p 127.0.0.1:5432:5432 postgres:17-alpine
+          echo "POSTGRES_PASSWORD=$password" >> "$GITHUB_ENV"
+          echo "MAF_TEST_DATABASE_URL=postgresql://blueprint_test:$password@127.0.0.1:5432/blueprint_test" >> "$GITHUB_ENV"
+          for attempt in {1..60}; do
+            if docker exec maf-instance-test pg_isready -q -U blueprint_test -d blueprint_test; then exit 0; fi
+            sleep 1
+          done
+          echo "PostgreSQL did not become ready" >&2
+          exit 1
+      - name: Run generated backend and frontend tests
+        run: |
+          cd "$GENERATED_DIR"
+          python -c "import app, pathlib; assert pathlib.Path(app.__file__).resolve().is_relative_to(pathlib.Path.cwd())"
+          python -m unittest -v tests.test_core tests.test_security tests.test_evidence_runner
+          cd frontend
+          npm test
+          npm run build
+          npm run check-csp
+      - name: Run generated contracts and golden acceptance without skips
+        run: |
+          cd "$GENERATED_DIR/verification"
+          export SCENARIO_ADAPTER="$GENERATED_DIR/tests/order_adjustment_adapter.py"
+          python -m unittest discover -s tests -v 2>&1 | tee "$RUNNER_TEMP/maf-verification-tests.log"
+          if grep -Eq 'skipped=|expected failures=' "$RUNNER_TEMP/maf-verification-tests.log"; then
+            echo "Generated verification must not skip acceptance checks." >&2
+            exit 1
+          fi
+      - name: Run real evidence producer and independent validator
+        run: |
+          cd "$GENERATED_DIR"
+          set +e
+          python -m tests.evidence_runner --verification-root verification \
+            --output verification/evidence/run --revision "$SOURCE_REVISION" \
+            --environment github-actions-generated
+          runner_status=$?
+          cd verification
+          python -m readiness --contract scenarios/order-adjustment/verification-contract.json \
+            --baseline scenarios/order-adjustment/verification-contract.json \
+            --input evidence/run/readiness-input.json --trust scenarios/order-adjustment/example-trust.json \
+            --evidence-root evidence/run --output evidence/run/readiness-report.json
+          validator_status=$?
+          set -e
+          test "$validator_status" -eq 1
+          python -c "import json; r=json.load(open('evidence/run/readiness-report.json')); assert r['gate_status'] != 'passed'"
+          if [ "$runner_status" -eq 0 ]; then
+            python -c "import json; r=json.load(open('evidence/run/readiness-report.json')); assert r['gate_status'] == 'unverified'; i=json.load(open('evidence/run/readiness-input.json')); s={x['check_id']:x['outcome'] for x in i['results']}; assert s == {'CHECK-APPROVAL':'passed','CHECK-RECOVERY':'passed','CHECK-EXPLANATION':'unverified','CHECK-HINT':'unverified'}"
+          fi
+          exit "$runner_status"
+      - name: Build and verify generated Compose stack
+        run: |
+          cd "$GENERATED_DIR"
+          docker compose -p maf-generated-ci config --format json > "$RUNNER_TEMP/maf-compose.json"
+          python -c "import json,os,pathlib; c=json.load(open(os.path.join(os.environ['RUNNER_TEMP'],'maf-compose.json'))); root=pathlib.Path(os.environ['GENERATED_DIR']).resolve(); assert all(pathlib.Path(s['build']['context']).resolve().is_relative_to(root) for s in c['services'].values() if 'build' in s); assert all(v.get('type') != 'bind' for s in c['services'].values() for v in s.get('volumes',[]))"
+          docker compose -p maf-generated-ci up --build --wait --wait-timeout 300
+          curl --fail --silent http://127.0.0.1:18080/ >/dev/null
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:18080/healthz)" = 204
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:18080/api/cases/40000000-0000-4000-8000-000000000004)" = 401
+      - name: Retain synthetic run evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: maf-generated-evidence
+          path: ${{ runner.temp }}/maf-generated/verification/evidence/run
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Remove isolated services
+        if: always()
+        run: |
+          if [ -d "${GENERATED_DIR:-}" ] && [ -n "${POSTGRES_PASSWORD:-}" ]; then
+            cd "$GENERATED_DIR"
+            docker compose -p maf-generated-ci down --volumes --remove-orphans
+          fi
+          if docker inspect maf-instance-test >/dev/null 2>&1; then
+            docker stop maf-instance-test
+          fi
