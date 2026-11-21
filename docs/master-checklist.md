@@ -11,6 +11,21 @@ The original [interactive architecture](software-factory.html) is a preserved
 historical source; this checklist records current status. The 2–3 hour
 prototype objective has not yet been measured.
 
+## Reconciled engineering backlog
+
+The foundation and the integrated review do not establish blueprint
+completion or deployment readiness. The issues below retain their own
+acceptance criteria, dependencies and required independent evidence.
+Deferred work remains deferred; critical security checks are not waived.
+
+| Area | Open tracking issues | Next action |
+| --- | --- | --- |
+| Hosted identity, execution and recovery | [Caller binding #22](https://github.com/ppenumatsa1/agent-blueprints/issues/22), [host and checkpoints #19](https://github.com/ppenumatsa1/agent-blueprints/issues/19), [lost-response recovery #20](https://github.com/ppenumatsa1/agent-blueprints/issues/20), [external effects #32](https://github.com/ppenumatsa1/agent-blueprints/issues/32) | Implement and independently verify the security and durability boundaries. |
+| Independent readiness | [Trust and contract approval #21](https://github.com/ppenumatsa1/agent-blueprints/issues/21), [evaluations and browser hints #25](https://github.com/ppenumatsa1/agent-blueprints/issues/25) | Obtain authorized trust and produce actual evidence; retain unverified outcomes. |
+| Azure and operations | [Infrastructure #18](https://github.com/ppenumatsa1/agent-blueprints/issues/18), [managed PostgreSQL #24](https://github.com/ppenumatsa1/agent-blueprints/issues/24), [telemetry #26](https://github.com/ppenumatsa1/agent-blueprints/issues/26), [live identity and accessibility #27](https://github.com/ppenumatsa1/agent-blueprints/issues/27), [deployment #28](https://github.com/ppenumatsa1/agent-blueprints/issues/28) | Close offline prerequisites, validate access and obtain approval of the concrete deployment plan before live validation. |
+| Developer experience and demonstration | [Cross-platform tooling #23](https://github.com/ppenumatsa1/agent-blueprints/issues/23), [measured local demo #29](https://github.com/ppenumatsa1/agent-blueprints/issues/29) | Verify supported environments and record a representative end-to-end run. |
+| Separately authorized or later work | [Reference repository #30](https://github.com/ppenumatsa1/agent-blueprints/issues/30), [ACA runtime #31](https://github.com/ppenumatsa1/agent-blueprints/issues/31), [Specification Studio #33](https://github.com/ppenumatsa1/agent-blueprints/issues/33), [later blueprints #34](https://github.com/ppenumatsa1/agent-blueprints/issues/34) | Preserve the scope boundaries and obtain separate authorization where required. |
+
 | Requirement or capability | Phase | Status | Acceptance criteria | Evidence or PR | Next action |
 | --- | --- | --- | --- | --- | --- |
 | Three-repository architecture and boundaries | 0 | Completed | Document Specification Studio, Agent Blueprints, and App/API Blueprints and their handoff. | [Overview](software-factory-overview.md); [PR #1](https://github.com/ppenumatsa1/agent-blueprints/pull/1) | Update architecture when decisions change. |
