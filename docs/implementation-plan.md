@@ -161,20 +161,19 @@ disabled. Acceptance requires canary, correlation and export
 failure tests, credential-free generated-project CI, and no workflow changes.
 Evidence: [tests](../blueprints/maf/workflow/backend/tests/test_telemetry.py)
 and [operational guidance](../blueprints/maf/workflow/README.md#operational-telemetry).
-After the metric and configuration changes, complete source and independent-copy
-backend suites each passed 46 tests, including 14 telemetry cases.
-two instantiation tests passed. Earlier,
-the browser suite passed nine tests, build and CSP checks passed, the generated
-standalone verifier passed 44 tests, and Compose returned UI 200, health 204
+After reconciliation onto the canonical foundation, complete source and
+independent-copy backend suites each passed 45 tests, including 14 telemetry
+cases; two instantiation tests passed. Source and generated browser suites
+each passed nine tests with build and CSP checks; the generated standalone
+verifier passed 44 tests. Earlier, Compose returned UI 200, health 204
 and protected API 401. One earlier Compose startup attempt failed; an immediate
 retry passed. These checks do not prove cloud export.
 This increment remains in progress pending branch/CI review and real hosted
 verification. Outbound/Foundry propagation, sampling,
 retention, regional placement and access policy require separate validation.
-Coordinate with the documentation workstream to update the shared design
-suite and engineering journal after the common baseline is selected. Coordinate
-the alias-free foundation before rebasing; actual PR CI is required before
-approval.
+The common design suite and engineering journal record the implementation and
+limitations. Reconcile dependencies with the separate tooling workstream;
+actual PR CI is required before approval.
 No Azure provisioning or ingestion is implied.
 
 ## Later phases

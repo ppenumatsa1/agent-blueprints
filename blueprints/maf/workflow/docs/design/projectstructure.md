@@ -70,6 +70,7 @@ occurs in the generated directory.
 | `backend/app/usecases/` | Coordinate authorization-approved request, decision, and workflow operations. | Preserve decision-before-resume and idempotent semantics. |
 | `backend/app/workflows/` | Native MAF executor/workflow and local host/checkpoint recovery. | Preserve pending request identity and matching terminal outcome; host adapters own their provider. |
 | `backend/app/infrastructure/` | PostgreSQL schema/store, Entra identity, and optional OBO adapter. | Keep credentials private; schema and checkpoint stores remain distinct. |
+| `backend/app/infrastructure/telemetry.py` | Manual privacy-safe traces, metrics, and structured operational logs. | Keep signal fields allowlisted; do not capture payloads, identities, or secrets. |
 | `backend/examples/` | Explicitly selected synthetic application. | Never treat as a production fallback or customer example. |
 | `backend/tests/` | PostgreSQL integration, security, crash recovery, and synthetic evidence tests. | Use isolated test DB and test-only identity providers. |
 | `frontend/src/` | MSAL app, typed API client, reusable workspace and UI tests. | Keep access tokens transient and do not embed service secrets. |
