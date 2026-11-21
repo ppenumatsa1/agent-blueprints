@@ -897,6 +897,9 @@ entries to hide failed attempts or gaps.
   checkpoint windows, and expired state remain unproven. Treat Postgres CAS
   as a candidate, not a fix; no implementation or hosted recovery claim
   follows.
+  The user explicitly deferred hosted recovery to a separate scoped follow-up;
+  this is not a security waiver, and caller binding and the host bridge remain
+  unimplemented blockers.
 - **Next action / limit:** Keep the Foundry workstream blocked until the
   caller-to-session mapping, authorization boundary, and live behavior are
   implemented and tested. Keep debugger UI, Restricted Mode, and macOS
