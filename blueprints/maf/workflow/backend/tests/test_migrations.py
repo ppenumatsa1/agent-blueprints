@@ -80,7 +80,11 @@ class MigrationTests(unittest.TestCase):
         before = self.rows()
         with self.assertRaises(SchemaDriftError):
             self.store.initialize()
-        upgrade(self.url)
+        original_stamp = command.stamp
+        with patch("app.infrastructure.migrations.command.stamp", wraps=original_stamp) as stamp:
+            upgrade(self.url)
+        stamp.assert_called_once()
+        self.assertEqual(stamp.call_args.args[1], "0001")
         self.store.initialize()
         self.assertEqual(self.rows(), before)
         with self.store.connect() as connection:
