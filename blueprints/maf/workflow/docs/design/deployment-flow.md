@@ -102,7 +102,7 @@ sequenceDiagram
     participant API as FastAPI + local MAF
     participant Web as React web container
     Operator->>Compose: up --build --wait with required environment
-    Compose->>DB: Start; wait for pg_isready
+    Compose->>DB: Start; wait for loopback TCP pg_isready
     Compose->>API: Start with DB URL and private checkpoint volume
     Operator->>DB: Apply explicit schema-owner migration
     API->>DB: Validate expected migration revision; no DDL
