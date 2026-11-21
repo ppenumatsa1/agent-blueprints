@@ -25,6 +25,24 @@ entries to hide failed attempts or gaps.
   migrations, telemetry export, Foundry hosting, cloud deployment, or live
   identity verification.
 
+## 2026-11-21 - Instrumentation failure isolation
+
+- **Finding:** Span entry, annotation, context reads and closure could raise
+  into application execution, and a pre-yield startup failure bypassed
+  telemetry shutdown.
+- **Decision:** Isolate SDK operations individually, emit fixed failure
+  signals, never rerun the business action or replace its exception, and
+  clean up initialized telemetry on construction or startup failure.
+- **Evidence:** Focused injected-failure tests exercise synchronous and
+  asynchronous actions, HTTP status and propagation, exporter/provider
+  cleanup, and original exception identity. The focused source suite passed
+  before final integration; source/generated regression and exact PR CI must
+  be checked on the final revision.
+- **Limit / lesson:** Public hosted configuration and cloud ingestion remain
+  unverified. A fixed signal is diagnostic, not delivery evidence; failures
+  can lose spans. Failure isolation must cover instrumentation
+  setup and teardown as well as export, without catching business errors.
+
 ## 2026-11-21 - Privacy-safe observability
 
 - **Issue:** Trace-only export omitted required metrics, and silently accepting

@@ -172,8 +172,11 @@ operations and OBO boundaries, allowlisted JSON operational logs and optional
 Azure Monitor trace and metric export. Missing or invalid hosted configuration
 fails startup; subsequent export failures are signaled without changing workflow
 outcomes. Metric dimensions are limited to operation/outcome and exemplars are
-disabled. Acceptance requires canary, correlation and export
-failure tests, credential-free generated-project CI, and no workflow changes.
+disabled. Span creation, metadata, context and closure failures are isolated
+without retrying work or masking application exceptions; startup failures clean
+up telemetry resources. Acceptance requires canary, correlation, injected SDK
+and export failure tests, credential-free generated-project CI, and no
+workflow changes.
 Evidence: [tests](../blueprints/maf/workflow/backend/tests/test_telemetry.py)
 and [operational guidance](../blueprints/maf/workflow/README.md#operational-telemetry).
 After reconciliation onto the canonical foundation, complete source and
