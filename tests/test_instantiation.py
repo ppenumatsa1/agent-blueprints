@@ -87,8 +87,11 @@ class InstantiationTests(unittest.TestCase):
                 "backend/app/extensions/agents.py",
                 "backend/app/extensions/prompts.py",
                 "backend/app/extensions/tools.py",
+                "backend/app/extensions/evaluation.py",
                 "backend/examples/prompts/synthetic-review.v1.md",
+                "backend/examples/evaluation_fixture.py",
                 "backend/tests/test_extensions.py",
+                "backend/tests/test_evaluation.py",
             ):
                 self.assertEqual(
                     (ROOT / "blueprints" / "maf" / "workflow" / relative).read_bytes(),
