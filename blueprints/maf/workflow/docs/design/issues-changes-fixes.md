@@ -36,11 +36,14 @@ entries to hide failed attempts or gaps.
 - **Fix / decision:** Retain canonical imports, remove references to deleted
   tests and requirements files, copy the design docs in generated projects,
   and run evidence-normalization tests in both source and generated CI.
-- **Evidence:** Before reconciliation, local source and generated backend
-  suites each passed 32 tests, independent verification passed 44 without
-  skips, and generated frontend tests/build/CSP passed with the approved npm
-  mirror. The earlier hosted run is linked in the PR #13 entry below and is
-  valid only for its recorded head; reconciled-head checks remain pending.
+- **Evidence:** On the reconciled tree, source and generated backend suites
+  each passed 31 tests, generated independent verification passed 44 without
+  skips, and generated frontend tests/build/CSP passed using an approved npm
+  mirror. Ruff passed in both backend copies. The root suite ran 46 tests
+  with one unselected-adapter skip. Hosted
+  [run 44931241591](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44931241591)
+  passed all five jobs for head `ad6a78aa989189871ae521a05100ade36cbe7eb1`;
+  confirm CI separately for any subsequent PR revision.
 - **Lesson / limit:** Integrate environment instructions with the canonical
   source layout; a successful earlier CI run cannot establish the result of a
   rebased revision. Public-only local downloads, macOS, and interactive
