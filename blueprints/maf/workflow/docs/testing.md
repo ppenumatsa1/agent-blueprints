@@ -7,7 +7,7 @@ Install dependencies as described in [setup](setup.md). Set
 ```text
 uv run --locked ruff check .
 uv run --locked ruff format --check .
-uv run --locked python -m unittest -v tests.test_core tests.test_security tests.test_evidence_runner tests.test_telemetry tests.test_migrations
+uv run --locked python -m unittest -v tests.test_core tests.test_external_effect tests.test_security tests.test_evidence_runner tests.test_telemetry tests.test_migrations
 ```
 
 Tests create and drop isolated schemas and roles; the test identity requires
@@ -18,6 +18,14 @@ checkpoint recovery, privacy-safe telemetry, migrations, evidence
 normalization, and actual worker termination after decision persistence and
 after a database action commits. They do not prove live Entra/OBO, external
 effect exactly-once delivery, or hosted recovery.
+
+The external-effect tests use a separate durable SQLite database as a
+synthetic downstream with atomic key binding. They exercise authorization,
+rejection, concurrent sends and retries, conflicting bindings, ambiguous
+reconciliation, failures before and after the effect and acknowledgment, and
+worker termination before the local ledger commits. They do not prove any
+real service's durability, retention, authorization, or reconciliation
+guarantees; the fixture's policy is not a production authorizer.
 
 From `frontend`:
 

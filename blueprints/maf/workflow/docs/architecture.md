@@ -33,10 +33,35 @@ checkpoint is a human approval.
    `renderCase` function; see [workspace.tsx](../frontend/src/workspace.tsx)
    and [api.ts](../frontend/src/api.ts). Do not put credentials in the
    browser or treat client-provided identity as authoritative.
-4. A database action and ledger entry can commit together; external effects
-   require their own idempotency contract or transactional outbox. Test
-   retries and both recovery windows; no general exactly-once guarantee is
-   implied. Model and tool input remain untrusted.
+4. A database action and ledger entry can commit together; this does not
+   prevent the application callback from making remote calls. The opt-in
+   [external-effect pattern](../backend/examples/external_effect_boundary.py)
+   checks application-supplied authorization for the approved case and uses
+   a stable case key and digest of the case, tenant, owner, reviewer,
+   operation, destination identity and payload. The application must pin the
+   actual destination, operation and encoding across the full recovery horizon;
+   an identifier cannot prevent a trusted adapter from switching services.
+   A trusted destination must atomically bind the key and digest to
+   the effect, reject conflicting reuse, retain that binding for the entire
+   retry/recovery horizon, and provide authoritative request-bound
+   reconciliation. `UNKNOWN`, a conflict, or an unverifiable acknowledgment
+   fails visibly; an empty or eventually consistent search is not proof of
+   absence. A lost send response is reconciled on the next attempt, not
+   assumed successful. A transactional outbox alone does not deduplicate a
+   remote effect after a lost acknowledgment.
+
+   This pattern runs inside the existing action transaction and holds the
+   case row lock during remote calls; it is not an outbox or a worker queue.
+   The application must validate identity, approval, effect-specific authority,
+   immutable intent, destination guarantees, retention, timeouts and safe
+   operational recovery. Its authorizer and destination adapters are trusted
+   code, not a sandbox: arbitrary Python can bypass this pattern or falsely
+   report a guarantee. A changed or revoked authorization blocks even
+   reconciliation; operators must resolve ambiguous outcomes without blindly
+   retrying. No arbitrary service, hosted behavior, or exactly-once guarantee
+   is established. Consequential remote actions remain P0-blocked by
+   [#32](https://github.com/ppenumatsa1/agent-blueprints/issues/32) pending
+   independent, service-specific evidence. Model and tool input remain untrusted.
 
 The [testing guide](testing.md) describes the synthetic evidence and its
 limits. Foundry-managed checkpoints and hosting are planned and unverified;
