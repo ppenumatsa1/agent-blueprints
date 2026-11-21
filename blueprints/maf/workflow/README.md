@@ -42,15 +42,6 @@ recovery are deferred to P1-12. The local store is not a shared-store or
 hosted-recovery solution. Do not mount a local checkpoint provider into a
 future host that supplies its own provider.
 
-## Design and operations
-
-The [design index](docs/design/projectstructure.md) links the component
-structure and extension points. The design documents include the
-[requirements](docs/design/prd.md), [technology stack](docs/design/techstack.md),
-[specifications](docs/design/specs.md), [architecture](docs/design/architecture.md),
-[user journeys](docs/design/userflow.md), [deployment flow](docs/design/deployment-flow.md),
-and [engineering journal](docs/design/issues-changes-fixes.md).
-
 ## Local stack
 
 Use Docker Compose and existing, authorized Microsoft Entra SPA and API

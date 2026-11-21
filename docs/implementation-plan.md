@@ -42,9 +42,10 @@ requires source and generated security/recovery tests, both crash windows,
 independent golden verification and exact contract bytes, credential-free
 CI and Compose smoke checks. Local evidence is recorded in the
 [checklist](master-checklist.md). [PR #11](https://github.com/ppenumatsa1/agent-blueprints/pull/11)
-remains open; its [hosted run](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44926437469)
-passed all five checks, including independent verification. Review and merge
-remain pending; hosted checks do not prove live hosting.
+remains open; cleaned foundation commit `61d44ed` removes compatibility
+aliases. Its [hosted run 44930591252](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44930591252)
+passed all five checks on that exact commit. Review and merge remain pending;
+hosted checks do not prove live hosting.
 The copied evidence producer observed approval and recovery passing while
 explanation and browser hint remained unverified; the independent unsigned
 readiness report remained unverified. The first local container build could
