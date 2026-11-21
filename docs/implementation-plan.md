@@ -80,10 +80,13 @@ health 204 and protected API 401. The
 [operations guide](../blueprints/maf/workflow/README.md#business-database-migrations)
 and [journal](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md) record
 the acceptance evidence and limitations. Two later local evidence runs failed;
-their subprocess stderr was not retained. Investigation reproduced an HTTP 503
-from native checkpoint restoration, but cannot establish whether the original
-failures had the same cause. Next: resolve this evidence blocker, reconcile
-parallel dependencies and run credential-free actual PR CI
+their subprocess stderr was not retained. An independently reproduced native
+checkpoint timestamp-tie defect was fixed in foundation `9efeef0`, whose
+[CI run](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44936094798)
+passed all five jobs. The original failures' causes remain unproven. Local
+PostgreSQL 16.15 migration tests passed at `031fdb4`, after an initial
+auxiliary readiness probe failed before tests. Next: verify this reconciled
+branch on both PostgreSQL versions and run credential-free actual PR CI
 on the integrated head. No hosted CI or live backup/restore is claimed.
 
 P1-01 through P1-04 have an initial local foundation and a test-only

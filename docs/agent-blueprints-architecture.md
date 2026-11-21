@@ -36,9 +36,9 @@ require operational quiescence. Identity requirements, backup and rollback limit
 and scope of drift detection are in the [blueprint](../blueprints/maf/workflow/README.md#business-database-migrations).
 These migrations do not own MAF checkpoints or independently authorize
 business approvals. This branch is stacked on the modularity foundation;
-hosted CI and live operational recovery remain unverified. An intermittent
-local evidence failure reproduced during checkpoint restoration; it remains
-an investigation blocker rather than evidence of migration drift.
+hosted CI and live operational recovery remain unverified. A deterministic
+checkpoint timestamp-tie defect was fixed in foundation `9efeef0`; the exact
+causes of earlier intermittent evidence failures remain unproven.
 
 | Layer | Responsibility | Examples |
 | --- | --- | --- |

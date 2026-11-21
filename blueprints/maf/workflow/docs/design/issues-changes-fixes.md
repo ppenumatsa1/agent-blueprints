@@ -111,6 +111,27 @@ entries to hide failed attempts or gaps.
   restore checks. A successful rerun alone is not resolution.
 - **Lesson:** Record privacy-safe subprocess failure diagnostics and preserve
   failed results; an HTTP 503 or later passing run cannot establish root cause.
+- **Later foundation fix:** The independently reproduced equal-timestamp
+  selection defect described above was fixed in foundation `9efeef0`, with
+  deterministic regression tests. GitHub Actions
+  [run 44936094798](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44936094798)
+  passed all five jobs on that exact foundation SHA. The original two failures'
+  exact causes remain unproven; those failures are not reclassified.
+
+### PostgreSQL 16 compatibility observation
+
+- **Evidence:** On migration branch `031fdb4`, an independent local run on
+  PostgreSQL 16.15 passed all 12 migration tests without skips, including
+  adoption, later revision, drift and rollback. Its first auxiliary readiness
+  probe failed before tests; a corrected probe was used for the successful
+  run. This is local evidence only, not Azure, Entra, hosted identity or
+  live restore verification.
+- **Next:** Recheck the reconciled branch on PostgreSQL 16 and 17 and verify
+  actual PR CI on its exact head before approval.
+- **Reconciled source evidence:** On rebased code `9f1f802`, `python -B -m
+  unittest discover -s tests -v` in `backend` passed 48 tests without skips
+  against each of isolated PostgreSQL 16.15 and 17.12. This covers migration,
+  security and recovery tests but does not replace generated-app or hosted CI.
 
 ### Migration review - versioned schema and least privilege
 
