@@ -153,20 +153,28 @@ explicitly and never provision Azure resources without approval.
 ### P1-11 observability increment
 
 The MAF backend now has manually instrumented request, workflow, database
-connection and OBO boundaries, allowlisted JSON operational logs and optional
-Azure Monitor trace export. Acceptance requires canary, correlation and export
+operations and OBO boundaries, allowlisted JSON operational logs and optional
+Azure Monitor trace and metric export. Missing or invalid hosted configuration
+fails startup; subsequent export failures are signaled without changing workflow
+outcomes. Metric dimensions are limited to operation/outcome and exemplars are
+disabled. Acceptance requires canary, correlation and export
 failure tests, credential-free generated-project CI, and no workflow changes.
 Evidence: [tests](../blueprints/maf/workflow/backend/tests/test_telemetry.py)
 and [operational guidance](../blueprints/maf/workflow/README.md#operational-telemetry).
-Local source and independent-copy backend suites each passed 40 tests before
-the final non-recording-span fix; the final focused telemetry suite passed
-eight cases in each. Browser suite passed nine tests, build and CSP checks passed; the
-generated standalone verifier passed 44 tests and Compose returned UI 200,
-health 204 and protected API 401. One later Compose startup attempt failed;
-an immediate retry passed. These checks do not prove cloud export.
+After the metric and configuration changes, complete source and independent-copy
+backend suites each passed 46 tests, including 14 telemetry cases.
+two instantiation tests passed. Earlier,
+the browser suite passed nine tests, build and CSP checks passed, the generated
+standalone verifier passed 44 tests, and Compose returned UI 200, health 204
+and protected API 401. One earlier Compose startup attempt failed; an immediate
+retry passed. These checks do not prove cloud export.
 This increment remains in progress pending branch/CI review and real hosted
 verification. Outbound/Foundry propagation, sampling,
 retention, regional placement and access policy require separate validation.
+Coordinate with the documentation workstream to update the shared design
+suite and engineering journal after the common baseline is selected. Coordinate
+the alias-free foundation before rebasing; actual PR CI is required before
+approval.
 No Azure provisioning or ingestion is implied.
 
 ## Later phases
