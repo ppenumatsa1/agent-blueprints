@@ -9,6 +9,7 @@ from agent_framework import CheckpointStorage, FileCheckpointStorage, Workflow, 
 from app.domain.errors import ActionError, CheckpointError
 from app.domain.models import StateRepository, TransactionalAction
 from app.workflows.workflow import WORKFLOW_NAME, create_workflow
+from app.infrastructure.telemetry import instrumented
 
 
 WorkflowFactory = Callable[[StateRepository, TransactionalAction, CheckpointStorage | None], Workflow]
@@ -23,11 +24,14 @@ class LocalWorkflowHost:
         action: TransactionalAction,
         checkpoint_root: Path,
         workflow_factory: WorkflowFactory = create_workflow,
+        *,
+        telemetry=None,
     ):
         self.store = store
         self.action = action
         self.root = Path(checkpoint_root).absolute()
         self.workflow_factory = workflow_factory
+        self.telemetry = telemetry
         self._private_directory(self.root)
 
     @staticmethod
@@ -80,6 +84,7 @@ class LocalWorkflowHost:
             and not any(checkpoint.messages.values())
         )
 
+    @instrumented("workflow.start")
     async def start(self, case_id: UUID) -> None:
         with self.store.run_lock(case_id):
             case = self.store.get(case_id)
@@ -120,6 +125,7 @@ class LocalWorkflowHost:
                 raise CheckpointError("The pending request could not be restored.")
             self.store.save_pending(case_id, pending.checkpoint_id, requests[0])
 
+    @instrumented("workflow.resume")
     async def resume(self, case_id: UUID) -> None:
         with self.store.run_lock(case_id):
             case = self.store.get(case_id)

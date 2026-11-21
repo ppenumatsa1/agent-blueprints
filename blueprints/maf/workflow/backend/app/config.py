@@ -38,6 +38,8 @@ class Settings:
     obo_enabled: bool = False
     obo_client_secret: str | None = field(default=None, repr=False)
     obo_allowed_scopes: tuple[str, ...] = ()
+    telemetry_mode: str = "local"
+    applicationinsights_connection_string: str | None = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
         try:
@@ -51,6 +53,8 @@ class Settings:
             raise ValueError("A local checkpoint root is required.")
         if self.host_mode != "local":
             raise ValueError("Only the explicitly selected local host is implemented.")
+        if self.telemetry_mode not in ("local", "azure-monitor"):
+            raise ValueError("TELEMETRY_MODE must be local or azure-monitor.")
         for value in self.cors_origins:
             _origin(value)
         if self.obo_enabled and (not self.obo_client_secret or not self.obo_allowed_scopes):
@@ -81,4 +85,6 @@ class Settings:
             obo_enabled=enabled == "true",
             obo_client_secret=os.environ.get("ENTRA_API_CLIENT_SECRET") or None,
             obo_allowed_scopes=values("OBO_ALLOWED_SCOPES"),
+            telemetry_mode=os.environ.get("TELEMETRY_MODE", "local"),
+            applicationinsights_connection_string=os.environ.get("APPLICATIONINSIGHTS_CONNECTION_STRING") or None,
         )
