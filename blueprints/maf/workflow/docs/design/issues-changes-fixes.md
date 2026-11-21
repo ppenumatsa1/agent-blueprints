@@ -1072,8 +1072,11 @@ available PR or test record does not establish one.
   the permanent independent application is P1 [#30](https://github.com/ppenumatsa1/agent-blueprints/issues/30)
   but still requires separate repository authorization. Consequential
   external effects are P0 [#32](https://github.com/ppenumatsa1/agent-blueprints/issues/32):
-  block them until authorization, downstream idempotency/outbox, reconciliation
-  and fault-injection evidence pass.
+  block them until service-specific authorization, verified downstream
+  idempotency, authoritative reconciliation and fault-injection evidence pass;
+  otherwise fail closed and use manual resolution. A transactional outbox only
+  persists intent; it cannot deduplicate an external effect after a lost
+  acknowledgment.
 - **Next verification:** Run focused documentation/instantiation and CI
   workflow tests, push without force, verify the exact #17 head, base and merge
   tree, and inspect every combined Actions check including `maf-infrastructure`

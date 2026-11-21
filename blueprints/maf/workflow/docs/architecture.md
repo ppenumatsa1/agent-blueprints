@@ -34,7 +34,10 @@ checkpoint is a human approval.
    and [api.ts](../frontend/src/api.ts). Do not put credentials in the
    browser or treat client-provided identity as authoritative.
 4. A database action and ledger entry can commit together; this does not
-   prevent the application callback from making remote calls. The opt-in
+   prevent the application callback from making remote calls. Consequential
+   effects require service-specific authorization, verified downstream
+   idempotency and authoritative reconciliation; otherwise fail closed and
+   use manual resolution rather than retrying an ambiguous effect. The opt-in
    [external-effect pattern](../backend/examples/external_effect_boundary.py)
    checks application-supplied authorization for the approved case and exact
    request before reconciliation or sending, and uses
@@ -48,8 +51,8 @@ checkpoint is a human approval.
    reconciliation. `UNKNOWN`, a conflict, or an unverifiable acknowledgment
    fails visibly; an empty or eventually consistent search is not proof of
    absence. A lost send response is reconciled on the next attempt, not
-   assumed successful. A transactional outbox alone does not deduplicate a
-   remote effect after a lost acknowledgment.
+   assumed successful. A transactional outbox only persists intent; it cannot
+   deduplicate an external effect after a lost acknowledgment.
 
    This pattern runs inside the existing action transaction and holds the
    case row lock during remote calls; it is not an outbox or a worker queue.
