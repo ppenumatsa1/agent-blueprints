@@ -76,6 +76,9 @@ sequenceDiagram
 - **Action/checkpoint/recovery failure:** the API returns an explicit failure
   class; logs omit tokens and payloads. Do not delete checkpoints or blindly
   repeat an external side effect.
+- **Telemetry export failure:** fixed sanitized failure signals are logged;
+  the workflow result is unaffected. Missing Azure configuration instead
+  stops startup. Neither signal proves cloud delivery.
 - **Process crash:** startup recovery reconciles SQL state with local MAF
   checkpoints. The tested worker-kill windows cover decision persistence and
   database-action commit, not host failover or external systems.

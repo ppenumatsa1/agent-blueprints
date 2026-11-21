@@ -25,6 +25,29 @@ entries to hide failed attempts or gaps.
   migrations, telemetry export, Foundry hosting, cloud deployment, or live
   identity verification.
 
+## 2026-11-21 - Privacy-safe observability
+
+- **Issue:** Trace-only export omitted required metrics, and silently accepting
+  missing Azure configuration obscured a nonfunctional hosted exporter.
+- **Decision:** Add manual allowlisted spans, JSON logs, counter and histogram,
+  explicit Azure trace and metric exporters, no metric exemplars, static
+  non-identifying exporter resource fields, fail-fast configuration and fixed
+  failure signals. Local mode has no exporter or collector.
+- **Evidence:** `backend/tests/test_telemetry.py` exercises in-memory signals,
+  redaction canaries, converted Azure envelopes and failure handling;
+  `frontend/src/test/api.test.ts` exercises browser trace context. Earlier
+  reconciled source and generated backend suites passed 45 tests each;
+  generated independent verification passed 44, instantiation passed two,
+  and both frontend suites passed nine with build and CSP checks. Earlier
+  revisions passed 46 backend tests each. Check exact PR CI before approval.
+- **Limits / lesson:** Export initialization is not ingestion evidence.
+  Hosted trace/metric delivery, outgoing and Foundry propagation, and Azure
+  operations remain unverified. A privacy review must cover exporter-generated
+  metadata and failure logs as well as application attributes.
+- **Coordination:** The independent tooling branch moves requirements into
+  `pyproject.toml` and `uv.lock`; its reported pins are SDK `1.45.2` and Azure
+  exporter `1.0.0b59`. Reconcile manifests and the public lock on integration.
+
 ## Prior implementation evidence
 
 ### 2026-11-21 - Local checkpoint timestamp ties
@@ -178,7 +201,7 @@ entries to hide failed attempts or gaps.
 | Item | Status | Evidence needed / next action |
 | --- | --- | --- |
 | Eight design documents and generated inclusion | In progress | Run the focused instantiation tests and verify copied Markdown links. |
-| Canonical imports and legacy-shim removal | Open in foundation workstream | Inspect final diff across imports, tests, Docker, CI, docs, and generator; do not approve while forwarding paths remain. |
+| Canonical imports and legacy-shim removal | Implemented in foundation | Reverify the integrated diff and generated copy; do not approve while forwarding paths remain. |
 | Locked developer tooling | Open in parallel PR #13 | Reconcile only after review/merge; verify any resulting revision and platform matrix independently. |
 | Current dependent PR CI | Pending on updated revision | Confirm all required checks correspond to the pushed PR head. |
 | Foundry host caller binding and lost-response recovery | Blocked | Establish supported identity and reconciliation guarantees before implementing a hosted bridge. |
