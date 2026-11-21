@@ -54,12 +54,15 @@ The dependent developer-tooling branch adds `backend/pyproject.toml` and a
 public-registry `uv.lock`, locked development and container installs, Ruff,
 portable development commands and VS Code configurations. Acceptance requires
 source and generated lint/tests and locked builds without Azure credentials,
-then passing hosted CI on the actual reviewed head. Local Windows source and
-generated backend tests, Ruff, generated UI tests/build and Linux Compose
+then passing hosted CI on the actual reviewed head. At e1d9536, local Windows
+source and generated backend tests, Ruff, generated UI tests/build and Linux Compose
 204/401 smoke passed using an approved temporary mirror; public artifact downloads failed locally with
 a TLS handshake error. macOS, clean public-only installation and hosted CI
 remain unverified. Next reconcile shared CI, generator, backend formatting and
 living docs with parallel branches, review, and run hosted CI.
+The lock includes the independently coordinated OpenTelemetry SDK 1.45.2
+and Azure Monitor exporter 1.0.0b59; telemetry implementation and its tests
+remain in the parallel workstream and require integrated validation.
 
 P1-01 through P1-04 have an initial local foundation and a test-only
 application adapter, but the scenario has no authorized contract approval.
