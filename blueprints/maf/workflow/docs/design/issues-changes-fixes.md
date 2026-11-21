@@ -101,7 +101,13 @@ entries to hide failed attempts or gaps.
   build and CSP check. Ruff passed in source and generated backends. The root
   suite passed 46 with one intentional unselected-adapter skip. Generated
   npm installation used the approved mirror. Public package downloads still
-  fail locally with TLS errors. The final PR-head hosted run remains pending.
+  fail locally with TLS errors. Check hosted CI for the actual PR head before
+  approval.
+- **Hosted evidence:** Run
+  [44937433206](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44937433206)
+  passed all five jobs for code head `2a8fafdbcf5574d2a4e6cba59e8621bf1b3c0cd7`,
+  including the checkpoint regressions and generated Compose build. Check the
+  actual PR-head run after this documentation update before approval.
 - **Lesson / limit:** Integrate environment instructions with the canonical
   source layout; a successful earlier CI run cannot establish the result of a
   rebased revision. Public-only local downloads, macOS, and interactive
