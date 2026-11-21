@@ -35,9 +35,10 @@ entries to hide failed attempts or gaps.
   clean up initialized telemetry on construction or startup failure.
 - **Evidence:** Focused injected-failure tests exercise synchronous and
   asynchronous actions, HTTP status and propagation, exporter/provider
-  cleanup, and original exception identity. The focused source suite passed
-  before final integration; source/generated regression and exact PR CI must
-  be checked on the final revision.
+  cleanup, and original exception identity. On implementation revision
+  `fe4550a`, source and generated backend suites passed 50 tests each, the
+  generated verifier passed 44, instantiation passed two, and changed Python
+  files passed the tooling branch's Ruff checks. Exact PR CI remains pending.
 - **Limit / lesson:** Public hosted configuration and cloud ingestion remain
   unverified. A fixed signal is diagnostic, not delivery evidence; failures
   can lose spans. Failure isolation must cover instrumentation

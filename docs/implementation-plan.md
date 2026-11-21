@@ -186,6 +186,10 @@ retention, regional placement and access policy require separate validation.
 The common design suite and engineering journal record the implementation and
 limitations. Reconcile dependencies with the separate tooling workstream;
 actual PR CI is required before approval.
+Revision `fe4550a` passed 50 source and 50 generated backend tests, the
+44-test generated verifier, and two instantiation tests; changed Python files
+passed Ruff with the tooling workstream's configuration. Hosted CI and cloud
+ingestion remain unverified.
 No Azure provisioning or ingestion is implied.
 
 ## Later phases
