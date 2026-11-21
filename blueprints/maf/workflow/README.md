@@ -126,9 +126,13 @@ The comparison covers table/column shape, defaults, constraints, indexes,
 triggers, rules, policies, inheritance and identity-sequence settings, not
 ownership, grants, other tables, data correctness, or external dependencies.
 Manifests list all migration-owned tables; application-owned tables remain
-outside the baseline. PostgreSQL 16.15 and 17.12 have local test evidence;
-other versions and managed-service configurations remain unverified and may
-fail comparison.
+outside the baseline. PostgreSQL 16.15 and 17.12 have local test evidence on
+earlier revisions. An independent local PostgreSQL 16.14 run passed 72 backend
+tests without skips on integration head `fcd8f6f4f5cf48d537b9183aefa35b6b079feb76`
+([evidence](https://github.com/ppenumatsa1/agent-blueprints/issues/24#issuecomment-7070316677)).
+This is not Azure managed PostgreSQL evidence; managed-service configurations,
+backup/restore, identity and high availability remain unverified. Other versions
+and configurations may fail comparison.
 Tables owned by a different known revision must not pre-exist; adoption of an
 application-owned table requires a separate reviewed migration design.
 
