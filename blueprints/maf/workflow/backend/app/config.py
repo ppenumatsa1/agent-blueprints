@@ -55,6 +55,11 @@ class Settings:
             raise ValueError("Only the explicitly selected local host is implemented.")
         if self.telemetry_mode not in ("local", "azure-monitor"):
             raise ValueError("TELEMETRY_MODE must be local or azure-monitor.")
+        if self.telemetry_mode == "azure-monitor" and (
+            not isinstance(self.applicationinsights_connection_string, str)
+            or not self.applicationinsights_connection_string.strip()
+        ):
+            raise ValueError("APPLICATIONINSIGHTS_CONNECTION_STRING is required for azure-monitor.")
         for value in self.cors_origins:
             _origin(value)
         if self.obo_enabled and (not self.obo_client_secret or not self.obo_allowed_scopes):

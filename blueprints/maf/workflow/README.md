@@ -89,7 +89,7 @@ and deployment identity in a real environment.
 
 ## Operational telemetry
 
-The backend uses one manual OpenTelemetry provider for HTTP requests, workflow
+The backend uses manual OpenTelemetry tracing and metrics for HTTP requests, workflow
 start/resume, selected PostgreSQL operations and OBO exchange. The
 `blueprint.telemetry` logger emits JSON operations with outcome, duration,
 trace/span IDs and a server-generated request correlation ID. It does not
@@ -101,11 +101,23 @@ These operational logs are not approval or audit evidence.
 cloud export is explicitly disabled. For a hosted service, explicitly set
 `TELEMETRY_MODE=azure-monitor` and supply an existing
 `APPLICATIONINSIGHTS_CONNECTION_STRING` through a secret manager. The
-prerelease Azure Monitor trace exporter uses batching and no offline disk
-storage. Configuration, flush, and export failures emit fixed, non-sensitive
-operational signals; telemetry failure does not alter workflow results.
-Configuration is not proof of successful ingestion. Export failure can lose
-spans; monitor these signals and validate the actual hosted pipeline separately.
+prerelease Azure Monitor trace and metric exporters use batching and no offline
+disk storage. Missing or invalid configuration or exporter initialization
+fails startup with a sanitized error. Once initialized, trace or metric
+export/flush failures produce fixed, non-sensitive signals and do not change
+workflow outcomes. Configuration is not proof of successful ingestion.
+Export failure can lose spans or metrics; monitor signals and validate the
+hosted pipeline separately.
+
+The `blueprint.operations` counter and `blueprint.operation.duration`
+histogram measure each instrumented operation independently of trace sampling.
+Their only dimensions are allowlisted operation and outcome; they contain no
+business identifiers or payloads. Metric exemplars are disabled. The hosted
+metric reader exports periodically (SDK default 60 seconds; configurable via
+`OTEL_METRIC_EXPORT_INTERVAL` in milliseconds); local mode has no metric
+exporter. The pinned Azure exporter uses its preferred aggregation temporality.
+If the Azure SDK configuration disables custom metric export, startup fails
+rather than claiming metrics are enabled.
 Azure exporter and Azure core pipeline log propagation is suppressed in this
 mode because SDK exception logs can contain endpoints or other sensitive data;
 the exporter wrapper instead reports a fixed failure signal.
