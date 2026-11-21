@@ -8,6 +8,7 @@ revision = "0001"
 down_revision = None
 branch_labels = None
 depends_on = None
+schema_manifest_sha256 = "706771476076cb44546c7761fabfcb0282b85cbd823d2b28b894032628f8bd70"
 
 
 def upgrade():

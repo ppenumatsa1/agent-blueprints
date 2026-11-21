@@ -6,6 +6,9 @@ select their own workflow, policy, rules, and transactional action; the
 included synthetic action is an explicit example, not a customer scenario
 or a replacement for a failed model or tool call.
 
+See the [design documents](docs/design/architecture.md) and
+[engineering journal](docs/engineering-journal.md) for evidence and open work.
+
 The local host uses MAF `FileCheckpointStorage` on a private, persistent
 single-host volume. PostgreSQL separately holds business records, decisions,
 audit events, and the action ledger. A per-case database lock coordinates
@@ -57,6 +60,9 @@ For example, after supplying the four Entra values in PowerShell:
 ```powershell
 $env:POSTGRES_PASSWORD = [Convert]::ToHexString([System.Security.Cryptography.RandomNumberGenerator]::GetBytes(24)).ToLowerInvariant()
 $env:BLUEPRINT_APPLICATION = "examples.synthetic_application:build_application"
+docker compose build api
+docker compose run --rm api python -m app.infrastructure.migrations upgrade
+docker compose run --rm api python -m examples.synthetic_application
 docker compose up --build --wait
 ```
 
@@ -82,38 +88,64 @@ checkpoint deserialization remains enabled.
 
 ## Business database migrations
 
-`backend/migrations` contains the Alembic baseline and immutable original SQL.
-API startup serializes initialization using a PostgreSQL advisory transaction
-lock. An empty schema is created and stamped `0001`; an unversioned schema is
-adopted only when its four business tables match the baseline. Existing rows,
-including decisions, audit and action ledger, are not rewritten. Versioned
-schemas are checked on each startup. Incomplete or divergent schemas, changed
-baseline bytes, and unknown revisions fail startup; no repair is automatic.
+`backend/migrations` contains Alembic revisions, immutable baseline SQL and
+revision-specific catalog manifests. **Run migrations explicitly before
+starting the API**, using `python -m app.infrastructure.migrations upgrade`
+from `backend` with `DATABASE_URL` set to the intended database. This is a
+controlled schema-owner operation; it creates an empty baseline or adopts an
+unversioned database only if its business tables exactly match revision
+`0001`, then upgrades to head. Existing rows, including decisions, audit and
+action ledger, are not rewritten by the baseline.
+
+API startup validates the recorded revision and its manifest without DDL or
+stamping. It fails if the database is unversioned, outdated or divergent;
+unknown revisions and changed baseline/manifest bytes also fail visibly.
+Migrations and startup validation take exclusive and shared PostgreSQL
+advisory transaction locks respectively. A migration failure rolls back the
+DDL and version update.
+
 The comparison covers table/column shape, defaults, constraints, indexes,
-triggers, rules, policies, inheritance and identity-sequence settings, not ownership, grants, other tables,
-data correctness, or external dependencies. Application-owned tables remain
-outside this baseline. PostgreSQL 17 has local test evidence; other versions
-and managed-service configurations remain unverified.
+triggers, rules, policies, inheritance and identity-sequence settings, not
+ownership, grants, other tables, data correctness, or external dependencies.
+Manifests list all migration-owned tables; application-owned tables remain
+outside the baseline. PostgreSQL 17 has local test evidence; other versions
+and managed-service configurations remain unverified and may fail comparison.
+Tables owned by a different known revision must not pre-exist; adoption of an
+application-owned table requires a separate reviewed migration design.
 
 The configured search path must select the intended business schema first.
-The database identity needs permission to create a schema in the database
-(a disposable reference schema is created and dropped transactionally on
-every initialization), plus rights to inspect and create/alter tables in the
-target schema and manage Alembic's version table. Validate these privileges
-before upgrading. Do not initialize concurrently with manual DDL or older
-application versions: the advisory lock coordinates only cooperating instances.
-Operationally quiesce writers and take a verified, consistent database and
-checkpoint backup first. Review any drift, then restore or explicitly repair
-the schema under change control and retry; do not delete data or stamp an
+The migration identity needs ownership or DDL rights in that schema and rights
+to manage the version table; no database-level `CREATE SCHEMA` is needed.
+The runtime identity needs schema `USAGE`, read access to `alembic_version`
+and the application's ordinary data privileges, but not schema/database
+creation privileges for baseline validation. The synthetic example has its
+own explicit preparation command above; a custom application's initializer and
+tables need separately reviewed provisioning and permissions. Local Compose
+uses the same PostgreSQL account for migration and runtime for convenience,
+not as a production least-privilege model. Production operators must supply
+separate identities and protect their connection settings.
+
+Before upgrading, quiesce old application versions and writers and take a
+verified, consistent database and checkpoint backup. The advisory lock only
+coordinates cooperating migration and startup checks; it does not protect
+against manual DDL, ongoing requests or old binaries. Review drift, then
+restore or explicitly repair under change control and retry; never stamp an
 unknown revision to bypass checks. Recover database and native checkpoints as
 a coordinated pair and reconcile external effects separately.
 
-There is **no automatic downgrade** from the baseline. A failed initialization
-rolls back its DDL and revision update; restore a verified compatible backup
-if recovery requires reverting. Future revisions must supply reviewed
-per-version drift checks and migration/rollback tests before release; this
-baseline-only checker deliberately rejects incompatible changes. Alembic
-tracks business schema versions, not MAF checkpoints or human authorization.
+There is **no automatic downgrade** from the baseline; restore a verified
+compatible backup if recovery requires reverting. For each future revision,
+add a reviewed manifest named `manifests/<revision>.json` and its UTF-8
+newline-normalized SHA-256 as `schema_manifest_sha256` on the revision.
+Produce and review the manifest from a clean, disposable PostgreSQL 17 schema
+after applying that revision: capture `_snapshot(connection, schema, tables)`
+with the complete migration-owned table list, serialize
+`{"tables": [...], "snapshot": ...}` as JSON, and hash the exact file.
+Never derive it from a production database or auto-accept observed drift.
+Review the migration and manifest together and test fresh, previous-revision,
+drift, recovery, privilege and rollback behavior. The test-only second
+revision under `backend/tests/migration_fixtures` demonstrates the contract.
+Alembic versions business tables, not MAF checkpoints or human authorization.
 
 Optional server-side OBO requires `OBO_ENABLED=true`, an existing
 `ENTRA_API_CLIENT_SECRET`, and comma-separated `OBO_ALLOWED_SCOPES`.
@@ -152,7 +184,9 @@ records, and human decisions separate.
 
 ## Tests
 
-Use Python 3.12 and an isolated PostgreSQL database. Install
+Use Python 3.12 and an isolated PostgreSQL database whose test identity can
+create/drop schemas and roles (the restricted-role startup test requires
+`CREATEROLE`). Never use production credentials or data. Install
 `backend/requirements-dev.txt` in a virtual environment, set
 `MAF_TEST_DATABASE_URL` to the test database, and run from `backend`:
 

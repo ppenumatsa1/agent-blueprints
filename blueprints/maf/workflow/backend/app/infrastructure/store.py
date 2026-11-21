@@ -47,9 +47,9 @@ class PostgresStore:
         return psycopg.connect(self._dsn, row_factory=dict_row)
 
     def initialize(self) -> None:
-        from app.infrastructure.migrations import upgrade
+        from app.infrastructure.migrations import validate
 
-        upgrade(self._dsn)
+        validate(self._dsn)
 
     def get(self, case_id: UUID) -> Case:
         with self.connect() as connection:

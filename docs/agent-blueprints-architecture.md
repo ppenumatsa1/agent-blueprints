@@ -27,11 +27,12 @@ alternative requiring its own verified checkpoint strategy. Neither topology
 is a verified deployment; provisioning requires separate authorization.
 
 The migration increment adds an Alembic `0001` baseline for PostgreSQL
-business tables. Empty schemas are initialized, and existing schemas are
-adopted only after a catalog comparison with the immutable baseline; drift
-fails closed. Initialization, schema comparison and version stamping share
-one transaction and cooperating instances serialize via an advisory lock.
-The reference-schema permission requirements, backup and rollback limits,
+business tables. An explicit schema-owner migration initializes empty schemas
+or adopts exact unversioned baselines, then upgrades to head. A catalog
+manifest per revision detects drift before and after the upgrade, and the API
+validates head without DDL. Migration and validation coordinate through
+transaction-scoped advisory locks; manual DDL and running old binaries still
+require operational quiescence. Identity requirements, backup and rollback limits,
 and scope of drift detection are in the [blueprint](../blueprints/maf/workflow/README.md#business-database-migrations).
 These migrations do not own MAF checkpoints or independently authorize
 business approvals. This branch is stacked on the modularity foundation;

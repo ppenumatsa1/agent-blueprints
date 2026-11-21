@@ -14,6 +14,7 @@ from agent_framework import FileCheckpointStorage
 from app.domain.errors import AccessDenied, ActionError, CheckpointError, Conflict
 from app.domain.models import Principal
 from app.domain.policy import CaseAccessPolicy, JsonObjectRules
+from app.infrastructure.migrations import upgrade
 from app.infrastructure.store import PostgresStore
 from app.usecases.service import WorkflowService
 from app.workflows.host import LocalWorkflowHost
@@ -39,6 +40,7 @@ class WorkflowIntegrationTests(unittest.IsolatedAsyncioTestCase):
         if not dsn:
             raise RuntimeError("MAF_TEST_DATABASE_URL must point to an isolated PostgreSQL test database.")
         cls.store = PostgresStore(dsn)
+        upgrade(dsn)
         cls.store.initialize()
         initialize_fixture(cls.store)
 
