@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Callable
 from uuid import UUID
 
-from agent_framework import CheckpointStorage, FileCheckpointStorage, Workflow
+from agent_framework import CheckpointStorage, FileCheckpointStorage, Workflow, WorkflowCheckpoint
 
 from app.domain.errors import ActionError, CheckpointError
 from app.domain.models import StateRepository, TransactionalAction
@@ -80,6 +80,14 @@ class LocalWorkflowHost:
     def _workflow(self, storage: FileCheckpointStorage) -> Workflow:
         return self.workflow_factory(self.store, self.action, storage)
 
+    @staticmethod
+    def _is_terminal(checkpoint: WorkflowCheckpoint, pending_id: str | None) -> bool:
+        return (
+            checkpoint.checkpoint_id != pending_id
+            and not checkpoint.pending_request_info_events
+            and not any(checkpoint.messages.values())
+        )
+
     @instrumented("workflow.start")
     async def start(self, case_id: UUID) -> None:
         with self.store.run_lock(case_id):
@@ -90,7 +98,14 @@ class LocalWorkflowHost:
             checkpoints = await self._checkpoints(storage)
             workflow = self._workflow(storage)
             if checkpoints:
-                latest = max(checkpoints, key=lambda item: item.timestamp)
+                try:
+                    latest = await storage.get_latest(workflow_name=WORKFLOW_NAME)
+                except Exception as exc:
+                    raise CheckpointError("The latest checkpoint could not be selected.") from exc
+                if latest is None or latest.checkpoint_id not in {
+                    item.checkpoint_id for item in checkpoints
+                }:
+                    raise CheckpointError("The latest checkpoint could not be verified.")
                 requests = await self._requests(
                     workflow.run(checkpoint_id=latest.checkpoint_id, stream=True), case_id
                 )
@@ -103,7 +118,10 @@ class LocalWorkflowHost:
             checkpoints = await self._checkpoints(storage)
             if not checkpoints:
                 raise CheckpointError("The pending workflow checkpoint was not saved.")
-            pending = max(checkpoints, key=lambda item: item.timestamp)
+            pending_id = workflow.get_last_checkpoint_id()
+            pending = next((item for item in checkpoints if item.checkpoint_id == pending_id), None)
+            if pending is None or set(pending.pending_request_info_events) != set(requests):
+                raise CheckpointError("The pending workflow checkpoint was not saved.")
             restored = await self._requests(
                 self._workflow(storage).run(checkpoint_id=pending.checkpoint_id, stream=True),
                 case_id,
@@ -122,6 +140,8 @@ class LocalWorkflowHost:
             if case.execution_complete:
                 if not case.terminal_checkpoint_id or case.terminal_checkpoint_id not in by_id:
                     raise CheckpointError("The completed workflow checkpoint is missing.")
+                if not self._is_terminal(by_id[case.terminal_checkpoint_id], case.checkpoint_id):
+                    raise CheckpointError("The completed workflow checkpoint is incomplete.")
                 return
             if not case.checkpoint_id or case.checkpoint_id not in by_id or not case.request_id:
                 raise CheckpointError("The pending workflow checkpoint is missing.")
@@ -149,7 +169,10 @@ class LocalWorkflowHost:
             if outputs != [expected]:
                 raise CheckpointError("The workflow did not produce the expected outcome.")
             checkpoints = await self._checkpoints(storage)
-            terminal = max(checkpoints, key=lambda item: item.timestamp)
-            if terminal.checkpoint_id == case.checkpoint_id:
+            terminal_id = workflow.get_last_checkpoint_id()
+            terminal = next(
+                (item for item in checkpoints if item.checkpoint_id == terminal_id), None
+            )
+            if terminal is None or not self._is_terminal(terminal, case.checkpoint_id):
                 raise CheckpointError("The completed workflow checkpoint was not saved.")
             self.store.finish(case_id, terminal.checkpoint_id)

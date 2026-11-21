@@ -101,6 +101,16 @@ The same-transaction action ledger applies only to database effects performed
 through the supplied transaction. External side effects require downstream
 idempotency or a transactional outbox.
 
+For an interrupted start, the local host asks the MAF file provider for the
+latest checkpoint after validating every file; the provider accounts for
+lineage when timestamps tie. After running a workflow, the host uses that
+workflow instance's last persisted checkpoint instead of sorting by wall
+clock time. It checks the pending request before recording it and requires a
+terminal checkpoint with no pending requests or queued messages before
+marking execution complete or accepting a completed replay. A missing or
+incomplete checkpoint remains an explicit recovery error; a committed
+database action is protected by the action ledger on retry.
+
 ## Trust and extension boundaries
 
 - `ApplicationComponents` supplies application-owned business rules, access

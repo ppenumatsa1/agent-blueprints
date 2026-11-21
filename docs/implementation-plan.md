@@ -42,10 +42,18 @@ requires source and generated security/recovery tests, both crash windows,
 independent golden verification and exact contract bytes, credential-free
 CI and Compose smoke checks. Local evidence is recorded in the
 [checklist](master-checklist.md). [PR #11](https://github.com/ppenumatsa1/agent-blueprints/pull/11)
-remains open; cleaned foundation commit `61d44ed` removes compatibility
-aliases. Its [hosted run 44930591252](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44930591252)
-passed all five checks on that exact commit. Review and merge remain pending;
-hosted checks do not prove live hosting.
+remains open; foundation commit `9efeef0` removes compatibility aliases and
+corrects checkpoint selection. Its
+[hosted run 44936094798](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44936094798)
+passed all five checks on that exact commit. An intermittent local restore
+failure occurred during migration testing; a deterministic equal-timestamp
+reproduction showed a real selection defect but does not prove the
+unretained original failure had the same cause. The foundation selects
+MAF-native persisted checkpoints and rejects incomplete terminal state on
+completion and replay. Local source/generated backend suites passed 36 tests
+each; the selected-adapter root suite passed 46 and the generated verifier
+passed 44 without skips. Reconcile dependent PRs and verify the combined
+revision separately. Hosted checks do not prove live hosting.
 The copied evidence producer observed approval and recovery passing while
 explanation and browser hint remained unverified; the independent unsigned
 readiness report remained unverified. The first local container build could
@@ -149,7 +157,7 @@ the local HTTP smoke check. Its unsigned readiness report is unverified.
 | P1-10 | Add integration/E2E tests, synthetic agent evaluations, and GitHub Actions; connect actual results and artifacts to the validator. | P1-04 through P1-09 | A local or CI run produces a report from real artifacts; blocking failures cannot pass, non-blocking outcomes follow the selected profile, and rubric/threshold decisions are recorded. |
 | P1-11 | Add privacy-safe logs, traces, correlation, and operational signals across API, workflow, approvals, and side effects. | P1-07, P1-09 interfaces | Tests verify redaction and correlation; actual export remains environment-specific. |
 | P1-15 | Demonstrate the local prototype from a synthetic specification through approval, evaluation, and its readiness report. | P1-10, P1-11 | Record the scenario, evidence, limitations, and observed elapsed time; the 2–3 hour objective is a target until a representative run demonstrates it. |
-| P1-12 | Validate Foundry Hosted Agent compatibility for the selected MAF version, Responses protocol, request-aware workflow factory, identity, and host-managed checkpoints. | P1-09, P1-15 | Record versions and evidence for the compatibility assessment; local checks alone are not a hosted deployment. No Azure resources are provisioned. |
+| P1-12 | Validate Foundry Hosted Agent compatibility for the selected MAF version, Responses protocol, request-aware workflow factory, identity, and host-managed checkpoints. | P1-09, P1-15 | Hosted caller binding and lost-response reconciliation are blocked; see the [investigation journal](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-21---hosted-caller-binding-and-lost-responses). Local checks alone are not a hosted deployment. No Azure resources are provisioned. |
 | P1-13 | Prepare the explicitly selected ACA fallback and a framework-compatible checkpoint strategy. | P1-09, P1-15 | Separate local/container recovery and idempotency checks pass; no claim that ACA shares Foundry checkpoint ownership or silently replaces a failed model call. |
 | P1-14 | Prepare Bicep, least-privilege identities, authenticated public endpoints, GitHub-hosted CI, and deployment/handoff instructions. Deploy only after separate Azure authorization. | P1-10, P1-11, P1-12; P1-13 if selected | Static checks work without Azure credentials; an authorized deployment later records its revision, versions, identity, network, evidence, cost, and teardown owner. |
 

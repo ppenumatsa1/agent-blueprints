@@ -110,6 +110,66 @@ entries to hide failed attempts or gaps.
   rebased revision. Public-only local downloads, macOS, and interactive
   debugging remain unverified.
 
+### 2026-11-21 - Local checkpoint timestamp ties
+
+- **Observed issue:** During migration acceptance, an intermittent submission
+  failed with `CheckpointError` while restoring the pending request. The
+  original failing checkpoint files were not retained, so their exact cause is
+  unverified.
+- **Reproduction and cause:** Independently forcing the native MAF entry and
+  pending checkpoints to have the same timestamp and listing the entry first
+  deterministically reproduced the same error. The host selected checkpoints
+  with `max(timestamp)`, which did not account for the framework's lineage
+  when timestamps were equal. Equal timestamps could also select an earlier,
+  non-terminal checkpoint after a decision.
+- **Fix / decision:** Use the MAF file provider's lineage-aware latest
+  selection for interrupted starts, and the active workflow instance's last
+  persisted checkpoint after execution. Verify the pending request and reject
+  a nonterminal checkpoint both on completion and replay. Keep the existing
+  file-validation, case lock and transactional action ledger.
+- **Evidence:** On the working tree for
+  [PR #11](https://github.com/ppenumatsa1/agent-blueprints/pull/11),
+  four focused test methods failed against the earlier host, including two
+  nonterminal replay subtests. With the fix, source and generated
+  `python -m unittest -v tests.test_core tests.test_security tests.test_evidence_runner`
+  passed 36 tests each using isolated PostgreSQL 17. The source root suite
+  passed 46 with the synthetic adapter selected; the generated verification
+  suite passed 44 without skips. The generated evidence producer recorded
+  approval and recovery as passed and explanation and hint as unverified;
+  the independent validator returned the expected exit 1 and `unverified`.
+  Tests include failed terminal saves and both real worker-kill windows.
+- **Next action:** Foundation
+  [run 44936094798](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44936094798)
+  passed all five jobs for `9efeef01101b176a1a10627c654eff0ca5150b6b`.
+  Reconcile dependent branches and verify the combined revision. Earlier
+  migration evidence failures remain recorded; a later pass does not establish
+  their original cause.
+- **Lesson:** Wall-clock timestamps are not unique checkpoint identifiers.
+  A successful later run alone does not explain an earlier intermittent
+  failure, and a committed database effect must remain idempotent on retry.
+
+### 2026-11-21 - Hosted caller binding and lost responses
+
+- **Issue:** A hosted bridge needs to bind each request to the authorized API
+  caller and safely reconcile a successful remote request whose response ID
+  was lost. Neither guarantee has been established.
+- **Investigation:** In `azure-ai-agentserver-responses==2.4.0`, resilient
+  execution can serialize forwarded `x-client-*` headers even for foreground
+  `store=true` requests when resilient or steering features are enabled.
+  Offline middleware tests rejected unauthorized requests and stripped a
+  header before SDK context creation for `store=false`; gateway retention
+  for stored requests remains unknown. The
+  [hosted-agent contract](https://learn.microsoft.com/en-us/azure/foundry/agents/concepts/hosted-agent-contract)
+  documents trusted but opaque platform identities and drops caller headers
+  outside its allowlist. The
+  [list responses API](https://learn.microsoft.com/en-us/azure/foundry/reference/rest/list-responses)
+  filters by agent or conversation, not operation metadata; its consistency
+  and suitability for this recovery path remain unverified.
+- **Decision / next action:** No hosted adapter was implemented. Establish
+  supported caller binding and unambiguous recovery before implementing the
+  bridge, and validate the actual service only with separate authorization.
+  Do not persist bearer credentials or silently retry ambiguous side effects.
+
 ### PR #6 - Native MAF workflow and local recovery core
 
 - **Change:** Added a native MAF approval workflow, local checkpoint host,
@@ -230,11 +290,12 @@ entries to hide failed attempts or gaps.
 
 | Item | Status | Evidence needed / next action |
 | --- | --- | --- |
-| Eight design documents and generated inclusion | Open in PR #12 | Focused instantiation tests passed and run 44931269846 passed all five checks on head `476e43a`; verify the combined revision separately. |
-| Canonical imports and legacy-shim removal | Implemented in foundation commit `61d44ed` | Foundation PR #11 run 44930591252 passed all five checks; preserve direct imports in later changes. |
-| Locked developer tooling | Open in PR #13 | Run 44931514554 passed all five checks on head `edfd572`; verify the combined revision separately. macOS, interactive debugging and public-only local downloads remain unverified. |
-| Combined revision CI | Not run | Passing checks on the two individual PRs do not establish checks for their combined revision. |
-| Live Entra/OBO, Foundry host/recovery, cloud telemetry, Azure deployment | Unverified | Separate scoped implementation, authorization where required, and live evidence. |
+| Eight design documents and generated inclusion | Open in PR #12 | Focused instantiation tests and run 44931269846 passed on prior head `476e43a`; verify the revised and combined revisions separately. |
+| Canonical imports and legacy-shim removal | Implemented in open PR #11 | Foundation run 44936094798 passed all five checks on `9efeef0`; preserve direct imports in later changes. |
+| Locked developer tooling | Open in PR #13 | Run 44931514554 passed all five checks on prior head `edfd572`; verify the revised and combined revisions separately. macOS, interactive debugging and public-only local downloads remain unverified. |
+| Combined revision CI | Not run | Passing checks on individual PRs do not establish checks for their combined revision. |
+| Foundry host caller binding and lost-response recovery | Blocked | Establish supported identity and reconciliation guarantees before implementing a hosted bridge. |
+| Live Entra/OBO, cloud telemetry, Azure deployment | Unverified | Separate scoped implementation, authorization where required, and live evidence. |
 
 Future entries should use this form: date and scope; observed issue and
 evidence-backed cause; attempted approaches (including failures); accepted

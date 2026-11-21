@@ -6,14 +6,17 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 from uuid import uuid4
 
+from agent_framework import FileCheckpointStorage
+
 from app.domain.errors import AccessDenied, ActionError, CheckpointError, Conflict
-from app.workflows.host import LocalWorkflowHost
 from app.domain.models import Principal
 from app.domain.policy import CaseAccessPolicy, JsonObjectRules
-from app.usecases.service import WorkflowService
 from app.infrastructure.store import PostgresStore
+from app.usecases.service import WorkflowService
+from app.workflows.host import LocalWorkflowHost
 from app.workflows.workflow import create_workflow
 from tests.fixture_application import FixtureAction, action_count, initialize_fixture
 
@@ -52,6 +55,23 @@ class WorkflowIntegrationTests(unittest.IsolatedAsyncioTestCase):
         return await self.service.submit(
             OWNER, reviewer, payload if payload is not None else {"value": 42}, key or str(uuid4())
         )
+
+    def fixed_checkpoint_timestamps(self):
+        save = FileCheckpointStorage.save
+
+        async def save_at_same_time(storage, checkpoint):
+            checkpoint.timestamp = "2026-01-01T00:00:00+00:00"
+            return await save(storage, checkpoint)
+
+        return patch.object(FileCheckpointStorage, "save", save_at_same_time)
+
+    def ordered_checkpoints(self, key):
+        checkpoints = self.host._checkpoints
+
+        async def ordered(storage):
+            return sorted(await checkpoints(storage), key=key)
+
+        return patch.object(self.host, "_checkpoints", ordered)
 
     async def test_native_pause_approval_and_replay_are_idempotent(self):
         case = await self.submit()
@@ -185,6 +205,92 @@ class WorkflowIntegrationTests(unittest.IsolatedAsyncioTestCase):
         recovered = self.store.get(case.id)
         self.assertEqual(recovered.status, "pending")
         self.assertEqual(recovered.request_id, requests[0])
+
+    async def test_equal_checkpoint_timestamps_select_current_pause_and_terminal(self):
+        with self.fixed_checkpoint_timestamps():
+            with self.ordered_checkpoints(lambda item: item.iteration_count):
+                case = await self.submit()
+                completed = await self.service.decide(REVIEWER, case.id, "approved")
+            stored = await self.host._checkpoints(self.host._storage(case.id))
+
+        terminal = next(
+            item for item in stored if item.checkpoint_id == completed.terminal_checkpoint_id
+        )
+        self.assertFalse(terminal.pending_request_info_events)
+        self.assertFalse(any(terminal.messages.values()))
+        self.assertGreater(terminal.iteration_count, 1)
+        self.assertEqual(action_count(self.store, case.id), 1)
+        await self.host.resume(case.id)
+        self.assertEqual(action_count(self.store, case.id), 1)
+
+    async def test_recovery_selects_pending_checkpoint_when_timestamps_tie(self):
+        case = self.store.create(OWNER, "reviewer-1", {"value": 1}, str(uuid4()), "digest")
+        storage = self.host._storage(case.id)
+        workflow = create_workflow(self.store, FixtureAction(), storage)
+        with self.fixed_checkpoint_timestamps():
+            requests = await self.host._requests(
+                workflow.run({"case_id": str(case.id)}, stream=True), case.id
+            )
+            with self.ordered_checkpoints(lambda item: item.iteration_count):
+                await self.host.start(case.id)
+
+        recovered = self.store.get(case.id)
+        self.assertEqual(recovered.status, "pending")
+        self.assertEqual(recovered.request_id, requests[0])
+
+    async def test_terminal_checkpoint_is_not_an_earlier_tied_checkpoint(self):
+        with self.fixed_checkpoint_timestamps():
+            with self.ordered_checkpoints(lambda item: not item.pending_request_info_events):
+                case = await self.submit()
+            with self.ordered_checkpoints(lambda item: item.iteration_count):
+                completed = await self.service.decide(REVIEWER, case.id, "approved")
+            stored = await self.host._checkpoints(self.host._storage(case.id))
+
+        terminal = next(
+            item for item in stored if item.checkpoint_id == completed.terminal_checkpoint_id
+        )
+        self.assertFalse(terminal.pending_request_info_events)
+        self.assertFalse(any(terminal.messages.values()))
+        self.assertGreater(terminal.iteration_count, 1)
+        self.assertEqual(action_count(self.store, case.id), 1)
+
+    async def test_completed_workflow_rejects_nonterminal_checkpoint_on_replay(self):
+        case = await self.submit()
+        completed = await self.service.decide(REVIEWER, case.id, "approved")
+        checkpoints = await self.host._checkpoints(self.host._storage(case.id))
+        entry = min(checkpoints, key=lambda item: item.iteration_count)
+        self.assertNotEqual(entry.checkpoint_id, completed.terminal_checkpoint_id)
+        self.assertNotEqual(entry.checkpoint_id, case.checkpoint_id)
+
+        for checkpoint_id in (entry.checkpoint_id, case.checkpoint_id):
+            with self.subTest(checkpoint_id=checkpoint_id):
+                with self.store.connect() as connection:
+                    connection.execute(
+                        "UPDATE wf_cases SET terminal_checkpoint_id = %s WHERE id = %s",
+                        (checkpoint_id, case.id),
+                    )
+                with self.assertRaises(CheckpointError):
+                    await self.host.resume(case.id)
+                self.assertEqual(action_count(self.store, case.id), 1)
+
+    async def test_failed_terminal_checkpoint_stays_recoverable(self):
+        case = await self.submit()
+        save = FileCheckpointStorage.save
+
+        async def fail_terminal_save(storage, checkpoint):
+            if checkpoint.iteration_count > 1:
+                raise OSError("Synthetic checkpoint write failure")
+            return await save(storage, checkpoint)
+
+        with patch.object(FileCheckpointStorage, "save", fail_terminal_save):
+            with self.assertRaises(CheckpointError):
+                await self.service.decide(REVIEWER, case.id, "approved")
+
+        self.assertFalse(self.store.get(case.id).execution_complete)
+        self.assertEqual(action_count(self.store, case.id), 1)
+        await self.host.resume(case.id)
+        self.assertTrue(self.store.get(case.id).execution_complete)
+        self.assertEqual(action_count(self.store, case.id), 1)
 
     def _worker(self, operation, case_id, barrier=None, marker=None):
         command = [

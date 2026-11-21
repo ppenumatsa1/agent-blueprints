@@ -140,10 +140,13 @@ file/database boundary; a transaction commits the application-owned
 database action together with its unique ledger entry. Tests terminate and
 restart real workers at both specified commit windows. This applies only to
 database effects in the same transaction, not arbitrary external services.
-Missing or corrupt checkpoints fail visibly. The application increment
-adds the Entra API, MSAL UI, and a loopback-only Compose stack with a
-non-root API and a private persistent checkpoint volume. Local HTTP smoke
-checks are not live identity verification.
+The local host uses MAF's lineage-aware latest selection during interrupted
+start recovery and the executing workflow's last persisted checkpoint after
+a run, rather than assuming timestamps are unique. It rejects incomplete
+terminal checkpoints at completion and replay. Missing or corrupt checkpoints
+fail visibly. The application increment adds the Entra API, MSAL UI, and a
+loopback-only Compose stack with a non-root API and a private persistent
+checkpoint volume. Local HTTP smoke checks are not live identity verification.
 
 The [generator](../scripts/instantiate_maf.py) copies the blueprint, license,
 independent verifier, contract bytes, and synthetic acceptance fixtures into a
