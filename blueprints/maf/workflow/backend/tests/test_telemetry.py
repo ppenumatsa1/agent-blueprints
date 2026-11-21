@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import os
@@ -5,7 +6,7 @@ import tempfile
 import unittest
 from dataclasses import replace
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 from uuid import UUID
 
 from fastapi.testclient import TestClient
@@ -16,7 +17,7 @@ from opentelemetry.trace import StatusCode
 
 from app.api import create_app
 from app.config import Settings
-from app.infrastructure.telemetry import SafeExporter, SafeMetricExporter, Telemetry
+from app.infrastructure.telemetry import SafeExporter, SafeMetricExporter, Telemetry, instrumented
 from app.infrastructure.delegation import OnBehalfOf
 from app.infrastructure.identity import AuthenticatedRequest
 from app.infrastructure.store import PostgresStore
@@ -36,12 +37,12 @@ def fake_metric_exporter():
 
 
 class TelemetryTests(unittest.TestCase):
-    def app(self):
+    def app(self, *, store=None, components=None):
         checkpoint_dir = tempfile.TemporaryDirectory(dir=".")
         self.addCleanup(checkpoint_dir.cleanup)
-        store = Mock()
+        store = store if store is not None else Mock()
         store.recoverable.return_value = []
-        components = Mock()
+        components = components if components is not None else Mock()
         settings = Settings(
             "10000000-0000-4000-8000-000000000001",
             "20000000-0000-4000-8000-000000000002",
@@ -172,6 +173,184 @@ class TelemetryTests(unittest.TestCase):
         self.assertIn('"outcome":"failure"', str(logs.output))
         self.assertIn('"event":"telemetry.metric_export"', str(logs.output))
         self.assertNotIn(CANARY, str(logs.output))
+
+    def test_instrumentation_failures_preserve_action_and_original_exception(self):
+        class Action:
+            def __init__(self, telemetry, error):
+                self.telemetry = telemetry
+                self.error = error
+                self.calls = 0
+
+            @instrumented("workflow.resume")
+            def run(self):
+                self.calls += 1
+                if self.error is not None:
+                    raise self.error
+                return "completed"
+
+        for stage in ("start", "enter", "status", "context", "close"):
+            for raises in (False, True):
+                with self.subTest(stage=stage, application_error=raises):
+                    telemetry = Telemetry()
+                    self.addCleanup(telemetry.shutdown)
+                    span = Mock()
+                    span.get_span_context.return_value = Mock(trace_id=1, span_id=2)
+                    manager = MagicMock()
+                    manager.__enter__.return_value = span
+                    tracer = Mock()
+                    tracer.start_as_current_span.return_value = manager
+                    telemetry.tracer = tracer
+                    failure = RuntimeError(CANARY)
+                    if stage == "start":
+                        tracer.start_as_current_span.side_effect = failure
+                    elif stage == "enter":
+                        manager.__enter__.side_effect = failure
+                    elif stage == "status":
+                        span.set_status.side_effect = failure
+                    elif stage == "context":
+                        span.get_span_context.side_effect = failure
+                    else:
+                        manager.__exit__.side_effect = failure
+                    error = ValueError("application error") if raises else None
+                    action = Action(telemetry, error)
+                    # A successful action does not set span status itself.
+                    if stage == "status" and not raises:
+                        continue
+                    with self.assertLogs("blueprint.telemetry", level="INFO") as logs:
+                        if raises:
+                            with self.assertRaises(ValueError) as caught:
+                                action.run()
+                            self.assertIs(caught.exception, error)
+                        else:
+                            self.assertEqual(action.run(), "completed")
+                    self.assertEqual(action.calls, 1)
+                    self.assertIn('"event":"telemetry.instrumentation"', str(logs.output))
+                    self.assertNotIn(CANARY, str(logs.output))
+                    if stage not in ("start", "enter"):
+                        manager.__exit__.assert_called_once_with(None, None, None)
+
+    def test_http_metadata_and_propagation_failures_do_not_change_response(self):
+        app = self.app()
+        span = Mock()
+        span.set_attribute.side_effect = RuntimeError(CANARY)
+        span.set_status.side_effect = RuntimeError(CANARY)
+        span.get_span_context.return_value = Mock(trace_id=1, span_id=2)
+        manager = MagicMock()
+        manager.__enter__.return_value = span
+        app.state.telemetry.tracer = Mock()
+        app.state.telemetry.tracer.start_as_current_span.return_value = manager
+        calls = []
+
+        @app.get("/telemetry-failure")
+        async def route():
+            calls.append(1)
+            return {"ok": True}
+
+        @app.get("/telemetry-failure-error")
+        async def route_error():
+            calls.append(2)
+            raise RuntimeError(CANARY)
+
+        with (
+            patch(
+                "app.infrastructure.telemetry._propagator.extract", side_effect=RuntimeError(CANARY)
+            ),
+            self.assertLogs("blueprint.telemetry", level="INFO") as logs,
+            TestClient(app) as client,
+        ):
+            response = client.get("/telemetry-failure")
+            response_error = client.get("/telemetry-failure-error")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"ok": True})
+        UUID(response.headers["X-Correlation-ID"])
+        self.assertEqual(response_error.status_code, 500)
+        self.assertEqual(calls, [1, 2])
+        span.set_status.assert_called_once()
+        self.assertIn('"event":"telemetry.instrumentation"', str(logs.output))
+        self.assertNotIn(CANARY, str(logs.output))
+
+    def test_async_action_executes_once_when_span_start_fails(self):
+        telemetry = Telemetry()
+        self.addCleanup(telemetry.shutdown)
+        telemetry.tracer = Mock()
+        telemetry.tracer.start_as_current_span.side_effect = RuntimeError(CANARY)
+
+        class Action:
+            def __init__(self):
+                self.telemetry = telemetry
+                self.calls = 0
+
+            @instrumented("workflow.start")
+            async def run(self, error):
+                self.calls += 1
+                if error is not None:
+                    raise error
+                return "completed"
+
+        action = Action()
+        error = ValueError("application error")
+        with self.assertLogs("blueprint.telemetry", level="INFO") as logs:
+            self.assertEqual(asyncio.run(action.run(None)), "completed")
+            with self.assertRaises(ValueError) as caught:
+                asyncio.run(action.run(error))
+        self.assertIs(caught.exception, error)
+        self.assertEqual(action.calls, 2)
+        self.assertEqual(sum("telemetry.instrumentation" in line for line in logs.output), 2)
+        self.assertNotIn(CANARY, str(logs.output))
+
+    def test_startup_failures_shutdown_telemetry_and_preserve_original_error(self):
+        for stage in ("host", "app", "store", "components", "recovery"):
+            with self.subTest(stage=stage):
+                telemetry = Mock()
+                store, components = Mock(), Mock()
+                store.recoverable.return_value = []
+                error = RuntimeError(CANARY)
+                if stage == "store":
+                    store.initialize.side_effect = error
+                elif stage == "components":
+                    components.initialize.side_effect = error
+                elif stage == "recovery":
+                    store.recoverable.side_effect = error
+                with patch("app.api.Telemetry", return_value=telemetry):
+                    if stage in ("host", "app"):
+                        target = (
+                            "app.api.LocalWorkflowHost" if stage == "host" else "app.api.FastAPI"
+                        )
+                        with patch(target, side_effect=error):
+                            with self.assertRaises(RuntimeError) as caught:
+                                self.app(store=store, components=components)
+                    else:
+                        app = self.app(store=store, components=components)
+                        with self.assertRaises(RuntimeError) as caught:
+                            with TestClient(app):
+                                pass
+                self.assertIs(caught.exception, error)
+                telemetry.shutdown.assert_called_once_with()
+
+    def test_provider_initialization_failures_close_created_exporters(self):
+        for stage in ("trace", "meter"):
+            with self.subTest(stage=stage):
+                trace_exporter = Mock()
+                metric_exporter = fake_metric_exporter()
+                target = (
+                    "app.infrastructure.telemetry.TracerProvider.get_tracer"
+                    if stage == "trace"
+                    else "app.infrastructure.telemetry.MeterProvider.get_meter"
+                )
+                with patch(target, side_effect=RuntimeError(CANARY)):
+                    with self.assertRaisesRegex(
+                        RuntimeError, "^Azure Monitor telemetry initialization failed[.]$"
+                    ) as caught:
+                        Telemetry(
+                            "azure-monitor",
+                            "configured",
+                            exporter=trace_exporter,
+                            metric_exporter=metric_exporter,
+                        )
+                trace_exporter.shutdown.assert_called_once()
+                metric_exporter.shutdown.assert_called_once()
+                self.assertNotIn(CANARY, str(caught.exception))
+                self.assertTrue(caught.exception.__suppress_context__)
 
     def test_dependency_exception_payload_is_not_recorded(self):
         telemetry = Telemetry()
