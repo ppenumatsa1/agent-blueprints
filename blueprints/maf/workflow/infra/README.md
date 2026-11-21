@@ -13,21 +13,25 @@ services are the adjacent API and web UI, **not** workflow runtimes.
 flowchart LR
   Browser[Browser] -. authenticated path not yet wired .-> UI[ACA UI - opt-in]
   UI -. protected API path not yet wired .-> API[ACA API - opt-in]
-  API -. project-scoped agent consumer .-> Foundry[Foundry project]
+  API -. optional project-wide grant unverified .-> Foundry[Foundry project]
   Foundry -. hosted workflow interface unverified .-> Agent[Hosted native workflow]
   API -. private network and Entra DB auth unverified .-> DB[Private PostgreSQL]
   API -. export and network unverified .-> AI[Application Insights / Log Analytics]
 ```
 
-Solid IaC resources do not establish the dashed runtime connections. Foundry
-network access and telemetry ingestion/query are disabled, with **no** private
-endpoints or Azure Monitor Private Link Scope in this milestone. They will
-not be reachable until a separately reviewed network path is supplied. The
+The IaC resources do not establish the dashed runtime connections. Foundry's
+public data-plane access and telemetry public ingestion/query are disabled,
+with **no** private endpoints or Azure Monitor Private Link Scope in this
+milestone. Ordinary client data-plane connectivity is not provided. The
 current local API only accepts `WORKFLOW_HOST=local` and does not implement a
 managed-identity PostgreSQL token flow; do not run it as the intended cloud
 API. The current nginx proxy targets `api:8000`, whereas ACA HTTP ingress uses
 its own TLS endpoint, and the SPA needs its public Entra values at build
 time. These are integration blockers, not configuration defaults to guess.
+The configured internal ingress is reachable directly only by other apps in
+the same Container Apps environment, not by a browser elsewhere on the VNet;
+no environment-level route is supplied. See
+[Container Apps ingress](https://learn.microsoft.com/en-us/azure/container-apps/ingress-overview).
 
 ## What the modules describe
 
@@ -37,15 +41,34 @@ time. These are integration blockers, not configuration defaults to guess.
 | `foundry.bicep` | Foundry account and project with system identities, key authentication disabled, public access disabled and deny-by-default ACLs. A model deployment is opt-in and requires a reviewed model, version, SKU, capacity, region and quota. |
 | `postgres.bicep` | Private Flexible Server and database, Entra-only auth, an explicitly supplied administrator, TLS required, 7-day backup and development-sized burstable default. No password administrator, firewall allow-all, database application principal or token-refresh implementation is created. |
 | `observability.bicep` | Workspace-based Application Insights and Log Analytics, 30-day default retention and 1 GB/day ingestion cap. Public ingestion/query and Insights local authentication are disabled; no private connectivity or exporter role is configured. The cap can discard telemetry. |
-| `identities.bicep` | Separate API and UI user-assigned managed identities. The project system identity receives Foundry User at account scope per the Foundry guidance; the API identity receives Foundry Agent Consumer at project scope. These assignments and actual data-plane requirements need live review. |
+| `identities.bicep` | Separate API and UI user-assigned managed identities. The project system identity receives Foundry User at account scope per Foundry guidance. A project-wide Foundry Agent Consumer grant to the API is opt-in and disabled by default; its scope covers all agents in that project. Actual role requirements need live review. |
 | `registry.bicep` | Optional Basic registry. It is internet-reachable when selected, but disables admin credentials and anonymous pulls; the two workload identities get only registry-scoped AcrPull. Private registry networking and hosted-agent image-pull permissions are not implemented. |
-| `container-apps.bicep` | Optional, separate UI and API in an internal-only workload-profile environment, with HTTPS-only internal ingress and scale-to-zero. Entra authentication returns 401 on the API except for `/healthz`; the API must still enforce scopes, roles and record authorization. Caller-supplied images and configuration are required. |
+| `container-apps.bicep` | Optional, separate UI and API in an internal-only workload-profile environment, with HTTPS-only internal ingress and scale-to-zero. The API's Entra platform-auth configuration specifies 401 except for `/healthz`; actual behavior is unverified. The API must independently enforce authentication, scopes, roles and record authorization. Caller-supplied images and configuration are required. |
 
-`createRegistry`, `createContainerApps`, and `deployModel` default to false.
+`createRegistry`, `createContainerApps`, `deployModel`, and
+`grantProjectAgentConsumer` default to false.
 Creating the template's other resources would still incur cost, especially
 PostgreSQL; the defaults are development-oriented, not free and not a
 production availability, backup, security or cost claim. Availability,
 retention, networking and pricing require a separate regional review.
+
+Container Apps platform authentication is a separate child resource and can
+fail to configure after an app is created. It is not a substitute for
+fail-closed application authentication and authorization, even on an internal
+endpoint. Do not select an image that relies on platform authentication alone.
+
+The optional project-wide consumer grant is not the least-privilege final
+host binding. Once an actual hosted agent and its trust boundary are verified,
+prefer an appropriately scoped agent-specific grant and review the project's
+account-scoped system-identity role. An agent-scoped grant is not exclusive:
+inherited project/account assignments and any other enabled authentication or
+privileged development paths may also allow access. No endpoint caller
+restriction or authenticated principal propagation has been verified.
+Any future forwarded workload token also requires reviewed evidence for
+gateway retention, stripping, replay and background recovery; no forwarding
+or token policy is configured here.
+See [Foundry RBAC](https://learn.microsoft.com/en-us/azure/foundry/concepts/rbac-foundry)
+and [hosted-agent permissions](https://learn.microsoft.com/en-us/azure/foundry/agents/concepts/hosted-agent-permissions).
 
 The deployment principal needs permission to create the requested resources
 and scoped role assignments. Runtime roles must not be used as provisioning
@@ -66,6 +89,15 @@ Azure configuration and do not select a subscription, region or tenant.
 The `.bicepparam` files are compiler examples, not automatically selected
 by azd. Optional Bicep parameters require explicit, reviewed native-typed
 parameter values; model and image inputs must not be invented.
+
+For later integration, the graph proposes non-secret discovery outputs
+`AZURE_AI_PROJECT_ENDPOINT`, `AZURE_AI_MODEL_DEPLOYMENT_NAME`,
+`AZURE_API_IDENTITY_CLIENT_ID`, `AZURE_POSTGRESQL_HOST`, and
+`AZURE_POSTGRESQL_DATABASE`. These are outputs, not environment injection,
+an agent service contract, or proof that the endpoint, identity, network,
+database or workflow can be used together. The hosted service root,
+entrypoint, authentication and continuation bindings must be agreed and
+verified before adding them to `azure.yaml`.
 
 ## Credential-free checks
 

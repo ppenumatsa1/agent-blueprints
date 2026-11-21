@@ -44,6 +44,9 @@ param modelFormat string = 'OpenAI'
 param modelSku string = 'Standard'
 param modelCapacity int = 1
 
+@description('Opt-in grants API access to all agents in the project; prefer a verified agent-scoped assignment.')
+param grantProjectAgentConsumer bool = false
+
 @description('An authenticated public-network registry is created only when explicitly selected.')
 param createRegistry bool = false
 param registrySku string = 'Basic'
@@ -112,6 +115,7 @@ module foundry './modules/foundry.bicep' = {
     tags: resourceTags
     projectName: '${prefix}-project'
     apiPrincipalId: identities.outputs.apiPrincipalId
+    grantProjectAgentConsumer: grantProjectAgentConsumer
     deployModel: deployModel
     modelDeploymentName: modelDeploymentName
     modelName: modelName

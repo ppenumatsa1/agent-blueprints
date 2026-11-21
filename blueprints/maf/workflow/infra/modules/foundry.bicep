@@ -5,6 +5,7 @@ param location string
 param tags object
 param projectName string
 param apiPrincipalId string
+param grantProjectAgentConsumer bool = false
 param deployModel bool = false
 param modelDeploymentName string = ''
 param modelName string = ''
@@ -71,7 +72,7 @@ resource model 'Microsoft.CognitiveServices/accounts/deployments@2025-06-01' = i
   }
 }
 
-resource consumerRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+resource consumerRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (grantProjectAgentConsumer) {
   name: guid(project.id, apiPrincipalId, foundryAgentConsumerRole)
   scope: project
   properties: {

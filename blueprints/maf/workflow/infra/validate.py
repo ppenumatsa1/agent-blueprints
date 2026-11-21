@@ -144,7 +144,7 @@ def validate_examples(executable: str, template: dict) -> None:
         parameters = json.loads(compiled["parametersJson"])["parameters"]
         values = {**defaults, **{name: item["value"] for name, item in parameters.items()}}
         validate_networks(values)
-        for option in ("deployModel", "createRegistry", "createContainerApps"):
+        for option in ("deployModel", "grantProjectAgentConsumer", "createRegistry", "createContainerApps"):
             if values.get(option) is not False:
                 raise ValidationError(f"{filename} must leave {option} disabled.")
 

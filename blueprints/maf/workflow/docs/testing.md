@@ -27,6 +27,19 @@ npm run check-csp
 The automated accessibility check does not assess color contrast. The CSP
 check compares the inline theme script against the reverse-proxy policy.
 
+From the blueprint or generated project root, run offline infrastructure
+checks with Python 3.12 and Bicep 0.49.2 or newer:
+
+```text
+python infra/validate.py
+python -m unittest discover -s infra/tests -v
+```
+
+These compile and lint local modules and inspect committed examples and
+security configuration without Azure credentials. They do not prove role
+propagation, endpoint behavior, connectivity, or a successful deployment.
+See the [infrastructure guide](../infra/README.md).
+
 In an independently generated project, the copied `verification` directory
 contains the verifier, contracts, synthetic fixture, and its own
 requirements. Set `SCENARIO_ADAPTER` to the absolute path of

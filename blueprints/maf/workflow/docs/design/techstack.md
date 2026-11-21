@@ -18,7 +18,9 @@ deployed environment.
 | Frontend | React/React DOM `19.3.1`, TypeScript `7.0.2`, Vite `8.3.8` | Component UI, static typing, and a production build; a different UI framework would need its own client contract and tests. |
 | Browser auth | `@azure/msal-browser` `5.29.1`, `@azure/msal-react` `5.8.2` | Browser obtains scoped delegated access tokens. Secrets and OBO credentials remain server-side. |
 | Frontend tests | Vitest `5.1.0`, Testing Library, jsdom `31.0.1`, axe-core `4.14.0` | Exercise UI and API client behavior. Automated accessibility checks do not assess color contrast. |
-| Packaging | Docker Compose; sibling `backend` and `frontend` build contexts | The checked-in topology is local and loopback-bound. Kubernetes, ACA, and Foundry hosting are not current alternatives selected by configuration. |
+| Packaging | Docker Compose; sibling `backend` and `frontend` build contexts | The runnable topology is local and loopback-bound. Optional ACA descriptors are staged only; neither ACA nor Foundry hosting is a verified runtime. |
+| Infrastructure | Local Bicep modules, azd service descriptors, Python static validator | Bicep 0.49.2 compiled and linted locally without Azure credentials. No external Bicep registry modules or shared runtime are required. |
+| Staged cloud resources | Foundry account/project, private PostgreSQL, Log Analytics/Application Insights, managed identities; optional model, project-wide consumer grant, registry and API/UI Container Apps | Development-oriented, restrictive defaults are not free or production-ready. Network paths and live service behavior remain unverified. |
 
 The exact Python requirements are in
 [`backend/requirements.txt`](../../backend/requirements.txt) and
@@ -48,9 +50,9 @@ project.
 ## Dependency and alternative status
 
 Direct Python pins are not a fully locked or hash-verified graph. uv lockfiles,
-Ruff, migrations, Foundry host integration, managed identity deployment,
-OpenTelemetry export, Bicep, and azd are planned work; no version or command
-should be inferred for them. The current local image uses tags rather than
+Ruff, migrations, Foundry host integration, live managed identity binding,
+and OpenTelemetry export are planned work. Staged Bicep and azd files do not
+establish a deployment or verified host integration. The current local image uses tags rather than
 immutable image digests, so supply-chain hardening is still an acceptance
 concern. See [deployment flow](deployment-flow.md) and
 the source repository's `docs/engineering-standards.md`.

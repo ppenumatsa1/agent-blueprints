@@ -19,12 +19,14 @@ Requirements, examples, schema and backend tests are owned by `backend`.
 The verifier and exact contract bytes remain independent of the runtime.
 
 The longer-term target adds separately reviewed dependency locking and
-developer tooling, migrations, privacy-safe telemetry, a Foundry Responses
-adapter and host-managed checkpoints, and Foundry-first Bicep/azd for
-separately hosted frontend and API services. These are not implemented by
-this modularity increment. Hosting the workflow runtime in ACA is a deferred
-alternative requiring its own verified checkpoint strategy. Neither topology
-is a verified deployment; provisioning requires separate authorization.
+developer tooling, migrations, privacy-safe telemetry, and a Foundry Responses
+adapter and host-managed checkpoints; those are not established by this
+infrastructure increment. Staged Foundry-first Bicep/azd now describes
+separately hosted frontend and API services and has credential-free static
+checks, but does not implement a hosted agent or a working cloud integration.
+Hosting the workflow runtime in ACA is a deferred alternative requiring its own
+verified checkpoint strategy. Neither topology is a verified deployment;
+provisioning requires separate authorization.
 
 | Layer | Responsibility | Examples |
 | --- | --- | --- |
@@ -39,7 +41,7 @@ Do not treat conversation history, workflow checkpoints, and business records
 as interchangeable. A model recommendation or remembered conversation is not
 human authorization.
 
-## First golden path: public-network MAF workflow
+## First golden path: Foundry-first MAF workflow
 
 This is a **design**, not a verified deployment:
 
@@ -76,10 +78,19 @@ remain independent components. Local development uses explicit local services
 and synthetic data; an offline scripted mode must be selected explicitly, never
 used as a silent replacement for a failed model call.
 
-The public-network choice is not public anonymous access: require Entra-backed
-authentication for protected APIs, authorization for sensitive operations,
-managed identity where applicable, restrictive CORS, and safe secret handling.
-Private networking and self-hosted CI are deferred, not prohibited forever.
+The staged resource graph chooses restrictive defaults rather than enabling
+the earlier public-network design: optional ACA UI/API ingress is internal,
+Foundry public access and monitoring public ingestion/query are disabled,
+and PostgreSQL uses private networking and Entra-only authentication.
+Foundry and monitoring private paths, application database token support,
+and the hosted-agent binding are missing; these services are not a connected,
+working topology. The optional registry remains publicly network-reachable
+with anonymous and admin access disabled. The API's project-wide
+agent-consumer grant is optional and disabled by default; review narrower
+agent scope, inherited grants, and actual caller restrictions.
+Any future public API still requires Entra-backed authentication,
+application authorization, restrictive CORS, and safe secret handling.
+See the [infrastructure guide](../blueprints/maf/workflow/infra/README.md).
 No Azure provisioning is authorized by this design.
 
 ## Blueprint-to-application boundary

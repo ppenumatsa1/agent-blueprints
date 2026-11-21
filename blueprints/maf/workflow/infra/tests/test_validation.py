@@ -46,7 +46,7 @@ class InfrastructureTests(unittest.TestCase):
     def resources_of_type(self, resource_type):
         return [resource for resource in self.resources if resource["type"] == resource_type]
 
-    def test_api_is_internal_and_platform_authentication_is_fail_closed(self):
+    def test_api_ingress_and_auth_configuration_are_restrictive(self):
         environments = self.resources_of_type("Microsoft.App/managedEnvironments")
         self.assertEqual(len(environments), 1)
         properties = environments[0]["properties"]
@@ -83,6 +83,14 @@ class InfrastructureTests(unittest.TestCase):
         self.assertIn("require_secure_transport", tls[0]["name"])
         self.assertEqual(tls[0]["properties"]["value"], "ON")
 
+    def test_monitoring_disables_public_access_and_insights_local_auth(self):
+        workspace = self.resources_of_type("Microsoft.OperationalInsights/workspaces")[0]["properties"]
+        insights = self.resources_of_type("Microsoft.Insights/components")[0]["properties"]
+        for resource in (workspace, insights):
+            self.assertEqual(resource["publicNetworkAccessForIngestion"], "Disabled")
+            self.assertEqual(resource["publicNetworkAccessForQuery"], "Disabled")
+        self.assertTrue(insights["DisableLocalAuth"])
+
     def test_roles_are_scoped_and_registry_cannot_use_anonymous_or_admin_auth(self):
         roles = list(role_assignments(self.template))
         self.assertEqual(len(roles), 4)
@@ -93,6 +101,7 @@ class InfrastructureTests(unittest.TestCase):
                 self.assertTrue(
                     "accounts/{0}/projects/{1}" in scope or "accounts/projects" in scope
                 )
+                self.assertEqual(role.get("condition"), "[parameters('grantProjectAgentConsumer')]")
             elif role_id == "53ca6127-db72-4b80-b1b0-d745d6d5456d":
                 self.assertIn("CognitiveServices/accounts", scope)
                 self.assertNotIn("/projects/", scope)
@@ -105,10 +114,11 @@ class InfrastructureTests(unittest.TestCase):
         self.assertFalse(registry["anonymousPullEnabled"])
 
     def test_optional_workloads_remain_disabled_and_keys_are_not_outputs(self):
-        for name in ("deployModel", "createRegistry", "createContainerApps"):
+        options = ("deployModel", "grantProjectAgentConsumer", "createRegistry", "createContainerApps")
+        for name in options:
             self.assertIs(self.template["parameters"][name]["defaultValue"], False)
         conditions = [item.get("condition") for item in self.resources]
-        for name in ("deployModel", "createRegistry", "createContainerApps"):
+        for name in options:
             self.assertIn(f"[parameters('{name}')]", conditions)
         outputs = json.dumps(self.template["outputs"]).lower()
         self.assertNotIn("listkeys", outputs)

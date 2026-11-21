@@ -25,6 +25,48 @@ entries to hide failed attempts or gaps.
   migrations, telemetry export, Foundry hosting, cloud deployment, or live
   identity verification.
 
+## 2026-11-21 - Staged Foundry-first infrastructure
+
+- **Issue / decision:** The local blueprint lacked independently copied IaC
+  and offline infrastructure checks. Add local Bicep modules and azd API/UI
+  descriptors, but do not guess an unimplemented Foundry hosted-service
+  contract or deploy resources. Keep the optional model, project-wide API
+  agent-consumer grant, registry and Container Apps disabled by default.
+- **Security boundary:** The graph configures private PostgreSQL with
+  Entra-only auth; Foundry and monitoring public access are disabled. The
+  optional API/UI are internal-only, while the optional authenticated registry
+  remains publicly network-reachable. Application authentication and
+  authorization remain required even if separately applied ACA platform auth
+  fails. An agent-scoped grant alone would not exclude inherited roles; caller
+  restrictions are unverified. No private Foundry/monitor endpoint or
+  database token flow is present.
+- **Attempt and evidence:** Bicep 0.37.4 lacked the selected Container Apps
+  type schema and the strict static check failed on its diagnostics. After
+  confirming the missing compiler capability, Bicep 0.49.2 was obtained and
+  verified. Source and independent
+  generated-copy compilation, lint, parameter examples and eight focused
+  compiled-resource/configuration tests each passed without Azure credentials.
+  The source repository suite passed 46 tests with the synthetic adapter
+  selected. Foundry's required local dependency preflight passed. Actual
+  PR-head CI is pending.
+- **Test-environment interruption:** An extended backend test run failed to
+  import `agent_framework` and `jwt` after its shared virtual environment
+  disappeared during execution. A task-owned isolated environment was then
+  created and dependencies restored. The subsequent isolated PostgreSQL run
+  passed 31 source backend, 31 independently generated backend, and 44
+  independently generated verification tests with the synthetic adapter
+  selected. The initial failure is not treated as a pass.
+- **Remaining gaps:** No hosted entrypoint, authenticated caller binding,
+  checkpoint/response recovery contract, Foundry private path, telemetry
+  private path, API database token acquisition, ACA proxy, or SPA cloud build
+  is verified. Forwarded workload-token retention, stripping, replay and
+  background recovery also require review. Static success is not a live
+  deployment, authorization, cost, telemetry-delivery, or recovery claim.
+- **Reusable lesson:** Compile a self-contained generated copy and preserve
+  separate application authorization even when platform authentication is
+  configured. Treat restrictive but unreachable services as blocked
+  integrations, not as evidence of a working secure deployment.
+
 ## Prior implementation evidence
 
 ### 2026-11-21 - Local checkpoint timestamp ties
@@ -180,6 +222,7 @@ entries to hide failed attempts or gaps.
 | Eight design documents and generated inclusion | In progress | Run the focused instantiation tests and verify copied Markdown links. |
 | Canonical imports and legacy-shim removal | Open in foundation workstream | Inspect final diff across imports, tests, Docker, CI, docs, and generator; do not approve while forwarding paths remain. |
 | Locked developer tooling | Open in parallel PR #13 | Reconcile only after review/merge; verify any resulting revision and platform matrix independently. |
+| Foundry-first infrastructure | In progress | Source and generated offline checks passed locally; confirm final-revision checks and actual PR-head CI, then coordinate live host, networking, identity and cost review. |
 | Current dependent PR CI | Pending on updated revision | Confirm all required checks correspond to the pushed PR head. |
 | Foundry host caller binding and lost-response recovery | Blocked | Establish supported identity and reconciliation guarantees before implementing a hosted bridge. |
 | Live Entra/OBO, cloud telemetry, Azure deployment | Unverified | Separate scoped implementation, authorization where required, and live evidence. |

@@ -6,7 +6,8 @@ This is the source map for the local MAF workflow blueprint. The implemented
 topology is React/MSAL, FastAPI, a native MAF workflow, PostgreSQL, private
 local file checkpoints, and Docker Compose. The synthetic application is an
 explicit example. Foundry hosting, cloud telemetry, and Azure deployment are
-planned and unverified. CI or local tests do not prove a live deployment.
+planned and unverified. Staged Bicep/azd resource definitions and offline
+checks exist, but CI or local tests do not prove a live deployment.
 
 ## Component view
 
@@ -114,6 +115,35 @@ Foundry host must use its supported host-managed checkpoint provider and a
 request-aware factory; it must not attach the local provider as a second
 checkpoint authority. ACA would require its own selected and verified
 multi-replica-safe strategy. Neither hosting path is implemented here.
+
+## Staged Foundry-first infrastructure
+
+```mermaid
+flowchart LR
+    Browser[Browser] -. access path not wired .-> UI[Optional internal ACA UI]
+    UI -. proxy not wired .-> API[Optional internal ACA API]
+    API -. agent contract not verified .-> Project[Foundry account and project]
+    Project -. no hosted service declared .-> Workflow[Future native MAF host]
+    API -. Entra token flow not implemented .-> DB[Private PostgreSQL]
+    API -. export and private path not implemented .-> Monitor[App Insights and Log Analytics]
+    Registry[Optional authenticated registry] -. scoped image pull .-> API
+    Registry -. scoped image pull .-> UI
+```
+
+The optional model, project-wide API agent-consumer grant, registry and
+Container Apps default off. Foundry public
+access and monitoring public ingestion/query are disabled, but this increment
+does not provide their private endpoints or verify any runtime connection.
+PostgreSQL uses a delegated subnet, private DNS and Entra-only authentication;
+the existing API does not acquire a database token. Container Apps platform
+auth is a separately applied resource; application-level authentication and
+record authorization remain mandatory even if it fails. The optional registry
+is publicly network-reachable but disallows anonymous and admin access.
+The eventual agent-scoped caller binding and inherited role assignments still
+need review; no endpoint caller exclusivity is established. ACA internal
+ingress is environment-scoped, so the UI is not directly reachable by a
+browser elsewhere on the VNet.
+See the [infrastructure guide](../../infra/README.md) for all limitations.
 
 For code responsibilities, see [project structure](projectstructure.md); for
 service and operator guidance, see the [project guide](../architecture.md).
