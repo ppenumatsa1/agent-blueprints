@@ -27,11 +27,23 @@ class InstantiationTests(unittest.TestCase):
             self.assertTrue((target / "backend" / "tests" / "order_adjustment_adapter.py").is_file())
             self.assertTrue((target / "backend" / "Dockerfile").is_file())
             self.assertTrue((target / "backend" / "requirements-dev.txt").is_file())
-            for name in ("architecture.md", "setup.md", "development.md", "testing.md", "deployment.md", "operations.md"):
+            for name in (
+                "architecture.md", "setup.md", "development.md", "testing.md", "deployment.md",
+                "operations.md", "engineering-journal.md",
+            ):
                 with self.subTest(document=name):
                     self.assertEqual(
                         (ROOT / "blueprints" / "maf" / "workflow" / "docs" / name).read_bytes(),
                         (target / "docs" / name).read_bytes(),
+                    )
+            for name in (
+                "prd.md", "techstack.md", "specs.md", "architecture.md", "projectstructure.md",
+                "userflow.md", "deployment-flow.md", "issues-changes-fixes.md",
+            ):
+                with self.subTest(design_document=name):
+                    self.assertEqual(
+                        (ROOT / "blueprints" / "maf" / "workflow" / "docs" / "design" / name).read_bytes(),
+                        (target / "docs" / "design" / name).read_bytes(),
                     )
             self.assertFalse((target / "frontend" / "node_modules").exists())
             self.assertFalse((target / "frontend" / "dist").exists())

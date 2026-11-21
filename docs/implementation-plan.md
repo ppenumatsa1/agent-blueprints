@@ -59,7 +59,9 @@ application is authorized here.
 
 The [generated-project guides](../blueprints/maf/workflow/README.md#project-guide)
 describe current local setup, architecture, debugging, testing and operations
-and label future deployment and telemetry as designs. Acceptance requires
+and label future deployment and telemetry as designs. The initial copied
+design suite and engineering journal capture requirements, diagrams, open
+issues and evidence. Acceptance requires
 working local links and inclusion in generated copies; local branch review and
 hosted CI remain pending. Update the guides as the parallel changes land,
 without advertising unimplemented commands or unverified deployment behavior.

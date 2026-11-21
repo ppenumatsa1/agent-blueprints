@@ -17,6 +17,7 @@ local prototype, not a production deployment:
 - [Testing and evidence](docs/testing.md)
 - [Deployment design](docs/deployment.md)
 - [Observability design and troubleshooting](docs/operations.md)
+- [Design suite](docs/design/prd.md) and [engineering journal](docs/engineering-journal.md)
 
 The local host uses MAF `FileCheckpointStorage` on a private, persistent
 single-host volume. PostgreSQL separately holds business records, decisions,

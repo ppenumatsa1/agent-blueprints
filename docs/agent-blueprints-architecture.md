@@ -31,7 +31,7 @@ its [hosted CI run](https://github.com/ppenumatsa1/agent-blueprints/actions/runs
 passed all five checks, including independent verification. This is not a
 merge or live hosting result. The copied
 [project guides](../blueprints/maf/workflow/README.md#project-guide) describe
-the current local boundaries and planned deployment/observability designs;
+the current local boundaries, design suite and planned deployment/observability;
 their own PR and hosted CI remain pending. Parallel tooling, migrations,
 documentation, telemetry and Foundry-host work build on the foundation.
 Reconcile their interfaces before IaC and integrated verification; prepare
