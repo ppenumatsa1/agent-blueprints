@@ -353,6 +353,7 @@ class ApiSecurityTests(unittest.TestCase):
                 self.assertEqual(response.json()["failure_code"], "recovery_failed")
                 self.assertEqual(action_count(self.store, case_id), 0)
         self.assertNotIn(self.owner_token, " ".join(logs.output))
+        self.assertIn('"event":"recovery","outcome":"failure"', " ".join(logs.output))
 
     def test_startup_recovery_preserves_action_failure(self):
         with self.client() as client:
@@ -368,6 +369,7 @@ class ApiSecurityTests(unittest.TestCase):
                     ("failed", "action_failed"),
                 )
                 self.assertEqual(action_count(self.store, case_id), 0)
+        self.assertIn('"event":"recovery","outcome":"action_failure"', " ".join(logs.output))
 
     def test_rejection_and_failed_action_remain_explicit(self):
         with self.client() as client:

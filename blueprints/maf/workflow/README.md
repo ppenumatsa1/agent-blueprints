@@ -87,6 +87,45 @@ Only explicitly allowlisted downstream scopes may be requested; the supplied
 example does not call a downstream service. Use an appropriate secret manager
 and deployment identity in a real environment.
 
+## Operational telemetry
+
+The backend uses one manual OpenTelemetry provider for HTTP requests, workflow
+start/resume, selected PostgreSQL operations and OBO exchange. The
+`blueprint.telemetry` logger emits JSON operations with outcome, duration,
+trace/span IDs and a server-generated request correlation ID. It does not
+inspect payloads, tokens, claims, SQL, URLs, exception text or tool/model
+inputs and outputs. No auto-instrumentation or local telemetry stack is enabled.
+These operational logs are not approval or audit evidence.
+
+`TELEMETRY_MODE=local` is the default: local structured logs are emitted and
+cloud export is explicitly disabled. For a hosted service, explicitly set
+`TELEMETRY_MODE=azure-monitor` and supply an existing
+`APPLICATIONINSIGHTS_CONNECTION_STRING` through a secret manager. The
+prerelease Azure Monitor trace exporter uses batching and no offline disk
+storage. Configuration, flush, and export failures emit fixed, non-sensitive
+operational signals; telemetry failure does not alter workflow results.
+Configuration is not proof of successful ingestion. Export failure can lose
+spans; monitor these signals and validate the actual hosted pipeline separately.
+Azure exporter and Azure core pipeline log propagation is suppressed in this
+mode because SDK exception logs can contain endpoints or other sensitive data;
+the exporter wrapper instead reports a fixed failure signal.
+Azure exporter Statsbeat, SDK statistics and remote configuration are disabled
+process-wide; static non-identifying device and service-instance values prevent
+the exporter from defaulting to the host name.
+
+Only valid W3C `traceparent` is accepted from clients; baggage and tracestate
+are discarded. The header is untrusted and never authorizes operations. The
+response's `X-Correlation-ID` is newly generated, is not a business ID, and
+matches the request log. The browser sends a random `traceparent` for each API
+request without exporting a browser span; if secure randomness is unavailable,
+the request proceeds without it. Outbound propagation and Foundry-host
+correlation are not yet implemented or verified. Recovery outside a request
+starts a new trace. Span sampling follows
+the SDK's parent-based default. Configure retention, access, ingestion region,
+and appropriate sampling in the hosted environment; none is verified here.
+Applications and deployment agents must not turn on additional automatic
+instrumentation or unrestricted SDK logging without a privacy review.
+
 ## Application extension points
 
 The project has sibling `backend` and `frontend` directories. The backend
@@ -122,7 +161,7 @@ Use Python 3.12 and an isolated PostgreSQL database. Install
 `MAF_TEST_DATABASE_URL` to the test database, and run from `backend`:
 
 ```text
-python -m unittest -v tests.test_core tests.test_security tests.test_evidence_runner
+python -m unittest -v tests.test_core tests.test_security tests.test_evidence_runner tests.test_telemetry
 ```
 
 These tests fail rather than skip if the database is unavailable. They use
@@ -164,7 +203,7 @@ $env:SCENARIO_ADAPTER = (Resolve-Path .\backend\tests\order_adjustment_adapter.p
 Set-Location .\verification
 python -m unittest discover -s tests -v
 Set-Location ..\backend
-python -m unittest -v tests.test_core tests.test_security tests.test_evidence_runner
+python -m unittest -v tests.test_core tests.test_security tests.test_evidence_runner tests.test_telemetry
 ```
 
 The golden adapter exercises the API, local MAF host, and synthetic database

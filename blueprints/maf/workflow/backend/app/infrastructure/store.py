@@ -9,6 +9,7 @@ from psycopg.types.json import Jsonb
 
 from app.domain.errors import ActionError, Conflict, NotFound
 from app.domain.models import Case, Decision, Principal, TransactionalAction
+from app.infrastructure.telemetry import instrumented
 
 
 _CASE_QUERY = """
@@ -43,7 +44,9 @@ class PostgresStore:
         if not dsn:
             raise ValueError("A PostgreSQL connection string is required.")
         self._dsn = dsn
+        self.telemetry = None
 
+    @instrumented("database.connect")
     def connect(self):
         return psycopg.connect(self._dsn, row_factory=dict_row)
 
@@ -52,6 +55,7 @@ class PostgresStore:
         with self.connect() as connection:
             connection.execute(schema)
 
+    @instrumented("database.read")
     def get(self, case_id: UUID) -> Case:
         with self.connect() as connection:
             row = connection.execute(_CASE_QUERY, (case_id,)).fetchone()
@@ -59,6 +63,7 @@ class PostgresStore:
             raise NotFound("Record not found.")
         return _case(row)
 
+    @instrumented("database.create")
     def create(
         self,
         actor: Principal,
@@ -137,6 +142,7 @@ class PostgresStore:
                 "INSERT INTO wf_audit (case_id, event) VALUES (%s, 'checkpoint_saved')", (case_id,)
             )
 
+    @instrumented("database.decision")
     def record_decision(self, case_id: UUID, actor: Principal, decision: Decision) -> Case:
         if decision not in ("approved", "rejected"):
             raise ValueError("Decision must be approved or rejected.")
@@ -223,6 +229,7 @@ class PostgresStore:
                     "INSERT INTO wf_audit (case_id, event) VALUES (%s, 'action_failed')", (case_id,)
                 )
 
+    @instrumented("database.finish")
     def finish(self, case_id: UUID, terminal_checkpoint_id: str) -> None:
         with self.connect() as connection:
             result = connection.execute(
