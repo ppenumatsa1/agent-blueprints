@@ -245,6 +245,14 @@ See the
 [hosted-agent contract](https://learn.microsoft.com/azure/foundry/agents/concepts/hosted-agent-contract)
 and [on-behalf-of guidance](https://learn.microsoft.com/azure/foundry/agents/how-to/use-on-behalf-of-flow).
 
+The identity header is a user OID, not a credential. Do not persist an
+end-user bearer/OBO token in business state, workflow checkpoints, or logs.
+The current local OBO option reads its secret from the backend environment;
+there is no hosted secret delivery/rotation, workload-identity configuration,
+or delegated-token lifecycle in this blueprint. If a hosted workflow must call
+a downstream API as the user, its OBO acquisition, renewal, and credential
+handling require a separately designed and verified path.
+
 Hosted response recovery remains unresolved: polling requires `response.id`,
 but response creation has no documented idempotency key. A matching
 response-metadata record visible while paging by conversation can provide its

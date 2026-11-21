@@ -42,7 +42,11 @@ The source map was corrected in the PR #11 follow-up at
 passed 47/47 on that tip. Actual-head run
 [44945419570](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44945419570)
 passed all five checks, including generated checks without skips. PR #12 still
-requires its own rebase and revision-specific checks.
+requires its own revision-specific checks. Its documentation changes are
+rebased onto the exact foundation tip above; the isolated root suite passed
+47 tests with one expected adapter-not-selected skip, and generated-copy/link
+plus verifier-pipeline regressions passed. Hosted checks for this dependent
+head are pending.
 The copied
 [project guides](../blueprints/maf/workflow/README.md#project-guide) describe
 the current local boundaries and planned deployment/observability designs.

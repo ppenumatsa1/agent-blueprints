@@ -88,7 +88,11 @@ Source/generated suites each passed 48 tests on PostgreSQL 16.15 and 17.12;
 the root suite passed 47 with one expected adapter-not-selected skip. Run
 44944613749 passed five jobs for `897aae8` against `d0e1727`, but is stale
 relative to foundation head `8144918`; reconcile and rerun before relying
-on this evidence.
+on this evidence. The owner later reported a local integration commit
+`ce86252324dca041fd5430602a3fc2c28a355274` atop PR #11 ancestry `51a0666`,
+with 12 focused PostgreSQL 17 migration regressions and Ruff 0.14.13
+lint/format checks passing. This commit is held for remaining deltas, and
+its ancestry must be reconciled; it has no final combined or hosted verification.
 
 Each PR must remove obsolete compatibility layers, use direct imports,
 update affected `docs/design` specifications and the cumulative engineering
@@ -113,8 +117,10 @@ coordinator reports the minimal link correction was then pushed at
 Actions run
 [44945419570](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44945419570)
 passed all five jobs on that exact head, including generated checks without
-skips. This does not substitute for checking PR #12 after rebase.
-Maintain the
+skips. PR #12 is now rebased onto that tip; the isolated root suite passed
+47 tests with one expected adapter-not-selected skip, including generated
+copy/link and verifier-pipeline tests, and `git diff --check` passed. This does
+not substitute for checking hosted CI on PR #12's pushed head. Maintain the
 engineering journal without inventing historical findings. For each meaningful PR update
 this plan, `docs/master-checklist.md`, and relevant architecture documentation
 with acceptance criteria, evidence, status, and next action.
@@ -171,7 +177,7 @@ the local HTTP smoke check. Its unsigned readiness report is unverified.
 | P1-10 | Add integration/E2E tests, synthetic agent evaluations, and GitHub Actions; connect actual results and artifacts to the validator. | P1-04 through P1-09 | A local or CI run produces a report from real artifacts; blocking failures cannot pass, non-blocking outcomes follow the selected profile, and rubric/threshold decisions are recorded. |
 | P1-11 | Add privacy-safe logs, traces, correlation, and operational signals across API, workflow, approvals, and side effects. | P1-07, P1-09 interfaces | Tests verify redaction and correlation; actual export remains environment-specific. |
 | P1-15 | Demonstrate the local prototype from a synthetic specification through approval, evaluation, and its readiness report. | P1-10, P1-11 | Record the scenario, evidence, limitations, and observed elapsed time; the 2–3 hour objective is a target until a representative run demonstrates it. |
-| P1-12 | Validate Foundry Hosted Agent compatibility for the selected MAF version, Responses protocol, request-aware workflow factory, identity, and host-managed checkpoints. | P1-09, P1-15 | A documented workload-identity binding pattern is now available but not implemented or live verified. Lost `response.id` recovery remains blocked because no idempotency key or proven unambiguous per-operation lookup is documented; see the [investigation journal](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-21---hosted-caller-binding-and-lost-responses). Local checks alone are not a hosted deployment. No Azure resources are provisioned. |
+| P1-12 | Validate Foundry Hosted Agent compatibility for the selected MAF version, Responses protocol, request-aware workflow factory, identity, and host-managed checkpoints. | P1-09, P1-15 | A documented workload-identity binding pattern is not implemented or live verified. The OID header is identity, not a credential; hosted secret delivery/rotation and downstream OBO token lifecycle are not implemented, and end-user bearer/OBO tokens must not be persisted. Lost `response.id` recovery remains blocked because no idempotency key or proven unambiguous per-operation lookup is documented; see the [investigation journal](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-21---hosted-caller-binding-and-lost-responses). Local checks alone are not a hosted deployment. No Azure resources are provisioned. |
 | P1-13 | Prepare the explicitly selected ACA fallback and a framework-compatible checkpoint strategy. | P1-09, P1-15 | Separate local/container recovery and idempotency checks pass; no claim that ACA shares Foundry checkpoint ownership or silently replaces a failed model call. |
 | P1-14 | Prepare Bicep, least-privilege identities, authenticated public endpoints, GitHub-hosted CI, and deployment/handoff instructions. Deploy only after separate Azure authorization. | P1-10, P1-11, P1-12; P1-13 if selected | Static checks work without Azure credentials; an authorized deployment later records its revision, versions, identity, network, evidence, cost, and teardown owner. |
 

@@ -115,6 +115,13 @@ entries to hide failed attempts or gaps.
   forwarded or persisted. The wire mechanism and protocol declaration are
   documented, but these are not evidence that this blueprint implements
   them.
+- **Credential boundary:** The OID header conveys identity, not a credential.
+  Never persist an end-user bearer/OBO token in business state, workflow
+  checkpoints, or logs. The current local OBO option reads its secret from
+  the backend environment; hosted secret delivery/rotation, workload identity
+  configuration, and delegated-token lifecycle are not implemented. If a
+  hosted workflow must call a downstream API as the user, design and verify
+  token acquisition, renewal, and credential handling separately.
 - **Remaining blocker:** `response.id` is required for polling. Creating a
   conversation first does not provide a documented idempotency key or
   unambiguous lookup for the case where response creation succeeds but its
@@ -337,6 +344,14 @@ entries to hide failed attempts or gaps.
   migration change must be reconciled and validated against its current base;
   this entry is owner-reported evidence, not proof for this branch or a
   production database.
+- **Follow-up owner report:** The owner applied the `897aae8` delta locally
+  and committed it as `ce86252324dca041fd5430602a3fc2c28a355274` atop PR #11
+  ancestry `51a0666`. Twelve focused migration regressions passed on isolated
+  PostgreSQL 17, and Ruff 0.14.13 lint/format checks passed. The README change
+  was retained and shared design docs/journal were left unchanged. This is
+  focused local evidence only; the commit is being held for remaining settled
+  deltas, its exact foundation ancestry needs reconciliation, and no combined
+  or hosted verification was reported.
 - **References:** [PR #16](https://github.com/ppenumatsa1/agent-blueprints/pull/16);
   the verified baseline manifest, Alembic revision `0001`, and source/generated
   migration tests are in that workstream.
@@ -388,8 +403,14 @@ entries to hide failed attempts or gaps.
   not this dependent PR's post-rebase checks. The owner reports PR #11 run
   [44945419570](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44945419570)
   passed all five jobs, including generated checks without skips, on exact
-  head `814491811eac457826108b70fc213fdc564af0e5`. PR #12 still needs its own
-  rebase and post-rebase verification.
+  head `814491811eac457826108b70fc213fdc564af0e5`. PR #12 was rebased onto
+  that exact tip. After rebase, the local working tree passed
+  `.\.venv\Scripts\python.exe -m unittest discover -s tests -v` in an isolated
+  environment with root `requirements-dev.txt` installed (47 tests, one
+  expected adapter-not-selected skip) and `git diff --check`. The
+  instantiation tests verified generated documentation copying and local
+  links, and the workflow regression passed. Hosted CI for the final dependent
+  head remains pending.
 - **Lesson:** Documentation structure may use a reference project's
   viewpoints, but implementation claims must be grounded in this repository
   and tied to evidence at the revision being reviewed.
@@ -398,13 +419,13 @@ entries to hide failed attempts or gaps.
 
 | Item | Status | Evidence needed / next action |
 | --- | --- | --- |
-| Eight design documents and generated inclusion | In progress | Focused instantiation and pipeline-regression tests pass after rebase; confirm this PR's hosted CI on its rebased head. |
+| Eight design documents and generated inclusion | In progress | After rebasing onto foundation `814491811eac457826108b70fc213fdc564af0e5`, the local root suite passed 47 tests with one expected adapter-not-selected skip; generated docs/link and pipeline regression tests passed; `git diff --check` passed. Confirm hosted CI on the pushed final PR head. |
 | Canonical imports, API module boundaries and legacy-shim removal | Implemented in foundation head `8144918` | PR #11 run 44945419570 passed all five checks; root suite passed 47/47. Preserve direct imports and canonical route/composition/lifecycle boundaries. |
 | Generated-verifier pipeline failure propagation | Implemented in foundation commit `d0e1727` | `tests/test_ci_workflow.py` covers failed, skipped, expected-failure, and successful outputs; PR #11 run 44945419570 passed all five checks at head `8144918`. |
 | Versioned database migrations | Proposed in parallel PR #16 | Owner-reported tests passed on PostgreSQL 16/17; run 44944613749 is stale against foundation head `8144918`; reconcile and rerun. |
 | Locked developer tooling | Open in parallel PR #13 | Reconcile only after review/merge; verify any resulting revision and platform matrix independently. |
 | Current dependent PR CI | Pending on updated revision | Confirm all required checks correspond to the pushed PR head. |
-| Foundry host caller binding and lost-response recovery | Blocked | OID caller binding and host-managed checkpoints have documented patterns but no implementation or live verification. Visible response metadata is best-effort only; obtain bounded visibility/idempotency or a separate durable reconciliation contract before retrying ambiguous creates. |
+| Foundry host identity, credential lifecycle and lost-response recovery | Blocked | OID caller binding and host-managed checkpoints have documented patterns but no bridge, role assignment, host integration, or live verification. Hosted credential delivery/rotation and downstream OBO lifecycle are unimplemented; never persist end-user bearer/OBO tokens. Visible response metadata is best-effort only; obtain bounded visibility/idempotency or a separate durable reconciliation contract before retrying ambiguous creates. |
 | Live Entra/OBO, cloud telemetry, Azure deployment | Unverified | Separate scoped implementation, authorization where required, and live evidence. |
 
 Future entries should use this form: date and scope; observed issue and
