@@ -51,6 +51,12 @@ completion and replay. Local source/generated backend suites passed 36 tests
 each; the selected-adapter root suite passed 46 and the generated verifier
 passed 44 without skips. Confirm actual-head CI and reconcile dependent PRs
 without treating prior-head CI as evidence.
+An independent CI regression exposed that the generated-verifier command's
+failure could be masked by `tee`. The workflow now propagates pipeline
+failures and the [regression test](../tests/test_ci_workflow.py) exercises
+failure, skip and success behavior. Prior CI job status alone is not proof
+that the verifier passed; confirm actual logs and revised-head CI before
+review.
 The copied evidence producer observed approval and recovery passing while
 explanation and browser hint remained unverified; the independent unsigned
 readiness report remained unverified. The first local container build could
