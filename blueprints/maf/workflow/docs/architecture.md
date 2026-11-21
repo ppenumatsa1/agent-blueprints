@@ -45,8 +45,12 @@ they are not a second runtime or a guarantee that a provider is configured.
   not authorize business decisions or external effects. `ToolRegistry` is
   registration and request-scoped binding convenience only: it does not force
   handlers to authorize, sandbox Python, or provide idempotency. Consequential
-  remote effects remain blocked pending the authorization, idempotency/outbox,
-  reconciliation, and fault-injection evidence required by [#32](https://github.com/ppenumatsa1/agent-blueprints/issues/32).
+  remote effects remain blocked pending service-specific authorization,
+  verified downstream idempotency, authoritative reconciliation, and
+  fault-injection evidence required by [#32](https://github.com/ppenumatsa1/agent-blueprints/issues/32).
+  An outbox persists intent but cannot deduplicate a downstream effect after a
+  lost acknowledgment; without verified idempotency and reconciliation, fail
+  closed and use manual resolution.
 - **Extension limits:** Typed contracts and fixture tests do not sandbox
   arbitrary trusted Python callbacks or prove that every possible extension
   cannot bypass authorization, approval, recovery, idempotency, or readiness.

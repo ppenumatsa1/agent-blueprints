@@ -123,6 +123,14 @@ call or fake response. Provider credentials and behavior, live hosted identity
 and recovery, trusted readiness evidence, and consequential external effects
 remain unverified or blocked; see the [MAF extension guidance](../blueprints/maf/workflow/docs/architecture.md#typed-maf-extension-patterns).
 
+Local PostgreSQL container initialization can briefly accept Unix socket
+connections before the final TCP server starts. Issue [#38](https://github.com/ppenumatsa1/agent-blueprints/issues/38)
+records this on disposable PostgreSQL 16.15 and 17, including a failed initial
+`createdb` and a successful 72/72 source/generated retry at historical head
+`8b3c357`. CI startup loops and Compose health checks use bounded loopback TCP
+probes; validate the resulting exact head. This does not establish managed
+PostgreSQL readiness.
+
 The local integration at `af3955a` combined the engineering layers. Source and
 independently generated backends each passed 68 tests on PostgreSQL 16.15 and
 17.12, generated verification passed 44 without skips, and both Compose stacks

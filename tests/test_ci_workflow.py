@@ -11,6 +11,50 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class VerificationWorkflowTests(unittest.TestCase):
+    def test_postgres_readiness_waits_for_tcp_and_fails_after_timeout(self):
+        bash = shutil.which("bash")
+        if not bash:
+            self.skipTest("Bash is required to exercise the GitHub Actions step.")
+
+        workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+        for marker, container in (
+            ("      - name: Start isolated PostgreSQL\n", "maf-core-test"),
+            ("      - name: Start isolated test PostgreSQL\n", "maf-instance-test"),
+        ):
+            step = workflow.split(marker, 1)[1].split("      - name:", 1)[0]
+            script = textwrap.dedent("for attempt in {1..60}; do\n" + step.split(
+                "          for attempt in {1..60}; do\n", 1
+            )[1].split("      - name:", 1)[0])
+            stub = (
+                "count=0\n"
+                "docker() {\n"
+                f'  [[ "$*" == "exec {container} pg_isready -q -h 127.0.0.1 -U blueprint_test -d blueprint_test" ]] || exit 99\n'
+                '  count=$((count + 1)); echo "$count" > "$COUNT_FILE"\n'
+                '  [[ "$count" -ge "$READY_AT" ]]\n'
+                "}\n"
+                "sleep() { :; }\n"
+            )
+            with tempfile.TemporaryDirectory() as temporary:
+                count_file = Path(temporary) / "attempts"
+                for ready_at, status, attempts in ((3, 0, "3"), (61, 1, "60")):
+                    with self.subTest(container=container, ready_at=ready_at):
+                        environment = os.environ.copy()
+                        environment.update(COUNT_FILE=count_file.as_posix(), READY_AT=str(ready_at))
+                        result = subprocess.run(
+                            [bash, "-e", "-c", stub + script],
+                            env=environment, capture_output=True, text=True, check=False,
+                        )
+                        self.assertEqual(result.returncode, status, result.stdout + result.stderr)
+                        self.assertEqual(count_file.read_text().strip(), attempts)
+                        if status:
+                            self.assertIn("PostgreSQL TCP did not become ready", result.stderr)
+
+        compose = (ROOT / "blueprints" / "maf" / "workflow" / "compose.yaml").read_text(encoding="utf-8")
+        postgres = compose.split("  postgres:\n", 1)[1].split("\n  api:\n", 1)[0]
+        self.assertIn('test: ["CMD-SHELL", "pg_isready -q -h 127.0.0.1 -U blueprint -d blueprint"]', postgres)
+        self.assertIn("timeout: 3s", postgres)
+        self.assertIn("retries: 20", postgres)
+
     def test_generated_verifier_step_propagates_failures_and_rejects_skips(self):
         bash = shutil.which("bash")
         if not bash:
