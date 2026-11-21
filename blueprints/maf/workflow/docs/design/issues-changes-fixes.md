@@ -111,11 +111,13 @@ entries to hide failed attempts or gaps.
 - **Fix / decision:** Retain canonical imports, remove references to deleted
   tests and requirements files, copy the design docs in generated projects,
   and run evidence-normalization tests in both source and generated CI.
-- **Evidence:** Previous tooling revisions passed local source/generated
-  backend tests, independent verification, frontend checks, and hosted CI as
-  recorded below. This reconciliation incorporates the foundation's
-  checkpoint selection/replay tests; run the applicable suites and hosted CI
-  on the final rebased head before approval.
+- **Evidence:** On the previous reconciled tree, source and generated backend
+  suites each passed 31 tests, generated independent verification passed 44
+  without skips, and generated frontend tests/build/CSP passed using an
+  approved npm mirror. Ruff passed in both backend copies. The root suite ran
+  46 tests with one unselected-adapter skip. Hosted run 44931241591 passed
+  all five jobs for head `ad6a78a`. This rebase incorporates the checkpoint
+  selection/replay fix; all applicable checks must pass on the final head.
 - **Lesson / limit:** Integrate environment instructions with the canonical
   source layout; a successful earlier CI run cannot establish the result of a
   rebased revision. Public-only local downloads, macOS, and interactive

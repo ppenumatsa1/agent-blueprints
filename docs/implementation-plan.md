@@ -82,10 +82,12 @@ source and generated lint/tests and locked builds without Azure credentials,
 then passing hosted CI on the actual reviewed head. Local Windows source and
 generated backend tests, Ruff, generated UI tests/build and Linux Compose
 204/401 smoke passed using an approved temporary mirror; public artifact downloads failed locally with
-a TLS handshake error. Hosted CI passed for the earlier tooling head
-`e1d9536`; that run does not verify the reconciled revision. macOS, interactive
+a TLS handshake error. Reconciled source/generated backend 31 tests each and
+independent verification 44 passed locally. Hosted
+[CI](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44931241591)
+passed for head `ad6a78a`, not subsequent revisions. macOS, interactive
 debugging and a clean public-only local installation remain unverified. Next
-run source/generated checks and hosted CI on the reviewed head.
+confirm hosted CI on the final reviewed head.
 
 P1-01 through P1-04 have an initial local foundation and a test-only
 application adapter, but the scenario has no authorized contract approval.
