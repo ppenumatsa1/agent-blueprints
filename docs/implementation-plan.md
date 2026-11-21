@@ -39,16 +39,30 @@ responsibilities while preserving existing extension imports. Acceptance
 requires source and generated security/recovery tests, both crash windows,
 independent golden verification and exact contract bytes, credential-free
 CI and Compose smoke checks. Local evidence is recorded in the
-[checklist](master-checklist.md); PR review and hosted CI remain pending.
+[checklist](master-checklist.md). [PR #11](https://github.com/ppenumatsa1/agent-blueprints/pull/11)
+remains open; its [hosted run](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44926437469)
+passed all five checks, including independent verification. Review and merge
+remain pending; hosted checks do not prove live hosting.
 The copied evidence producer observed approval and recovery passing while
 explanation and browser hint remained unverified; the independent unsigned
 readiness report remained unverified. The first local container build could
 not reach the public Python package host; a retry using the operator-approved
 package proxies built and passed the generated Compose smoke checks.
-Next, review and publish this foundation before accepting it; later separate
-increments cover locked tooling, configuration, migrations, observability,
-Foundry hosting, infrastructure and integration evidence. No deployment,
-Azure provisioning or permanent reference application is authorized here.
+Parallel follow-on increments cover locked tooling/configuration, migrations,
+project documentation, observability and Foundry host integration; reconcile
+their interfaces and documentation before integration. Foundry-first IaC
+follows settled host interfaces; independent integration and evidence
+hardening follows the relevant increments. A separate inventory, cost estimate
+and deployment plan plus explicit approval precede any Azure provisioning or
+live validation. No deployment, Azure provisioning or permanent reference
+application is authorized here.
+
+The [generated-project guides](../blueprints/maf/workflow/README.md#project-guide)
+describe current local setup, architecture, debugging, testing and operations
+and label future deployment and telemetry as designs. Acceptance requires
+working local links and inclusion in generated copies; local branch review and
+hosted CI remain pending. Update the guides as the parallel changes land,
+without advertising unimplemented commands or unverified deployment behavior.
 
 P1-01 through P1-04 have an initial local foundation and a test-only
 application adapter, but the scenario has no authorized contract approval.
