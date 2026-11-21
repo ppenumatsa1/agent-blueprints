@@ -6,6 +6,18 @@ select their own workflow, policy, rules, and transactional action; the
 included synthetic action is an explicit example, not a customer scenario
 or a replacement for a failed model or tool call.
 
+## Project guide
+
+These guides are copied into generated projects and describe the current
+local prototype, not a production deployment:
+
+- [Architecture and extension recipes](docs/architecture.md)
+- [Setup and configuration](docs/setup.md)
+- [Development and debugging](docs/development.md)
+- [Testing and evidence](docs/testing.md)
+- [Deployment design](docs/deployment.md)
+- [Observability design and troubleshooting](docs/operations.md)
+
 The local host uses MAF `FileCheckpointStorage` on a private, persistent
 single-host volume. PostgreSQL separately holds business records, decisions,
 audit events, and the action ledger. A per-case database lock coordinates
