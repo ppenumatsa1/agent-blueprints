@@ -1,0 +1,58 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: blueprint
+      POSTGRES_USER: blueprint
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set a URL-safe POSTGRES_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -q -U blueprint -d blueprint"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build:
+      context: .
+      args:
+        PYTHON_PACKAGE_INDEX: ${PYTHON_PACKAGE_INDEX:-https://pypi.org/simple}
+    environment:
+      DATABASE_URL: postgresql://blueprint:${POSTGRES_PASSWORD:?Set a URL-safe POSTGRES_PASSWORD}@postgres:5432/blueprint
+      CHECKPOINT_ROOT: /var/lib/blueprint/checkpoints
+      WORKFLOW_HOST: local
+      BLUEPRINT_APPLICATION: ${BLUEPRINT_APPLICATION:?Select an application factory}
+      ENTRA_TENANT_ID: ${ENTRA_TENANT_ID:?Set the Entra tenant ID}
+      ENTRA_API_CLIENT_ID: ${ENTRA_API_CLIENT_ID:?Set the Entra API client ID}
+      OBO_ENABLED: ${OBO_ENABLED:-false}
+      OBO_ALLOWED_SCOPES: ${OBO_ALLOWED_SCOPES:-}
+      ENTRA_API_CLIENT_SECRET: ${ENTRA_API_CLIENT_SECRET:-}
+    volumes:
+      - checkpoints:/var/lib/blueprint/checkpoints
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3).close()"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  web:
+    build:
+      context: ./frontend
+      args:
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org/}
+        VITE_ENTRA_TENANT_ID: ${ENTRA_TENANT_ID:?Set the Entra tenant ID}
+        VITE_ENTRA_SPA_CLIENT_ID: ${ENTRA_SPA_CLIENT_ID:?Set the Entra SPA client ID}
+        VITE_ENTRA_API_APP_ID_URI: ${ENTRA_API_APP_ID_URI:?Set the Entra API application ID URI}
+    ports:
+      - "127.0.0.1:${BLUEPRINT_PORT:-8080}:8080"
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  postgres-data:
+  checkpoints:

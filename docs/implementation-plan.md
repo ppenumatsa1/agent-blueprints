@@ -39,12 +39,14 @@ result production and repository protection remain unverified. The blueprint
 work follows the foundation in smaller reviewable changes. See the
 [checklist](master-checklist.md) for status and evidence.
 
-The first blueprint increment contains a native MAF approval workflow, an
-explicit local host, PostgreSQL decision/audit/action records, and passing
-local PostgreSQL integration tests, including both process-kill recovery
-windows. It exposes no API. The authenticated application, independent
-instantiation, acceptance adapter, and evidence pipeline remain to be built;
-the core tests are not evidence of hosted recovery or live Entra validation.
+The [first blueprint increment](https://github.com/ppenumatsa1/agent-blueprints/pull/6)
+contains a native MAF approval workflow, an explicit local host, PostgreSQL
+decision/audit/action records, and integration tests including both
+process-kill recovery windows. The next increment adds an Entra-secured API,
+MSAL UI, explicit synthetic application, and locally smoke-tested Compose
+stack. It does not establish live Entra/OBO or hosted recovery. Independent
+instantiation, the acceptance adapter, and the evidence pipeline remain to
+be verified in a separate stacked increment.
 
 | ID | Bounded work package | Dependencies | Independently verifiable outcome |
 | --- | --- | --- | --- |

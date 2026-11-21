@@ -1,0 +1,37 @@
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--cp-bg);
+  color: var(--cp-text);
+  font-family: "Segoe UI", Aptos, Calibri, -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+button, input, textarea { font: inherit; }
+button, input, textarea { border-radius: 0.625rem; }
+button { cursor: pointer; border: 1px solid var(--cp-accent); padding: 0.65rem 1rem; background: var(--cp-accent); color: var(--cp-accent-fg); font-weight: 600; }
+button:hover:not(:disabled) { background: var(--cp-accent-hover); }
+button:disabled { cursor: not-allowed; opacity: 0.65; }
+button.secondary { background: var(--cp-surface); color: var(--cp-text); border-color: var(--cp-border-strong); }
+button.secondary:hover:not(:disabled) { background: var(--cp-surface-soft); }
+:focus-visible { outline: 3px solid var(--cp-accent); outline-offset: 3px; }
+
+.shell { max-width: 72rem; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+.header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; margin-bottom: 1.5rem; }
+.header p, .card > p { color: var(--cp-text-muted); }
+.eyebrow { font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; }
+h1 { margin: 0.25rem 0; font-size: 2rem; }
+h2 { margin-top: 0; font-size: 1.25rem; }
+h3 { font-size: 1.1rem; }
+.layout { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr)); gap: 1rem; align-items: start; }
+.card { background: var(--cp-surface); border: 1px solid var(--cp-border); border-radius: 1rem; padding: 1.5rem; box-shadow: 0 1px 2px var(--cp-border); }
+form { display: grid; gap: 0.75rem; }
+label { font-weight: 600; }
+input, textarea { width: 100%; padding: 0.7rem; border: 1px solid var(--cp-border-strong); background: var(--cp-surface); color: var(--cp-text); }
+textarea, pre, .identifier { font-family: Consolas, "Courier New", Courier, monospace; }
+pre { overflow: auto; padding: 1rem; background: var(--cp-surface-soft); border-radius: 0.625rem; }
+.inline, .actions { display: flex; gap: 0.5rem; }
+.record { border-top: 1px solid var(--cp-border); margin-top: 1.5rem; padding-top: 0.5rem; }
+.identifier { overflow-wrap: anywhere; color: var(--cp-text-muted); }
+.alert { color: var(--cp-danger); font-weight: 600; }
+@media (max-width: 36rem) { .header, .inline { flex-direction: column; } .inline button { width: 100%; } }

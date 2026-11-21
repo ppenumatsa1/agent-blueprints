@@ -129,7 +129,7 @@ class PostgresStore:
             connection.execute(
                 """
                 UPDATE wf_cases SET status = 'pending', checkpoint_id = %s, request_id = %s,
-                    updated_at = now() WHERE id = %s
+                    failure_code = NULL, updated_at = now() WHERE id = %s
                 """,
                 (checkpoint_id, request_id, case_id),
             )
@@ -237,4 +237,27 @@ class PostgresStore:
                 raise Conflict("The workflow finished without a matching business outcome.")
             connection.execute(
                 "INSERT INTO wf_audit (case_id, event) VALUES (%s, 'workflow_finished')", (case_id,)
+            )
+
+    def recoverable(self) -> list[tuple[UUID, str]]:
+        with self.connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT id, status FROM wf_cases
+                WHERE NOT execution_complete AND status IN ('created', 'approved', 'rejected', 'completed')
+                ORDER BY created_at, id
+                """
+            ).fetchall()
+        return [(row["id"], row["status"]) for row in rows]
+
+    def mark_recovery_failed(self, case_id: UUID, code: str) -> None:
+        with self.connect() as connection:
+            result = connection.execute(
+                "UPDATE wf_cases SET failure_code = %s, updated_at = now() WHERE id = %s",
+                (code, case_id),
+            )
+            if result.rowcount != 1:
+                raise NotFound("Record not found.")
+            connection.execute(
+                "INSERT INTO wf_audit (case_id, event) VALUES (%s, 'recovery_failed')", (case_id,)
             )

@@ -1,8 +1,8 @@
 # Blueprint catalog and compatibility
 
-All entries are **planned**. A documented platform integration is not a
-verified blueprint deployment, and no Phase 0 entry is represented as ready
-for customer use.
+The local MAF workflow blueprint is in progress; the other entries are
+planned. A documented platform integration is not a verified blueprint
+deployment, and no entry is represented as ready for customer use.
 
 | Priority | Blueprint | Framework / execution | Initial direction |
 | --- | --- | --- | --- |
@@ -23,7 +23,7 @@ blueprint. `N/A` means the combination is not the selected architecture.
 
 | Blueprint | Local development | Foundry Hosted Agent | Azure Container Apps | Foundry prompt agent |
 | --- | --- | --- | --- | --- |
-| MAF Workflow | Requires validation | Requires validation; native Python workflow hosting is documented | Requires validation; fallback | N/A: prompt agents do not host the custom workflow |
+| MAF Workflow | Compose smoke checked; independent project and live identity require validation | Requires validation; native Python workflow hosting is documented | Requires validation; fallback | N/A: prompt agents do not host the custom workflow |
 | MAF Harness | Requires validation | Requires validation | Requires validation | N/A |
 | Foundry Project SDK Agent | Requires validation | Requires validation if custom container selected | Requires validation if application-owned | Requires validation; prompt-agent runtime is documented |
 | LangGraph Workflow | Requires validation | Requires validation; LangGraph hosting is documented | Requires validation | N/A |

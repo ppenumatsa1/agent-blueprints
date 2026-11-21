@@ -2,7 +2,7 @@ import json
 import re
 from typing import Any
 
-from .errors import AccessDenied
+from .errors import AccessDenied, InvalidInput
 from .models import Case, Principal
 
 
@@ -43,11 +43,11 @@ class JsonObjectRules:
 
     def validate(self, payload: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(payload, dict) or any(not isinstance(key, str) for key in payload):
-            raise ValueError("The payload must be a JSON object with string keys.")
+            raise InvalidInput("The payload must be a JSON object with string keys.")
         try:
             encoded = json.dumps(payload, allow_nan=False, ensure_ascii=False, sort_keys=True)
         except (TypeError, ValueError) as exc:
-            raise ValueError("The payload must contain valid JSON.") from exc
+            raise InvalidInput("The payload must contain valid JSON.") from exc
         if len(encoded.encode("utf-8")) > 16_384:
-            raise ValueError("The payload exceeds the 16 KiB limit.")
+            raise InvalidInput("The payload exceeds the 16 KiB limit.")
         return json.loads(encoded)

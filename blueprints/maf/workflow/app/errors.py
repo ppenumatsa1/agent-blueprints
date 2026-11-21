@@ -20,3 +20,19 @@ class CheckpointError(BlueprintError):
 
 class ActionError(BlueprintError):
     pass
+
+
+class AuthenticationFailed(BlueprintError):
+    pass
+
+
+class AuthenticationUnavailable(BlueprintError):
+    pass
+
+
+class DelegationError(BlueprintError):
+    pass
+
+
+class InvalidInput(BlueprintError):
+    pass

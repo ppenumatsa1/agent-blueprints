@@ -6,9 +6,11 @@ independently buildable customer projects, not a shared production runtime or
 another coding-agent platform.
 
 **Current state: Phase 1 in progress.** A local readiness validator, synthetic
-acceptance fixtures, and the local [MAF workflow core](blueprints/maf/workflow/)
-are available. The authenticated application, generated-project verification,
-and hosted compatibility are not complete; no Azure resources are deployed.
+acceptance fixtures, and the local [MAF workflow blueprint](blueprints/maf/workflow/)
+are available. The authenticated application has local automated coverage and
+a Compose smoke check; independent generated-project verification, live
+Entra sign-in, and hosted compatibility remain unverified. No Azure resources
+are deployed.
 
 The first planned golden path is a Microsoft Agent Framework (MAF) workflow:
 Foundry Hosted Agents are the preferred public-network hosting path, subject to
