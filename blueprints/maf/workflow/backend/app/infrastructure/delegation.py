@@ -5,16 +5,19 @@ import msal
 from app.config import Settings
 from app.domain.errors import DelegationError
 from app.infrastructure.identity import AuthenticatedRequest
+from app.infrastructure.telemetry import instrumented
 
 
 class OnBehalfOf:
     """Optional server-side delegation during an authenticated request."""
 
-    def __init__(self, settings: Settings, client_factory: Callable = msal.ConfidentialClientApplication):
+    def __init__(self, settings: Settings, client_factory: Callable = msal.ConfidentialClientApplication, *, telemetry=None):
         self.settings = settings
         self._client_factory = client_factory
         self._client = None
+        self.telemetry = telemetry
 
+    @instrumented("identity.obo")
     def exchange(self, identity: AuthenticatedRequest, scopes: Sequence[str]) -> str:
         if not self.settings.obo_enabled:
             raise DelegationError("Delegated access is disabled.")

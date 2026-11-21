@@ -76,6 +76,9 @@ sequenceDiagram
 - **Action/checkpoint/recovery failure:** the API returns an explicit failure
   class; logs omit tokens and payloads. Do not delete checkpoints or blindly
   repeat an external side effect.
+- **Telemetry export failure:** fixed sanitized failure signals are logged;
+  the workflow result is unaffected. Missing Azure configuration instead
+  stops startup. Neither signal proves cloud delivery.
 - **Process crash:** startup recovery reconciles SQL state with local MAF
   checkpoints. The tested worker-kill windows cover decision persistence and
   database-action commit, not host failover or external systems.
@@ -86,7 +89,11 @@ The browser journey is implemented by
 [`authenticated-app.tsx`](../../frontend/src/authenticated-app.tsx),
 [`api.ts`](../../frontend/src/api.ts), and
 [`workspace.tsx`](../../frontend/src/workspace.tsx). API policy and transitions
-are in `backend/app/api.py`, `backend/app/domain/policy.py`,
+are in `backend/app/api/routes/` and `backend/app/api/dependencies.py`.
+Composition and lifecycle are in
+[`backend/app/composition.py`](../../backend/app/composition.py) and
+[`backend/app/lifecycle.py`](../../backend/app/lifecycle.py); policy and
+transitions are in `backend/app/domain/policy.py`,
 `backend/app/usecases/service.py`, and `backend/app/infrastructure/store.py`.
 Tests under `backend/tests/test_security.py` and `backend/tests/test_core.py`
 cover automated authorization and recovery. Live Entra login and role

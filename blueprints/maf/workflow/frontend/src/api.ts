@@ -19,6 +19,19 @@ export interface WorkflowClient {
 
 export class WorkflowClientError extends Error {}
 
+function newTraceparent(): string | undefined {
+  try {
+    const bytes = crypto.getRandomValues(new Uint8Array(24));
+    const hex = (part: Uint8Array) => Array.from(part, (value) => value.toString(16).padStart(2, "0")).join("");
+    const trace = hex(bytes.subarray(0, 16));
+    const parent = hex(bytes.subarray(16));
+    if (/^0+$/.test(trace) || /^0+$/.test(parent)) return undefined;
+    return `00-${trace}-${parent}-01`;
+  } catch {
+    return undefined;
+  }
+}
+
 function isWorkflowCase(value: unknown): value is WorkflowCase {
   if (!value || typeof value !== "object") return false;
   const record = value as Record<string, unknown>;
@@ -51,12 +64,14 @@ export class HttpWorkflowClient implements WorkflowClient {
     }
     let response: Response;
     try {
+      const traceparent = newTraceparent();
       response = await fetch(path, {
         method: options.body === undefined ? "GET" : "POST",
         headers: {
           Authorization: `Bearer ${token}`,
           ...(options.body === undefined ? {} : { "Content-Type": "application/json" }),
           ...(options.idempotencyKey ? { "Idempotency-Key": options.idempotencyKey } : {}),
+          ...(traceparent ? { traceparent } : {}),
         },
         body: options.body === undefined ? undefined : JSON.stringify(options.body),
         credentials: "omit",

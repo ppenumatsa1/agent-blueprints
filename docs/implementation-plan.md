@@ -165,6 +165,39 @@ path before promising it. Foundry-managed checkpoints do not replace PostgreSQL
 business state; ACA recovery requires separate evidence. Select a fallback
 explicitly and never provision Azure resources without approval.
 
+### P1-11 observability increment
+
+The MAF backend now has manually instrumented request, workflow, database
+operations and OBO boundaries, allowlisted JSON operational logs and optional
+Azure Monitor trace and metric export. Missing or invalid hosted configuration
+fails startup; subsequent export failures are signaled without changing workflow
+outcomes. Metric dimensions are limited to operation/outcome and exemplars are
+disabled. Span creation, metadata, context and closure failures are isolated
+without retrying work or masking application exceptions; startup failures clean
+up telemetry resources. Logger failures produce a fixed stderr-only failure
+signal without payloads; a stderr write failure cannot change the workflow
+result. Acceptance requires canary, correlation, injected SDK, logger and
+export failure tests, credential-free generated-project CI, and no workflow
+changes.
+Evidence: [tests](../blueprints/maf/workflow/backend/tests/test_telemetry.py)
+and [operational guidance](../blueprints/maf/workflow/README.md#operational-telemetry).
+After reconciliation onto the checkpoint foundation, the source backend suite
+passed 51 tests and the independent generated backend suite passed 56 tests
+(including evidence-runner tests); the generated standalone verifier passed
+44 tests and two instantiation tests passed. Recovery coverage includes tied
+checkpoint selection, pending and terminal validation, and completed replay
+rejection. These checks do not prove cloud export.
+This increment remains in progress pending branch/CI review and real hosted
+verification. Outbound/Foundry propagation, sampling,
+retention, regional placement and access policy require separate validation.
+The common design suite and engineering journal record the implementation and
+limitations. Reconcile dependencies with the separate tooling workstream;
+actual PR CI is required before approval.
+The [testing guide](../blueprints/maf/workflow/docs/testing.md) documents the
+source and generated backend commands, including telemetry and evidence
+normalization scope. Hosted configuration and cloud ingestion remain
+unverified. No Azure provisioning or ingestion is implied.
+
 ## Later phases
 
 | Phase | Scope and dependency |

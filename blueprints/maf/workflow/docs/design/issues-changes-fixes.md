@@ -25,6 +25,93 @@ entries to hide failed attempts or gaps.
   migrations, telemetry export, Foundry hosting, cloud deployment, or live
   identity verification.
 
+## 2026-11-21 - Instrumentation failure isolation
+
+- **Finding:** Span entry, annotation, context reads and closure could raise
+  into application execution, and a pre-yield startup failure bypassed
+  telemetry shutdown.
+- **Decision:** Isolate SDK operations individually, emit fixed failure
+  signals, never rerun the business action or replace its exception, and
+  clean up initialized telemetry on construction or startup failure.
+- **Evidence:** Focused injected-failure tests exercise synchronous and
+  asynchronous actions, HTTP status and propagation, exporter/provider
+  cleanup, and original exception identity. On implementation revision
+  `fe4550a`, source and generated backend suites passed 50 tests each, the
+  generated verifier passed 44, instantiation passed two, and changed Python
+  files passed the tooling branch's Ruff checks. Exact PR CI remains pending.
+- **Limit / lesson:** Public hosted configuration and cloud ingestion remain
+  unverified. A fixed signal is diagnostic, not delivery evidence; failures
+  can lose spans. Failure isolation must cover instrumentation
+  setup and teardown as well as export, without catching business errors.
+
+## 2026-11-21 - Privacy-safe observability
+
+- **Issue:** Trace-only export omitted required metrics, and silently accepting
+  missing Azure configuration obscured a nonfunctional hosted exporter.
+- **Decision:** Add manual allowlisted spans, JSON logs, counter and histogram,
+  explicit Azure trace and metric exporters, no metric exemplars, static
+  non-identifying exporter resource fields, fail-fast configuration and fixed
+  failure signals. Local mode has no exporter or collector.
+- **Evidence:** `backend/tests/test_telemetry.py` exercises in-memory signals,
+  redaction canaries, converted Azure envelopes and failure handling;
+  `frontend/src/test/api.test.ts` exercises browser trace context. Earlier
+  reconciled source and generated backend suites passed 45 tests each;
+  generated independent verification passed 44, instantiation passed two,
+  and both frontend suites passed nine with build and CSP checks. Earlier
+  revisions passed 46 backend tests each. Check exact PR CI before approval.
+- **Limits / lesson:** Export initialization is not ingestion evidence.
+  Hosted trace/metric delivery, outgoing and Foundry propagation, and Azure
+  operations remain unverified. A privacy review must cover exporter-generated
+  metadata and failure logs as well as application attributes.
+- **Coordination:** The independent tooling branch moves requirements into
+  `pyproject.toml` and `uv.lock`; its reported pins are SDK `1.45.2` and Azure
+  exporter `1.0.0b59`. Reconcile manifests and the public lock on integration.
+
+## 2026-11-21 - Observability reconciliation and logger fallback
+
+- **Reconciliation:** Rebased observability onto checkpoint foundation
+  `9efeef01101b176a1a10627c654eff0ca5150b6b`. Retained native checkpoint
+  selection, pending restoration/validation, terminal checkpoint validation,
+  timestamp-tie recovery, and completed replay rejection; instrumentation
+  remains outside those decisions.
+- **Change:** The testing guide now lists telemetry in the source backend
+  command and describes the generated evidence-runner suite separately. If
+  operational logging fails, emit only a fixed failure event to stderr; a
+  stderr write error cannot replace workflow output or an original exception.
+- **Evidence:** Source backend 51 tests, generated backend 56 tests (including
+  evidence-runner), generated verifier 44 tests, and two instantiation tests
+  passed in an isolated local test environment. Focused telemetry coverage
+  checks logger failure, exact payload-free fallback bytes, preserved business
+  results/original exceptions, and stderr failure. Actual-head CI is required
+  after publishing this reconciliation.
+- **Limit:** This does not verify Azure configuration, cloud ingestion, or
+  hosted trace/metric propagation.
+
+## 2026-11-21 - Native telemetry privacy gate
+
+- **Finding:** With `agent-framework-core==1.26.0` and
+  `fastapi==0.162.7`, conflicting enablement settings produced
+  `fastapi.dependencies`, `fastapi.endpoint`, `fastapi.serialization`, and
+  `GET /private` spans; the request span included `url.query` with prompt and
+  identity canaries. A failing request also emitted FastAPI endpoint/request
+  spans. This bypassed the blueprint's manual allowlist.
+- **Decision:** Keep Agent Framework instrumentation sticky-disabled, explicitly
+  disable FastAPI traces, metrics, logs, operation spans, and auto-configuration,
+  and avoid process-global OpenTelemetry provider registration. Retain only the
+  manual allowlisted spans and payload-free failure signals.
+- **Evidence:** On feature revision `3aa389f`, the isolated
+  `python -m unittest tests.test_telemetry -v` run passed 23 tests. The
+  subprocess regression set `ENABLE_INSTRUMENTATION`,
+  `ENABLE_SENSITIVE_DATA`, and `ENABLE_MESSAGE_EVENTS` to `true`, exercised two
+  app instances and normal/failing HTTP and MAF workflow paths, and found no
+  global spans, metrics, or prompt/tool/identity/failure canaries. Exactly two
+  manual `http.request` spans remained, with no events or canaries. Focused
+  checks also cover recovery-log ID/message redaction and CORS trace propagation.
+- **Limit:** This verifies the pinned local stack and blueprint app factory,
+  not public hosted configuration, cloud ingestion, or a separately configured
+  third-party instrumentor. Native MAF instrumentation remains disabled, so
+  native prompt/tool/identity span attributes are intentionally not captured.
+
 ## Prior implementation evidence
 
 ### 2026-11-21 - Generated verifier pipeline exit status
@@ -196,7 +283,7 @@ entries to hide failed attempts or gaps.
 | Item | Status | Evidence needed / next action |
 | --- | --- | --- |
 | Eight design documents and generated inclusion | In progress | Run the focused instantiation tests and verify copied Markdown links. |
-| Canonical imports and legacy-shim removal | Open in foundation workstream | Inspect final diff across imports, tests, Docker, CI, docs, and generator; do not approve while forwarding paths remain. |
+| Canonical imports and legacy-shim removal | Implemented in foundation | Reverify the integrated diff and generated copy; do not approve while forwarding paths remain. |
 | Locked developer tooling | Open in parallel PR #13 | Reconcile only after review/merge; verify any resulting revision and platform matrix independently. |
 | Current dependent PR CI | Pending on updated revision | Confirm all required checks correspond to the pushed PR head. |
 | Foundry host caller binding and lost-response recovery | Blocked | Establish supported identity and reconciliation guarantees before implementing a hosted bridge. |

@@ -47,7 +47,7 @@ jobs:
           exit 1
       - name: Run workflow, worker recovery, and API security tests
         working-directory: blueprints/maf/workflow/backend
-        run: python -m unittest -v tests.test_core tests.test_security
+        run: python -m unittest -v tests.test_core tests.test_security tests.test_telemetry
       - name: Stop isolated PostgreSQL
         if: always()
         run: docker stop maf-core-test || true
@@ -158,7 +158,7 @@ jobs:
         run: |
           cd "$GENERATED_DIR/backend"
           python -c "import app, pathlib; assert pathlib.Path(app.__file__).resolve().is_relative_to(pathlib.Path.cwd())"
-          python -m unittest -v tests.test_core tests.test_security tests.test_evidence_runner
+          python -m unittest -v tests.test_core tests.test_security tests.test_evidence_runner tests.test_telemetry
           cd ../frontend
           npm test
           npm run build
