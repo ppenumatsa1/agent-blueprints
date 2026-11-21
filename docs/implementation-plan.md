@@ -72,16 +72,16 @@ verified behavior.
 The migration workstream, based on `modularity-foundation`, adds Alembic
 baseline `0001`, per-revision catalog manifests, an explicit schema-owner
 upgrade and read-only startup validation. Local PostgreSQL 17 evidence:
-12 migration tests including a test-only second revision, 44 source and 44
-generated backend tests, two generator tests, a local Compose migration and
-startup check, and a generated runtime image build. The
+12 migration tests including a test-only second revision, 43 source and 43
+generated backend tests, 44 generated verifier tests, and two generator tests
+after rebasing; source and generated Compose smokes each returned UI 200,
+health 204 and protected API 401. The
 [migration tests](../blueprints/maf/workflow/backend/tests/test_migrations.py),
 [operations guide](../blueprints/maf/workflow/README.md#business-database-migrations)
 and [journal](../blueprints/maf/workflow/docs/engineering-journal.md) record
-the acceptance evidence and limitations. Next: reconcile canonical imports,
-dependencies, CI and design docs with the parallel foundation and other
-workstreams; run credential-free actual PR CI on the integrated head. No hosted
-CI or live backup/restore is claimed.
+the acceptance evidence and limitations. Next: reconcile parallel dependencies
+and run credential-free actual PR CI
+on the integrated head. No hosted CI or live backup/restore is claimed.
 
 P1-01 through P1-04 have an initial local foundation and a test-only
 application adapter, but the scenario has no authorized contract approval.

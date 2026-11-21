@@ -24,6 +24,7 @@ distributed tracing or cloud observability.
 | --- | --- |
 | Compose reports a missing variable | Review [setup](setup.md), especially required Entra IDs, factory and URL-safe database password. |
 | API does not start | Check PostgreSQL reachability, private checkpoint directory, factory import and validated settings. For existing volumes, the supplied password must match the one already stored; changing the variable is not rotation. |
+| Schema validation fails | Run a reviewed migration using the schema-owner identity; investigate drift or an unknown revision rather than stamping or deleting state. See [migration operations](../README.md#business-database-migrations). |
 | Browser configuration or sign-in fails | Rebuild after public configuration changes; check UUIDs, API URI, redirect origin, registration permissions and consent. Live sign-in remains unverified. |
 | Protected request returns 401 or 403 | Check token audience, tenant, delegated scope, approver role, and case authorization; never paste tokens into logs. |
 | Recovery or action returns 503 | Inspect privacy-safe API logs and checkpoint/database health. Do not delete state or retry external effects blindly; investigate reconciliation and downstream idempotency first. |
@@ -31,5 +32,5 @@ distributed tracing or cloud observability.
 | Readiness is unverified | Review evidence freshness, actual test results and independently administered trust and approval; do not convert an unknown to a pass. |
 
 Volume deletion is destructive; follow the operator's data and backup policy.
-The current initialization is not a versioned migration system; migration and
-schema-drift adoption are planned work.
+The baseline has no automatic downgrade; coordinate database and checkpoint
+recovery from verified backups.

@@ -5,6 +5,8 @@
 The current UI supports one request at a time and requires an existing
 authorized Entra configuration. CI uses synthetic identities and does not
 perform interactive sign-in.
+Before users can reach the API, an operator applies reviewed business
+migrations; runtime startup rejects an outdated or drifted schema.
 
 ```mermaid
 flowchart TD

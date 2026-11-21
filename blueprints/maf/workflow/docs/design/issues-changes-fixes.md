@@ -84,6 +84,23 @@ entries to hide failed attempts or gaps.
   bridge, and validate the actual service only with separate authorization.
   Do not persist bearer credentials or silently retry ambiguous side effects.
 
+### Migration review - versioned schema and least privilege
+
+- **Issue:** Comparing every live database to the original baseline rejected
+  later legitimate revisions, and creating a reference schema on every API
+  startup required unnecessary database CREATE privilege.
+- **Fix:** Reviewed manifests validate the current revision and migration
+  head; an explicit owner job performs upgrades, while runtime startup
+  validates without DDL. Unversioned drift and unknown revisions fail.
+- **Evidence:** PostgreSQL 17 tests exercise a test-only second revision,
+  fresh and existing upgrades, preserved business/decision/audit/ledger rows,
+  rollback, concurrent startup and a restricted role. Source and generated
+  tests and local Compose were rerun; see the [engineering journal](../engineering-journal.md)
+  for exact evidence and the initially failed example bootstrap attempt.
+- **Lesson and limits:** Test upgrades against a later head, not just
+  baseline adoption. Coordinate backup and checkpoint recovery; no automatic
+  downgrade or live restore is established. Actual PR CI is still required.
+
 ### PR #6 - Native MAF workflow and local recovery core
 
 - **Change:** Added a native MAF approval workflow, local checkpoint host,
