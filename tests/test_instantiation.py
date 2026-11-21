@@ -13,6 +13,33 @@ GENERATOR = ROOT / "scripts" / "instantiate_maf.py"
 
 
 class InstantiationTests(unittest.TestCase):
+    def test_hosted_identity_guidance_rejects_unverified_oid_binding(self):
+        documents = (
+            ROOT / "docs" / "agent-blueprints-architecture.md",
+            ROOT / "docs" / "implementation-plan.md",
+            ROOT / "docs" / "master-checklist.md",
+            ROOT / "blueprints" / "maf" / "workflow" / "docs" / "design" / "architecture.md",
+        )
+        oid_claim = re.compile(
+            r"(?:x-ms-user-identity.{0,80}(?:trusted user OID|user OID)|"
+            r"(?:identity|OID) header is (?:a |the )?(?:user OID|identity|not a credential))",
+            re.IGNORECASE | re.DOTALL,
+        )
+        for document in documents:
+            with self.subTest(document=document.relative_to(ROOT)):
+                text = document.read_text(encoding="utf-8")
+                self.assertNotRegex(text, oid_claim)
+
+        journal = (
+            ROOT / "blueprints" / "maf" / "workflow" / "docs" / "design" / "issues-changes-fixes.md"
+        ).read_text(encoding="utf-8")
+        historical_claim = "trusted user OID. **Superseded/unverified:**"
+        self.assertIn(historical_claim, journal)
+        clarification = journal.split(historical_claim, 1)[1].split("Current azd", 1)[0]
+        for required in ("opaque", "x-agent-user-id", "not be persisted", "unverified"):
+            with self.subTest(clarification=required):
+                self.assertIn(required, clarification)
+
     def test_copied_project_owns_runtime_verifier_and_exact_contract(self):
         with tempfile.TemporaryDirectory() as temporary:
             target = Path(temporary) / "application"

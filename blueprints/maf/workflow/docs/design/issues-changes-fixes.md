@@ -381,7 +381,16 @@ entries to hide failed attempts or gaps.
   do not pass a separate checkpoint store to the Workflow. For caller binding,
   the backend must first authenticate and authorize the user, then send the
   Foundry workload Authorization and `x-ms-user-identity` populated from the
-  trusted user OID. Current azd protocol-adapter documentation explicitly
+  trusted user OID. **Superseded/unverified:** this historical OID and identity
+  equivalence claim is not safe current guidance. The later
+  [delegated-isolation clarification](#2026-11-21---delegated-session-isolation-and-debugger-evidence)
+  treats `x-ms-user-identity` as an opaque app-supplied scoping value distinct
+  from platform-generated `x-agent-user-id`; neither its binding to the validated
+  principal nor their equivalence is established. A trusted app must authorize
+  each principal's session, map callers to distinct sessions, and reject
+  unchecked session IDs. Neither header is authorization, and bearer/OBO tokens
+  must not be persisted. The bridge and mapping remain unimplemented and
+  unverified. Current azd protocol-adapter documentation explicitly
   declares protocol 2.0.0 in `azure.yaml`; the Foundry hosted-agent sample
   uses `host: azure.ai.agent` with version 2.0.0. The
   hosted container receives platform-injected `x-agent-user-id`; the backend
