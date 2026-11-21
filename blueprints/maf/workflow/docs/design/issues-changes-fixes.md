@@ -841,11 +841,92 @@ entries to hide failed attempts or gaps.
   viewpoints, but implementation claims must be grounded in this repository
   and tied to evidence at the revision being reviewed.
 
+## 2026-11-21 - Delegated session isolation and debugger evidence
+
+- **Security clarification:** Microsoft's
+  [per-user isolation guidance](https://learn.microsoft.com/azure/foundry/agents/how-to/isolate-sessions-per-user)
+  warns that the platform does not fence one delegated end user from another
+  within delegated access. If an application routes two users to the same
+  session, they can see each other's data. The trusted application must
+  authenticate each caller, maintain a server-side caller-to-session
+  mapping, issue distinct session IDs, and reject unchecked client-supplied
+  session IDs. The platform-generated global `x-agent-user-id` and
+  service-supplied opaque `x-ms-user-identity` are distinct values; do not
+  assume their raw strings match. The bridge must verify an explicit mapping
+  from the validated application principal. `x-ms-user-identity` is an
+  identity-scoping assertion, not authorization. This hosted bridge and
+  mapping are not implemented or tested.
+- **PR #13 debugger report:** The workstream owner reports a headless
+  generated-project debugpy/DAP smoke using `.vscode/launch.json`'s
+  `Backend: FastAPI` configuration: execution stopped at `health.py:9`, the
+  stack was inspected, and continuing returned HTTP 204 with exit code 0.
+  Temporary resources were cleaned. This is owner-reported evidence; the
+  report did not identify an immutable revision. It does not verify the
+  interactive VS Code UI, Restricted Mode, or macOS.
+- **Separate hosted CI evidence:** PR #13 is open at head
+  `7325765cbbfb809e2064ec0e78a5567b465e3621`. Actions run
+  [44947297321](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44947297321)
+  completed successfully for that exact head with all five jobs passing.
+  This verifies that PR's CI revision, not the debugger smoke or this
+  documentation branch.
+- **PR #15 task-ID research, negative evidence:** The owner reports testing
+  the real local filesystem TaskManager with AgentServer Core 2.3.0 and
+  Responses 2.4.0; Core 2.4.0 was unavailable. Concurrent calls with the same
+  task ID raised `TaskConflictError`, but after terminal completion the same
+  one-shot ID ran fresh for both same and different inputs, including after a
+  manager restart; a different session also ran fresh. The source documents
+  one-shot `@task` as ephemeral/deleted at terminal completion, rejects
+  `ephemeral=False`, and partitions local storage by agent/session/task. This
+  local evidence means one-shot task identity alone is not persistent
+  completed-result deduplication. It does not establish hosted behavior.
+- **Separate reconciliation candidate:** The owner is assessing a
+  Postgres compare-and-set claim bound to an owner and request digest as a
+  possible way to recover the winning outer response ID. Public MAF host docs
+  do not define its recovery contract. The owner inspected the exact public
+  wheel `agent-framework-foundry-hosting==1.0.0b261112`
+  (SHA-256 `9609ca758dd7f9e45542e2407b473acb7514ec6c0fd4dad3189068fd4ee2e55c`):
+  `HostedResponseRequest.response_id` is exposed in `_request.py:150-164`,
+  and `_workflow_responses.py:425-434` resolves the request-aware factory
+  before checkpoint preparation, parsing, and run claim. The parser is skipped
+  on recovery while the factory still runs. This establishes source-level
+  hook availability for that exact version, not a safe reservation contract.
+  Each continuation produces a new outer response requiring a separately
+  linked reservation; whether the hook supports a claim before every action
+  and pending-reply consumption remains unverified. Lost claim visibility,
+  user/session mapping, same-response recovery, duplicate side effects and
+  checkpoint windows, and expired state remain unproven. Treat Postgres CAS
+  as a candidate, not a fix; no implementation or hosted recovery claim
+  follows.
+- **Next action / limit:** Keep the Foundry workstream blocked until the
+  caller-to-session mapping, authorization boundary, and live behavior are
+  implemented and tested. Keep debugger UI, Restricted Mode, and macOS
+  checks explicitly unverified.
+
+## PR #14 - Native global instrumentation privacy failure
+
+- **Reported failure:** On the pinned stack, an opt-in native-global
+  instrumentation probe emitted duplicate FastAPI spans
+  (`fastapi.dependencies`, `fastapi.endpoint`, `fastapi.serialization`, and
+  `GET /secret`) alongside manual HTTP telemetry. A synthetic query canary
+  appeared in exported span JSON.
+- **Decision:** The PR #14 owner is removing the opt-in or explicitly
+  disabling auto-instrumentation until prompt/tool/identity and failure-path
+  privacy are proven. Native MAF instrumentation must not be described as
+  safe based on the separate manual telemetry tests.
+- **Evidence limit:** The owner report did not include an immutable revision
+  or exact regression-test output. Run 44940364995 passed five jobs on the
+  earlier workstream head `cb4ff78`; that historical result does not verify
+  this probe's fix or show whether it covered the failing case.
+- **Next action:** Record the fix commit and exact-head CI when available.
+  Add negative tests that assert the query canary is absent and duplicate
+  auto-generated spans are disabled across prompt, tool, identity, and
+  failure paths before enabling this instrumentation.
+
 ## Current acceptance queue
 
 | Item | Status | Evidence needed / next action |
 | --- | --- | --- |
-| Eight design documents and generated inclusion | Verified on PR #12 head `c247bf7` | Root tests passed 47 with one expected adapter-not-selected skip; generated-copy/link and verifier-pipeline tests passed. Actual-head run [44946550709](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44946550709) passed all five jobs. Verify again on the final combined PR #17 revision. |
+| Eight design documents and generated inclusion | Verified on PR #12 head `3cdd0ca` | Root tests passed 47 with one expected adapter-not-selected skip; generated-copy/link and verifier-pipeline tests passed. Actual-head run [44948709595](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44948709595) passed all five jobs on `3cdd0ca`. Verify again on the final combined PR #17 revision. |
 | Canonical imports, API module boundaries and legacy-shim removal | Implemented in foundation head `8144918` | PR #11 run [44945419570](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44945419570) passed all five checks, including generated checks without skips. Preserve direct imports and canonical route/composition/lifecycle boundaries. |
 | Generated-verifier pipeline failure propagation | Implemented in foundation commit `d0e1727` | `tests/test_ci_workflow.py` covers failed, skipped, expected-failure, and successful outputs; PR #11 run 44945419570 passed all five checks at head `8144918`. |
 | Locked developer tooling | In integrated workstream; combined status pending | Run [44937692067](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44937692067) passed five checks for tooling head `543b137a432ca054920d629b943fc42a729df676`, not PR #17's combined revision. macOS and interactive debugging remain unverified; the owner could not test in VS Code Restricted Mode. |
@@ -854,7 +935,7 @@ entries to hide failed attempts or gaps.
 | Foundry-first infrastructure staging | Integrated but not deployed | Run 44939817209 passed for workstream head `2023e16`; offline source/generated checks were reported locally. The resource graph, private paths, identity behavior, cost, and Azure compatibility remain unverified; no resources were provisioned. |
 | PostgreSQL major-version alignment | Locally checked on a prior combined code revision | `af3955a` reportedly passed source/generated suites on PostgreSQL 16.15 and 17.12; run 44940559106 passed for `eb898f6`. Staged Azure 16/local 17 mismatch, live API and Azure compatibility remain unverified. |
 | Combined PR #17 revision CI | Not yet run | Passing workstream checks do not establish checks for the combined revision; run all required jobs against the exact final PR #17 head. |
-| Foundry host identity, credential lifecycle and lost-response recovery | Blocked | No hosted Responses host/dependency/service, caller-identity bridge/role assignment, hosted credential delivery/rotation, or host-managed checkpoint integration is implemented/live verified. The OID header is not a credential; never persist end-user bearer/OBO tokens. Visible response metadata is best-effort; obtain bounded visibility/idempotency or a durable reconciliation contract before retrying ambiguous creates. |
+| Foundry host identity, per-user session isolation, credential lifecycle and lost-response recovery | Blocked | Delegated users are not fenced from a shared session; a trusted app must verify the mapping from the validated principal to the platform-generated `x-agent-user-id` and opaque service assertion `x-ms-user-identity`; do not assume the raw values match. Map each caller to a distinct server-side session and reject unchecked client IDs. No bridge or mapping tests exist. Local one-shot AgentServer IDs reran fresh after terminal completion and are not persistent deduplication; hosted semantics remain unknown. Exact wheel source exposes `response_id` in a request-aware factory, but a Postgres CAS reservation remains a candidate only: safe caller binding, per-continuation reservation, pending-reply/action ordering, claim visibility, same-response recovery, duplicate side effects/checkpoint windows, and expiry are unproven. Hosted credentials and host-managed checkpoints are unimplemented; never persist end-user bearer/OBO tokens. Visible response metadata is best-effort; bounded visibility/idempotency or a durable reconciliation contract is still required before safely retrying ambiguous creates. |
 | Live Entra/OBO, cloud telemetry, Azure deployment | Unverified | Separate scoped implementation, authorization where required, and live evidence. |
 
 Future entries should use this form: date and scope; observed issue and

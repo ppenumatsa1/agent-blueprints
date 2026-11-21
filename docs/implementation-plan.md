@@ -73,21 +73,29 @@ without approval. Azure deployment is a deliverable but requires prior
 approval of its resource inventory, estimated cost and deployment plan;
 permanent reference repository creation requires separate approval. As of
 2026-11-21, locked tooling is proposed in open
-[PR #13](https://github.com/ppenumatsa1/agent-blueprints/pull/13), head
+[PR #13](https://github.com/ppenumatsa1/agent-blueprints/pull/13), currently
+at `7325765cbbfb809e2064ec0e78a5567b465e3621`. Actions run
+[44947297321](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44947297321)
+passed all five jobs on that exact head. The owner reports a headless
+generated-project debugpy/DAP smoke using `.vscode/launch.json`'s
+`Backend: FastAPI` configuration: execution stopped at `health.py:9`, the
+stack was inspected, and continuing returned HTTP 204 with exit code 0;
+temporary resources were cleaned. The report did not identify an immutable
+revision. It does not verify the interactive VS Code UI, Restricted Mode, or
+macOS.
+
+Earlier, the owner reported Windows/Linux Compose verification using an
+approved mirror after public TLS failures and could not run uv in a separate
+validation environment. PR #13's previous reported head was
 `b78634b3b746c7adbf5f8500e4b7023c96c67963`; its
-[hosted run](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44928260607)
+[run 44928260607](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44928260607)
 passed five checks for prior exact revision
-`e1d953662e615e547fa641ad0831907c363318e3` only. The proposal's reported
-Windows/Linux Compose verification used an approved mirror after public TLS
-failures. The owner could not exercise the debugger in VS Code Restricted
-Mode or run uv because no executable was available in that environment;
-macOS and debugger verification remain unverified. These results do not
-establish that tooling in PR #13 is merged or validated on this branch.
-The integrated tooling revision is
-`543b137a432ca054920d629b943fc42a729df676`; its
+`e1d953662e615e547fa641ad0831907c363318e3` only. The integrated tooling
+revision is `543b137a432ca054920d629b943fc42a729df676`; its
 [run 44937692067](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44937692067)
-passed five checks for that exact head, not the combined PR #17 tree. This
-does not establish the hosted deployment or unverified platforms.
+passed five checks for that exact head, not the combined PR #17 tree. None of
+these results establishes that tooling is merged or validates this branch,
+interactive debugging, Restricted Mode, or macOS.
 
 For PR #16, the owner reports guarded Alembic adoption only after exact
 baseline-manifest validation and checking that no later-revision-owned tables
@@ -271,9 +279,9 @@ the local HTTP smoke check. Its unsigned readiness report is unverified.
 | P1-08 | Implement an accessible MSAL React client for sign-in, submission, status, approval/rejection, and failure states. | P1-01, P1-07 API contract | UI tests cover visible states and safe retries; browser code contains no service secrets. |
 | P1-09 | Implement a native MAF workflow with local file checkpoints, isolated pause/resume, rejection, and recovery. | P1-01, P1-06 interfaces | Local tests cover repeated decisions, concurrent requests, and recovery without a universal orchestration wrapper; Foundry hosting is deferred to P1-12. |
 | P1-10 | Add integration/E2E tests, synthetic agent evaluations, and GitHub Actions; connect actual results and artifacts to the validator. | P1-04 through P1-09 | A local or CI run produces a report from real artifacts; blocking failures cannot pass, non-blocking outcomes follow the selected profile, and rubric/threshold decisions are recorded. |
-| P1-11 | Add privacy-safe logs, traces, correlation, and operational signals across API, workflow, approvals, and side effects. | P1-07, P1-09 interfaces | Tests verify redaction and correlation; actual export remains environment-specific. |
+| P1-11 | Add privacy-safe logs, traces, correlation, and operational signals across API, workflow, approvals, and side effects. | P1-07, P1-09 interfaces | Manual telemetry tests cover redaction and correlation; owner-reported native global auto-instrumentation leaked a query canary and emitted duplicate FastAPI spans. Do not enable that path until exact-revision negative tests cover prompt/tool/identity and failure paths; hosted export remains environment-specific. |
 | P1-15 | Demonstrate the local prototype from a synthetic specification through approval, evaluation, and its readiness report. | P1-10, P1-11 | Record the scenario, evidence, limitations, and observed elapsed time; the 2–3 hour objective is a target until a representative run demonstrates it. |
-| P1-12 | Validate Foundry Hosted Agent compatibility for the selected MAF version, Responses protocol, request-aware workflow factory, identity, and host-managed checkpoints. | P1-09, P1-15 | Documented OID caller binding is not implemented or live verified. The OID header is identity, not a credential; hosted secret delivery/rotation and downstream OBO lifecycle are not implemented, and end-user bearer/OBO tokens must not be persisted. Lost `response.id` recovery remains blocked because no idempotency key or proven unambiguous per-operation lookup is documented; see the [investigation journal](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-21---hosted-caller-binding-and-lost-responses). Local checks alone are not a hosted deployment. No Azure resources are provisioned. |
+| P1-12 | Validate Foundry Hosted Agent compatibility for the selected MAF version, Responses protocol, request-aware workflow factory, identity, per-user session isolation, and host-managed checkpoints. | P1-09, P1-15 | Microsoft warns delegated users are not fenced from one another within a shared session. A trusted app must verify mapping from the validated principal, map each authenticated caller to a distinct session, and reject unchecked client IDs; opaque `x-ms-user-identity` is distinct from platform-generated `x-agent-user-id` and is not authorization. This bridge and mapping are not implemented or tested. Local AgentServer Core 2.3.0/Responses 2.4.0 one-shot task IDs reran fresh after terminal completion and are not persistent deduplication; hosted semantics remain unknown. The exact `agent-framework-foundry-hosting==1.0.0b261112` source exposes `response_id` in the request-aware factory before checkpoint preparation/parsing/run claim, but this hook alone does not establish a safe owner-bound CAS claim, a reservation per continuation, pending-reply/action ordering, idempotent side effects, or same-response recovery. The OID header is identity, not a credential; hosted secret delivery/rotation and downstream OBO token lifecycle are not implemented, and end-user bearer/OBO tokens must not be persisted. Lost `response.id` recovery remains blocked; see the [investigation journal](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-21---hosted-caller-binding-and-lost-responses) and [session-isolation clarification](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-21---delegated-session-isolation-and-debugger-evidence). Local checks alone are not a hosted deployment. No Azure resources are provisioned. |
 | P1-13 | Prepare the explicitly selected ACA fallback and a framework-compatible checkpoint strategy. | P1-09, P1-15 | Separate local/container recovery and idempotency checks pass; no claim that ACA shares Foundry checkpoint ownership or silently replaces a failed model call. |
 | P1-14 | Prepare Bicep, least-privilege identities, authenticated public endpoints, GitHub-hosted CI, and deployment/handoff instructions. Deploy only after separate Azure authorization. | P1-10, P1-11, P1-12; P1-13 if selected | Source and independently generated Bicep compilation and focused tests passed locally without Azure credentials; PR-head CI must be confirmed. Agent-scoped identity, private connectivity and application integration remain unverified. An authorized deployment later records its revision, versions, identity, network, evidence, cost, and teardown owner. |
 
