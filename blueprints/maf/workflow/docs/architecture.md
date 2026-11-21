@@ -41,7 +41,11 @@ they are not a second runtime or a guarantee that a provider is configured.
   reading protected data or causing an effect. The synthetic tool in
   [synthetic_application.py](../backend/examples/synthetic_application.py)
   demonstrates a scope- and resource-gated read-only call. This example does
-  not authorize business decisions or external effects.
+  not authorize business decisions or external effects. `ToolRegistry` is
+  registration and request-scoped binding convenience only: it does not force
+  handlers to authorize, sandbox Python, or provide idempotency. Consequential
+  remote effects remain blocked pending the authorization, idempotency/outbox,
+  reconciliation, and fault-injection evidence required by [#32](https://github.com/ppenumatsa1/agent-blueprints/issues/32).
 - **Executor/workflow composition:** implement the existing
   `WorkflowFactory` signature with MAF `Executor` and `WorkflowBuilder`;
   receive the checkpoint provider selected by the host. Keep workflow name,
@@ -79,10 +83,12 @@ remain blocked by [#32](https://github.com/ppenumatsa1/agent-blueprints/issues/3
    `renderCase` function; see [workspace.tsx](../frontend/src/workspace.tsx)
    and [api.ts](../frontend/src/api.ts). Do not put credentials in the
    browser or treat client-provided identity as authoritative.
-4. A database action and ledger entry can commit together; external effects
-   require their own idempotency contract or transactional outbox. Test
-   retries and both recovery windows; no general exactly-once guarantee is
-   implied.
+4. A database action and ledger entry can commit together in one PostgreSQL
+   transaction. The transaction callback is arbitrary application code, not a
+   sandbox; it can make external calls that the database ledger cannot roll
+   back or deduplicate. Do not put consequential remote effects in that path.
+   Keep them blocked until #32 is independently verified. The local ledger
+   proves neither external idempotency nor a general exactly-once guarantee.
 
 The [testing guide](testing.md) describes the synthetic evidence and its
 limits. Foundry-managed checkpoints and hosting are planned and unverified;

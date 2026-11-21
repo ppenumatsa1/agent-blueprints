@@ -87,14 +87,12 @@ canary into exported span JSON. The integrated fix from `3aa389f` removes the
 opt-in and disables auto-instrumentation; all 23 focused telemetry regressions
 passed locally, including recovery redaction and restricted-origin CORS.
 Public metric APIs replace private SDK fields. Exact PR #17 head
-`b63353944372f2b6dcd91546cca3a350250be78b`, based on
+`fcd8f6f4f5cf48d537b9183aefa35b6b079feb76`, based on
 `1e99e038dc31c0ae25e5ea7712030d204ee35bc0`, passed all six jobs in run
-`44955776238`; its merge ref `0a54717118879bab6be56633dc29c313178d9081`
-had the exact base/head parents and identical tree. This run predates this
-documentation correction and does not cover the new tree; fresh exact-head CI
-is required. Cloud ingestion remains unverified and native
-auto-instrumentation is not approved. Any later tree or base change also
-requires revalidation.
+`44957081895`; its merge ref `3c9c5842fc29b34e70b7c33b7be8beb215a9735c`
+had the exact base/head parents and identical tree. Cloud ingestion remains
+unverified and native auto-instrumentation is not approved. Any later tree or
+base change also requires revalidation.
 Track safe cloud export and end-to-end propagation separately in
 [#26](https://github.com/ppenumatsa1/agent-blueprints/issues/26).
 

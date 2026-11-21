@@ -77,12 +77,16 @@ assets, MAF `Agent` construction, principal-bound MAF tool registration,
 and native `Executor`/`WorkflowBuilder` composition through the existing
 `WorkflowFactory`. The generated synthetic example demonstrates construction,
 configuration rejection, and unauthorized tool denial; it does not call a
-model or synthesize a model response. Exact source/generated test results and
-the draft PR's head-specific CI are recorded in the corresponding checklist
-row and engineering journal after verification. Provider credentials and live
-model behavior, hosted identity/checkpoints/recovery (#19/#20/#22), trusted
-readiness evidence (#21), and consequential external effects (#32) remain
-unverified or blocked.
+model or synthesize a model response. At stacked revision `4d478db`, source
+and generated backend suites each passed 79 tests, generated acceptance passed
+44 tests without skips, and the isolated root suite passed 47 tests with one
+expected skip; source/generated Ruff checks passed. The draft PR's exact-head
+CI remains pending. The tool registry only binds application-authored
+handlers; it does not enforce handler authorization, sandbox code, or provide
+idempotency. The synthetic tool is read-only, and consequential remote effects
+remain blocked by #32. Provider credentials and live model behavior, hosted
+identity/checkpoints/recovery (#19/#20/#22), and trusted readiness evidence
+(#21) remain unverified.
 
 ### Execution sequence and work packages
 
@@ -334,23 +338,22 @@ the local HTTP smoke check. Its unsigned readiness report is unverified.
 | P1-15 | Demonstrate the local prototype from a synthetic specification through approval, evaluation, and its readiness report. | P1-10, P1-11 | Record the scenario, evidence, limitations, and observed elapsed time; the 2–3 hour objective is a target until a representative run demonstrates it. |
 | P1-12 | Validate Foundry Hosted Agent compatibility for the selected MAF version, Responses protocol, request-aware workflow factory, identity, per-user session isolation, and host-managed checkpoints. | P1-09, P1-15 | Microsoft warns delegated users are not fenced from one another within a shared session. A trusted app must verify mapping from the validated principal, map each authenticated caller to a distinct session, and reject unchecked client IDs; opaque `x-ms-user-identity` is distinct from platform-generated `x-agent-user-id` and is not authorization. This bridge and mapping are not implemented or tested. Local AgentServer Core 2.3.0/Responses 2.4.0 one-shot task IDs reran fresh after terminal completion and are not persistent deduplication; hosted semantics remain unknown. The exact `agent-framework-foundry-hosting==1.0.0b261112` source exposes `response_id` in the request-aware factory before checkpoint preparation/parsing/run claim, but this hook alone does not establish a safe owner-bound CAS claim, a reservation per continuation, pending-reply/action ordering, idempotent side effects, or same-response recovery. The OID header is identity, not a credential; hosted secret delivery/rotation and downstream OBO token lifecycle are not implemented, and end-user bearer/OBO tokens must not be persisted. Lost `response.id` recovery remains blocked; see the [investigation journal](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-21---hosted-caller-binding-and-lost-responses) and [session-isolation clarification](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-21---delegated-session-isolation-and-debugger-evidence). Local checks alone are not a hosted deployment. No Azure resources are provisioned. |
 | P1-13 | Prepare the explicitly selected ACA fallback and a framework-compatible checkpoint strategy. | P1-09, P1-15 | Separate local/container recovery and idempotency checks pass; no claim that ACA shares Foundry checkpoint ownership or silently replaces a failed model call. |
-| P1-14 | Prepare Bicep, least-privilege identities, authenticated public endpoints, GitHub-hosted CI, and deployment/handoff instructions. Deploy only after separate Azure authorization. | Offline: P1-10, P1-11, P1-12 design decisions; P1-13 only if selected. Live deployment supplies evidence for hosted/cloud issues and must not wait for all live-verification issues to be closed. | Exact PR #17 head `b633539` passed `maf-infrastructure` and generated infrastructure checks in run 44955776238; the staged graph is not wired or deployed. Track IaC wiring [#18](https://github.com/ppenumatsa1/agent-blueprints/issues/18), managed PostgreSQL operations [#24](https://github.com/ppenumatsa1/agent-blueprints/issues/24), and separately authorized live deployment [#28](https://github.com/ppenumatsa1/agent-blueprints/issues/28). |
+| P1-14 | Prepare Bicep, least-privilege identities, authenticated public endpoints, GitHub-hosted CI, and deployment/handoff instructions. Deploy only after separate Azure authorization. | Offline: P1-10, P1-11, P1-12 design decisions; P1-13 only if selected. Live deployment supplies evidence for hosted/cloud issues and must not wait for all live-verification issues to be closed. | Exact PR #17 head `fcd8f6f` passed `maf-infrastructure` and generated infrastructure checks in run [44957081895](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44957081895); the staged graph is not wired or deployed. Track IaC wiring [#18](https://github.com/ppenumatsa1/agent-blueprints/issues/18), managed PostgreSQL operations [#24](https://github.com/ppenumatsa1/agent-blueprints/issues/24), and separately authorized live deployment [#28](https://github.com/ppenumatsa1/agent-blueprints/issues/28). |
 
 ### Current integrated review baseline and issue-linked backlog
 
 The latest verified integrated snapshot is head
-`b63353944372f2b6dcd91546cca3a350250be78b`, based on
+`fcd8f6f4f5cf48d537b9183aefa35b6b079feb76`, based on
 `1e99e038dc31c0ae25e5ea7712030d204ee35bc0`. Run
-[44955776238](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44955776238)
+[44957081895](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44957081895)
 passed all six jobs. Merge ref
-`0a54717118879bab6be56633dc29c313178d9081` had exact base/head parents and a
-tree identical to the head (`1e0a7994da25cbf63c9e3f6b7284f1a660260c55`).
-Generated acceptance passed 44 tests with no skips or expected failures.
+`3c9c5842fc29b34e70b7c33b7be8beb215a9735c` had exact base/head parents and a
+tree identical to the head (`3db77d24193aa2faa89ad22858889c04f4126d44`).
+Generated acceptance passed 44 tests without skips or expected failures.
 Synthetic producer evidence remains limited: approval/recovery passed,
 explanation/hint remain unverified, and the unsigned validator exited 1.
-This documentation correction is newer than that tested snapshot and needs
-fresh exact-head CI; any later tree or base change also requires revalidation.
-Neither result makes the blueprint, readiness report, or deployment complete. See the
+Any later tree or base change requires exact-head revalidation. Neither result
+makes the blueprint, readiness report, or deployment complete. See the
 [journal](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-21---integrated-gap-reconciliation-and-backlog).
 
 | Work package | Open issue(s) and acceptance boundary |

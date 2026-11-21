@@ -34,13 +34,12 @@ Managed database operations and live backup/restore remain unverified
 resource or permanent repository creation is authorized by this PRD.
 
 The latest verified integrated snapshot is PR #17 head
-`b63353944372f2b6dcd91546cca3a350250be78b`, based on foundation
+`fcd8f6f4f5cf48d537b9183aefa35b6b079feb76`, based on foundation
 `1e99e038dc31c0ae25e5ea7712030d204ee35bc0`; all six jobs passed in run
-`44955776238`. Merge ref `0a54717118879bab6be56633dc29c313178d9081` had
-exact base/head parents and a tree identical to the head. This documentation
-correction is newer than that tested snapshot and needs its own exact-head
-CI. Any later tree or base change also requires revalidation. Neither result
-makes the blueprint or a generated application complete or deployment-ready.
+`44957081895`. Merge ref `3c9c5842fc29b34e70b7c33b7be8beb215a9735c` had
+exact base/head parents and a tree identical to the head. Any later tree or
+base change also requires revalidation. Neither result makes the blueprint
+or a generated application complete or deployment-ready.
 Track hosted implementation, trust, and evidence work in
 [#18](https://github.com/ppenumatsa1/agent-blueprints/issues/18),
 [#19](https://github.com/ppenumatsa1/agent-blueprints/issues/19),
