@@ -12,9 +12,10 @@ uv run --locked python -m unittest -v tests.test_core tests.test_security tests.
 
 Tests create and drop isolated schemas and roles; the test identity requires
 `CREATEROLE`. They fail if the database is unavailable; do not point them at
-production data. They use synthetic
-identities and no Azure credentials or model. They exercise authorization,
-native workflow and actual worker termination after decision persistence and
+production data. They use synthetic identities and no Azure credentials or
+model. Source and generated CI run the same suite: authorization, native
+checkpoint recovery, privacy-safe telemetry, migrations, evidence
+normalization, and actual worker termination after decision persistence and
 after a database action commits. They do not prove live Entra/OBO, external
 effect exactly-once delivery, or hosted recovery.
 

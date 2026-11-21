@@ -54,8 +54,10 @@ No collector is provisioned. Export failures are sanitized and do not alter
 workflow outcomes; configuration or initialization failures stop startup.
 Instrumented work is not retried when span setup, annotation or closure
 fails. SDK failures emit a sanitized signal and cannot replace an application
-exception. Startup failure cleanup includes initialized exporters and
-pre-lifespan service initialization.
+exception. If operational logging fails, a fixed failure event is written to
+stderr without exception text or payload; stderr failure also cannot change
+application behavior. Startup failure cleanup includes initialized exporters
+and pre-lifespan service initialization.
 
 The browser is not authoritative for identity or permission. FastAPI validates
 the token and derives the principal; application policy controls record access

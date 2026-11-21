@@ -193,6 +193,10 @@ Span creation, metadata, context extraction and closure failures also emit a
 fixed `telemetry.instrumentation` failure signal without retrying the
 instrumented operation or replacing its exception. Initialization and
 pre-startup failures release created providers and exporters where possible.
+If the operational logger itself fails, a fixed `telemetry.log` failure event
+is written directly to stderr as a best-effort fallback; neither the logger
+exception nor application data is included. A stderr write failure is ignored
+so it cannot replace a workflow outcome or exception.
 
 The `blueprint.operations` counter and `blueprint.operation.duration`
 histogram measure each instrumented operation independently of trace sampling.

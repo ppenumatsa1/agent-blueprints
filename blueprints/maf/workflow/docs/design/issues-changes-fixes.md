@@ -42,7 +42,7 @@ entries to hide failed attempts or gaps.
   separate PR heads is not evidence for this combined revision. Hosted CI,
   public hosted configuration and cloud ingestion remain unverified.
 - **Next:** Reconcile independently developed migration and infrastructure
-  changes only after review; no PR is merged and no Azure resource is created.
+  changes; no PR is merged and no Azure resource is created.
 
 ## 2026-11-21 - Instrumentation failure isolation
 
@@ -85,6 +85,27 @@ entries to hide failed attempts or gaps.
 - **Coordination:** The independent tooling branch moves requirements into
   `pyproject.toml` and `uv.lock`; its reported pins are SDK `1.45.2` and Azure
   exporter `1.0.0b59`. Reconcile manifests and the public lock on integration.
+
+## 2026-11-21 - Observability reconciliation and logger fallback
+
+- **Reconciliation:** Rebased observability onto checkpoint foundation
+  `9efeef01101b176a1a10627c654eff0ca5150b6b`. Retained native checkpoint
+  selection, pending restoration/validation, terminal checkpoint validation,
+  timestamp-tie recovery, and completed replay rejection; instrumentation
+  remains outside those decisions.
+- **Change:** The testing guide now lists telemetry in the source backend
+  command and describes the generated evidence-runner suite separately. If
+  operational logging fails, emit only a fixed failure event to stderr; a
+  stderr write error cannot replace workflow output or an original exception.
+- **Evidence:** Source backend 51 tests, generated backend 56 tests (including
+  evidence-runner), generated verifier 44 tests, and two instantiation tests
+  passed in an isolated local test environment. Focused telemetry coverage
+  checks logger failure, exact payload-free fallback bytes, preserved business
+  results/original exceptions, and stderr failure. Actual-head CI is required
+  after publishing this reconciliation. [Run 44938368000](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44938368000)
+  subsequently passed all five jobs for head `8c643df`, not the combined tree.
+- **Limit:** This does not verify Azure configuration, cloud ingestion, or
+  hosted trace/metric propagation.
 
 ## Prior implementation evidence
 
@@ -430,6 +451,7 @@ entries to hide failed attempts or gaps.
 | Eight design documents and generated inclusion | Open in PR #12 | Focused instantiation tests and run 44936739123 passed on head `60458d9`; verify the combined revision separately. |
 | Canonical imports and legacy-shim removal | Implemented in open PR #11 | Foundation run 44936094798 passed all five checks on `9efeef0`; preserve direct imports in later changes. |
 | Locked developer tooling | Open in PR #13 | Run 44937692067 passed all five checks on head `543b137`; verify the combined revision separately. macOS, interactive debugging and public-only local downloads remain unverified. |
+| Privacy-safe observability | Open in PR #14 | Run 44938368000 passed all five checks on head `8c643df`; verify the combined revision separately. Hosted telemetry remains unverified. |
 | Combined revision CI | Not run | Passing checks on individual PRs do not establish checks for their combined revision. |
 | Foundry host caller binding and lost-response recovery | Blocked | Establish supported identity and reconciliation guarantees before implementing a hosted bridge. |
 | Live Entra/OBO, cloud telemetry, Azure deployment | Unverified | Separate scoped implementation, authorization where required, and live evidence. |

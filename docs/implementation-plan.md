@@ -253,19 +253,24 @@ fails startup; subsequent export failures are signaled without changing workflow
 outcomes. Metric dimensions are limited to operation/outcome and exemplars are
 disabled. Span creation, metadata, context and closure failures are isolated
 without retrying work or masking application exceptions; startup failures clean
-up telemetry resources. Acceptance requires canary, correlation, injected SDK
-and export failure tests, credential-free generated-project CI, and no
-workflow changes.
+up telemetry resources. Logger failures produce a fixed stderr-only failure
+signal without payloads; a stderr write failure cannot change the workflow
+result. Acceptance requires canary, correlation, injected SDK, logger and
+export failure tests, credential-free generated-project CI, and no workflow
+changes.
 Evidence: [tests](../blueprints/maf/workflow/backend/tests/test_telemetry.py)
 and [operational guidance](../blueprints/maf/workflow/README.md#operational-telemetry).
-After reconciliation onto the canonical foundation, complete source and
-independent-copy backend suites each passed 45 tests, including 14 telemetry
-cases; two instantiation tests passed. Source and generated browser suites
-each passed nine tests with build and CSP checks; the generated standalone
-verifier passed 44 tests. Earlier, Compose returned UI 200, health 204
-and protected API 401. One earlier Compose startup attempt failed; an immediate
-retry passed. These checks do not prove cloud export.
-This increment remains in progress pending branch/CI review and real hosted
+After reconciliation onto the checkpoint foundation, the source backend suite
+passed 51 tests and the independent generated backend suite passed 56 tests
+(including evidence-runner tests); the generated standalone verifier passed
+44 tests and two instantiation tests passed. Recovery coverage includes tied
+checkpoint selection, pending and terminal validation, and completed replay
+rejection. Earlier Compose returned UI 200, health 204 and protected API 401
+after an initial failed startup attempt. [PR #14](https://github.com/ppenumatsa1/agent-blueprints/pull/14)
+head `8c643df` passed all five jobs in
+[run 44938368000](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44938368000);
+these checks do not prove cloud export or the combined revision.
+This increment remains in progress pending review and real hosted
 verification. Outbound/Foundry propagation, sampling,
 retention, regional placement and access policy require separate validation.
 The common design suite and engineering journal record the implementation and
@@ -273,12 +278,12 @@ limitations. The local integration tree combines the public locked telemetry
 dependencies with tooling. Its source and generated backend suites passed 50
 tests each, its generated verifier 44, and generation tests two; full Ruff
 checks passed. Both backend images built with an approved mirror after public
-Python TLS failures. Actual PR CI is required before approval.
+Python TLS failures.
 Revision `fe4550a` passed 50 source and 50 generated backend tests, the
 44-test generated verifier, and two instantiation tests; changed Python files
-passed Ruff with the tooling workstream's configuration. Hosted CI and cloud
-ingestion remain unverified.
-No Azure provisioning or ingestion is implied.
+passed Ruff with the tooling workstream's configuration. These historical
+results are not combined-revision evidence. Hosted configuration and cloud
+ingestion remain unverified. No Azure provisioning or ingestion is implied.
 
 ## Later phases
 
