@@ -67,6 +67,26 @@ entries to hide failed attempts or gaps.
   `pyproject.toml` and `uv.lock`; its reported pins are SDK `1.45.2` and Azure
   exporter `1.0.0b59`. Reconcile manifests and the public lock on integration.
 
+## 2026-11-21 - Observability reconciliation and logger fallback
+
+- **Reconciliation:** Rebased observability onto checkpoint foundation
+  `9efeef01101b176a1a10627c654eff0ca5150b6b`. Retained native checkpoint
+  selection, pending restoration/validation, terminal checkpoint validation,
+  timestamp-tie recovery, and completed replay rejection; instrumentation
+  remains outside those decisions.
+- **Change:** The testing guide now lists telemetry in the source backend
+  command and describes the generated evidence-runner suite separately. If
+  operational logging fails, emit only a fixed failure event to stderr; a
+  stderr write error cannot replace workflow output or an original exception.
+- **Evidence:** Source backend 51 tests, generated backend 56 tests (including
+  evidence-runner), generated verifier 44 tests, and two instantiation tests
+  passed in an isolated local test environment. Focused telemetry coverage
+  checks logger failure, exact payload-free fallback bytes, preserved business
+  results/original exceptions, and stderr failure. Actual-head CI is required
+  after publishing this reconciliation.
+- **Limit:** This does not verify Azure configuration, cloud ingestion, or
+  hosted trace/metric propagation.
+
 ## Prior implementation evidence
 
 ### 2026-11-21 - Generated verifier pipeline exit status
