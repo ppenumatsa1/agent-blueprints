@@ -5,9 +5,10 @@ Factory. It will provide framework-specific reference architectures for
 independently buildable customer projects, not a shared production runtime or
 another coding-agent platform.
 
-**Current state: Phase 1 readiness foundation.** A local readiness validator
-and synthetic acceptance fixtures are available. The reusable MAF blueprint is
-planned; there are no runnable agent templates or deployed Azure resources yet.
+**Current state: Phase 1 in progress.** A local readiness validator, synthetic
+acceptance fixtures, and the local [MAF workflow core](blueprints/maf/workflow/)
+are available. The authenticated application, generated-project verification,
+and hosted compatibility are not complete; no Azure resources are deployed.
 
 The first planned golden path is a Microsoft Agent Framework (MAF) workflow:
 Foundry Hosted Agents are the preferred public-network hosting path, subject to

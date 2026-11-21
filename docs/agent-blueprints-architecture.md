@@ -81,6 +81,16 @@ actions. The future Foundry host owns its own checkpoint provider and must
 not attach the local store. The Foundry adapter and managed recovery remain
 unverified P1-12 work; ACA checkpoint selection is separate.
 
+The [local core](../blueprints/maf/workflow/) now constructs a fresh native
+workflow per case and restores its recorded pending request before delivering
+a PostgreSQL-backed decision. A per-case PostgreSQL advisory lock spans the
+file/database boundary; a transaction commits the application-owned
+database action together with its unique ledger entry. Tests terminate and
+restart real workers at both specified commit windows. This applies only to
+database effects in the same transaction, not arbitrary external services.
+Missing or corrupt checkpoints fail visibly. The Entra API, UI, generated
+application, and end-to-end verification remain in progress.
+
 Interactive local and hosted access uses Microsoft Entra ID: React uses MSAL,
 and FastAPI validates access tokens, scopes, roles, and record-level access.
 Synthetic identities are confined to automated tests. Existing registrations
@@ -104,8 +114,8 @@ before copying anything; preserve any applicable license notices.
 ## Proposed future structure
 
 Documentation, contracts, a synthetic scenario, an independent readiness
-validator, tests, and CI currently exist. Blueprint directories below remain
-proposed, not implemented templates:
+validator, tests, CI, and the in-progress MAF workflow core currently exist.
+Other blueprint directories below remain proposed:
 
 ```text
 agent-blueprints/
@@ -114,7 +124,7 @@ agent-blueprints/
   readiness/               # independent local verification CLI
   scenarios/               # synthetic contract and acceptance fixtures
   blueprints/
-    maf/workflow/          # first future golden path
+    maf/workflow/          # in-progress local workflow core
     maf/harness/
     foundry-sdk/agent/
     langgraph/workflow/

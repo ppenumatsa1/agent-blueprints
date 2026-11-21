@@ -39,6 +39,13 @@ result production and repository protection remain unverified. The blueprint
 work follows the foundation in smaller reviewable changes. See the
 [checklist](master-checklist.md) for status and evidence.
 
+The first blueprint increment contains a native MAF approval workflow, an
+explicit local host, PostgreSQL decision/audit/action records, and passing
+local PostgreSQL integration tests, including both process-kill recovery
+windows. It exposes no API. The authenticated application, independent
+instantiation, acceptance adapter, and evidence pipeline remain to be built;
+the core tests are not evidence of hosted recovery or live Entra validation.
+
 | ID | Bounded work package | Dependencies | Independently verifiable outcome |
 | --- | --- | --- | --- |
 | P1-01 | Define the synthetic scenario, golden acceptance tests, and contract; obtain authorized approval. | None | [Scenario and golden cases](../scenarios/order-adjustment/README.md) exist; the application adapter and authorized approval remain outstanding. |
