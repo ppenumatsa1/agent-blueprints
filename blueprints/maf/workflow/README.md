@@ -111,8 +111,9 @@ starting the API**, using `python -m app.infrastructure.migrations upgrade`
 from `backend` with `DATABASE_URL` set to the intended database. This is a
 controlled schema-owner operation; it creates an empty baseline or adopts an
 unversioned database only if its business tables exactly match revision
-`0001`, then upgrades to head. Existing rows, including decisions, audit and
-action ledger, are not rewritten by the baseline.
+`0001` by recording that validated revision with Alembic, then upgrades to head.
+Fresh schemas execute the baseline revision normally. Existing rows, including
+decisions, audit and action ledger, are not rewritten by the baseline.
 
 API startup validates the recorded revision and its manifest without DDL or
 stamping. It fails if the database is unversioned, outdated or divergent;

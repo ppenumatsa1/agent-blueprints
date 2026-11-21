@@ -337,6 +337,13 @@ records focused local evidence and limitations. Acceptance still requires the
 remaining workstream changes and source/generated checks on the final combined
 revision; earlier runs do not establish that result.
 
+The exact PR #16 delta `897aae8` adopts a validated existing baseline through
+Alembic `stamp` inside the existing transaction; fresh schemas still execute
+the baseline revision. Its 12 migration regressions passed locally on isolated
+PostgreSQL 17 after restoring cached HTTP test dependencies, and locked-version
+Ruff checks passed. This focused result is not final combined verification.
+The design-document owner will consolidate the engineering journal.
+
 ## Later phases
 
 | Phase | Scope and dependency |

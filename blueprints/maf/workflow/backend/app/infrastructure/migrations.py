@@ -154,6 +154,7 @@ def _run(dsn, root, migrate):
                 if revision is None:
                     raise SchemaDriftError("Unknown migration revision.")
                 manifest = manifests[revision.revision]
+                adopt_baseline = False
                 if _snapshot(connection, schema, manifest["tables"]) != manifest["snapshot"]:
                     raise SchemaDriftError(f"The business schema differs from revision {current}.")
             else:
@@ -165,6 +166,7 @@ def _run(dsn, root, migrate):
                         "The unversioned business schema differs from the supported baseline."
                     )
                 manifest = baseline
+                adopt_baseline = bool(actual[0])
             unexpected = owned_tables.difference(manifest["tables"])
             if unexpected and _snapshot(connection, schema, sorted(unexpected))[0]:
                 raise SchemaDriftError("A table owned by another revision already exists.")
@@ -174,6 +176,9 @@ def _run(dsn, root, migrate):
                         "Database is not at the required migration head; run the migration job."
                     )
                 return
+            if adopt_baseline:
+                command.stamp(config, "0001")
+                current = "0001"
             if current != head:
                 command.upgrade(config, "head")
             expected = manifests[head]
