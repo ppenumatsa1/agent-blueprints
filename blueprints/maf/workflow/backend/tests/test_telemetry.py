@@ -22,7 +22,7 @@ from opentelemetry.sdk.trace.export import SimpleSpanProcessor, SpanExportResult
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from opentelemetry.trace import StatusCode
 
-from app.api import create_app
+from app.composition import create_app
 from app.config import Settings
 from app.infrastructure.telemetry import SafeExporter, SafeMetricExporter, Telemetry, instrumented
 from app.infrastructure.delegation import OnBehalfOf
@@ -183,55 +183,171 @@ class TelemetryTests(unittest.TestCase):
         self.assertIn('"event":"telemetry.metric_export"', str(logs.output))
         self.assertNotIn(CANARY, str(logs.output))
 
-    def test_native_maf_workflow_spans_use_the_safe_global_provider(self):
+    def test_maf_auto_instrumentation_stays_disabled_and_manual_spans_remain_safe(self):
         script = textwrap.dedent(
             f"""
             import asyncio
             from agent_framework import Executor, WorkflowBuilder, WorkflowContext, handler
-            from opentelemetry.sdk.metrics.export import MetricExportResult
+            from fastapi.testclient import TestClient
+            from opentelemetry import metrics, trace
+            from opentelemetry.sdk.metrics import MeterProvider
+            from opentelemetry.sdk.metrics.export import InMemoryMetricReader
+            from opentelemetry.sdk.trace import TracerProvider
             from opentelemetry.sdk.trace.export import SimpleSpanProcessor
             from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
-            from opentelemetry.sdk.trace.export import SpanExportResult
-            from app.infrastructure.telemetry import Telemetry
+            from pathlib import Path
+            from tempfile import TemporaryDirectory
             from unittest.mock import Mock
 
+            from app.application import ApplicationComponents
+            from app.composition import create_app
+            from app.config import Settings
+            from app.infrastructure.telemetry import SafeExporter
+
+            PROMPT_CANARY = "private-prompt-canary"
+            TOOL_CANARY = "private-tool-canary"
+            IDENTITY_CANARY = "private-identity-canary"
+            FAILURE_CANARY = "private-failure-canary"
+
+            global_trace_provider = TracerProvider()
+            global_trace_exporter = InMemorySpanExporter()
+            global_trace_provider.add_span_processor(
+                SimpleSpanProcessor(global_trace_exporter)
+            )
+            global_metrics_reader = InMemoryMetricReader()
+            global_meter_provider = MeterProvider(metric_readers=[global_metrics_reader])
+            trace.set_tracer_provider(global_trace_provider)
+            metrics.set_meter_provider(global_meter_provider)
+
             class Passthrough(Executor):
+                def __init__(self, *, fail=False):
+                    super().__init__(id=TOOL_CANARY)
+                    self.fail = fail
+
                 @handler
                 async def run(self, value: str, ctx: WorkflowContext) -> None:
-                    await ctx.yield_output(value)
+                    if self.fail:
+                        raise RuntimeError(FAILURE_CANARY)
+                    await ctx.yield_output(TOOL_CANARY)
 
-            trace_exporter = Mock()
-            trace_exporter.export.return_value = SpanExportResult.SUCCESS
-            trace_exporter.force_flush.return_value = True
-            metric_exporter = Mock()
-            metric_exporter.export.return_value = MetricExportResult.SUCCESS
-            metric_exporter.force_flush.return_value = True
-            telemetry = Telemetry(
-                "azure-monitor",
-                "configured",
-                exporter=trace_exporter,
-                metric_exporter=metric_exporter,
-                enable_native_instrumentation=True,
-            )
-            exporter = InMemorySpanExporter()
-            telemetry.provider.add_span_processor(SimpleSpanProcessor(exporter))
-            workflow = WorkflowBuilder(
-                name="privacy-check",
-                start_executor=Passthrough(id="passthrough"),
-            ).build()
-            asyncio.run(workflow.run("{CANARY}"))
-            spans = exporter.get_finished_spans()
-            assert spans, "Native MAF workflow spans were not exported."
-            assert any("workflow" in span.name.lower() for span in spans), [
-                span.name for span in spans
-            ]
-            assert "{CANARY}" not in "".join(span.to_json() for span in spans)
-            telemetry.shutdown()
+            with TemporaryDirectory() as directory:
+                settings = Settings(
+                    "10000000-0000-4000-8000-000000000001",
+                    "20000000-0000-4000-8000-000000000002",
+                    "postgresql://localhost/test",
+                    Path(directory),
+                )
+                components = ApplicationComponents(
+                    rules=Mock(),
+                    policy=Mock(),
+                    action=Mock(),
+                    workflow_factory=Mock(),
+                )
+                store = Mock()
+                store.recoverable.return_value = []
+                app = create_app(settings, components, store=store, identity=Mock())
+                second_store = Mock()
+                second_store.recoverable.return_value = []
+                second_app = create_app(
+                    settings, components, store=second_store, identity=Mock()
+                )
+                first_telemetry = app.state.telemetry
+                second_telemetry = second_app.state.telemetry
+                assert first_telemetry.provider is not second_telemetry.provider
+                assert trace.get_tracer_provider() is global_trace_provider
+                assert metrics.get_meter_provider() is global_meter_provider
+
+                manual_exporter = InMemorySpanExporter()
+                first_telemetry.provider.add_span_processor(
+                    SimpleSpanProcessor(SafeExporter(manual_exporter))
+                )
+
+                @app.get("/private")
+                def endpoint():
+                    return {{"ok": True}}
+
+                @app.get("/failure")
+                def fail_request():
+                    raise RuntimeError(FAILURE_CANARY)
+
+                with TestClient(app, raise_server_exceptions=False) as client:
+                    response = client.get(
+                        "/private?" + PROMPT_CANARY,
+                        headers={{"Authorization": "Bearer " + IDENTITY_CANARY}},
+                    )
+                    assert response.status_code == 200
+                    failure_response = client.get(
+                        "/failure?" + PROMPT_CANARY,
+                        headers={{"Authorization": "Bearer " + IDENTITY_CANARY}},
+                    )
+                    assert failure_response.status_code == 500
+
+                normal_workflow = WorkflowBuilder(
+                    name="normal-" + TOOL_CANARY,
+                    start_executor=Passthrough(),
+                ).build()
+                asyncio.run(normal_workflow.run(PROMPT_CANARY))
+                failure_workflow = WorkflowBuilder(
+                    name="failure-" + TOOL_CANARY,
+                    start_executor=Passthrough(fail=True),
+                ).build()
+                failure_observed = False
+                try:
+                    asyncio.run(failure_workflow.run(PROMPT_CANARY))
+                except Exception as exc:
+                    failure_observed = FAILURE_CANARY in str(exc)
+                assert failure_observed, "The failing workflow did not preserve its failure."
+
+                spans = manual_exporter.get_finished_spans()
+                assert [span.name for span in spans] == [
+                    "http.request",
+                    "http.request",
+                ]
+                assert all(span.instrumentation_scope.name == "blueprint.manual" for span in spans)
+                assert all(not span.events for span in spans)
+                assert all(
+                    not any(
+                        canary in span.to_json()
+                        for canary in (
+                            PROMPT_CANARY,
+                            TOOL_CANARY,
+                            IDENTITY_CANARY,
+                            FAILURE_CANARY,
+                        )
+                    )
+                    for span in spans
+                )
+                global_spans = global_trace_exporter.get_finished_spans()
+                assert not global_spans, [
+                    (
+                        span.name,
+                        span.instrumentation_scope.name,
+                        sorted(span.attributes),
+                        [event.name for event in span.events],
+                        any(
+                            canary in span.to_json()
+                            for canary in (
+                                PROMPT_CANARY,
+                                TOOL_CANARY,
+                                IDENTITY_CANARY,
+                                FAILURE_CANARY,
+                            )
+                        ),
+                    )
+                    for span in global_spans
+                ]
+                global_metrics = global_metrics_reader.get_metrics_data()
+                assert global_metrics is None or not global_metrics.resource_metrics
+                assert trace.get_tracer_provider() is global_trace_provider
+                assert metrics.get_meter_provider() is global_meter_provider
+                second_telemetry.shutdown()
+            global_trace_provider.shutdown()
+            global_meter_provider.shutdown()
             """
         )
         environment = os.environ.copy()
         environment.update(
-            ENABLE_INSTRUMENTATION="false",
+            ENABLE_INSTRUMENTATION="true",
             ENABLE_SENSITIVE_DATA="true",
             ENABLE_MESSAGE_EVENTS="true",
         )
@@ -243,6 +359,7 @@ class TelemetryTests(unittest.TestCase):
             text=True,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn(CANARY, result.stdout + result.stderr)
 
     def test_logging_failure_uses_fixed_stderr_signal_without_changing_operation(self):
         telemetry = Telemetry()
@@ -414,10 +531,12 @@ class TelemetryTests(unittest.TestCase):
                     components.initialize.side_effect = error
                 elif stage == "recovery":
                     store.recoverable.side_effect = error
-                with patch("app.api.Telemetry", return_value=telemetry):
+                with patch("app.composition.Telemetry", return_value=telemetry):
                     if stage in ("host", "app"):
                         target = (
-                            "app.api.LocalWorkflowHost" if stage == "host" else "app.api.FastAPI"
+                            "app.composition.LocalWorkflowHost"
+                            if stage == "host"
+                            else "app.api.app.FastAPI"
                         )
                         with patch(target, side_effect=error):
                             with self.assertRaises(RuntimeError) as caught:
@@ -661,7 +780,7 @@ class TelemetryTests(unittest.TestCase):
     def test_request_canaries_do_not_reach_metrics_even_when_unsampled(self):
         reader = InMemoryMetricReader()
         with patch(
-            "app.api.Telemetry",
+            "app.composition.Telemetry",
             side_effect=lambda *args, **kwargs: Telemetry(
                 *args, metric_reader=reader, **kwargs
             ),

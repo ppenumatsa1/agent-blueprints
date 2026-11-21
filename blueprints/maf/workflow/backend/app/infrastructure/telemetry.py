@@ -1,35 +1,33 @@
 """Allowlisted operational telemetry; never inspect application payloads."""
 
+import inspect
 import json
 import logging
 import os
 import time
-import inspect
-import threading
 from contextlib import contextmanager
 from functools import wraps
 from uuid import UUID
 
-from agent_framework.observability import enable_instrumentation
-from opentelemetry import metrics as otel_metrics
-from opentelemetry import trace as otel_trace
+from agent_framework.observability import disable_instrumentation
+from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.metrics import (
+    AlwaysOffExemplarFilter,
     Counter,
     Histogram,
+    MeterProvider,
     ObservableCounter,
     ObservableGauge,
     ObservableUpDownCounter,
     UpDownCounter,
 )
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.resources import Resource
-from opentelemetry.sdk.metrics import AlwaysOffExemplarFilter, MeterProvider
 from opentelemetry.sdk.metrics.export import (
     AggregationTemporality,
     MetricExporter,
     MetricExportResult,
     PeriodicExportingMetricReader,
 )
+from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, SpanExportResult, SpanExporter
 from opentelemetry.trace import SpanKind, Status, StatusCode
 from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
@@ -41,8 +39,6 @@ if not _log.handlers:
 _log.setLevel(logging.INFO)
 _log.propagate = False
 _propagator = TraceContextTextMapPropagator()
-_global_provider_lock = threading.Lock()
-_global_providers_registered = False
 _OPERATIONS = frozenset(
     {
         "http.request",
@@ -98,14 +94,20 @@ def instrumented(name):
 
 
 class SafeExporter(SpanExporter):
-    """Keep exporter errors and exception text out of operational logs."""
+    """Drop unredacted FastAPI spans and keep exporter diagnostics payload-free."""
 
     def __init__(self, exporter):
         self._exporter = exporter
 
     def export(self, spans):
+        spans = tuple(spans)
+        exportable = tuple(
+            span for span in spans if span.instrumentation_scope.name != "fastapi"
+        )
+        if spans and not exportable:
+            return SpanExportResult.SUCCESS
         try:
-            result = self._exporter.export(spans)
+            result = self._exporter.export(exportable)
         except Exception:
             result = SpanExportResult.FAILURE
         if result != SpanExportResult.SUCCESS:
@@ -203,7 +205,6 @@ class Telemetry:
         exporter=None,
         metric_exporter=None,
         metric_reader=None,
-        enable_native_instrumentation=False,
     ):
         if mode not in ("local", "azure-monitor"):
             raise ValueError("TELEMETRY_MODE must be local or azure-monitor.")
@@ -225,6 +226,7 @@ class Telemetry:
         provider = meter_provider = azure_reader = processor = None
         processor_attached = reader_attached = False
         try:
+            disable_instrumentation()
             if mode == "azure-monitor":
                 # Do not let exporter diagnostics collect environment identifiers.
                 for setting in (
@@ -269,22 +271,6 @@ class Telemetry:
                 processor = BatchSpanProcessor(SafeExporter(exporter))
                 provider.add_span_processor(processor)
                 processor_attached = True
-            if enable_native_instrumentation:
-                global _global_providers_registered
-                with _global_provider_lock:
-                    if not _global_providers_registered:
-                        # Agent Framework instrumentation uses the process-wide OTel providers.
-                        otel_trace.set_tracer_provider(provider)
-                        otel_metrics.set_meter_provider(meter_provider)
-                        if (
-                            otel_trace.get_tracer_provider() is not provider
-                            or otel_metrics.get_meter_provider() is not meter_provider
-                        ):
-                            raise RuntimeError("OpenTelemetry providers were already configured.")
-                        _global_providers_registered = True
-                enable_instrumentation(
-                    enable_sensitive_data=False, enable_message_events=False
-                )
         except Exception:
             if provider is not None:
                 try:

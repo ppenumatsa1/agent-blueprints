@@ -11,6 +11,7 @@ from app.api.routes.health import router as health_router
 from app.config import Settings
 from app.infrastructure.delegation import OnBehalfOf
 from app.infrastructure.identity import IdentityProvider
+from app.infrastructure.telemetry import Telemetry
 from app.usecases.service import WorkflowService
 
 Lifespan = Callable[[FastAPI], AbstractAsyncContextManager[None]]
@@ -22,11 +23,25 @@ def create_api_app(
     identity: IdentityProvider,
     obo: OnBehalfOf,
     lifespan: Lifespan,
+    telemetry: Telemetry,
 ) -> FastAPI:
-    app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
+    app = FastAPI(
+        lifespan=lifespan,
+        docs_url=None,
+        redoc_url=None,
+        openapi_url=None,
+        telemetry={
+            "tracing": False,
+            "metrics": False,
+            "logs": False,
+            "operation_spans": False,
+            "auto_configure": False,
+        },
+    )
     app.state.service = service
     app.state.identity = identity
     app.state.obo = obo
+    app.state.telemetry = telemetry
 
     if settings.cors_origins:
         app.add_middleware(
@@ -37,7 +52,7 @@ def create_api_app(
             allow_headers=["Authorization", "Content-Type", "Idempotency-Key"],
         )
 
-    install_request_middleware(app)
+    install_request_middleware(app, telemetry)
     install_exception_handlers(app)
     app.include_router(health_router)
     app.include_router(cases_router, prefix="/api")
