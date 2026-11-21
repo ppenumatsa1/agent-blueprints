@@ -150,6 +150,25 @@ path before promising it. Foundry-managed checkpoints do not replace PostgreSQL
 business state; ACA recovery requires separate evidence. Select a fallback
 explicitly and never provision Azure resources without approval.
 
+### P1-11 observability increment
+
+The MAF backend now has manually instrumented request, workflow, database
+connection and OBO boundaries, allowlisted JSON operational logs and optional
+Azure Monitor trace export. Acceptance requires canary, correlation and export
+failure tests, credential-free generated-project CI, and no workflow changes.
+Evidence: [tests](../blueprints/maf/workflow/backend/tests/test_telemetry.py)
+and [operational guidance](../blueprints/maf/workflow/README.md#operational-telemetry).
+Local source and independent-copy backend suites each passed 40 tests before
+the final non-recording-span fix; the final focused telemetry suite passed
+eight cases in each. Browser suite passed nine tests, build and CSP checks passed; the
+generated standalone verifier passed 44 tests and Compose returned UI 200,
+health 204 and protected API 401. One later Compose startup attempt failed;
+an immediate retry passed. These checks do not prove cloud export.
+This increment remains in progress pending branch/CI review and real hosted
+verification. Outbound/Foundry propagation, sampling,
+retention, regional placement and access policy require separate validation.
+No Azure provisioning or ingestion is implied.
+
 ## Later phases
 
 | Phase | Scope and dependency |
