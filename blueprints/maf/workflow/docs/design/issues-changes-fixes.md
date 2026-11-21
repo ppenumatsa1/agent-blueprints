@@ -154,6 +154,24 @@ entries to hide failed attempts or gaps.
   `backend/app/`, `frontend/`, `backend/Dockerfile`, and
   `tests/test_instantiation.py`.
 
+### 2026-11-21 - Reconcile documentation with checkpoint foundation
+
+- **Change / decision:** Rebase the documentation work onto foundation
+  `9efeef0`, preserving its checkpoint timestamp-tie and hosted caller-binding
+  investigations, canonical imports, and the documentation and copy/link
+  checks. The foundation also rejects incomplete terminal checkpoint state
+  during completion and replay.
+- **Evidence:** Foundation PR #11 run
+  [44936094798](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44936094798)
+  passed all five checks for exact commit
+  `9efeef01101b176a1a10627c654eff0ca5150b6b`. The two
+  `tests.test_instantiation` tests pass locally after rebasing this branch.
+  Hosted checks for this dependent PR must still be confirmed on its pushed
+  final head.
+- **Limit:** This is documentation reconciliation and regression evidence; it
+  does not verify Azure hosting, interactive debugging on macOS, live
+  Entra/OBO, or hosted checkpoint recovery.
+
 ## 2026-11-21 - Reconcile dependent documentation with cleaned foundation
 
 - **Change / decision:** Rebase the documentation work onto foundation
@@ -172,7 +190,7 @@ entries to hide failed attempts or gaps.
 
 - **Status and revision:** Open, based on `modularity-foundation`; head
   `e1d953662e615e547fa641ad0831907c363318e3`. It is a parallel workstream and
-  is not included in cleaned foundation commit `61d44ed`.
+  is not included in cleaned foundation commit `9efeef0`.
 - **Proposed changes:** Python 3.12, uv 0.9.26, public-PyPI `uv.lock` and
   hash-pinned backend/image installs, Ruff 0.14.13, Node 22 with `npm ci`,
   and VS Code task/debug configurations.
@@ -192,7 +210,7 @@ entries to hide failed attempts or gaps.
 | Item | Status | Evidence needed / next action |
 | --- | --- | --- |
 | Eight design documents and generated inclusion | In progress | Focused instantiation tests passed after rebase; confirm this PR's hosted CI on its rebased head. |
-| Canonical imports and legacy-shim removal | Implemented in foundation commit `61d44ed` | Foundation PR #11 run 44930591252 passed all five checks; preserve direct imports in later changes. |
+| Canonical imports and legacy-shim removal | Implemented in foundation commit `9efeef0` | Foundation PR #11 run 44936094798 passed all five checks; preserve direct imports in later changes. |
 | Locked developer tooling | Open in parallel PR #13 | Reconcile only after review/merge; verify any resulting revision and platform matrix independently. |
 | Current dependent PR CI | Pending on updated revision | Confirm all required checks correspond to the pushed PR head. |
 | Foundry host caller binding and lost-response recovery | Blocked | Establish supported identity and reconciliation guarantees before implementing a hosted bridge. |
