@@ -41,22 +41,24 @@ responsibilities using canonical imports and no compatibility aliases. Acceptanc
 requires source and generated security/recovery tests, both crash windows,
 independent golden verification and exact contract bytes, credential-free
 CI and Compose smoke checks. Local evidence is recorded in the
-[checklist](master-checklist.md); PR review and hosted CI for the revised
-head remain pending. An intermittent local restore failure was observed during
-migration testing. A deterministic equal-timestamp reproduction showed that
-the previous host could select an earlier checkpoint; it does not prove the
-unretained original failure had the same cause. The foundation now selects
-MAF-native persisted checkpoints and rejects incomplete terminal state on
-completion and replay. Local source/generated backend suites passed 36 tests
+[checklist](master-checklist.md). An intermittent local restore failure was
+observed during migration testing. A deterministic equal-timestamp reproduction
+showed that the previous host could select an earlier checkpoint; it does not
+prove the unretained original failure had the same cause. The foundation now
+selects MAF-native persisted checkpoints and rejects incomplete terminal state
+on completion and replay. Local source/generated backend suites passed 36 tests
 each; the selected-adapter root suite passed 46 and the generated verifier
-passed 44 without skips. Confirm actual-head CI and reconcile dependent PRs
-without treating prior-head CI as evidence.
-An independent CI regression exposed that the generated-verifier command's
-failure could be masked by `tee`. The workflow now propagates pipeline
-failures and the [regression test](../tests/test_ci_workflow.py) exercises
-failure, skip and success behavior. Prior CI job status alone is not proof
-that the verifier passed; confirm actual logs and revised-head CI before
-review.
+passed 44 without skips. Foundation PR #11 remains open; its
+[actual-head run](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44939172266)
+passed all five checks on `d0e172751a39bc6e3a072d80482b3581b7007413`. This is CI evidence, not proof of live
+hosting. Confirm CI on the revised dependent PR head; do not treat prior-head
+CI as evidence. An independent CI regression exposed that the generated
+verifier command's failure could be masked by `tee`. The workflow now
+propagates pipeline failures, and the [regression test](../tests/test_ci_workflow.py)
+exercises failure, skip, expected-failure, and success behavior. Foundation
+run 44939172266 is the exact-head validation of that fix. Prior CI job status
+alone is not proof that the verifier passed; confirm actual logs and
+revised-head CI before review.
 The copied evidence producer observed approval and recovery passing while
 explanation and browser hint remained unverified; the independent unsigned
 readiness report remained unverified. The first local container build could
@@ -66,14 +68,84 @@ Independent workstreams cover locked tooling, migrations, observability,
 Foundry hosting, infrastructure and integration evidence. Do not merge PRs
 without approval. Azure deployment is a deliverable but requires prior
 approval of its resource inventory, estimated cost and deployment plan;
-permanent reference repository creation requires separate approval.
+permanent reference repository creation requires separate approval. As of 2026-11-21, locked tooling is proposed in open
+[PR #13](https://github.com/ppenumatsa1/agent-blueprints/pull/13), currently
+at `7325765cbbfb809e2064ec0e78a5567b465e3621`. Actions run
+[44947297321](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44947297321)
+passed all five jobs on that exact head. The owner reports a headless
+generated-project debugpy/DAP smoke using `.vscode/launch.json`'s
+`Backend: FastAPI` configuration: execution stopped at `health.py:9`, the
+stack was inspected, and continuing returned HTTP 204 with exit code 0;
+temporary resources were cleaned. That report did not identify an immutable
+revision. It does not verify the interactive VS Code UI, Restricted Mode, or
+macOS. Earlier Windows/Linux Compose verification used an approved mirror
+after public TLS failures. The owner also previously could not run uv in a
+separate validation environment. PR #13's checks and reported debugger
+evidence do not establish that the proposal is merged or validated on this
+branch.
+
+For PR #16, the owner reports guarded Alembic adoption only after exact
+baseline-manifest validation and checking that no later-revision-owned tables
+exist; fresh databases run revision `0001`, and validation never stamps.
+Source/generated suites each passed 48 tests on PostgreSQL 16.15 and 17.12;
+the root suite passed 47 with one expected adapter-not-selected skip. Run
+44944613749 passed five jobs for `897aae8` against `d0e1727`, but is stale
+relative to foundation head `8144918`; reconcile and rerun before relying
+on this evidence. The owner later reported a local integration commit
+`ce86252324dca041fd5430602a3fc2c28a355274` atop PR #11 ancestry `51a0666`,
+with 12 focused PostgreSQL 17 migration regressions and Ruff 0.14.13
+lint/format checks passing. This commit is held for remaining deltas, and
+its ancestry must be reconciled; it has no final combined or hosted verification.
 
 Each PR must remove obsolete compatibility layers, use direct imports,
 update affected `docs/design` specifications and the cumulative engineering
 journal, and record actual regression, security, durability, independent
-verification and CI outcomes for its final revision. The design documents
-must accompany generated applications and distinguish planned work from
-verified behavior.
+verification and CI outcomes for its final revision. PR #12 is deepening the
+six generated-project guides and eight documents under
+`blueprints/maf/workflow/docs/design/`; these documents must evolve alongside
+implementation, remain in generated applications, and use actual
+source/configuration references, meaningful Mermaid diagrams, and accurate
+implemented/planned labels. The current documentation working tree passed three focused
+instantiation and generated-verifier pipeline tests. PR #11 is now pushed at
+`44ee18b886d409b0b59cf6df6b4893917370307d`. Its canonical source separates
+`composition.py`, `api/app.py`, route handlers, schemas, dependencies,
+errors, middleware, and `lifecycle.py`; the current PR #12 source-map links
+now point to these exact paths. The owner reports 37 backend tests passed.
+Actions run 44944929394 completed with four jobs passing and `contracts`
+failing on the stale `specs.md` API link; the root suite had 47 tests, one
+failure from that link, and one expected adapter-not-selected skip. Rebase
+onto the new head and rerun root/contracts before final PR validation. The
+coordinator reports the minimal link correction was then pushed at
+`814491811eac457826108b70fc213fdc564af0e5`; root tests passed 47/47 and
+Actions run
+[44945419570](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44945419570)
+passed all five jobs on that exact head, including generated checks without
+skips. PR #12 is now rebased onto that tip; the isolated root suite passed
+47 tests with one expected adapter-not-selected skip, including generated
+copy/link and verifier-pipeline tests, and `git diff --check` passed. This does
+not substitute for checking hosted CI on PR #12's pushed head. Maintain the
+engineering journal without inventing historical findings. For each meaningful PR update
+this plan, `docs/master-checklist.md`, and relevant architecture documentation
+with acceptance criteria, evidence, status, and next action.
+
+### Cross-cutting PR acceptance gates
+
+Before any PR is ready for approval, keep one canonical implementation and
+use direct imports. Remove compatibility shims, forwarding modules, legacy
+import aliases, obsolete directories, duplicate code, unused dependencies,
+and stale configuration; backward compatibility with prior internal
+implementations is not required for this greenfield blueprint. Update
+dependent call sites, tests, Dockerfiles/build contexts, CI, documentation,
+and instantiation scripts in the same coherent change while preserving
+functional behavior and verification contracts.
+
+Before requesting approval, run applicable regression, security, durability,
+and independent verification tests; do not weaken or relabel failed or
+unverified checks. Confirm GitHub Actions for the actual PR head revision.
+Live Entra/OBO, Foundry-hosted recovery, cloud telemetry, and Azure deployment
+remain unverified until separately implemented and evidenced. Azure
+provisioning and permanent repository creation still require separate
+authorization; never merge automatically.
 
 P1-01 through P1-04 have an initial local foundation and a test-only
 application adapter, but the scenario has no authorized contract approval.
@@ -106,9 +178,9 @@ the local HTTP smoke check. Its unsigned readiness report is unverified.
 | P1-08 | Implement an accessible MSAL React client for sign-in, submission, status, approval/rejection, and failure states. | P1-01, P1-07 API contract | UI tests cover visible states and safe retries; browser code contains no service secrets. |
 | P1-09 | Implement a native MAF workflow with local file checkpoints, isolated pause/resume, rejection, and recovery. | P1-01, P1-06 interfaces | Local tests cover repeated decisions, concurrent requests, and recovery without a universal orchestration wrapper; Foundry hosting is deferred to P1-12. |
 | P1-10 | Add integration/E2E tests, synthetic agent evaluations, and GitHub Actions; connect actual results and artifacts to the validator. | P1-04 through P1-09 | A local or CI run produces a report from real artifacts; blocking failures cannot pass, non-blocking outcomes follow the selected profile, and rubric/threshold decisions are recorded. |
-| P1-11 | Add privacy-safe logs, traces, correlation, and operational signals across API, workflow, approvals, and side effects. | P1-07, P1-09 interfaces | Tests verify redaction and correlation; actual export remains environment-specific. |
+| P1-11 | Add privacy-safe logs, traces, correlation, and operational signals across API, workflow, approvals, and side effects. | P1-07, P1-09 interfaces | Planned and unverified. The PR #14 owner reports opt-in native-global instrumentation emitted duplicate FastAPI spans alongside manual HTTP telemetry and leaked a synthetic query canary into exported span JSON. The owner is removing that opt-in or disabling auto-instrumentation; exact fix revision and privacy regression results are pending. Do not claim native MAF instrumentation safe; see the [journal](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-21---hosted-recovery-and-telemetry-evidence-updates). |
 | P1-15 | Demonstrate the local prototype from a synthetic specification through approval, evaluation, and its readiness report. | P1-10, P1-11 | Record the scenario, evidence, limitations, and observed elapsed time; the 2–3 hour objective is a target until a representative run demonstrates it. |
-| P1-12 | Validate Foundry Hosted Agent compatibility for the selected MAF version, Responses protocol, request-aware workflow factory, identity, and host-managed checkpoints. | P1-09, P1-15 | Hosted caller binding and lost-response reconciliation are blocked; see the [investigation journal](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-21---hosted-caller-binding-and-lost-responses). Local checks alone are not a hosted deployment. No Azure resources are provisioned. |
+| P1-12 | Validate Foundry Hosted Agent compatibility for the selected MAF version, Responses protocol, request-aware workflow factory, identity, per-user session isolation, and host-managed checkpoints. | P1-09, P1-15 | Microsoft warns delegated users are not fenced from one another within a shared session. A trusted app must authenticate callers, verify an explicit mapping to the validated principal, enforce a server-side caller-to-session mapping, assign distinct session IDs, and reject unchecked client IDs; opaque `x-ms-user-identity` is not authorization and is not assumed to equal platform-generated `x-agent-user-id`. The bridge and mapping tests are absent. The OID header is identity, not a credential; hosted secret delivery/rotation and downstream OBO token lifecycle are not implemented, and end-user bearer/OBO tokens must not be persisted. Public source for `agent-framework-foundry-hosting==1.0.0b261112` confirms `response_id` and request-aware factory ordering only; safe binding, per-continuation reservations, side-effect recovery, pending-reply ordering, hosted auth, and runtime guarantees remain unverified. Local AgentServer one-shot task IDs were ephemeral and did not deduplicate completed results in the tested SDK version; this is local-only evidence, not hosted behavior. Lost-response recovery remains blocked; see the [hosted investigation](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-21---hosted-caller-binding-and-lost-responses), [session-isolation clarification](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-21---delegated-session-isolation-and-debugger-evidence), and [recovery evidence update](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-21---hosted-recovery-and-telemetry-evidence-updates). Local checks alone are not a hosted deployment. No Azure resources are provisioned. |
 | P1-13 | Prepare the explicitly selected ACA fallback and a framework-compatible checkpoint strategy. | P1-09, P1-15 | Separate local/container recovery and idempotency checks pass; no claim that ACA shares Foundry checkpoint ownership or silently replaces a failed model call. |
 | P1-14 | Prepare Bicep, least-privilege identities, authenticated public endpoints, GitHub-hosted CI, and deployment/handoff instructions. Deploy only after separate Azure authorization. | P1-10, P1-11, P1-12; P1-13 if selected | Static checks work without Azure credentials; an authorized deployment later records its revision, versions, identity, network, evidence, cost, and teardown owner. |
 

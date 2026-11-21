@@ -6,6 +6,30 @@ select their own workflow, policy, rules, and transactional action; the
 included synthetic action is an explicit example, not a customer scenario
 or a replacement for a failed model or tool call.
 
+## Project guide
+
+These guides are copied into generated projects and describe the current
+local prototype, not a production deployment:
+
+- [Architecture and extension recipes](docs/architecture.md)
+- [Setup and configuration](docs/setup.md)
+- [Development and debugging](docs/development.md)
+- [Testing and evidence](docs/testing.md)
+- [Deployment design](docs/deployment.md)
+- [Observability design and troubleshooting](docs/operations.md)
+
+The design baseline is in [docs/design](docs/design/architecture.md):
+[PRD](docs/design/prd.md),
+[technology stack](docs/design/techstack.md),
+[specifications](docs/design/specs.md),
+[architecture](docs/design/architecture.md),
+[project structure](docs/design/projectstructure.md),
+[user flow](docs/design/userflow.md),
+[deployment flow](docs/design/deployment-flow.md), and the cumulative
+[engineering journal](docs/design/issues-changes-fixes.md). These documents
+are maintained with the implementation and copied into every generated
+project; planned hosting and cloud behavior remain unverified.
+
 The local host uses MAF `FileCheckpointStorage` on a private, persistent
 single-host volume. PostgreSQL separately holds business records, decisions,
 audit events, and the action ledger. A per-case database lock coordinates
@@ -17,15 +41,6 @@ The Foundry Responses adapter and Foundry-managed checkpoint storage and
 recovery are deferred to P1-12. The local store is not a shared-store or
 hosted-recovery solution. Do not mount a local checkpoint provider into a
 future host that supplies its own provider.
-
-## Design and operations
-
-The [design index](docs/design/projectstructure.md) links the component
-structure and extension points. The design documents include the
-[requirements](docs/design/prd.md), [technology stack](docs/design/techstack.md),
-[specifications](docs/design/specs.md), [architecture](docs/design/architecture.md),
-[user journeys](docs/design/userflow.md), [deployment flow](docs/design/deployment-flow.md),
-and [engineering journal](docs/design/issues-changes-fixes.md).
 
 ## Local stack
 

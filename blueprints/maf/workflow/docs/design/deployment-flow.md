@@ -32,18 +32,67 @@ deployment command.
 5. Stop with `docker compose down`; volumes persist. Back up or delete data
    only under the operator's policy.
 
+### Compose configuration and startup
+
+Compose requires `POSTGRES_PASSWORD`, `BLUEPRINT_APPLICATION`,
+`ENTRA_TENANT_ID`, `ENTRA_API_CLIENT_ID`, `ENTRA_SPA_CLIENT_ID`, and
+`ENTRA_API_APP_ID_URI`. Optional `BLUEPRINT_PORT` defaults to `8080`;
+`NPM_REGISTRY` and `PYTHON_PACKAGE_INDEX` default to the public registries.
+`OBO_ENABLED` defaults to `false`; enabling it also requires
+`ENTRA_API_CLIENT_SECRET` and resource-qualified `OBO_ALLOWED_SCOPES`.
+Never put credentials in the Vite `VITE_*` build arguments; they are public
+browser configuration. Full purpose and sensitivity descriptions are in
+[setup](../setup.md).
+
+`compose.yaml` starts PostgreSQL 17 and waits for its readiness probe before
+starting the API. API startup reads settings, initializes the current
+`schema.sql`, initializes the selected application factory, then attempts
+recovery of recoverable cases before its health check succeeds. The web
+container waits for API health and is the only published service; its port is
+bound to `127.0.0.1`. Named volumes retain PostgreSQL data and local file
+checkpoints across `docker compose down`.
+
+```mermaid
+sequenceDiagram
+    participant Operator
+    participant Compose
+    participant DB as PostgreSQL 17
+    participant API as FastAPI + local MAF
+    participant Web as React web container
+    Operator->>Compose: up --build --wait with required environment
+    Compose->>DB: Start; wait for pg_isready
+    Compose->>API: Start with DB URL and private checkpoint volume
+    API->>DB: Initialize current schema.sql
+    API->>API: Build application components
+    API->>DB: Enumerate recoverable cases
+    API->>API: Reconcile local checkpoints under case lock
+    Compose->>Web: Build with public Vite Entra settings
+    Compose->>Web: Start after API /healthz succeeds
+    Operator->>Web: Browse on loopback HTTP
+```
+
+Schema initialization uses `CREATE TABLE IF NOT EXISTS`, not versioned
+migrations; it is not an upgrade path for arbitrary existing schemas. Local
+recovery is single-host and uses the persistent file-checkpoint volume. Do not
+copy this topology to a hosted runtime: Foundry-managed checkpoint recovery,
+caller binding, and lost-response handling remain unresolved.
+Versioned migration support is proposed separately in
+[PR #16](https://github.com/ppenumatsa1/agent-blueprints/pull/16); its
+legacy-adoption and upgrade checks have not been reconciled onto this baseline
+or verified against the current foundation.
+
 ## CI and independent generation
 
-`.github/workflows/ci.yml` (source repository) runs contract/readiness tests,
-PostgreSQL-backed backend tests, frontend tests/build/CSP checks, Compose HTTP
-and permission checks, and `maf-independent`. The independent job creates the
-project outside the checkout, checks its own imports and build contexts, runs
-generated backend/frontend/verification tests, validates evidence
-disclosures, and builds the generated Compose stack. CI does not provision
-Azure or prove live Entra/Foundry behavior. The generated-verifier pipeline
-propagates the test command's nonzero exit through `tee` and separately
-rejects skipped or expected-failure results; `tests/test_ci_workflow.py`
-exercises these failure paths against the actual CI step.
+The source `.github/workflows/ci.yml` has five jobs: `contracts`,
+PostgreSQL-backed `maf-core`, `maf-frontend` tests/build/CSP, `maf-compose`
+HTTP/permission checks, and `maf-independent`. The independent job generates
+outside the checkout, installs generated dependencies, runs backend/frontend
+and verification tests, validates synthetic evidence disclosures, builds the
+generated Compose stack, then removes its services. Its verifier step
+propagates test failures through `tee` and rejects skipped or expected-failure
+results; `tests/test_ci_workflow.py` exercises these paths against the actual
+workflow step. CI does not provision Azure or prove live Entra/Foundry
+behavior.
 
 Before PR approval:
 
