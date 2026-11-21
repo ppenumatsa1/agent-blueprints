@@ -1,4 +1,5 @@
 agent-framework-core==1.26.0
+alembic==1.16.5
 fastapi==0.162.7
 msal==1.39.0
 psycopg[binary]==3.3.9

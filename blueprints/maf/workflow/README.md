@@ -80,6 +80,41 @@ checkpoint directory must remain private to that account. On Windows outside
 the container, enforce equivalent filesystem ACLs. MAF's restricted
 checkpoint deserialization remains enabled.
 
+## Business database migrations
+
+`backend/migrations` contains the Alembic baseline and immutable original SQL.
+API startup serializes initialization using a PostgreSQL advisory transaction
+lock. An empty schema is created and stamped `0001`; an unversioned schema is
+adopted only when its four business tables match the baseline. Existing rows,
+including decisions, audit and action ledger, are not rewritten. Versioned
+schemas are checked on each startup. Incomplete or divergent schemas, changed
+baseline bytes, and unknown revisions fail startup; no repair is automatic.
+The comparison covers table/column shape, defaults, constraints, indexes,
+triggers, rules, policies, inheritance and identity-sequence settings, not ownership, grants, other tables,
+data correctness, or external dependencies. Application-owned tables remain
+outside this baseline. PostgreSQL 17 has local test evidence; other versions
+and managed-service configurations remain unverified.
+
+The configured search path must select the intended business schema first.
+The database identity needs permission to create a schema in the database
+(a disposable reference schema is created and dropped transactionally on
+every initialization), plus rights to inspect and create/alter tables in the
+target schema and manage Alembic's version table. Validate these privileges
+before upgrading. Do not initialize concurrently with manual DDL or older
+application versions: the advisory lock coordinates only cooperating instances.
+Operationally quiesce writers and take a verified, consistent database and
+checkpoint backup first. Review any drift, then restore or explicitly repair
+the schema under change control and retry; do not delete data or stamp an
+unknown revision to bypass checks. Recover database and native checkpoints as
+a coordinated pair and reconcile external effects separately.
+
+There is **no automatic downgrade** from the baseline. A failed initialization
+rolls back its DDL and revision update; restore a verified compatible backup
+if recovery requires reverting. Future revisions must supply reviewed
+per-version drift checks and migration/rollback tests before release; this
+baseline-only checker deliberately rejects incompatible changes. Alembic
+tracks business schema versions, not MAF checkpoints or human authorization.
+
 Optional server-side OBO requires `OBO_ENABLED=true`, an existing
 `ENTRA_API_CLIENT_SECRET`, and comma-separated `OBO_ALLOWED_SCOPES`.
 Never put that secret in a frontend build argument or browser configuration.
@@ -122,7 +157,7 @@ Use Python 3.12 and an isolated PostgreSQL database. Install
 `MAF_TEST_DATABASE_URL` to the test database, and run from `backend`:
 
 ```text
-python -m unittest -v tests.test_core tests.test_security tests.test_evidence_runner
+python -m unittest -v tests.test_core tests.test_security tests.test_evidence_runner tests.test_migrations
 ```
 
 These tests fail rather than skip if the database is unavailable. They use
@@ -164,7 +199,7 @@ $env:SCENARIO_ADAPTER = (Resolve-Path .\backend\tests\order_adjustment_adapter.p
 Set-Location .\verification
 python -m unittest discover -s tests -v
 Set-Location ..\backend
-python -m unittest -v tests.test_core tests.test_security tests.test_evidence_runner
+python -m unittest -v tests.test_core tests.test_security tests.test_evidence_runner tests.test_migrations
 ```
 
 The golden adapter exercises the API, local MAF host, and synthetic database

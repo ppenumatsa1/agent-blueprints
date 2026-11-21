@@ -69,6 +69,20 @@ verification and CI outcomes for its final revision. The design documents
 must accompany generated applications and distinguish planned work from
 verified behavior.
 
+The migration workstream, based on `modularity-foundation`, adds Alembic
+baseline `0001` and catalog-checked adoption of existing business schemas.
+Acceptance requires fresh and concurrent initialization, preservation of
+business, approval, audit and action-ledger rows, rejection and recovery from
+drift, and an explicitly refused baseline downgrade. Local PostgreSQL 17
+tests (8 passed in both source and generated copy) and source and generated backend regressions (39 each before
+the final additional rollback test) passed. The source and generated images
+built with a local package proxy; source image initialization also passed.
+The [migration tests](../blueprints/maf/workflow/backend/tests/test_migrations.py)
+and [operations guide](../blueprints/maf/workflow/README.md#business-database-migrations)
+record the scope and limits. Next: reconcile dependencies, Dockerfile, CI and
+living documentation with parallel workstreams; run credential-free hosted
+CI on the reviewed PR head. No hosted CI or live backup/restore is claimed.
+
 P1-01 through P1-04 have an initial local foundation and a test-only
 application adapter, but the scenario has no authorized contract approval.
 Trusted result production and repository protection remain unverified. The

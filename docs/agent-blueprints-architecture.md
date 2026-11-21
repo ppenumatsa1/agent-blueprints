@@ -15,16 +15,27 @@ The local blueprint and its generated copy now have sibling `backend` and
 generic domain ports and policy, native MAF workflow/host, and PostgreSQL and
 identity infrastructure. Application factories and transactional-action
 interfaces remain the extension boundaries; use canonical module imports.
-Requirements, examples, schema and backend tests are owned by `backend`.
+Requirements, examples, migrations and backend tests are owned by `backend`.
 The verifier and exact contract bytes remain independent of the runtime.
 
 The longer-term target adds separately reviewed dependency locking and
-developer tooling, migrations, privacy-safe telemetry, a Foundry Responses
+developer tooling, privacy-safe telemetry, a Foundry Responses
 adapter and host-managed checkpoints, and Foundry-first Bicep/azd for
 separately hosted frontend and API services. These are not implemented by
 this modularity increment. Hosting the workflow runtime in ACA is a deferred
 alternative requiring its own verified checkpoint strategy. Neither topology
 is a verified deployment; provisioning requires separate authorization.
+
+The migration increment adds an Alembic `0001` baseline for PostgreSQL
+business tables. Empty schemas are initialized, and existing schemas are
+adopted only after a catalog comparison with the immutable baseline; drift
+fails closed. Initialization, schema comparison and version stamping share
+one transaction and cooperating instances serialize via an advisory lock.
+The reference-schema permission requirements, backup and rollback limits,
+and scope of drift detection are in the [blueprint](../blueprints/maf/workflow/README.md#business-database-migrations).
+These migrations do not own MAF checkpoints or independently authorize
+business approvals. This branch is stacked on the modularity foundation;
+hosted CI and live operational recovery remain unverified.
 
 | Layer | Responsibility | Examples |
 | --- | --- | --- |

@@ -44,6 +44,9 @@ class InstantiationTests(unittest.TestCase):
                     resolved = (markdown.parent / linked_path).resolve() if linked_path else markdown.resolve()
                     with self.subTest(document=markdown.relative_to(target), link=destination):
                         self.assertTrue(resolved.is_file(), f"Broken generated-project link: {destination}")
+            for name in ("baseline.sql", "env.py", "versions/0001_baseline.py"):
+                source = ROOT / "blueprints" / "maf" / "workflow" / "backend" / "migrations" / name
+                self.assertEqual(source.read_bytes(), (target / "backend" / "migrations" / name).read_bytes())
             self.assertFalse((target / "frontend" / "node_modules").exists())
             self.assertFalse((target / "frontend" / "dist").exists())
             self.assertFalse((target / ".env").exists())
