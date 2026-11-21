@@ -34,9 +34,9 @@ Managed database operations and live backup/restore remain unverified
 resource or permanent repository creation is authorized by this PRD.
 
 The latest verified integrated snapshot is PR #17 head
-`fcd8f6f4f5cf48d537b9183aefa35b6b079feb76`, based on foundation
+`5d71842931446a5fe1cd2566c5d32f77e6ed4d5d`, based on foundation
 `1e99e038dc31c0ae25e5ea7712030d204ee35bc0`; all six jobs passed in run
-`44957081895`. Merge ref `3c9c5842fc29b34e70b7c33b7be8beb215a9735c` had
+`44959327591`. Merge ref `206a4aa9ab37cf0b8983ae4cea3b081d34ac784b` had
 exact base/head parents and a tree identical to the head. Any later tree or
 base change also requires revalidation. Neither result makes the blueprint
 or a generated application complete or deployment-ready.

@@ -1022,7 +1022,7 @@ entries to hide failed attempts or gaps.
 
 | Item | Status | Evidence needed / next action |
 | --- | --- | --- |
-| Eight design documents and generated inclusion | Passed at exact tested head `fcd8f6f` | `maf-independent` passed in run 44957081895 after copying and checking the issue-linked documentation. Earlier run 44955210922 applies to `152743a`, not this head. |
+| Eight design documents and generated inclusion | Passed at exact tested head `5d71842` | `maf-independent` passed in run 44959327591 after copying and checking the issue-linked documentation. |
 | Canonical imports, API module boundaries and legacy-shim removal | Implemented in foundation head `1e99e03` | PR #11 run [44954168348](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44954168348) passed five checks for that exact head. Preserve direct imports and canonical route/composition/lifecycle boundaries. |
 | Generated-verifier pipeline failure propagation | Implemented in foundation commit `d0e1727`, retained at `1e99e03` | `tests/test_ci_workflow.py` covers failed, skipped, expected-failure, and successful outputs; PR #11 run 44954168348 passed all five checks at head `1e99e03`. |
 | Locked developer tooling | Passed source/generated installs and Ruff at exact tested head `b633539` | Run 44955776238 passed the locked source/generated jobs. Earlier run 44955210922 applies to `152743a` only. macOS, interactive debugging and Restricted Mode remain unverified; track [#23](https://github.com/ppenumatsa1/agent-blueprints/issues/23). |
@@ -1030,8 +1030,8 @@ entries to hide failed attempts or gaps.
 | Versioned database migrations | Integrated; exact-head source/generated CI passed | Run 44955776238 passed `maf-core` and `maf-independent` on `b633539`. Managed PostgreSQL version alignment, backup/restore and operational evidence remain in [#24](https://github.com/ppenumatsa1/agent-blueprints/issues/24); historical PG16 tests were on separate revisions. |
 | Foundry-first infrastructure staging | Static validation passed; application graph not wired or deployed | Run 44955776238 passed `maf-infrastructure` and generated infrastructure checks on `b633539`. Private paths, database identity, auth/proxy wiring and service contracts remain in [#18](https://github.com/ppenumatsa1/agent-blueprints/issues/18); deployment requires separate authorization under [#28](https://github.com/ppenumatsa1/agent-blueprints/issues/28). |
 | PostgreSQL major-version alignment | Local integrated runtime tested on PostgreSQL 17.12 | Azure template selects 16; earlier 16.15 migration checks were on separate revisions. Resolve target and verify managed behavior under [#24](https://github.com/ppenumatsa1/agent-blueprints/issues/24). |
-| Combined PR #17 revision CI | Six-check pass on exact head `fcd8f6f4f5cf48d537b9183aefa35b6b079feb76`, base `1e99e038dc31c0ae25e5ea7712030d204ee35bc0` | Run [44957081895](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44957081895) passed all six checks. Merge ref `3c9c5842fc29b34e70b7c33b7be8beb215a9735c` had exact base/head parents and identical tree `3db77d24193aa2faa89ad22858889c04f4126d44`. Generated verifier passed 44 tests with no skips or expected failures. Synthetic producer continues to report approval/recovery passed, explanation/hint unverified, and unsigned validator exit 1/unverified. Earlier run 44955210922 applies to `152743a`, not this head. Any later tree/base change requires exact-head revalidation. |
-| Reusable MAF extension contracts (#35) | Implemented; local source/generated verification passed; draft PR CI pending | Added typed provider/model selection, explicit versioned prompt assets with source-byte digests, MAF `Agent` construction, principal-bound `FunctionTool` registration/authorization, and native `Executor`/`WorkflowBuilder` composition via the existing factory. At stacked revision `4d478db`, source and generated backend suites each passed 79 tests (including 7 extension tests), generated acceptance passed 44 tests with no skips, and root tests passed 47 tests with one expected adapter-not-selected skip; Ruff check/format passed on both backend copies. The generated synthetic example does not call a model or return synthetic model output. No live model, hosted identity/checkpoint/recovery (#19/#20/#22), trusted readiness (#21), or consequential external effect (#32) is verified. |
+| Combined PR #17 revision CI | Six-check pass on exact head `5d71842931446a5fe1cd2566c5d32f77e6ed4d5d`, base `1e99e038dc31c0ae25e5ea7712030d204ee35bc0` | Run [44959327591](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44959327591) passed all six checks. Merge ref `206a4aa9ab37cf0b8983ae4cea3b081d34ac784b` had exact base/head parents and identical tree `f537c547e3529c25cac5658cd3a8808b5b1a3c57`. Generated verifier passed 44 tests with no skips or expected failures. Synthetic producer continues to report approval/recovery passed, explanation/hint unverified, and unsigned validator exit 1/unverified. |
+| Reusable MAF extension contracts (#35) | Implemented locally; exact stacked PR CI pending | Added typed provider/model selection, explicit versioned prompt assets with source-byte digests, MAF `Agent` construction, principal-bound `FunctionTool` registration/authorization, and native `Executor`/`WorkflowBuilder` composition via the existing factory. After integrating #17 head `5d71842`, source and generated backend suites each passed 79 tests (including 7 extension tests), generated acceptance passed 44 tests with no skips, and root tests passed 48 tests with one expected adapter-not-selected skip; Ruff check/format passed on both backend copies. The generated synthetic example does not call a model or return synthetic model output. No live model, hosted identity/checkpoint/recovery (#19/#20/#22), trusted readiness (#21), or consequential external effect (#32) is verified. |
 | Foundry host identity, per-user isolation, checkpoints and lost-response recovery | Blocked and explicitly deferred | No trusted host bridge, per-caller session map, managed checkpoint integration or safe ambiguous-create recovery. Preserve distinction between `x-agent-user-id` and opaque `x-ms-user-identity`; never persist end-user bearer/OBO tokens. Track host/checkpoints [#19](https://github.com/ppenumatsa1/agent-blueprints/issues/19), recovery [#20](https://github.com/ppenumatsa1/agent-blueprints/issues/20), caller binding [#22](https://github.com/ppenumatsa1/agent-blueprints/issues/22). Deferral is not a security waiver. |
 | Independent readiness trust, evaluations and browser hints | Incomplete/unverified | Synthetic approval/recovery passed; explanation/hint remain unverified and unsigned validator exits 1. Track trust [#21](https://github.com/ppenumatsa1/agent-blueprints/issues/21), evaluations/hints [#25](https://github.com/ppenumatsa1/agent-blueprints/issues/25). |
 | Live Entra/OBO, accessible UI, external effects and local demo | Unverified or not exercised | Track [#27](https://github.com/ppenumatsa1/agent-blueprints/issues/27), P0 consequential effects [#32](https://github.com/ppenumatsa1/agent-blueprints/issues/32), and [#29](https://github.com/ppenumatsa1/agent-blueprints/issues/29). Block consequential remote actions until #32 is verified. |
@@ -1094,22 +1094,22 @@ available PR or test record does not establish one.
   builds the existing native approval workflow. Invalid provider/prompt
   configuration and unauthorized tool requests are covered. The unavailable
   test client raises if invoked; no response is fabricated.
-- **Verification:** At stacked revision `4d478db` (base
-  `fcd8f6f4f5cf48d537b9183aefa35b6b079feb76`), source and independently
+- **Verification:** At stacked revision `287e9b5` (base
+  `5d71842931446a5fe1cd2566c5d32f77e6ed4d5d`), source and independently
   generated backend suites each passed 79 tests, including all 7 extension
   tests; Ruff check and format passed in both. Generated acceptance passed 44
-  tests with no skips or expected failures. The isolated root suite passed 47
+  tests with no skips or expected failures. The isolated root suite passed 48
   tests with one expected adapter-not-selected skip. The generated project was
   imported from its independent copy and used its own locked virtual
   environment. The local transactional action fixture is not a remote-effect
   boundary; neither the tool registry nor the database ledger sandboxes Python
   or proves external authorization/idempotency. Consequential remote effects
   remain blocked pending #32. PR #17's base snapshot is independently verified by run
-  [44957081895](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44957081895):
-  all six jobs passed for exact head `fcd8f6f4f5cf48d537b9183aefa35b6b079feb76`
+  [44959327591](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44959327591):
+  all six jobs passed for exact head `5d71842931446a5fe1cd2566c5d32f77e6ed4d5d`
   and base `1e99e038dc31c0ae25e5ea7712030d204ee35bc0`; merge ref
-  `3c9c5842fc29b34e70b7c33b7be8beb215a9735c` had exact parents and tree
-  `3db77d24193aa2faa89ad22858889c04f4126d44`, identical to the head.
+  `206a4aa9ab37cf0b8983ae4cea3b081d34ac784b` had exact parents and tree
+  `f537c547e3529c25cac5658cd3a8808b5b1a3c57`, identical to the head.
 - **Install attempt and workaround:** Direct `uv sync --locked` for the
   generated copy hit a TLS handshake failure fetching `cffi` from
   `files.pythonhosted.org`. No lock or dependency files were changed. Exporting

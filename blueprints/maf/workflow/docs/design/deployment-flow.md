@@ -5,10 +5,10 @@
 **Implemented:** local development, Docker Compose, source tests, generated
 project tests, staged Bicep/azd definitions and credential-free static checks.
 The latest verified integrated snapshot is PR #17 head
-`fcd8f6f4f5cf48d537b9183aefa35b6b079feb76`, based on
+`5d71842931446a5fe1cd2566c5d32f77e6ed4d5d`, based on
 `1e99e038dc31c0ae25e5ea7712030d204ee35bc0`; all six jobs passed in
-[run 44957081895](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44957081895).
-Merge ref `3c9c5842fc29b34e70b7c33b7be8beb215a9735c` had exact base/head
+[run 44959327591](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44959327591).
+Merge ref `206a4aa9ab37cf0b8983ae4cea3b081d34ac784b` had exact base/head
 parents and a tree identical to the head. Any later tree or base change also
 requires revalidation. These checks are not readiness or deployment evidence.
 

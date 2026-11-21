@@ -87,9 +87,9 @@ canary into exported span JSON. The integrated fix from `3aa389f` removes the
 opt-in and disables auto-instrumentation; all 23 focused telemetry regressions
 passed locally, including recovery redaction and restricted-origin CORS.
 Public metric APIs replace private SDK fields. Exact PR #17 head
-`fcd8f6f4f5cf48d537b9183aefa35b6b079feb76`, based on
+`5d71842931446a5fe1cd2566c5d32f77e6ed4d5d`, based on
 `1e99e038dc31c0ae25e5ea7712030d204ee35bc0`, passed all six jobs in run
-`44957081895`; its merge ref `3c9c5842fc29b34e70b7c33b7be8beb215a9735c`
+`44959327591`; its merge ref `206a4aa9ab37cf0b8983ae4cea3b081d34ac784b`
 had the exact base/head parents and identical tree. Cloud ingestion remains
 unverified and native auto-instrumentation is not approved. Any later tree or
 base change also requires revalidation.
