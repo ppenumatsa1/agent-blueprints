@@ -97,11 +97,22 @@ entries to hide failed attempts or gaps.
   `backend/app/`, `frontend/`, `backend/Dockerfile`, and
   `tests/test_instantiation.py`.
 
+## 2026-11-21 - Reconcile dependent documentation with cleaned foundation
+
+- **Change / decision:** Rebase the documentation work onto foundation
+  `61d44ed`, retain its canonical imports and remove stale `test_modularity`
+  command references. Preserve the six generated-project guides, their README
+  navigation, the eight design documents, and copy/link verification.
+- **Evidence:** Focused generated-project tests and checks for the final rebased
+  PR head are pending; record exact local and hosted results before approval.
+- **Limit:** This reconciliation does not verify Azure hosting, interactive
+  debugging on macOS, live Entra/OBO, or hosted checkpoint recovery.
+
 ### PR #13 - Locked developer tooling proposal
 
 - **Status and revision:** Open, based on `modularity-foundation`; head
   `e1d953662e615e547fa641ad0831907c363318e3`. It is a parallel workstream and
-  is not included in this branch's baseline commit `57d404c`.
+  is not included in cleaned foundation commit `61d44ed`.
 - **Proposed changes:** Python 3.12, uv 0.9.26, public-PyPI `uv.lock` and
   hash-pinned backend/image installs, Ruff 0.14.13, Node 22 with `npm ci`,
   and VS Code task/debug configurations.
@@ -120,8 +131,8 @@ entries to hide failed attempts or gaps.
 
 | Item | Status | Evidence needed / next action |
 | --- | --- | --- |
-| Eight design documents and generated inclusion | In progress | Run the focused instantiation tests and verify copied Markdown links. |
-| Canonical imports and legacy-shim removal | Open in foundation workstream | Inspect final diff across imports, tests, Docker, CI, docs, and generator; do not approve while forwarding paths remain. |
+| Eight design documents and generated inclusion | In progress | Run focused instantiation tests and verify copied Markdown links on the rebased PR head. |
+| Canonical imports and legacy-shim removal | Implemented in foundation commit `61d44ed` | Confirm foundation CI and verify no compatibility forwarding paths appear in the rebased PR diff. |
 | Locked developer tooling | Open in parallel PR #13 | Reconcile only after review/merge; verify any resulting revision and platform matrix independently. |
 | Current dependent PR CI | Pending on updated revision | Confirm all required checks correspond to the pushed PR head. |
 | Live Entra/OBO, Foundry host/recovery, cloud telemetry, Azure deployment | Unverified | Separate scoped implementation, authorization where required, and live evidence. |
