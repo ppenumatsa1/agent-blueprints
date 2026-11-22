@@ -141,8 +141,9 @@ formats but MUST preserve the normalized facts, rules, commands, and outcomes.
 | `ORDER-LOW` | amount `79.00`; issue `late_delivery`; delay `4 days`; owner `USER-A` |
 | `ORDER-HIGH` | amount `185.00`; issue `late_delivery`; delay `5 days`; owner `USER-A` |
 | `ORDER-DAMAGED` | amount `79.00`; issue `damaged_item`; owner `USER-A` |
-| `POLICY-LATE@1` | an applicable delay over 3 days proposes `partial_refund_10`; approval is required when amount is at least `100.00` |
-| `POLICY-DAMAGED@1` | an applicable damaged-item case proposes `replacement_or_full_refund`; approval is required |
+| Currency rule | all fixture amounts are decimal US dollars (`USD`); `partial_refund_10` equals exactly 10% of the order amount, rounded once to two decimal places using round-half-up |
+| `POLICY-LATE@1` | an applicable delay over 3 days proposes `partial_refund_10`; approval is required when the USD order amount is at least `100.00` |
+| `POLICY-DAMAGED@1` | an applicable damaged-item case proposes exactly one `replacement_shipment`; approval is required |
 | Reviewer rule | `REVIEWER-A` may decide `USER-A` cases; `USER-B` and `REVIEWER-B` may not |
 | Idempotency rule | one action claim per `(case_id, proposal_version, action)` |
 | Evidence rule | exactly one current, applicable, digest-valid policy evidence set is required before a proposal is authoritative |
@@ -151,9 +152,9 @@ formats but MUST preserve the normalized facts, rules, commands, and outcomes.
 
 | ID | Input and command | Required outcome |
 | --- | --- | --- |
-| `ORS-001` low-risk auto-resolution | `USER-A` submits `ORDER-LOW` with `POLICY-LATE@1`. | Deterministic proposal `partial_refund_10`; no approval pause; one verified action; terminal `completed`. |
-| `ORS-002` high-risk approval | `USER-A` submits `ORDER-HIGH`; `REVIEWER-A` approves the current proposal. | Native pause/checkpoint before action; one authorized decision; one verified `partial_refund_10`; terminal `completed`. |
-| `ORS-003` human rejection | `USER-A` submits `ORDER-DAMAGED`; `REVIEWER-A` rejects the current proposal. | Native pause/checkpoint; one rejection; no action claim or side effect; terminal `escalated`. |
+| `ORS-001` low-risk auto-resolution | `USER-A` submits `ORDER-LOW` with `POLICY-LATE@1`. | Deterministic proposal `partial_refund_10` for `USD 7.90`; no approval pause; one verified action for that amount; terminal `completed`. |
+| `ORS-002` high-risk approval | `USER-A` submits `ORDER-HIGH`; `REVIEWER-A` approves the current proposal. | Native pause/checkpoint before action; one authorized decision; one verified `partial_refund_10` for `USD 18.50`; terminal `completed`. |
+| `ORS-003` human rejection | `USER-A` submits `ORDER-DAMAGED`; `REVIEWER-A` rejects the current proposal. | Deterministic proposal `replacement_shipment`; native pause/checkpoint; one rejection; no action claim or side effect; terminal `escalated`. |
 | `ORS-004` duplicate request/action | Repeat `ORS-001` with the same server-recognized request/idempotency identity before and after completion. | Return or reconcile the original case/outcome; action count remains one; no duplicate terminal event is emitted. |
 | `ORS-005` worker restart/recovery | For `ORS-002`, terminate the worker after the decision commit and before native resume acknowledgement, then restart. | Restore/reconcile the native continuation and stored decision; execute at most one action; terminal `completed` with the original decision audit. |
 | `ORS-006` missing policy evidence | Submit `ORDER-LOW` without `POLICY-LATE@1`. | No authoritative proposal, approval, or action; terminal `failed` with `policy_evidence_missing`. |
@@ -336,8 +337,14 @@ cannot establish conformance, authorization, execution, or release readiness.
 
 ## Assumptions and limitations
 
-- Concrete issue categories, thresholds, policy text, and actions are
-  application-owned and intentionally unspecified.
+- The identifiers, USD amounts, 10% refund calculation, approval threshold,
+  damaged-item replacement action, reviewer assignments, and evidence rules in
+  `order-resolution-spec/0.1.0` are specified only for repeatable synthetic
+  tests. They are not recommended or inferred customer business policies.
+- Real issue categories, currencies, rounding rules, thresholds, policy text,
+  actions, reviewer authority, and evidence requirements are application-owned.
+  A customer implementation MUST define, authorize, version, and evaluate its
+  own rules rather than reuse the synthetic fixture as production policy.
 - The referenced MAF implementation demonstrates useful public design patterns
   but is not cross-framework proof. Its PostgreSQL checkpoint adapter is an
   implementation choice, not a requirement for other frameworks or hosts.
