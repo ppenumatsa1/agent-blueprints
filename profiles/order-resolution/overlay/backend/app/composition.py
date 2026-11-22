@@ -1,3 +1,6 @@
+from importlib import import_module
+from typing import cast
+
 from fastapi import FastAPI
 
 from app.api.app import create_api_app
@@ -13,11 +16,34 @@ from app.infrastructure.telemetry import Telemetry
 from app.lifecycle import create_lifespan
 from app.order_resolution.host import OrderResolutionWorkflowHost
 from app.order_resolution.action import RecordOrderResolutionAction
+from app.order_resolution.hosted_authority import PostgresHostedAuthorityBindings
+from app.order_resolution.hosted_journal import PostgresOperationJournal
 from app.order_resolution.persistence import OrderResolutionStore
 from app.order_resolution.rules import OrderResolutionRules
 from app.order_resolution.service import OrderResolutionService
 from app.usecases.service import WorkflowService
 from app.workflows.host import LocalWorkflowHost
+
+
+def _build_hosted_workflow_host(
+    settings: Settings,
+    repository: OrderResolutionStore,
+) -> WorkflowHost:
+    try:
+        module = import_module("order_resolution_hosted.bridge")
+        factory = getattr(module, "build_workflow_host")
+    except (AttributeError, ImportError) as exc:
+        raise HostedWorkflowError(
+            "Hosted mode requires the integrated Agent A Responses workflow adapter "
+            "from the generated backend."
+        ) from exc
+    host = factory(
+        settings,
+        repository,
+        PostgresHostedAuthorityBindings(repository),
+        PostgresOperationJournal(repository),
+    )
+    return cast(WorkflowHost, host)
 
 
 def create_app(
@@ -59,18 +85,23 @@ def create_app(
                 telemetry=telemetry,
             )
         else:
-            if hosted_host is None:
+            if not isinstance(repository, OrderResolutionStore):
                 raise HostedWorkflowError(
-                    "Hosted mode requires the integrated Agent A Responses workflow adapter."
+                    "Hosted mode requires the integrated Agent A Responses workflow adapter "
+                    "and Order Resolution PostgreSQL persistence."
                 )
-            workflow_host = hosted_host
+            workflow_host = hosted_host or _build_hosted_workflow_host(settings, repository)
         if isinstance(repository, PostgresStore):
             repository.telemetry = telemetry
         if order_resolution:
             if not isinstance(repository, OrderResolutionStore):
                 raise TypeError("The Order Resolution persistence adapter is required.")
             service = OrderResolutionService(
-                repository, workflow_host, components.rules, components.policy
+                repository,
+                workflow_host,
+                components.rules,
+                components.policy,
+                hosted_mode=settings.host_mode == "hosted",
             )
         else:
             service = WorkflowService(
@@ -82,6 +113,7 @@ def create_app(
             workflow_host,
             telemetry,
             close_store=store is None,
+            recover_workflows=settings.host_mode == "local",
         )
         return create_api_app(
             settings,

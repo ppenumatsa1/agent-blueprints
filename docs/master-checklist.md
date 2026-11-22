@@ -34,18 +34,19 @@ identity separation, and restart reconciliation for ambiguous hosted outcomes.
 The API UAMI is the sole PostgreSQL runtime principal. The hosted identity
 calls the protected `/api/internal/hosted/v1` boundary with the fixed
 `Hosted.Workflow.Invoke` app role and receives no database configuration.
-Durable caller/session/conversation binding, case-bound idempotency, exact
+Durable case/conversation/channel binding, case-bound idempotency, exact
 Agent A operation-journal conversion, and business-only hosted
 pending/decision/effect/completion state leave local checkpoint columns null.
 
 Acceptance evidence is local only: 117 source-backend tests, 117 tests in a
-fresh generated generic backend, 158 tests in a fresh generated Order
+fresh generated generic backend, 159 tests in a fresh generated Order
 Resolution backend, the ORS-001..009 adapter contract (9/9), 68 root tests
 with two expected unselected-adapter skips, and source/generated frontend
 suites with 9/9 or 10/10 tests plus build/CSP passed. A PostgreSQL 17 and
 loopback HTTP test composes Agent A's live `HttpHostedBusinessStore` and
 `ResponsesClient` with C's exact journal types, covers restart/duplicate
-no-replay, and records one decision/effect with null checkpoint fields.
+no-replay with changing opaque platform call IDs, revocation and changed-intent
+negatives, and one decision/effect with null checkpoint fields.
 Fresh generated Compose built through approved package proxies, ran explicit
 migrations, became healthy, and returned root `200`, health `204`, and
 protected API `401`. The

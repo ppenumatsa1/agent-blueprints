@@ -80,9 +80,10 @@ NOT READY for production, release, or deployment.
 ## Azure/Foundry Workstream C
 
 Workstream C composes the generated FastAPI application with either the
-existing native local host or an injected Agent A native Responses adapter.
-The standalone app has no generic hosted HTTP fallback and fails closed when
-that adapter is absent. The
+existing native local host or Agent A's API-only native Responses bridge copied
+into the generated backend. The API image does not import the sibling hosted
+runtime or hosting SDK, and hosted composition fails closed when the bridge is
+absent. The
 application owns end-user authentication/authorization and PostgreSQL
 business state; Agent A owns hosted execution identity and checkpoint/session
 state. The API UAMI is the sole PostgreSQL runtime principal and is never
@@ -99,8 +100,15 @@ Implementation acceptance criteria:
 - claim-before-send and authoritative status reconciliation for ambiguous
   hosted acknowledgments, without replay;
 - app-only tenant/issuer/audience/principal/role validation on
-  `/api/internal/hosted/v1`, case-bound caller/session/conversation checks,
+  `/api/internal/hosted/v1`, case-bound conversation/channel checks,
   and durable idempotency-key conflict detection;
+- authenticated-human start/resume prebinding before Responses dispatch,
+  verification-only service-MI binding routes, and a hashed expiring decision
+  intent that the hosted callback must match before recording a decision;
+- opaque platform user/session/call correlation that cannot grant human
+  authority, with current durable binding reauthorization on every
+  verification request and platform call IDs excluded from business-operation
+  digests;
 - explicit migrations, startup schema validation, runtime/admin identity
   separation, TLS verification, bounded pools, and managed-identity or secret
   authentication;
@@ -114,7 +122,9 @@ case-bound prepare/claim/effect/finish calls and C's
 `PostgresOperationJournal` beside `ResponsesClient`. These seams persist
 business approval state and opaque correlation only; they never fabricate
 local checkpoint IDs, expose PostgreSQL to the hosted runtime, or store
-Foundry checkpoint bytes.
+Foundry checkpoint bytes. The API-side `PostgresHostedAuthorityBindings`
+adapter never derives user authority from opaque hosted correlation or case
+fields.
 
 Current local evidence satisfies those implementation criteria and is detailed
 in [application security](azure-foundry/application-security.md) and draft PR

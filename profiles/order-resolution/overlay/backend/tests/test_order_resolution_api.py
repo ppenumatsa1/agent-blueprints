@@ -1,6 +1,8 @@
 import asyncio
 import hashlib
+import importlib
 import os
+import shutil
 import socket
 import subprocess
 import sys
@@ -20,7 +22,7 @@ from psycopg import sql
 from app.composition import create_app
 from app.config import Settings
 from app.infrastructure.identity import EntraIdentity
-from app.domain.errors import ActionError
+from app.domain.errors import AccessDenied, ActionError, Conflict, NotFound
 from app.domain.models import Principal
 from app.order_resolution.action import RecordOrderResolutionAction
 from app.order_resolution.application import build_application
@@ -32,6 +34,7 @@ from app.order_resolution.durability import (
 )
 from app.order_resolution.effects import EffectIdentity
 from app.order_resolution.host import OrderResolutionWorkflowHost
+from app.order_resolution.hosted_authority import PostgresHostedAuthorityBindings
 from app.order_resolution.migrations import upgrade
 from app.order_resolution.persistence import (
     HOSTED_CHANNEL,
@@ -39,6 +42,7 @@ from app.order_resolution.persistence import (
     PostgresSyntheticDestination,
 )
 from app.order_resolution.rules import OrderResolutionRules
+from app.order_resolution.service import OrderResolutionService
 from app.order_resolution.workflow import build_order_resolution_workflow
 from tests.test_security import API, OWNER, REVIEWER, TENANT, TokenFixture, scoped_url
 
@@ -317,14 +321,15 @@ class OrderResolutionApiTests(unittest.TestCase):
         self.assertEqual(count, 1)
 
     def test_hosted_service_endpoints_are_authorized_durable_and_idempotent(self):
-        _, case, proposal = self.hosted_case("ORDER-HOSTED-SERVICE", "185.00")
+        owner, case, proposal = self.hosted_case("ORDER-HOSTED-SERVICE", "185.00")
         case_id = case.id
         caller_id = "00000000-0000-0000-0000-000000000123"
         session_id = f"case:{case_id}"
         conversation_id = "conversation-hosted-service"
         binding = {
-            "caller_id": caller_id,
-            "session_id": session_id,
+            "platform_user_id": caller_id,
+            "platform_session_id": session_id,
+            "platform_call_id": "platform-call-start",
             "conversation_id": conversation_id,
             "channel": HOSTED_CHANNEL,
         }
@@ -343,19 +348,53 @@ class OrderResolutionApiTests(unittest.TestCase):
             json=binding,
         )
         self.assertEqual(invalid.status_code, 401, invalid.text)
-        missing_key = client.post(
+        missing_binding = client.post(
             f"{base}/bindings/start",
             headers=headers,
             json=binding,
         )
-        self.assertEqual(missing_key.status_code, 422, missing_key.text)
+        self.assertEqual(missing_binding.status_code, 404, missing_binding.text)
+
+        authority = PostgresHostedAuthorityBindings(self.store)
+        with self.assertRaises(AccessDenied):
+            authority.bind_start(
+                case_id,
+                Principal(TENANT, REVIEWER, frozenset({"workflow.read"}), frozenset()),
+                conversation_id=conversation_id,
+                channel=HOSTED_CHANNEL,
+            )
+        with self.assertRaises(NotFound):
+            authority.load_binding(case_id)
+        authority.bind_start(
+            case_id,
+            owner,
+            conversation_id=conversation_id,
+            channel=HOSTED_CHANNEL,
+        )
         bound = client.post(f"{base}/bindings/start", headers=start_headers, json=binding)
         self.assertEqual(bound.status_code, 200, bound.text)
         self.assertEqual(bound.json()["subject"], OWNER)
 
-        cross_session = {**binding, "session_id": "different-session", "principal_kind": "owner"}
-        denied = client.post(f"{base}/read", headers=headers, json=cross_session)
-        self.assertEqual(denied.status_code, 409, denied.text)
+        opaque_platform_repeat = client.post(
+            f"{base}/bindings/start",
+            headers=start_headers,
+            json={
+                **binding,
+                "platform_user_id": "different-platform-user",
+                "platform_session_id": "different-platform-session",
+                "platform_call_id": "different-platform-call",
+            },
+        )
+        self.assertEqual(opaque_platform_repeat.status_code, 200, opaque_platform_repeat.text)
+        self.assertEqual(opaque_platform_repeat.json()["subject"], OWNER)
+
+        cross_conversation = {
+            **binding,
+            "conversation_id": "different-conversation",
+            "principal_kind": "owner",
+        }
+        denied = client.post(f"{base}/read", headers=headers, json=cross_conversation)
+        self.assertEqual(denied.status_code, 403, denied.text)
 
         read_binding = {**binding, "principal_kind": "owner"}
         read = client.post(f"{base}/read", headers=headers, json=read_binding)
@@ -379,20 +418,83 @@ class OrderResolutionApiTests(unittest.TestCase):
         repeated_prepare = client.post(
             f"{base}/approvals/prepare",
             headers=prepare_headers,
-            json=prepare_body,
+            json={**prepare_body, "platform_call_id": "platform-call-prepare-replay"},
         )
         self.assertEqual(prepared.status_code, 200, prepared.text)
         self.assertEqual(repeated_prepare.json(), prepared.json())
         self.assertIsNone(self.store.get(case_id).checkpoint_id)
 
+        proposal = self.store.get_current_proposal(str(case_id))
+        decision_command = DecisionCommand(
+            case_id=str(case_id),
+            proposal_version=proposal.proposal_version,
+            action=proposal.action,
+            destination_id=proposal.destination_id,
+            handle=request_id,
+            decision=Decision.APPROVED,
+            scope="workflow.approve",
+            channel=HOSTED_CHANNEL,
+        )
+        reviewer = Principal(
+            TENANT,
+            REVIEWER,
+            frozenset({"workflow.read", "workflow.approve"}),
+            frozenset({"Workflow.Approver"}),
+        )
         resume_headers = self.headers(
             self.service_token,
             f"case:{case_id}:bind-resume:test",
         )
         reviewer_binding = {
             **binding,
-            "caller_id": "00000000-0000-0000-0000-000000000456",
         }
+        with self.assertRaises(AccessDenied):
+            authority.bind_resume(
+                case_id,
+                Principal(
+                    TENANT,
+                    OWNER,
+                    frozenset({"workflow.read", "workflow.approve"}),
+                    frozenset({"Workflow.Approver"}),
+                ),
+                conversation_id=conversation_id,
+                channel=HOSTED_CHANNEL,
+                decision_command=decision_command,
+            )
+            with self.assertRaises(Conflict):
+                authority.bind_resume(
+                    case_id,
+                    reviewer,
+                    conversation_id=conversation_id,
+                    channel=HOSTED_CHANNEL,
+                    decision_command=DecisionCommand(
+                        case_id=str(case_id),
+                        proposal_version=proposal.proposal_version,
+                        action=proposal.action,
+                        destination_id=proposal.destination_id,
+                        handle=request_id,
+                        decision=Decision.REJECTED,
+                        scope="workflow.approve",
+                        channel=HOSTED_CHANNEL,
+                    ),
+                )
+        with self.assertRaises(AccessDenied):
+            authority.bind_resume(
+                case_id,
+                reviewer,
+                conversation_id="wrong-conversation",
+                channel=HOSTED_CHANNEL,
+                decision_command=decision_command,
+            )
+        authority.bind_resume(
+            case_id,
+            reviewer,
+            conversation_id=conversation_id,
+            channel=HOSTED_CHANNEL,
+            decision_command=decision_command,
+        )
+        self.assertEqual(self.store.get(case_id).status, "pending")
+        self.assertIsNone(self.store.get_decision(case_id))
         resumed = client.post(
             f"{base}/bindings/resume",
             headers=resume_headers,
@@ -400,6 +502,26 @@ class OrderResolutionApiTests(unittest.TestCase):
         )
         self.assertEqual(resumed.status_code, 200, resumed.text)
         self.assertEqual(resumed.json()["subject"], REVIEWER)
+        self.assertEqual(self.store.get(case_id).status, "pending")
+        self.assertIsNone(self.store.get_decision(case_id))
+        opaque_platform_resume = client.post(
+            f"{base}/bindings/resume",
+            headers=resume_headers,
+            json={
+                **reviewer_binding,
+                "platform_user_id": "different-platform-user",
+                "platform_session_id": "different-platform-session",
+                "platform_call_id": "different-platform-call",
+            },
+        )
+        self.assertEqual(opaque_platform_resume.status_code, 200, opaque_platform_resume.text)
+        self.assertEqual(opaque_platform_resume.json()["subject"], REVIEWER)
+        revoked_owner = client.post(
+            f"{base}/bindings/start",
+            headers=start_headers,
+            json={**binding, "platform_call_id": "platform-call-after-resume"},
+        )
+        self.assertEqual(revoked_owner.status_code, 403, revoked_owner.text)
         decision_body = {
             **reviewer_binding,
             "proposal_version": proposal.proposal_version,
@@ -420,14 +542,18 @@ class OrderResolutionApiTests(unittest.TestCase):
         repeated_decision = client.post(
             f"{base}/decisions/claim",
             headers=decision_headers,
-            json=decision_body,
+            json={**decision_body, "platform_call_id": "platform-call-decision-replay"},
         )
         self.assertEqual(decided.status_code, 200, decided.text)
         self.assertEqual(repeated_decision.json(), decided.json())
         conflict = client.post(
             f"{base}/decisions/claim",
             headers=decision_headers,
-            json={**decision_body, "decision": "rejected"},
+            json={
+                **decision_body,
+                "decision": "rejected",
+                "platform_call_id": "platform-call-decision-conflict",
+            },
         )
         self.assertEqual(conflict.status_code, 409, conflict.text)
 
@@ -444,7 +570,7 @@ class OrderResolutionApiTests(unittest.TestCase):
         repeated_effect = client.post(
             f"{base}/effects/apply",
             headers=effect_headers,
-            json=effect_body,
+            json={**effect_body, "platform_call_id": "platform-call-effect-replay"},
         )
         self.assertEqual(first_effect.status_code, 200, first_effect.text)
         self.assertEqual(repeated_effect.status_code, 200, repeated_effect.text)
@@ -465,7 +591,7 @@ class OrderResolutionApiTests(unittest.TestCase):
         repeated_finish = client.post(
             f"{base}/finish",
             headers=finish_headers,
-            json=finish_body,
+            json={**finish_body, "platform_call_id": "platform-call-finish-replay"},
         )
         self.assertEqual(first_finish.status_code, 200, first_finish.text)
         self.assertEqual(repeated_finish.json(), first_finish.json())
@@ -487,6 +613,12 @@ class OrderResolutionApiTests(unittest.TestCase):
             )
         )
         self.addCleanup(restart_client.close)
+        restarted_effect = restart_client.post(
+            f"{base}/effects/apply",
+            headers=effect_headers,
+            json={**effect_body, "platform_call_id": "platform-call-effect-after-restart"},
+        )
+        self.assertEqual(restarted_effect.status_code, 200, restarted_effect.text)
         restarted_read = restart_client.post(
             f"{base}/read",
             headers=headers,
@@ -503,14 +635,10 @@ class OrderResolutionApiTests(unittest.TestCase):
             frozenset({"Workflow.Approver"}),
         )
         owner, rejected_case, rejected_proposal = self.hosted_case("ORDER-HOSTED-REJECT", "185.00")
-        caller_id = "00000000-0000-0000-0000-000000000123"
-        rejected_session = f"case:{rejected_case.id}"
         rejected_conversation = "conversation-hosted-rejection"
         self.store.bind_hosted_principal(
             rejected_case.id,
             owner,
-            caller_id=caller_id,
-            session_id=rejected_session,
             conversation_id=rejected_conversation,
             principal_kind="owner",
         )
@@ -524,19 +652,28 @@ class OrderResolutionApiTests(unittest.TestCase):
         restarted = OrderResolutionStore(self.settings.database_url)
         self.addCleanup(restarted.close)
         action = RecordOrderResolutionAction().bind(restarted)
-        restarted.bind_hosted_principal(
-            rejected_case.id,
-            reviewer,
-            caller_id=caller_id,
-            session_id=rejected_session,
-            conversation_id=rejected_conversation,
-            principal_kind="reviewer",
-        )
 
         class HostedDecisionStore:
             get_current_proposal = restarted.get_current_proposal
             claim_decision = restarted.claim_hosted_decision
 
+        command = DecisionCommand(
+            case_id=str(rejected_case.id),
+            proposal_version=rejected_proposal.proposal_version,
+            action=rejected_proposal.action,
+            destination_id=rejected_proposal.destination_id,
+            handle=request_id,
+            decision=Decision.REJECTED,
+            scope="workflow.approve",
+            channel=HOSTED_CHANNEL,
+        )
+        PostgresHostedAuthorityBindings(restarted).bind_resume(
+            rejected_case.id,
+            reviewer,
+            conversation_id=rejected_conversation,
+            channel=HOSTED_CHANNEL,
+            decision_command=command,
+        )
         decision = record_decision(
             HostedDecisionStore(),
             proposal=restarted.get_current_proposal(str(rejected_case.id)),
@@ -546,16 +683,7 @@ class OrderResolutionApiTests(unittest.TestCase):
                 reviewer.scopes,
                 reviewer.roles,
             ),
-            command=DecisionCommand(
-                case_id=str(rejected_case.id),
-                proposal_version=rejected_proposal.proposal_version,
-                action=rejected_proposal.action,
-                destination_id=rejected_proposal.destination_id,
-                handle=request_id,
-                decision=Decision.REJECTED,
-                scope="workflow.approve",
-                channel=HOSTED_CHANNEL,
-            ),
+            command=command,
             now=datetime.now(timezone.utc),
         )
         self.assertEqual(restarted.claim_hosted_decision(decision), decision)
@@ -571,8 +699,6 @@ class OrderResolutionApiTests(unittest.TestCase):
         restarted.bind_hosted_principal(
             automatic_case.id,
             owner,
-            caller_id=caller_id,
-            session_id=f"case:{automatic_case.id}",
             conversation_id="conversation-hosted-automatic",
             principal_kind="owner",
         )
@@ -593,18 +719,26 @@ class OrderResolutionApiTests(unittest.TestCase):
             ("rejected", "185.00", "rejected", 0),
         ):
             with self.subTest(mode=mode):
-                _, case, proposal = self.hosted_case(
+                owner, case, proposal = self.hosted_case(
                     f"ORDER-HOSTED-{mode.upper()}",
                     amount,
                 )
                 case_id = case.id
                 binding = {
-                    "caller_id": "00000000-0000-0000-0000-000000000123",
-                    "session_id": f"case:{case_id}",
+                    "platform_user_id": "platform-api-workload",
+                    "platform_session_id": f"platform-session:{case_id}",
+                    "platform_call_id": f"platform-call:{mode}",
                     "conversation_id": f"conversation-{mode}",
                     "channel": HOSTED_CHANNEL,
                 }
                 base = f"/api/internal/hosted/v1/cases/{case_id}"
+                authority = PostgresHostedAuthorityBindings(self.store)
+                authority.bind_start(
+                    case_id,
+                    owner,
+                    conversation_id=binding["conversation_id"],
+                    channel=HOSTED_CHANNEL,
+                )
                 self.assertEqual(
                     client.post(
                         f"{base}/bindings/start",
@@ -616,6 +750,7 @@ class OrderResolutionApiTests(unittest.TestCase):
                     ).status_code,
                     200,
                 )
+                active_binding = binding
                 if mode == "rejected":
                     request_id = f"case:{case_id}:approval:v1"
                     self.assertEqual(
@@ -629,6 +764,31 @@ class OrderResolutionApiTests(unittest.TestCase):
                         ).status_code,
                         200,
                     )
+                    proposal = self.store.get_current_proposal(str(case_id))
+                    command = DecisionCommand(
+                        case_id=str(case_id),
+                        proposal_version=proposal.proposal_version,
+                        action=proposal.action,
+                        destination_id=proposal.destination_id,
+                        handle=request_id,
+                        decision=Decision.REJECTED,
+                        scope="workflow.approve",
+                        channel=HOSTED_CHANNEL,
+                    )
+                    reviewer = Principal(
+                        TENANT,
+                        REVIEWER,
+                        frozenset({"workflow.read", "workflow.approve"}),
+                        frozenset({"Workflow.Approver"}),
+                    )
+                    active_binding = binding
+                    authority.bind_resume(
+                        case_id,
+                        reviewer,
+                        conversation_id=active_binding["conversation_id"],
+                        channel=HOSTED_CHANNEL,
+                        decision_command=command,
+                    )
                     self.assertEqual(
                         client.post(
                             f"{base}/bindings/resume",
@@ -636,7 +796,7 @@ class OrderResolutionApiTests(unittest.TestCase):
                                 self.service_token,
                                 f"case:{case_id}:bind-resume:{mode}",
                             ),
-                            json=binding,
+                            json=active_binding,
                         ).status_code,
                         200,
                     )
@@ -648,7 +808,7 @@ class OrderResolutionApiTests(unittest.TestCase):
                                 f"case:{case_id}:decision:{proposal.proposal_version}:rejected",
                             ),
                             json={
-                                **binding,
+                                **active_binding,
                                 "proposal_version": proposal.proposal_version,
                                 "action": proposal.action,
                                 "destination_id": proposal.destination_id,
@@ -664,7 +824,7 @@ class OrderResolutionApiTests(unittest.TestCase):
                         self.service_token,
                         f"case:{case_id}:action:{mode}",
                     ),
-                    json={**binding, "mode": mode},
+                    json={**active_binding, "mode": mode},
                 )
                 finish = client.post(
                     f"{base}/finish",
@@ -672,7 +832,7 @@ class OrderResolutionApiTests(unittest.TestCase):
                         self.service_token,
                         f"case:{case_id}:completion:{mode}",
                     ),
-                    json={**binding, "mode": mode},
+                    json={**active_binding, "mode": mode},
                 )
                 self.assertEqual(effect.status_code, 200, effect.text)
                 self.assertEqual(finish.status_code, 200, finish.text)
@@ -683,47 +843,145 @@ class OrderResolutionApiTests(unittest.TestCase):
                 self.assertIsNone(stored.terminal_checkpoint_id)
                 self.assertEqual(self.database_counts(case_id)["actions"], expected_actions)
 
+    def test_hosted_human_command_persists_intent_before_callback_decision(self):
+        owner, case, proposal = self.hosted_case("ORDER-HOSTED-INTENT", "185.00")
+        request_id = f"case:{case.id}:approval:v1"
+        conversation_id = "conversation-hosted-intent"
+        authority = PostgresHostedAuthorityBindings(self.store)
+        authority.bind_start(
+            case.id,
+            owner,
+            conversation_id=conversation_id,
+            channel=HOSTED_CHANNEL,
+        )
+        self.store.prepare_hosted_approval(case.id, request_id, channel=HOSTED_CHANNEL)
+
+        class IntentOnlyHost:
+            async def start(self, case_id, actor):
+                raise AssertionError("start was not expected")
+
+            async def resume(self, case_id, actor, decision_command):
+                authority.bind_resume(
+                    case_id,
+                    actor,
+                    conversation_id=conversation_id,
+                    channel=HOSTED_CHANNEL,
+                    decision_command=decision_command,
+                )
+
+        components = build_application()
+        service = OrderResolutionService(
+            self.store,
+            IntentOnlyHost(),
+            components.rules,
+            components.policy,
+            hosted_mode=True,
+        )
+        reviewer = Principal(
+            TENANT,
+            REVIEWER,
+            frozenset({"workflow.read", "workflow.approve"}),
+            frozenset({"Workflow.Approver"}),
+        )
+        result = asyncio.run(
+            service.decide_bound(
+                reviewer,
+                case.id,
+                "approved",
+                proposal_version=proposal.proposal_version,
+                action=proposal.action,
+                destination_id=proposal.destination_id,
+                handle=request_id,
+                channel=HOSTED_CHANNEL,
+            )
+        )
+        self.assertEqual(result.status, "pending")
+        self.assertIsNone(self.store.get_decision(case.id))
+        verified = self.store.authorize_hosted_resume(
+            case.id,
+            conversation_id=conversation_id,
+            channel=HOSTED_CHANNEL,
+        )
+        self.assertEqual(verified.subject, REVIEWER)
+
     def test_agent_a_http_business_store_composes_over_loopback_and_postgres(self):
         agent_a_source = os.environ.get("ORDER_RESOLUTION_AGENT_A_SOURCE")
         if not agent_a_source:
             self.skipTest("ORDER_RESOLUTION_AGENT_A_SOURCE does not select Agent A source.")
 
-        import importlib.util
-        import types
-
         import uvicorn
 
-        package_root = Path(agent_a_source) / "order_resolution_hosted"
-        package = types.ModuleType("order_resolution_hosted")
-        package.__path__ = [str(package_root)]
-        sys.modules["order_resolution_hosted"] = package
-        loaded_modules = ["order_resolution_hosted"]
-        for module_name in ("application", "business", "client"):
-            qualified_name = f"order_resolution_hosted.{module_name}"
-            spec = importlib.util.spec_from_file_location(
-                qualified_name,
-                package_root / f"{module_name}.py",
-            )
-            if spec is None or spec.loader is None:
-                self.fail(f"Cannot load Agent A module {qualified_name}.")
-            module = importlib.util.module_from_spec(spec)
-            sys.modules[qualified_name] = module
-            loaded_modules.append(qualified_name)
-            spec.loader.exec_module(module)
-        self.addCleanup(
-            lambda: [sys.modules.pop(module_name, None) for module_name in loaded_modules]
-        )
+        source_root = Path(agent_a_source) / "order_resolution_hosted"
+        package_temp = tempfile.TemporaryDirectory()
+        self.addCleanup(package_temp.cleanup)
+        package_root = Path(package_temp.name) / "order_resolution_hosted"
+        package_root.mkdir()
+        (package_root / "__init__.py").write_text("", encoding="utf-8")
+        for module_name in ("application", "business", "client", "bridge"):
+            shutil.copy2(source_root / f"{module_name}.py", package_root)
+        sys.path.insert(0, package_temp.name)
+        importlib.invalidate_caches()
+        loaded_modules = [
+            "order_resolution_hosted",
+            "order_resolution_hosted.application",
+            "order_resolution_hosted.business",
+            "order_resolution_hosted.client",
+            "order_resolution_hosted.bridge",
+        ]
+        for module_name in loaded_modules:
+            sys.modules.pop(module_name, None)
+
+        def unload_backend_bridge():
+            for module_name in loaded_modules:
+                sys.modules.pop(module_name, None)
+            sys.path.remove(package_temp.name)
+
+        self.addCleanup(unload_backend_bridge)
         from order_resolution_hosted.application import CallerContext
+        from order_resolution_hosted.bridge import ResponsesWorkflowHost
         from order_resolution_hosted.business import HttpHostedBusinessStore
         from order_resolution_hosted.client import (
             OperationClaim,
+            OperationRecord,
             OperationStatus,
             ResponsesClient,
         )
 
         from app.order_resolution.hosted_journal import PostgresOperationJournal
 
-        _, case, proposal = self.hosted_case("ORDER-HOSTED-AGENT-A", "185.00")
+        hosted_settings = Settings(
+            TENANT,
+            API,
+            (
+                "postgresql://runtime@database.postgres.database.azure.com/app"
+                "?sslmode=verify-full"
+            ),
+            None,
+            host_mode="hosted",
+            hosted_workflow_endpoint=(
+                "https://example.test/agents/order/endpoint/responses?api-version=v1"
+            ),
+            hosted_conversation_endpoint=(
+                "https://example.test/agents/order/endpoint/conversations?api-version=v1"
+            ),
+            hosted_workflow_scope="https://ai.azure.com/.default",
+            api_managed_identity_client_id="50000000-0000-4000-8000-000000000005",
+            hosted_service_principal_id=HOSTED_SERVICE,
+            hosted_service_app_role=HOSTED_SERVICE_ROLE,
+            database_auth_mode="managed-identity",
+            database_managed_identity_client_id="50000000-0000-4000-8000-000000000005",
+            database_tls_mode="verify-full",
+            database_tls_root_cert="system",
+        )
+        hosted_application = create_app(
+            hosted_settings,
+            build_application(),
+            store=self.store,
+            identity=self.identity,
+        )
+        self.assertIsInstance(hosted_application.state.service.host, ResponsesWorkflowHost)
+
+        owner_actor, case, proposal = self.hosted_case("ORDER-HOSTED-AGENT-A", "185.00")
         application = create_app(
             self.settings,
             build_application(),
@@ -784,11 +1042,18 @@ class OrderResolutionApiTests(unittest.TestCase):
         endpoint = f"http://127.0.0.1:{port}/api/internal/hosted/v1"
         api = HttpHostedBusinessStore(endpoint, StaticTokenProvider())
         conversation_id = "conversation-agent-a"
-        session_id = f"case:{case.id}"
-        owner = CallerContext(OWNER, session_id, "call-start")
-        reviewer = CallerContext(REVIEWER, session_id, "call-resume")
+        session_id = "platform-session-agent-a"
+        owner = CallerContext("platform-api-workload", session_id, "call-start")
+        reviewer = CallerContext("platform-api-workload", session_id, "call-resume")
+        authority = PostgresHostedAuthorityBindings(self.store)
 
-        owner_principal = api.bind_start(
+        authority.bind_start(
+            case.id,
+            owner_actor,
+            conversation_id=conversation_id,
+            channel=HOSTED_CHANNEL,
+        )
+        owner_principal = api.resolve_start_principal(
             case_id=case.id,
             caller=owner,
             conversation_id=conversation_id,
@@ -799,6 +1064,29 @@ class OrderResolutionApiTests(unittest.TestCase):
             f"case:{case.id}:approval:v1",
             channel=HOSTED_CHANNEL,
         )
+        decision_command = DecisionCommand(
+            case_id=str(case.id),
+            proposal_version=proposal.proposal_version,
+            action=proposal.action,
+            destination_id=proposal.destination_id,
+            handle=f"case:{case.id}:approval:v1",
+            decision=Decision.APPROVED,
+            scope="workflow.approve",
+            channel=HOSTED_CHANNEL,
+        )
+        reviewer_actor = Principal(
+            TENANT,
+            REVIEWER,
+            frozenset({"workflow.read", "workflow.approve"}),
+            frozenset({"Workflow.Approver"}),
+        )
+        authority.bind_resume(
+            case.id,
+            reviewer_actor,
+            conversation_id=conversation_id,
+            channel=HOSTED_CHANNEL,
+            decision_command=decision_command,
+        )
         reviewer_principal = api.authorize_resume(
             case_id=case.id,
             caller=reviewer,
@@ -806,27 +1094,29 @@ class OrderResolutionApiTests(unittest.TestCase):
             channel=HOSTED_CHANNEL,
         )
         reviewer_store = api.for_binding(reviewer, conversation_id, "reviewer")
-        decision = reviewer_store.record_hosted_decision(
-            DecisionCommand(
-                case_id=str(case.id),
-                proposal_version=proposal.proposal_version,
-                action=proposal.action,
-                destination_id=proposal.destination_id,
-                handle=f"case:{case.id}:approval:v1",
-                decision=Decision.APPROVED,
-                scope="workflow.approve",
-                channel=HOSTED_CHANNEL,
-            )
-        )
+        decision = reviewer_store.record_hosted_decision(decision_command)
         reviewer_store.apply_once(case.id, True, object())
         reviewer_store.finish_hosted(case.id)
 
         restarted_api = HttpHostedBusinessStore(endpoint, StaticTokenProvider())
-        restarted_store = restarted_api.for_binding(reviewer, conversation_id, "reviewer")
+        restarted_store = restarted_api.for_binding(
+            CallerContext(
+                "platform-api-workload",
+                session_id,
+                "call-resume-after-restart",
+            ),
+            conversation_id,
+            "reviewer",
+        )
         restarted_store.apply_once(case.id, True, object())
         restarted_store.finish_hosted(case.id)
 
-        journal = PostgresOperationJournal(self.store)
+        journal = PostgresOperationJournal(
+            self.store,
+            record_type=OperationRecord,
+            claim_type=OperationClaim,
+            status_type=OperationStatus,
+        )
         probe = journal.claim(
             f"case:{case.id}:decision:journal-probe",
             hashlib.sha256(b"journal-probe").hexdigest(),
@@ -851,8 +1141,6 @@ class OrderResolutionApiTests(unittest.TestCase):
         decision_operation = f"case:{case.id}:decision:{proposal.proposal_version}"
         responses_binding = responses.create_conversation(
             operation_id=conversation_operation,
-            caller_id=OWNER,
-            session_id=session_id,
         )
         start_id = responses.start(
             operation_id=start_operation,
@@ -873,7 +1161,6 @@ class OrderResolutionApiTests(unittest.TestCase):
             "handle": request_id,
             "decision": "approved",
             "conversation_id": responses_binding.conversation_id,
-            "session_id": responses_binding.session_id,
             "channel": HOSTED_CHANNEL,
         }
         response_id = responses.resume(
@@ -891,8 +1178,6 @@ class OrderResolutionApiTests(unittest.TestCase):
         self.assertEqual(
             restarted_responses.create_conversation(
                 operation_id=conversation_operation,
-                caller_id=OWNER,
-                session_id=session_id,
             ).conversation_id,
             responses_binding.conversation_id,
         )
@@ -927,6 +1212,10 @@ class OrderResolutionApiTests(unittest.TestCase):
             foundry_calls[1][1]["input"],
             f'{{"case_id":"{case.id}"}}',
         )
+        self.assertNotIn("agent_session_id", foundry_calls[1][1])
+        self.assertNotIn("agent_session_id", foundry_calls[2][1])
+        self.assertEqual(foundry_calls[1][1]["metadata"], {"operation_id": start_operation})
+        self.assertEqual(foundry_calls[2][1]["metadata"], {"operation_id": decision_operation})
         self.assertEqual(foundry_calls[2][1]["input"][0]["type"], "function_call_output")
         stored = self.store.get(case.id)
         self.assertEqual((stored.status, stored.execution_complete), ("completed", True))

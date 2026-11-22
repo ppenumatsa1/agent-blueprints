@@ -27,8 +27,9 @@ ResultT = TypeVar("ResultT")
 class BindingInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    caller_id: str = Field(min_length=1, max_length=512)
-    session_id: str = Field(min_length=1, max_length=512)
+    platform_user_id: str = Field(min_length=1, max_length=512)
+    platform_session_id: str = Field(min_length=1, max_length=512)
+    platform_call_id: str = Field(min_length=1, max_length=512)
     conversation_id: str = Field(min_length=1, max_length=512)
     channel: Literal["foundry-responses"] = HOSTED_CHANNEL
 
@@ -178,11 +179,13 @@ def _idempotent(
         or not operation_id.startswith(f"case:{case_id}:")
     ):
         raise InvalidInput("The Idempotency-Key must be bounded and case-bound.")
+    logical_body = body.model_dump(mode="json")
+    logical_body.pop("platform_call_id", None)
     request_digest = hashlib.sha256(
         json.dumps(
             {
                 "operation": operation_label,
-                "body": body.model_dump(mode="json"),
+                "body": logical_body,
             },
             ensure_ascii=False,
             separators=(",", ":"),
@@ -210,34 +213,13 @@ def _authorize_binding(
     case_id: UUID,
     body: BindingInput,
     principal_kind: Literal["owner", "reviewer"],
-) -> None:
-    store.authorize_hosted_binding(
+) -> Principal:
+    return store.authorize_hosted_binding(
         case_id,
-        caller_id=body.caller_id,
-        session_id=body.session_id,
         conversation_id=body.conversation_id,
         channel=body.channel,
         principal_kind=principal_kind,
     )
-
-
-def _bind_principal(
-    store: OrderResolutionStore,
-    case_id: UUID,
-    principal: Principal,
-    body: BindingInput,
-    principal_kind: Literal["owner", "reviewer"],
-) -> PrincipalOutput:
-    store.bind_hosted_principal(
-        case_id,
-        principal,
-        caller_id=body.caller_id,
-        session_id=body.session_id,
-        conversation_id=body.conversation_id,
-        principal_kind=principal_kind,
-    )
-    _authorize_binding(store, case_id, body, principal_kind)
-    return _principal(principal)
 
 
 def _apply_effect(
@@ -265,32 +247,16 @@ def _finish_hosted(
 def bind_start(
     case_id: UUID,
     body: BindingInput,
-    idempotency_key: Annotated[str, Header(alias="Idempotency-Key")],
     _: Annotated[AuthenticatedRequest, Depends(current_service_identity)],
     service: Annotated[WorkflowService, Depends(workflow_service)],
 ) -> PrincipalOutput:
     store = _store(service)
-    case = store.get(case_id)
-    principal = Principal(
-        case.tenant_id,
-        case.owner_id,
-        frozenset({"workflow.read"}),
-        frozenset(),
-    )
-    return _idempotent(
-        store,
-        case_id,
-        idempotency_key,
-        "start",
-        "bind-start",
-        body,
-        lambda: _bind_principal(
-            store,
+    return _principal(
+        store.resolve_hosted_start_principal(
             case_id,
-            principal,
-            body,
-            "owner",
-        ),
+            conversation_id=body.conversation_id,
+            channel=body.channel,
+        )
     )
 
 
@@ -298,32 +264,16 @@ def bind_start(
 def bind_resume(
     case_id: UUID,
     body: BindingInput,
-    idempotency_key: Annotated[str, Header(alias="Idempotency-Key")],
     _: Annotated[AuthenticatedRequest, Depends(current_service_identity)],
     service: Annotated[WorkflowService, Depends(workflow_service)],
 ) -> PrincipalOutput:
     store = _store(service)
-    case = store.get(case_id)
-    principal = Principal(
-        case.tenant_id,
-        case.reviewer_id,
-        frozenset({"workflow.read", "workflow.approve"}),
-        frozenset({"Workflow.Approver"}),
-    )
-    return _idempotent(
-        store,
-        case_id,
-        idempotency_key,
-        "resume",
-        "bind-resume",
-        body,
-        lambda: _bind_principal(
-            store,
+    return _principal(
+        store.authorize_hosted_resume(
             case_id,
-            principal,
-            body,
-            "reviewer",
-        ),
+            conversation_id=body.conversation_id,
+            channel=body.channel,
+        )
     )
 
 
@@ -388,8 +338,7 @@ def claim_decision(
 ) -> DecisionOutput:
     service = _service(workflow)
     store = _store(service)
-    _authorize_binding(store, case_id, body, "reviewer")
-    actor = store.resolve_hosted_principal(body.caller_id, body.session_id)
+    actor = _authorize_binding(store, case_id, body, "reviewer")
     return _idempotent(
         store,
         case_id,
@@ -407,6 +356,7 @@ def claim_decision(
                 destination_id=body.destination_id,
                 handle=body.handle,
                 channel=body.channel,
+                hosted_callback=True,
             )
         ),
     )

@@ -46,7 +46,7 @@ class WorkflowService:
         case = self.store.create(
             actor, reviewer_id, validated, idempotency_key, hashlib.sha256(canonical).hexdigest()
         )
-        await self.host.start(case.id)
+        await self.host.start(case.id, actor)
         return self.store.get(case.id)
 
     def read(self, actor: Principal, case_id: UUID) -> Case:
@@ -58,5 +58,5 @@ class WorkflowService:
         case = self.store.get(case_id)
         self.policy.authorize_decision(actor, case)
         self.store.record_decision(case_id, actor, decision)
-        await self.host.resume(case_id)
+        await self.host.resume(case_id, actor)
         return self.store.get(case_id)

@@ -13,6 +13,10 @@ MIGRATION = ROOT / "0001_order_resolution_durability.sql"
 MIGRATION_SHA256 = "09cf3a6023b6070828ba82ce8ab71a7ad966933ab0414ea2980b7eb5a06c32cf"
 HOSTED_MIGRATION = ROOT / "0002_order_resolution_hosted_identity.sql"
 HOSTED_MIGRATION_SHA256 = "b68932f657dc13a771a399acecedac7840378b3e8bf1c51c13a8f58db9415b6f"
+HOSTED_DECISION_MIGRATION = ROOT / "0003_order_resolution_hosted_decision_intents.sql"
+HOSTED_DECISION_MIGRATION_SHA256 = (
+    "92eceac225f5369ef207ef23c0dd4f350bce30a58dbe2b42d70389700157d247"
+)
 TABLES = (
     "order_resolution_requests",
     "order_resolution_proposals",
@@ -23,6 +27,7 @@ TABLES = (
     "order_resolution_audit",
     "order_resolution_hosted_operations",
     "order_resolution_hosted_bindings",
+    "order_resolution_hosted_decision_intents",
 )
 
 
@@ -41,6 +46,13 @@ def _hosted_sql() -> str:
     value = HOSTED_MIGRATION.read_text(encoding="utf-8")
     if hashlib.sha256(value.encode("utf-8")).hexdigest() != HOSTED_MIGRATION_SHA256:
         raise OrderResolutionSchemaError("The hosted identity migration has changed.")
+    return value
+
+
+def _hosted_decision_sql() -> str:
+    value = HOSTED_DECISION_MIGRATION.read_text(encoding="utf-8")
+    if hashlib.sha256(value.encode("utf-8")).hexdigest() != HOSTED_DECISION_MIGRATION_SHA256:
+        raise OrderResolutionSchemaError("The hosted decision migration has changed.")
     return value
 
 
@@ -69,6 +81,7 @@ def upgrade(dsn: str, *, connect=None) -> None:
         )
         connection.execute(_sql())
         connection.execute(_hosted_sql())
+        connection.execute(_hosted_decision_sql())
         validate_connection(connection)
 
 
