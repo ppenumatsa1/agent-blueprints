@@ -15,7 +15,7 @@ services:
 
   api:
     build:
-      context: .
+      context: ./backend
       args:
         PYTHON_PACKAGE_INDEX: ${PYTHON_PACKAGE_INDEX:-https://pypi.org/simple}
     environment:

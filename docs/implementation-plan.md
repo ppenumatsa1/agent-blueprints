@@ -20,18 +20,101 @@ independently buildable generated project, with durable human approval and
 recovery and an independent Verification/Readiness Validator. Start locally
 with FastAPI, React, PostgreSQL, Docker Compose, tests, and evaluations.
 Business logic is supplied by the generated application; order adjustment is
-only a synthetic test fixture. Foundry Hosted Agents are the preferred later
-deployment target, subject to compatibility verification; Azure Container Apps
-(ACA) is the explicit fallback.
+only a synthetic test fixture. The primary deployment targets a Foundry
+Hosted Agent for the native workflow, with separate Azure Container Apps
+(ACA) for the UI and API. Hosting the workflow itself in ACA is a deferred
+alternative, not a verified fallback.
 
 The local workflow uses MAF-native file checkpoints on a persistent single-host
 volume, separate from PostgreSQL business state and approval records. A future
 Foundry host owns its managed checkpoint provider; the adapter and hosted
 pause/resume validation are P1-12, not local durability evidence. Interactive
 sign-in uses Entra ID and existing registrations, while isolated automated
-tests may use synthetic identities. Do not provision Azure resources.
+tests may use synthetic identities. Azure provisioning requires explicit
+approval of the resource inventory, estimated cost, and deployment plan.
+
+### Reconciled gaps and sequencing
+
+The engineering foundation and [integrated review #17](https://github.com/ppenumatsa1/agent-blueprints/pull/17)
+are not proof of completed hosted or deployment capabilities. Track the
+remaining acceptance criteria, dependencies and evidence in these issues:
+
+- Hosted security and durability: [#22](https://github.com/ppenumatsa1/agent-blueprints/issues/22),
+  [#19](https://github.com/ppenumatsa1/agent-blueprints/issues/19),
+  [#20](https://github.com/ppenumatsa1/agent-blueprints/issues/20), and
+  [#32](https://github.com/ppenumatsa1/agent-blueprints/issues/32).
+- Independent trust and evaluation: [#21](https://github.com/ppenumatsa1/agent-blueprints/issues/21)
+  and [#25](https://github.com/ppenumatsa1/agent-blueprints/issues/25).
+- Azure, data, telemetry and identity: [#18](https://github.com/ppenumatsa1/agent-blueprints/issues/18),
+  [#24](https://github.com/ppenumatsa1/agent-blueprints/issues/24),
+  [#26](https://github.com/ppenumatsa1/agent-blueprints/issues/26),
+  [#27](https://github.com/ppenumatsa1/agent-blueprints/issues/27), and
+  [#28](https://github.com/ppenumatsa1/agent-blueprints/issues/28).
+- Developer experience and demonstration: [#23](https://github.com/ppenumatsa1/agent-blueprints/issues/23)
+  and [#29](https://github.com/ppenumatsa1/agent-blueprints/issues/29).
+- Reusable MAF extensions and PostgreSQL readiness: [#35](https://github.com/ppenumatsa1/agent-blueprints/issues/35)
+  and [#38](https://github.com/ppenumatsa1/agent-blueprints/issues/38).
+- Separately authorized or future work: [#30](https://github.com/ppenumatsa1/agent-blueprints/issues/30),
+  [#31](https://github.com/ppenumatsa1/agent-blueprints/issues/31),
+  [#33](https://github.com/ppenumatsa1/agent-blueprints/issues/33), and
+  [#34](https://github.com/ppenumatsa1/agent-blueprints/issues/34).
+
+Hosted recovery remains explicitly deferred, not waived. Azure deployment
+requires the implemented and independently verified offline prerequisites,
+subscription access, and approval of the concrete deployment plan; its live
+checks provide evidence to close the related hosted and operational issues.
+Do not merge overlapping workstream histories blindly or treat a green
+engineering check as release authorization.
+The dated [issue and fix journal](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-22---issue-and-fix-status)
+summarizes open PR evidence, unresolved issues and the review sequence. Its
+draft work is not represented as merged functionality on this branch.
 
 ### Execution sequence and work packages
+
+The modularity foundation reorganizes the local blueprint and generated
+copies into sibling backend/frontend contexts and separates backend
+responsibilities using canonical imports and no compatibility aliases. Acceptance
+requires source and generated security/recovery tests, both crash windows,
+independent golden verification and exact contract bytes, credential-free
+CI and Compose smoke checks. Local evidence is recorded in the
+[checklist](master-checklist.md); PR review and hosted CI for the revised
+head remain pending. An intermittent local restore failure was observed during
+migration testing. A deterministic equal-timestamp reproduction showed that
+the previous host could select an earlier checkpoint; it does not prove the
+unretained original failure had the same cause. The foundation now selects
+MAF-native persisted checkpoints and rejects incomplete terminal state on
+completion and replay. Local source/generated backend suites passed 36 tests
+each; the selected-adapter root suite passed 46 and the generated verifier
+passed 44 without skips. Confirm actual-head CI and reconcile dependent PRs
+without treating prior-head CI as evidence.
+An independent CI regression exposed that the generated-verifier command's
+failure could be masked by `tee`. The workflow now propagates pipeline
+failures and the [regression test](../tests/test_ci_workflow.py) exercises
+failure, skip and success behavior. Prior CI job status alone is not proof
+that the verifier passed; confirm actual logs and revised-head CI before
+review.
+The [targeted MAF supply-chain audit](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-22---targeted-maf-supply-chain-audit)
+distinguishes the approved `agent-framework-core==1.26.0` dependency from the
+compromised `agent-framework` umbrella releases. Source and generated installs
+must reject the umbrella distribution and verify the approved core wheel hash
+before installation.
+The copied evidence producer observed approval and recovery passing while
+explanation and browser hint remained unverified; the independent unsigned
+readiness report remained unverified. The first local container build could
+not reach the public Python package host; a retry using the operator-approved
+package proxies built and passed the generated Compose smoke checks.
+Independent workstreams cover locked tooling, migrations, observability,
+Foundry hosting, infrastructure and integration evidence. Do not merge PRs
+without approval. Azure deployment is a deliverable but requires prior
+approval of its resource inventory, estimated cost and deployment plan;
+permanent reference repository creation requires separate approval.
+
+Each PR must remove obsolete compatibility layers, use direct imports,
+update affected `docs/design` specifications and the cumulative engineering
+journal, and record actual regression, security, durability, independent
+verification and CI outcomes for its final revision. The design documents
+must accompany generated applications and distinguish planned work from
+verified behavior.
 
 P1-01 through P1-04 have an initial local foundation and a test-only
 application adapter, but the scenario has no authorized contract approval.
@@ -55,7 +138,7 @@ the local HTTP smoke check. Its unsigned readiness report is unverified.
 | ID | Bounded work package | Dependencies | Independently verifiable outcome |
 | --- | --- | --- | --- |
 | P1-01 | Define the synthetic scenario, golden acceptance tests, and contract; obtain authorized approval. | None | [Scenario, golden cases, and test-only adapter](../scenarios/order-adjustment/README.md) exist; independent authorized approval remains outstanding. |
-| P1-02 | Define normalized result, evidence, baseline, and signed-decision inputs; map actual runner output. | P1-01 | The [synthetic runner](../blueprints/maf/workflow/tests/evidence_runner.py) records actual observations; independent result attestation remains outstanding. |
+| P1-02 | Define normalized result, evidence, baseline, and signed-decision inputs; map actual runner output. | P1-01 | The [synthetic runner](../blueprints/maf/workflow/backend/tests/evidence_runner.py) records actual observations; independent result attestation remains outstanding. |
 | P1-03 | Implement local traceability, evidence integrity, freshness, decisions, and profile gates. | P1-02 | [Validator](../readiness/validator.py) and [acceptance tests](../tests/test_readiness.py) exercise the policy; actual trust and provenance require independent administration. |
 | P1-04 | Expose the validator as a local CLI with a machine-readable report. | P1-03 | [CLI](../readiness/__main__.py) and [usage](readiness-validator.md) preserve outcomes and disclose unapproved inputs. |
 | P1-05 | Create a self-contained blueprint with the local React, FastAPI, PostgreSQL, and Docker Compose stack. | P1-01 interfaces | The stack starts; one temporary generated project builds, runs, tests, and verifies independently. Automated tests need no Azure credentials; interactive sign-in requires existing Entra configuration. |
@@ -66,7 +149,7 @@ the local HTTP smoke check. Its unsigned readiness report is unverified.
 | P1-10 | Add integration/E2E tests, synthetic agent evaluations, and GitHub Actions; connect actual results and artifacts to the validator. | P1-04 through P1-09 | A local or CI run produces a report from real artifacts; blocking failures cannot pass, non-blocking outcomes follow the selected profile, and rubric/threshold decisions are recorded. |
 | P1-11 | Add privacy-safe logs, traces, correlation, and operational signals across API, workflow, approvals, and side effects. | P1-07, P1-09 interfaces | Tests verify redaction and correlation; actual export remains environment-specific. |
 | P1-15 | Demonstrate the local prototype from a synthetic specification through approval, evaluation, and its readiness report. | P1-10, P1-11 | Record the scenario, evidence, limitations, and observed elapsed time; the 2–3 hour objective is a target until a representative run demonstrates it. |
-| P1-12 | Validate Foundry Hosted Agent compatibility for the selected MAF version, Responses protocol, request-aware workflow factory, identity, and host-managed checkpoints. | P1-09, P1-15 | Record versions and evidence for the compatibility assessment; local checks alone are not a hosted deployment. No Azure resources are provisioned. |
+| P1-12 | Validate Foundry Hosted Agent compatibility for the selected MAF version, Responses protocol, request-aware workflow factory, identity, and host-managed checkpoints. | P1-09, P1-15 | Hosted caller binding and lost-response reconciliation are blocked; see the [investigation journal](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-21---hosted-caller-binding-and-lost-responses). Local checks alone are not a hosted deployment. No Azure resources are provisioned. |
 | P1-13 | Prepare the explicitly selected ACA fallback and a framework-compatible checkpoint strategy. | P1-09, P1-15 | Separate local/container recovery and idempotency checks pass; no claim that ACA shares Foundry checkpoint ownership or silently replaces a failed model call. |
 | P1-14 | Prepare Bicep, least-privilege identities, authenticated public endpoints, GitHub-hosted CI, and deployment/handoff instructions. Deploy only after separate Azure authorization. | P1-10, P1-11, P1-12; P1-13 if selected | Static checks work without Azure credentials; an authorized deployment later records its revision, versions, identity, network, evidence, cost, and teardown owner. |
 

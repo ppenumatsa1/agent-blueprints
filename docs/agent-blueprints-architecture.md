@@ -8,6 +8,41 @@ contracts and documented engineering patterns where they have demonstrated
 value; do not hide MAF, LangGraph, or a harness behind a universal runtime.
 Generated projects must not import this repository at runtime.
 
+## Open architecture and verification gaps
+
+The engineering foundation is not a deployment-readiness claim. Open work
+includes [hosted caller binding #22](https://github.com/ppenumatsa1/agent-blueprints/issues/22),
+[native hosting and checkpoints #19](https://github.com/ppenumatsa1/agent-blueprints/issues/19),
+[hosted recovery #20](https://github.com/ppenumatsa1/agent-blueprints/issues/20),
+[external effects #32](https://github.com/ppenumatsa1/agent-blueprints/issues/32),
+[independent trust #21](https://github.com/ppenumatsa1/agent-blueprints/issues/21),
+and [deployment integration #18](https://github.com/ppenumatsa1/agent-blueprints/issues/18).
+See the [master checklist](master-checklist.md#reconciled-engineering-backlog)
+for the complete issue-linked backlog, including live identity, telemetry,
+database operations, evaluations, and separately authorized alternatives.
+The dated [issue and fix journal](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-22---issue-and-fix-status)
+distinguishes local and draft-PR evidence from merged or hosted capabilities.
+Do not conflate an approved engineering merge with verified hosted execution,
+human approval, or production readiness.
+
+## MAF modularity foundation and target
+
+The local blueprint and its generated copy now have sibling `backend` and
+`frontend` build contexts. The backend separates API composition, use cases,
+generic domain ports and policy, native MAF workflow/host, and PostgreSQL and
+identity infrastructure. Application factories and transactional-action
+interfaces remain the extension boundaries; use canonical module imports.
+Requirements, examples, schema and backend tests are owned by `backend`.
+The verifier and exact contract bytes remain independent of the runtime.
+
+The longer-term target adds separately reviewed dependency locking and
+developer tooling, migrations, privacy-safe telemetry, a Foundry Responses
+adapter and host-managed checkpoints, and Foundry-first Bicep/azd for
+separately hosted frontend and API services. These are not implemented by
+this modularity increment. Hosting the workflow runtime in ACA is a deferred
+alternative requiring its own verified checkpoint strategy. Neither topology
+is a verified deployment; provisioning requires separate authorization.
+
 | Layer | Responsibility | Examples |
 | --- | --- | --- |
 | Agent definition | Instructions, goal, tools, skills, permissions | A bounded diagnostic agent |
@@ -88,10 +123,13 @@ file/database boundary; a transaction commits the application-owned
 database action together with its unique ledger entry. Tests terminate and
 restart real workers at both specified commit windows. This applies only to
 database effects in the same transaction, not arbitrary external services.
-Missing or corrupt checkpoints fail visibly. The application increment
-adds the Entra API, MSAL UI, and a loopback-only Compose stack with a
-non-root API and a private persistent checkpoint volume. Local HTTP smoke
-checks are not live identity verification.
+The local host uses MAF's lineage-aware latest selection during interrupted
+start recovery and the executing workflow's last persisted checkpoint after
+a run, rather than assuming timestamps are unique. It rejects incomplete
+terminal checkpoints at completion and replay. Missing or corrupt checkpoints
+fail visibly. The application increment adds the Entra API, MSAL UI, and a
+loopback-only Compose stack with a non-root API and a private persistent
+checkpoint volume. Local HTTP smoke checks are not live identity verification.
 
 The [generator](../scripts/instantiate_maf.py) copies the blueprint, license,
 independent verifier, contract bytes, and synthetic acceptance fixtures into a
@@ -101,8 +139,11 @@ assets; it does not install a shared factory runtime. A test-only adapter
 drives the actual API and native workflow. Its evidence producer retains
 per-case results and both worker-kill outcomes, but its unsigned output and
 synthetic approval records do not establish trusted provenance or human
-authorization. Fixture-formatted explanations and hints are not agent
-evaluation or browser end-to-end evidence, so those checks remain unverified.
+authorization. The generated-verifier CI step propagates failures through
+its evidence-capture pipeline and rejects skips; see the
+[pipeline regression](../tests/test_ci_workflow.py). Fixture-formatted
+explanations and hints are not agent evaluation or browser end-to-end
+evidence, so those checks remain unverified.
 The temporary generated copy builds, runs, and tests locally without source
 imports or bind mounts; live identity and browser end-to-end verification
 remain in progress.
