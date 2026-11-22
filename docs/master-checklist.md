@@ -66,7 +66,8 @@ Responses dispatch and cannot be inferred from the hosted token.
 Exploratory composition of A `228aa772` and C `60fd83fc` built and imported the
 backend bridge, but used B-side file staging and C's dev dependency group.
 Final proof remains blocked on A-owned generator output, C-owned runtime
-`httpx==0.28.1`, and a no-dev image import/startup/wire-parity pass.
+`httpx==0.28.1`, a no-dev image import/composition/wire-parity pass, and normal
+entrypoint/lifespan/health against composed PostgreSQL.
 
 **Next action:** independently validate the exact PR revision, supply the
 deployment-specific hosted endpoint/agent-name/administrator/journal values,

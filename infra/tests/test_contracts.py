@@ -280,6 +280,7 @@ class InfrastructureContractTests(unittest.TestCase):
             "smoke-generated-api-image.py",
             scripts["test-generated-api-image.ps1"],
         )
+        self.assertIn("runpy.run_path", scripts["test-generated-api-image.ps1"])
         self.assertIn("'WORKFLOW_HOST=hosted'", scripts["deploy.ps1"])
         self.assertIn(
             "eed3b665-ab3a-47b6-8f48-c9382fb1dad6",

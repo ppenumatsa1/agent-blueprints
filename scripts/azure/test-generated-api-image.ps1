@@ -61,9 +61,12 @@ try {
         --volume "${smokeScript}:/tmp/smoke-generated-api-image.py:ro" `
         --entrypoint python `
         $ImageTag `
-        /tmp/smoke-generated-api-image.py
+        -c (
+            "import runpy; " +
+            "runpy.run_path('/tmp/smoke-generated-api-image.py', run_name='__main__')"
+        )
     if ($LASTEXITCODE -ne 0) {
-        throw 'Generated API image failed hosted startup composition and wire parity.'
+        throw 'Generated API image failed hosted composition and wire parity.'
     }
 }
 finally {

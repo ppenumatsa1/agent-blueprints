@@ -148,9 +148,6 @@ function Assert-GeneratedApiImageContext {
         $dockerfile -notmatch [regex]::Escape(
             'COPY --chown=blueprint:blueprint order_resolution_hosted/'
         ) -or
-        $dockerfile -notmatch [regex]::Escape(
-            'from order_resolution_hosted.bridge import build_workflow_host'
-        ) -or
         $dockerfile -notmatch [regex]::Escape('uv export --locked --no-dev') -or
         $dockerfile -match '\bPYTHONPATH\b' -or
         $dockerfile -match '\bhosted-agent\b' -or
