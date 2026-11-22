@@ -23,6 +23,10 @@ deployed environment.
 The exact Python requirements are in
 [`backend/requirements.txt`](../../backend/requirements.txt) and
 [`backend/requirements-dev.txt`](../../backend/requirements-dev.txt); the
+approved `agent-framework-core==1.26.0` wheel digest is recorded separately in
+[`backend/agent-framework-core.sha256`](../../backend/agent-framework-core.sha256)
+and verified before CI and container installation. This targeted guard does
+not claim that the complete transitive Python graph is hash-locked. The
 frontend's direct dependency manifest and lock are
 [`frontend/package.json`](../../frontend/package.json) and
 [`frontend/package-lock.json`](../../frontend/package-lock.json).
@@ -47,12 +51,14 @@ project.
 
 ## Dependency and alternative status
 
-Direct Python pins are not a fully locked or hash-verified graph. uv lockfiles,
-Ruff, migrations, Foundry host integration, managed identity deployment,
-OpenTelemetry export, Bicep, and azd are planned work; no version or command
-should be inferred for them. The current local image uses tags rather than
-immutable image digests, so supply-chain hardening is still an acceptance
-concern. See [deployment flow](deployment-flow.md) and
+Direct Python pins are not a fully locked or hash-verified graph. The MAF core
+wheel has a targeted exact-version and SHA-256 guard; full transitive locking
+remains in the separate tooling workstream. Ruff, migrations, Foundry host
+integration, managed identity deployment, OpenTelemetry export, Bicep, and
+azd are planned work; no version or command should be inferred for them. The
+current local image uses tags rather than immutable image digests, so
+supply-chain hardening is still an acceptance concern. See
+[deployment flow](deployment-flow.md) and
 the source repository's `docs/engineering-standards.md`.
 
 The separate, **open** developer-tooling proposal is PR

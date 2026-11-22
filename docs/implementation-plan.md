@@ -93,6 +93,11 @@ failures and the [regression test](../tests/test_ci_workflow.py) exercises
 failure, skip and success behavior. Prior CI job status alone is not proof
 that the verifier passed; confirm actual logs and revised-head CI before
 review.
+The [targeted MAF supply-chain audit](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-22---targeted-maf-supply-chain-audit)
+distinguishes the approved `agent-framework-core==1.26.0` dependency from the
+compromised `agent-framework` umbrella releases. Source and generated installs
+must reject the umbrella distribution and verify the approved core wheel hash
+before installation.
 The copied evidence producer observed approval and recovery passing while
 explanation and browser hint remained unverified; the independent unsigned
 readiness report remained unverified. The first local container build could

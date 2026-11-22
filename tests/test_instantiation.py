@@ -29,6 +29,17 @@ class InstantiationTests(unittest.TestCase):
             self.assertTrue((target / "backend" / "tests" / "order_adjustment_adapter.py").is_file())
             self.assertTrue((target / "backend" / "Dockerfile").is_file())
             self.assertTrue((target / "backend" / "requirements-dev.txt").is_file())
+            for relative in (
+                Path("agent-framework-core.sha256"),
+                Path("scripts") / "verify_framework_supply_chain.py",
+            ):
+                source_backend_file = (
+                    ROOT / "blueprints" / "maf" / "workflow" / "backend" / relative
+                )
+                self.assertEqual(
+                    source_backend_file.read_bytes(),
+                    (target / "backend" / relative).read_bytes(),
+                )
             source_docs = ROOT / "blueprints" / "maf" / "workflow" / "docs"
             for source in source_docs.rglob("*.md"):
                 copied = target / "docs" / source.relative_to(source_docs)

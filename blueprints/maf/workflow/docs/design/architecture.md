@@ -109,11 +109,15 @@ database action is protected by the action ledger on retry.
 ## Hosting boundary
 
 `LocalWorkflowHost` constructs per-case `FileCheckpointStorage` under a
-private single-host directory. PostgreSQL is not a checkpoint store. A future
-Foundry host must use its supported host-managed checkpoint provider and a
-request-aware factory; it must not attach the local provider as a second
-checkpoint authority. ACA would require its own selected and verified
-multi-replica-safe strategy. Neither hosting path is implemented here.
+private single-host directory. PostgreSQL remains application-owned
+persistence for business records, approvals, audit history, and idempotency;
+it is not a workflow checkpoint store. A future Foundry host must use its
+supported host-managed checkpoint provider and a request-aware factory; it
+must not attach the local provider as a second checkpoint authority. Do not
+introduce a custom PostgreSQL checkpointer without a demonstrated requirement
+and separate recovery evidence. ACA would require its own selected and
+verified multi-replica-safe strategy. Neither hosting path is implemented
+here.
 
 For code responsibilities, see [project structure](projectstructure.md); for
 service and operator guidance, see the [project guide](../architecture.md).

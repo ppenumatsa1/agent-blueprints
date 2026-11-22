@@ -97,6 +97,51 @@ subsequent updates and rerun checks after any head or base changes.
    consequential external effects blocked or unverified until their stated
    evidence exists. No merge or Azure provisioning is authorized by this journal.
 
+## 2026-11-22 - Targeted MAF supply-chain audit
+
+- **Incident reviewed:** The malicious PyPI distribution `agent-framework`
+  versions `1.26.1` and `1.26.2`, published on 2026-11-17, used `.pth`
+  startup hooks. This is a separate umbrella distribution from the blueprint's
+  `agent-framework-core==1.26.0` dependency.
+- **Verified repository and history findings:** Current manifests, Dockerfile,
+  CI, and all accessible Git revisions contain no dependency on the umbrella
+  `agent-framework` distribution or either affected version. PR #11 build
+  logs install `agent-framework-core==1.26.0`. The approved core wheel fetched
+  from the configured package proxy has SHA-256
+  `175b75f07e15d1bb7b6cea9cb35b965ac2528cd96e3eae8f791c85c48c7232b3`.
+- **Verified environment findings:** Read-only scans of accessible Python
+  installations, user caches, the workspace, and locally available blueprint
+  API image filesystems found no `agent_framework_meta.pth`,
+  `agent_framework_meta/_telemetry.py`, `af_runtime_diag.pth`, or
+  `af_runtime_diag.py`. Inspected blueprint images contain
+  `agent_framework_core-1.26.0.dist-info` and no affected umbrella-package
+  metadata. No evidence that an affected version executed was found, so
+  isolation or credential rotation is not currently triggered.
+- **Guard:** CI and backend container builds download the exact core wheel
+  without dependencies, verify the approved SHA-256, install that wheel, and
+  reject any requirement on the umbrella distribution. Focused tests also
+  reject the known affected umbrella version and an unapproved core version.
+  The generated application copies the same hash and verification script.
+- **Residual uncertainty:** Historical GitHub-hosted runner filesystems and
+  network telemetry are unavailable. External mirrors, remote registries,
+  self-hosted runners, and other developer machines were not independently
+  inspected. A later indicator of execution requires immediate host isolation,
+  rotation of credentials accessible to that environment, invalidation of
+  caches and images, and a clean rebuild from trusted artifacts.
+- **Sources:** [PYSEC-2026-4388](https://osv.dev/vulnerability/PYSEC-2026-4388)
+  and [JFrog's incident analysis](https://research.jfrog.com/post/agent-framework-hijack/).
+
+## 2026-11-22 - Checkpoint ownership decision
+
+- PostgreSQL remains application-owned persistence for business records,
+  approvals, audit history, and idempotency.
+- Local MAF execution uses its native private file checkpoint provider.
+  Future Foundry hosting must use the native managed checkpoint provider and
+  must not attach the local provider as another authority.
+- A custom PostgreSQL workflow checkpointer is not part of this blueprint and
+  must not be introduced without a demonstrated requirement and independently
+  verified recovery semantics.
+
 ## 2026-11-21 - Generated-project design baseline
 
 - **Issue / cause:** Blueprint implementation and operator guides existed,
