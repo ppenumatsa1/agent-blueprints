@@ -616,9 +616,73 @@ class OrderResolutionApiTests(unittest.TestCase):
         restarted_effect = restart_client.post(
             f"{base}/effects/apply",
             headers=effect_headers,
-            json={**effect_body, "platform_call_id": "platform-call-effect-after-restart"},
+            json={
+                **effect_body,
+                "platform_call_id": "platform-call-effect-after-restart",
+            },
         )
         self.assertEqual(restarted_effect.status_code, 200, restarted_effect.text)
+        components = build_application()
+
+        class ReplayAuthorityHost:
+            async def start(self, case_id, actor):
+                raise AssertionError("start was not expected")
+
+            async def resume(self, case_id, actor, decision_command):
+                PostgresHostedAuthorityBindings(restarted).bind_resume(
+                    case_id,
+                    actor,
+                    conversation_id=conversation_id,
+                    channel=HOSTED_CHANNEL,
+                    decision_command=decision_command,
+                )
+
+        replay_service = OrderResolutionService(
+            restarted,
+            ReplayAuthorityHost(),
+            components.rules,
+            components.policy,
+            hosted_mode=True,
+        )
+        replayed = asyncio.run(
+            replay_service.decide_bound(
+                reviewer,
+                case_id,
+                "approved",
+                proposal_version=proposal.proposal_version,
+                action=proposal.action,
+                destination_id=proposal.destination_id,
+                handle=request_id,
+                channel=HOSTED_CHANNEL,
+            )
+        )
+        self.assertEqual((replayed.status, replayed.execution_complete), ("completed", True))
+        with self.assertRaises(Conflict):
+            asyncio.run(
+                replay_service.decide_bound(
+                    reviewer,
+                    case_id,
+                    "rejected",
+                    proposal_version=proposal.proposal_version,
+                    action=proposal.action,
+                    destination_id=proposal.destination_id,
+                    handle=request_id,
+                    channel=HOSTED_CHANNEL,
+                )
+            )
+        with self.assertRaises(AccessDenied):
+            asyncio.run(
+                replay_service.decide_bound(
+                    owner,
+                    case_id,
+                    "approved",
+                    proposal_version=proposal.proposal_version,
+                    action=proposal.action,
+                    destination_id=proposal.destination_id,
+                    handle=request_id,
+                    channel=HOSTED_CHANNEL,
+                )
+            )
         restarted_read = restart_client.post(
             f"{base}/read",
             headers=headers,
@@ -694,6 +758,43 @@ class OrderResolutionApiTests(unittest.TestCase):
         self.assertEqual((rejected.status, rejected.execution_complete), ("rejected", True))
         self.assertIsNone(rejected.checkpoint_id)
         self.assertIsNone(rejected.terminal_checkpoint_id)
+        components = build_application()
+
+        class RejectedReplayAuthorityHost:
+            async def start(self, case_id, actor):
+                raise AssertionError("start was not expected")
+
+            async def resume(self, case_id, actor, decision_command):
+                PostgresHostedAuthorityBindings(restarted).bind_resume(
+                    case_id,
+                    actor,
+                    conversation_id=rejected_conversation,
+                    channel=HOSTED_CHANNEL,
+                    decision_command=decision_command,
+                )
+
+        replayed_rejection = asyncio.run(
+            OrderResolutionService(
+                restarted,
+                RejectedReplayAuthorityHost(),
+                components.rules,
+                components.policy,
+                hosted_mode=True,
+            ).decide_bound(
+                reviewer,
+                rejected_case.id,
+                "rejected",
+                proposal_version=rejected_proposal.proposal_version,
+                action=rejected_proposal.action,
+                destination_id=rejected_proposal.destination_id,
+                handle=request_id,
+                channel=HOSTED_CHANNEL,
+            )
+        )
+        self.assertEqual(
+            (replayed_rejection.status, replayed_rejection.execution_complete),
+            ("rejected", True),
+        )
 
         owner, automatic_case, _ = self.hosted_case("ORDER-HOSTED-AUTOMATIC", "8.00")
         restarted.bind_hosted_principal(
@@ -710,7 +811,9 @@ class OrderResolutionApiTests(unittest.TestCase):
         self.assertIsNone(automatic.checkpoint_id)
         self.assertIsNone(automatic.terminal_checkpoint_id)
 
-    def test_hosted_service_effect_modes_preserve_rejection_and_automatic_outcomes(self):
+    def test_hosted_service_effect_modes_preserve_rejection_and_automatic_outcomes(
+        self,
+    ):
         client = self.client()
         self.addCleanup(client.close)
 
@@ -952,10 +1055,7 @@ class OrderResolutionApiTests(unittest.TestCase):
         hosted_settings = Settings(
             TENANT,
             API,
-            (
-                "postgresql://runtime@database.postgres.database.azure.com/app"
-                "?sslmode=verify-full"
-            ),
+            ("postgresql://runtime@database.postgres.database.azure.com/app?sslmode=verify-full"),
             None,
             host_mode="hosted",
             hosted_workflow_endpoint=(
@@ -1198,6 +1298,29 @@ class OrderResolutionApiTests(unittest.TestCase):
             ),
             response_id,
         )
+        composed_host = ResponsesWorkflowHost(restarted_responses, authority)
+        responses_before_terminal_replay = len(foundry_calls)
+        asyncio.run(composed_host.resume(case.id, reviewer_actor, decision_command))
+        self.assertEqual(len(foundry_calls), responses_before_terminal_replay)
+        with self.assertRaises(Conflict):
+            asyncio.run(
+                composed_host.resume(
+                    case.id,
+                    reviewer_actor,
+                    DecisionCommand(
+                        case_id=str(case.id),
+                        proposal_version=proposal.proposal_version,
+                        action=proposal.action,
+                        destination_id=proposal.destination_id,
+                        handle=request_id,
+                        decision=Decision.REJECTED,
+                        scope="workflow.approve",
+                        channel=HOSTED_CHANNEL,
+                    ),
+                )
+            )
+        with self.assertRaises(AccessDenied):
+            asyncio.run(composed_host.resume(case.id, owner_actor, decision_command))
 
         self.assertEqual(owner_principal.subject, OWNER)
         self.assertEqual(reviewer_principal.subject, REVIEWER)

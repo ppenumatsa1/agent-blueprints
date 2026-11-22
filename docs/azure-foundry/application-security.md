@@ -110,6 +110,12 @@ mismatched conversation, channel, or principal kind returns `403`. Every
 binding lookup reauthorizes current PostgreSQL state; verification results are
 not cached by an idempotency record, so revoked or changed authority fails
 closed.
+For an approved, rejected, or completed case, an identical authenticated human
+resume is accepted only when the stored reviewer principal, conversation,
+channel, proposal, handle digest, decision intent, and authoritative decision
+all match. The bridge then reaches Agent A's completed operation journal and
+returns the recorded Responses result without another dispatch or effect.
+Changed principals, conversations, channels, or command content fail closed.
 
 State-changing requests other than the verification-only binding lookups
 require a bounded `Idempotency-Key` beginning with
@@ -240,7 +246,10 @@ second POST all pass with one decision and one effect. Repeated verification
 with changed platform call IDs reauthorizes current binding state; revoked
 owner authority and changed decision intent fail. Business replay with a
 changed platform call ID returns the authoritative existing outcome after
-restart, while a changed decision command conflicts. It also covers all ORS-001..009 scenarios,
+restart, while a changed decision command conflicts. Exact approved and
+rejected post-terminal human retries return through Agent A's acknowledged
+journal without a second `/responses` call; unauthorized and conflicting
+retries fail. It also covers all ORS-001..009 scenarios,
 frontend tests/build, and generated-project independence.
 
 Live-only checks remain unverified: API UAMI token issuance, `Foundry Agent

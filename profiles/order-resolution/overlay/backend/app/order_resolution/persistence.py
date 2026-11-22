@@ -630,11 +630,24 @@ class OrderResolutionStore(PostgresStore):
                 and principal.subject != case.owner_id
                 and "workflow.approve" in principal.scopes
                 and "Workflow.Approver" in principal.roles
-                and case.status == "pending"
                 and case.checkpoint_id is None
                 and case.request_id == decision_command.handle
             ):
                 raise AccessDenied("The hosted reviewer is not authorized for the case.")
+            row = connection.execute(
+                """
+                SELECT * FROM order_resolution_hosted_bindings
+                WHERE case_id = %s FOR UPDATE
+                """,
+                (case_id,),
+            ).fetchone()
+            if row is None:
+                raise NotFound("The hosted owner binding was not found.")
+            if (
+                row["conversation_id"],
+                row["channel"],
+            ) != (conversation_id, channel):
+                raise AccessDenied("The case is bound to a different hosted conversation.")
             proposal_row = connection.execute(
                 """
                 SELECT * FROM order_resolution_proposals
@@ -646,15 +659,78 @@ class OrderResolutionStore(PostgresStore):
             if proposal_row is None:
                 raise Conflict("The current proposal was not found.")
             proposal = _proposal(proposal_row)
-            if (
+            handle_digest = hashlib.sha256(decision_command.handle.encode("utf-8")).hexdigest()
+            command_matches = not (
                 decision_command.case_id != str(case_id)
                 or decision_command.proposal_version != proposal.proposal_version
                 or decision_command.action != proposal.action
                 or decision_command.destination_id != proposal.destination_id
                 or decision_command.scope != "workflow.approve"
                 or decision_command.channel != proposal.decision_channel
-                or proposal.decision_handle_digest
-                != hashlib.sha256(decision_command.handle.encode("utf-8")).hexdigest()
+                or proposal.decision_handle_digest != handle_digest
+            )
+            requested = (
+                principal.tenant_id,
+                principal.subject,
+                scopes,
+                roles,
+                "reviewer",
+            )
+            current = (
+                row["tenant_id"],
+                row["subject_id"],
+                sorted(row["scopes"]),
+                sorted(row["roles"]),
+                row["principal_kind"],
+            )
+            if case.status in ("approved", "rejected", "completed"):
+                intent = connection.execute(
+                    """
+                    SELECT proposal_version, action, destination_id, handle_digest,
+                        decision, actor_id, tenant_id, decision_scope, decision_channel
+                    FROM order_resolution_hosted_decision_intents
+                    WHERE case_id = %s
+                    """,
+                    (case_id,),
+                ).fetchone()
+                decision_row = connection.execute(
+                    """
+                    SELECT * FROM order_resolution_decisions
+                    WHERE case_id = %s AND proposal_version = %s
+                    """,
+                    (case_id, decision_command.proposal_version),
+                ).fetchone()
+                decision = _decision(decision_row) if decision_row is not None else None
+                if (
+                    not command_matches
+                    or current != requested
+                    or intent is None
+                    or decision is None
+                    or intent["proposal_version"] != decision_command.proposal_version
+                    or intent["action"] != decision_command.action
+                    or intent["destination_id"] != decision_command.destination_id
+                    or intent["handle_digest"] != handle_digest
+                    or intent["decision"] != decision_command.decision.value
+                    or intent["actor_id"] != principal.subject
+                    or intent["tenant_id"] != principal.tenant_id
+                    or intent["decision_scope"] != decision_command.scope
+                    or intent["decision_channel"] != decision_command.channel
+                    or decision.proposal_version != decision_command.proposal_version
+                    or decision.action != decision_command.action
+                    or decision.destination_id != decision_command.destination_id
+                    or decision.decision != decision_command.decision
+                    or decision.actor_id != principal.subject
+                    or decision.tenant_id != principal.tenant_id
+                    or decision.scope != decision_command.scope
+                    or decision.channel != decision_command.channel
+                ):
+                    raise Conflict(
+                        "The hosted decision replay conflicts with the authoritative decision."
+                    )
+                return
+            if (
+                case.status != "pending"
+                or not command_matches
                 or proposal.decision_expires_at is None
                 or datetime.now(timezone.utc) >= proposal.decision_expires_at
             ):
@@ -664,7 +740,7 @@ class OrderResolutionStore(PostgresStore):
                 decision_command.proposal_version,
                 decision_command.action,
                 decision_command.destination_id,
-                hashlib.sha256(decision_command.handle.encode("utf-8")).hexdigest(),
+                handle_digest,
                 decision_command.decision.value,
                 principal.subject,
                 principal.tenant_id,
@@ -692,34 +768,6 @@ class OrderResolutionStore(PostgresStore):
             ).fetchone()
             if stored_intent is None or tuple(stored_intent.values()) != intent:
                 raise Conflict("The hosted decision intent conflicts with an existing intent.")
-            row = connection.execute(
-                """
-                SELECT * FROM order_resolution_hosted_bindings
-                WHERE case_id = %s FOR UPDATE
-                """,
-                (case_id,),
-            ).fetchone()
-            if row is None:
-                raise NotFound("The hosted owner binding was not found.")
-            if (
-                row["conversation_id"],
-                row["channel"],
-            ) != (conversation_id, channel):
-                raise AccessDenied("The case is bound to a different hosted conversation.")
-            requested = (
-                principal.tenant_id,
-                principal.subject,
-                scopes,
-                roles,
-                "reviewer",
-            )
-            current = (
-                row["tenant_id"],
-                row["subject_id"],
-                sorted(row["scopes"]),
-                sorted(row["roles"]),
-                row["principal_kind"],
-            )
             if current == requested:
                 return
             if row["principal_kind"] != "owner":

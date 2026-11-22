@@ -46,7 +46,9 @@ suites with 9/9 or 10/10 tests plus build/CSP passed. A PostgreSQL 17 and
 loopback HTTP test composes Agent A's live `HttpHostedBusinessStore` and
 `ResponsesClient` with C's exact journal types, covers restart/duplicate
 no-replay with changing opaque platform call IDs, revocation and changed-intent
-negatives, and one decision/effect with null checkpoint fields.
+negatives, post-terminal approved/rejected command replay through Agent A's
+acknowledged journal without a second Responses dispatch, and one
+decision/effect with null checkpoint fields.
 Fresh generated Compose built through approved package proxies, ran explicit
 migrations, became healthy, and returned root `200`, health `204`, and
 protected API `401`. The

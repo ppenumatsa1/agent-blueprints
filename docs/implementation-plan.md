@@ -109,6 +109,9 @@ Implementation acceptance criteria:
   authority, with current durable binding reauthorization on every
   verification request and platform call IDs excluded from business-operation
   digests;
+- exact post-terminal human decision retries that reauthorize the reviewer,
+  conversation, channel, intent, and command, then return Agent A's recorded
+  Responses result without redispatch or another effect;
 - explicit migrations, startup schema validation, runtime/admin identity
   separation, TLS verification, bounded pools, and managed-identity or secret
   authentication;
