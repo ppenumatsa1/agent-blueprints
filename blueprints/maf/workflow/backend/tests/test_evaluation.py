@@ -1,7 +1,11 @@
 import asyncio
+import importlib
 import json
+import os
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from agent_framework import (
     AgentResponse,
@@ -18,7 +22,10 @@ from app.extensions.evaluation import (
     EvaluationCase,
     EvaluationDataset,
     EvaluationRubric,
+    RealProviderEvaluationSettings,
     RubricCriterion,
+    load_real_provider_evaluator,
+    load_real_provider_results,
     map_evaluation_results,
     unavailable_assessment,
 )
@@ -319,6 +326,53 @@ class EvaluationExtensionTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(ValueError, "queries must be unique"):
             SYNTHETIC_RUBRIC.validate_for(dataset, self.known_check_ids)
+
+    def test_real_provider_evaluation_is_disabled_by_default_and_strict_when_enabled(self):
+        with patch.dict(os.environ, {}, clear=True):
+            settings = RealProviderEvaluationSettings.from_environment()
+        self.assertFalse(settings.enabled)
+        with self.assertRaisesRegex(ValueError, "not explicitly enabled"):
+            load_real_provider_evaluator(settings)
+        with self.assertRaisesRegex(ValueError, "not explicitly enabled"):
+            load_real_provider_results(settings)
+
+        configured = {
+            "MAF_REAL_EVALUATION_ENABLED": "true",
+            "MAF_REAL_EVALUATION_PROVIDER": "azure-ai-foundry",
+            "MAF_REAL_EVALUATION_MODEL": "configured-deployment",
+            "MAF_REAL_EVALUATOR_FACTORY": "tests.fixture_evaluator:create",
+            "MAF_REAL_RESULT_FACTORY": "tests.fixture_results:create",
+            "MAF_REAL_BASE_URL": "https://example.invalid",
+            "MAF_REAL_AUTH_FILE": str(Path(__file__).resolve()),
+            "SOURCE_REVISION": "source-123",
+            "DEPLOYMENT_REVISION": "revision-123",
+        }
+        with patch.dict(os.environ, configured, clear=True):
+            enabled = RealProviderEvaluationSettings.from_environment()
+        self.assertTrue(enabled.enabled)
+        self.assertEqual(enabled.minimum_score, 0.8)
+        for missing in (
+            "MAF_REAL_EVALUATION_PROVIDER",
+            "MAF_REAL_EVALUATION_MODEL",
+            "MAF_REAL_EVALUATOR_FACTORY",
+            "MAF_REAL_RESULT_FACTORY",
+            "MAF_REAL_BASE_URL",
+            "MAF_REAL_AUTH_FILE",
+            "SOURCE_REVISION",
+            "DEPLOYMENT_REVISION",
+        ):
+            with self.subTest(missing=missing):
+                environment = dict(configured)
+                environment.pop(missing)
+                with patch.dict(os.environ, environment, clear=True), self.assertRaises(ValueError):
+                    RealProviderEvaluationSettings.from_environment()
+        with patch.object(
+            importlib,
+            "import_module",
+            return_value=SimpleNamespace(create=lambda **kwargs: {"ORS-001": {"result": kwargs}}),
+        ):
+            actual = load_real_provider_results(enabled)
+        self.assertIn("ORS-001", actual)
 
 
 if __name__ == "__main__":

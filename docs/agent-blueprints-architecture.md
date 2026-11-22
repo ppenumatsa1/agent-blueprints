@@ -577,3 +577,36 @@ agent-blueprints/
 Phase 1 will copy the selected blueprint and verification assets into an
 independently buildable project. Specification Studio integration remains
 Phase 6 work.
+
+## Azure/Foundry Workstream D
+
+The observability boundary is manual and content-free. A request UUID starts
+at the API and propagates through the Foundry call, native MAF workflow,
+model/tool operations, and PostgreSQL spans. A case UUID is added only after
+the application has established it. W3C trace/span IDs, agent version, and
+deployment revision bind technical evidence, but none authorizes a user,
+approval, case, or side effect. Technical status and business outcome remain
+separate.
+
+Automatic MAF content instrumentation stays disabled. Model usage, latency,
+retry reason, safe provider/model/tool identifiers, and bounded operation
+status are allowlisted; prompts, completions, tokens, SQL, exception messages,
+arbitrary baggage, and business payloads are excluded. Application Insights
+verification joins only exact correlation tuples from hosted synthetic tests.
+
+Release evidence is a separate architecture layer, not runtime state. It
+validates immutable files and divides readiness into implementation, Azure
+runtime, and production dimensions. Cloud evidence must match one exact source
+revision, environment, and immutable deployment revision. Implementation
+evidence cannot establish Azure runtime readiness. Runtime evidence cannot
+establish production readiness without independent security, cost, and scoped
+human risk acceptance.
+
+The manual cloud workflow observes existing resources but never provisions,
+deploys, changes traffic, retries an ambiguous business operation, or rolls
+back. Agent A supplies native hosted lifecycle and reconciliation semantics;
+Agent B supplies immutable revision/resource evidence and telemetry endpoints;
+Agent C supplies authenticated application/database behavior and bounded
+synthetic fault controls. See the
+[Workstream D readiness guide](azure-foundry/readiness.md) for executable gates
+and the current blocked/unverified matrix.

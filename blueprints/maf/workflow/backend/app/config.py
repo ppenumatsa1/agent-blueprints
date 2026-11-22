@@ -76,6 +76,8 @@ class Settings:
     obo_allowed_scopes: tuple[str, ...] = ()
     telemetry_mode: str = "local"
     applicationinsights_connection_string: str | None = field(default=None, repr=False)
+    agent_version: str = "0.1.0"
+    deployment_revision: str = "local-unversioned"
 
     def __post_init__(self) -> None:
         try:
@@ -198,6 +200,17 @@ class Settings:
             or not self.applicationinsights_connection_string.strip()
         ):
             raise ValueError("APPLICATIONINSIGHTS_CONNECTION_STRING is required for azure-monitor.")
+        for name, value in (
+            ("AGENT_VERSION", self.agent_version),
+            ("DEPLOYMENT_REVISION", self.deployment_revision),
+        ):
+            if (
+                not isinstance(value, str)
+                or not value
+                or len(value) > 128
+                or not all(character.isalnum() or character in "._:/-" for character in value)
+            ):
+                raise ValueError(f"{name} must be a privacy-safe identifier.")
         for value in self.cors_origins:
             _origin(value)
         if self.obo_enabled and (not self.obo_client_secret or not self.obo_allowed_scopes):
@@ -289,4 +302,6 @@ class Settings:
                 "APPLICATIONINSIGHTS_CONNECTION_STRING"
             )
             or None,
+            agent_version=os.environ.get("AGENT_VERSION", "0.1.0"),
+            deployment_revision=os.environ.get("DEPLOYMENT_REVISION", "local-unversioned"),
         )

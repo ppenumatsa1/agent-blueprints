@@ -1,11 +1,14 @@
 """Application-owned evaluation configuration and per-check result mapping."""
 
+import importlib
+import os
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from math import isfinite
+from pathlib import Path
 from typing import Literal
 
-from agent_framework import EvalItemResult, EvalResults, EvalScoreResult
+from agent_framework import EvalItemResult, EvalResults, EvalScoreResult, Evaluator
 
 
 Outcome = Literal["passed", "failed", "unverified"]
@@ -32,6 +35,112 @@ def _is_valid_score(value: object) -> bool:
     if isinstance(value, int):
         return 0 <= value <= 1
     return isfinite(value) and 0 <= value <= 1
+
+
+@dataclass(frozen=True)
+class RealProviderEvaluationSettings:
+    enabled: bool
+    provider_id: str | None = None
+    model_id: str | None = None
+    evaluator_factory: str | None = None
+    result_factory: str | None = None
+    base_url: str | None = None
+    auth_file: str | None = None
+    source_revision: str | None = None
+    deployment_revision: str | None = None
+    minimum_score: float = 0.8
+
+    @classmethod
+    def from_environment(cls) -> "RealProviderEvaluationSettings":
+        raw_enabled = os.environ.get("MAF_REAL_EVALUATION_ENABLED", "false").lower()
+        if raw_enabled not in {"true", "false"}:
+            raise ValueError("MAF_REAL_EVALUATION_ENABLED must be true or false.")
+        if raw_enabled == "false":
+            return cls(enabled=False)
+        provider_id = os.environ.get("MAF_REAL_EVALUATION_PROVIDER", "")
+        model_id = os.environ.get("MAF_REAL_EVALUATION_MODEL", "")
+        evaluator_factory = os.environ.get("MAF_REAL_EVALUATOR_FACTORY", "")
+        result_factory = os.environ.get("MAF_REAL_RESULT_FACTORY", "")
+        base_url = os.environ.get("MAF_REAL_BASE_URL", "")
+        auth_file = os.environ.get("MAF_REAL_AUTH_FILE", "")
+        source_revision = os.environ.get("SOURCE_REVISION", "")
+        deployment_revision = os.environ.get("DEPLOYMENT_REVISION", "")
+        for value, label in (
+            (provider_id, "MAF_REAL_EVALUATION_PROVIDER"),
+            (model_id, "MAF_REAL_EVALUATION_MODEL"),
+            (evaluator_factory, "MAF_REAL_EVALUATOR_FACTORY"),
+            (result_factory, "MAF_REAL_RESULT_FACTORY"),
+            (base_url, "MAF_REAL_BASE_URL"),
+            (auth_file, "MAF_REAL_AUTH_FILE"),
+            (source_revision, "SOURCE_REVISION"),
+            (deployment_revision, "DEPLOYMENT_REVISION"),
+        ):
+            _require_text(value, label)
+        if provider_id.lower() in {"local", "synthetic", "fixture"}:
+            raise ValueError("Real-provider evaluation cannot use a local or synthetic provider.")
+        if not Path(auth_file).is_file():
+            raise ValueError("MAF_REAL_AUTH_FILE must identify a readable authentication file.")
+        try:
+            minimum_score = float(os.environ.get("MAF_REAL_EVALUATION_MINIMUM_SCORE", "0.8"))
+        except ValueError as error:
+            raise ValueError(
+                "MAF_REAL_EVALUATION_MINIMUM_SCORE must be a finite number from 0 to 1."
+            ) from error
+        if not _is_valid_score(minimum_score):
+            raise ValueError(
+                "MAF_REAL_EVALUATION_MINIMUM_SCORE must be a finite number from 0 to 1."
+            )
+        return cls(
+            enabled=True,
+            provider_id=provider_id,
+            model_id=model_id,
+            evaluator_factory=evaluator_factory,
+            result_factory=result_factory,
+            base_url=base_url,
+            auth_file=auth_file,
+            source_revision=source_revision,
+            deployment_revision=deployment_revision,
+            minimum_score=minimum_score,
+        )
+
+
+def load_real_provider_evaluator(
+    settings: RealProviderEvaluationSettings,
+) -> Evaluator:
+    if not settings.enabled:
+        raise ValueError("Real-provider evaluation was not explicitly enabled.")
+    module_name, separator, attribute = (settings.evaluator_factory or "").partition(":")
+    if not separator or not module_name or not attribute:
+        raise ValueError("MAF_REAL_EVALUATOR_FACTORY must use module:callable syntax.")
+    factory = getattr(importlib.import_module(module_name), attribute)
+    evaluator_provider = factory(
+        provider_id=settings.provider_id,
+        model_id=settings.model_id,
+        auth_file=settings.auth_file,
+    )
+    if not isinstance(evaluator_provider, Evaluator):
+        raise TypeError("The configured real-provider factory did not return a MAF Evaluator.")
+    return evaluator_provider
+
+
+def load_real_provider_results(
+    settings: RealProviderEvaluationSettings,
+) -> Mapping[str, Mapping[str, object]]:
+    if not settings.enabled:
+        raise ValueError("Real-provider evaluation was not explicitly enabled.")
+    module_name, separator, attribute = (settings.result_factory or "").partition(":")
+    if not separator or not module_name or not attribute:
+        raise ValueError("MAF_REAL_RESULT_FACTORY must use module:callable syntax.")
+    factory = getattr(importlib.import_module(module_name), attribute)
+    results = factory(
+        base_url=settings.base_url,
+        auth_file=settings.auth_file,
+        source_revision=settings.source_revision,
+        deployment_revision=settings.deployment_revision,
+    )
+    if not isinstance(results, Mapping):
+        raise TypeError("The configured real-provider result factory returned invalid results.")
+    return results
 
 
 @dataclass(frozen=True)

@@ -201,6 +201,11 @@ class InstantiationTests(unittest.TestCase):
                 "backend/examples/evaluation_fixture.py",
                 "backend/tests/test_extensions.py",
                 "backend/tests/test_evaluation.py",
+                "backend/tests/hosted_failure_runner.py",
+                "backend/tests/test_hosted_failure_runner.py",
+                "frontend/playwright.config.ts",
+                "frontend/e2e/local.spec.ts",
+                "frontend/e2e/live.spec.ts",
             ):
                 self.assertEqual(
                     (ROOT / "blueprints" / "maf" / "workflow" / relative).read_bytes(),
@@ -314,6 +319,18 @@ class InstantiationTests(unittest.TestCase):
             )
             self.assertFalse((target / "frontend" / "node_modules").exists())
             self.assertFalse((target / "frontend" / "dist").exists())
+            self.assertTrue(
+                (target / "verification" / "readiness" / "release.py").is_file()
+            )
+            self.assertTrue(
+                (
+                    target / "verification" / "tests" / "test_release_evidence.py"
+                ).is_file()
+            )
+            self.assertIn(
+                "verification/scenarios/order-adjustment/verification-contract.json -text",
+                (target / ".gitattributes").read_text(encoding="utf-8"),
+            )
             self.assertFalse((target / ".env").exists())
             environment = os.environ.copy()
             environment.pop("PYTHONPATH", None)
@@ -416,6 +433,7 @@ class InstantiationTests(unittest.TestCase):
                 "hosted-agent/tests/test_business.py",
                 "hosted-agent/tests/test_protocol.py",
                 "scripts/foundry/publish_order_resolution_hosted.py",
+                "backend/tests/test_order_resolution_real_provider.py",
                 "frontend/src/order-resolution.tsx",
                 "frontend/src/test/order-resolution.test.tsx",
                 "docs/order-resolution.md",
@@ -453,6 +471,10 @@ class InstantiationTests(unittest.TestCase):
                 "COPY --chown=blueprint:blueprint order_resolution_hosted/ "
                 "order_resolution_hosted/",
                 dockerfile,
+            )
+            self.assertIn(
+                "verification/scenarios/order-resolution/verification-contract.json -text",
+                (target / ".gitattributes").read_text(encoding="utf-8"),
             )
             self.assertNotIn(
                 "order_resolution",

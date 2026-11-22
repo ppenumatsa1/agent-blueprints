@@ -203,7 +203,12 @@ def instantiate(
         shutil.copy2(cases, order_resolution / "golden-cases.json")
         _merge_order_resolution_verification(verification)
     (verification / "tests").mkdir()
-    for name in ("test_contracts.py", "test_golden_scenario.py", "test_readiness.py"):
+    for name in (
+        "test_contracts.py",
+        "test_golden_scenario.py",
+        "test_readiness.py",
+        "test_release_evidence.py",
+    ):
         shutil.copy2(ROOT / "tests" / name, verification / "tests" / name)
     if contract_test is not None:
         shutil.copy2(
@@ -217,8 +222,15 @@ def instantiate(
     )
     shutil.copy2(ROOT / "requirements-dev.txt", verification / "requirements-dev.txt")
     shutil.copy2(ROOT / "LICENSE", destination / "LICENSE")
+    attributes = [
+        "verification/scenarios/order-adjustment/verification-contract.json -text",
+    ]
+    if profile == "order-resolution":
+        attributes.append(
+            "verification/scenarios/order-resolution/verification-contract.json -text"
+        )
     (destination / ".gitattributes").write_text(
-        "verification/scenarios/order-adjustment/verification-contract.json -text\n",
+        "\n".join(attributes) + "\n",
         encoding="utf-8",
     )
     with (destination / ".gitignore").open("a", encoding="utf-8") as file:

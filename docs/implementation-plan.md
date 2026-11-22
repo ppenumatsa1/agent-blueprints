@@ -827,3 +827,31 @@ Private networking and self-hosted runners are deferred work, not assumed
 prerequisites for Phase 1. Each phase requires its own approval, implementation,
 and evidence; this plan does not authorize deployment or create those
 repositories.
+
+## Azure/Foundry Workstream D
+
+Workstream D adds only observability and evidence-producing/validating
+capabilities. It preserves the six existing CI jobs and adds a generated
+Chromium job. The separate cloud-validation workflow is manual,
+revision-bound, and non-deploying.
+
+Acceptance requires:
+
+1. allowlisted API-to-PostgreSQL correlation with separate technical and
+   business outcomes and no raw model, tool, identity, SQL, or business
+   payloads;
+2. explicit real-provider evaluation with no synthetic fallback;
+3. actual local Chromium plus authenticated live browser evidence;
+4. all nine hosted fault/recovery cases with unknown-outcome reconciliation
+   and no hidden retry;
+5. exact active revision/image/version and App Insights corroboration; and
+6. independent implementation, Azure runtime, and production readiness
+   dimensions with immutable artifact hashes.
+
+The exact commands, GitHub environment inputs, evidence schemas, baseline CI,
+region reference, current blocked/unverified matrix, and dependencies on
+Agents A-C are in the [Workstream D readiness guide](azure-foundry/readiness.md).
+Next action: complete exact-head local/CI validation, then consume the immutable
+deployment and live adapter outputs from Agents A-C. Credential-free CI is
+implementation evidence only; Azure runtime remains unverified until the
+manual live gates produce matching evidence.
