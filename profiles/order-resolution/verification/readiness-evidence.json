@@ -1,0 +1,97 @@
+{
+  "schema_version": "1.0.0",
+  "profile": "order-resolution",
+  "source_baseline": "d5a13ddcca1ce40c8b591c475a3c1204f5033902",
+  "specification": {
+    "id": "order-resolution-spec",
+    "version": "0.1.0"
+  },
+  "evaluation_dataset": {
+    "id": "order-resolution-evaluation",
+    "version": "0.1.0",
+    "path": "backend/evaluations/order-resolution-0.1.0.json"
+  },
+  "integration_sources": {
+    "agent_a": {
+      "pull_request": "https://github.com/ppenumatsa1/agent-blueprints/pull/42",
+      "head": "3c977bf1b0ce2d29ad6d689f586dc74739ea85ea",
+      "acceptance_contract": "scenarios/order-resolution/acceptance-contract.json",
+      "golden_cases": "scenarios/order-resolution/golden-cases.json",
+      "use": "Reference scenario IDs and order-resolution-spec/0.1.0 after integration; do not copy the executable contract into this overlay."
+    },
+    "agent_b": {
+      "state": "pending",
+      "use": "Provide the surrounding Order Resolution MAF runtime and package boundary."
+    },
+    "agent_c": {
+      "state": "pending",
+      "use": "Provide durability and effect evidence consumed by integrated evaluation."
+    }
+  },
+  "contract_validation": {
+    "state": "passed",
+    "scope": "Evaluation dataset validation, native MAF local result mapping, and readiness-state semantics only.",
+    "command": "python -m unittest discover -s profiles\\order-resolution\\backend\\tests -v",
+    "reason": "Eleven focused tests passed in an isolated Python 3.12 environment; this is not integrated scenario, model, browser, or trusted provenance evidence."
+  },
+  "readiness": [
+    {
+      "area": "technical_execution",
+      "check_id": "ORDER-RESOLUTION-TECHNICAL-EXECUTION",
+      "state": "unverified",
+      "reason": "Requires Agent A executable scenario outputs and the Agent B MAF runtime integration.",
+      "dependencies": [
+        "Agent A draft PR #42 executable nine-case fixture",
+        "Agent B Order Resolution MAF runtime",
+        "Agent C durability and effect evidence"
+      ]
+    },
+    {
+      "area": "business_outcome",
+      "check_id": "ORDER-RESOLUTION-BUSINESS-OUTCOME",
+      "state": "unverified",
+      "reason": "The dataset declares assertions but no integrated scenario result is present.",
+      "dependencies": [
+        "Agent A draft PR #42 executable nine-case fixture",
+        "Agent B Order Resolution MAF runtime",
+        "Agent C durability and effect evidence"
+      ]
+    },
+    {
+      "area": "model_quality",
+      "check_id": "ORDER-RESOLUTION-MODEL-QUALITY",
+      "state": "unverified",
+      "reason": "No real model or provider evaluation was executed.",
+      "dependencies": [
+        "Agent B configured model path",
+        "Authorized provider credentials and environment"
+      ]
+    },
+    {
+      "area": "browser_evidence",
+      "check_id": "ORDER-RESOLUTION-BROWSER-EVIDENCE",
+      "state": "unverified",
+      "reason": "No browser workflow was executed and no browser artifact exists.",
+      "dependencies": [
+        "Integrated profile UI and API",
+        "Actual browser execution"
+      ]
+    },
+    {
+      "area": "provenance",
+      "check_id": "ORDER-RESOLUTION-PROVENANCE",
+      "state": "unverified",
+      "reason": "MAF item references are not evidence bytes, digest verification, or authenticated provenance.",
+      "dependencies": [
+        "Revision-bound evidence artifacts",
+        "Trusted producer identity and digest verification"
+      ]
+    }
+  ],
+  "integration_blockers": [
+    "Agent A draft PR #42 is complete but intentionally not cherry-picked into this isolated overlay.",
+    "Agent B profile runtime and package manifest are not yet available on this branch.",
+    "Agent C durability and effect evidence is not yet available on this branch.",
+    "Shared documentation finalization is intentionally excluded from this overlay."
+  ]
+}

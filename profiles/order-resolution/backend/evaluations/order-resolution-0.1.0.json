@@ -1,0 +1,171 @@
+{
+  "schema_version": "1.0.0",
+  "dataset_id": "order-resolution-evaluation",
+  "dataset_version": "0.1.0",
+  "specification": {
+    "id": "order-resolution-spec",
+    "version": "0.1.0"
+  },
+  "cases": [
+    {
+      "case_id": "OR-EVAL-RESOLUTION",
+      "query": "Evaluate the specified deterministic outcomes for ORS-001, ORS-002, and ORS-003.",
+      "scenario_ids": [
+        "ORS-001",
+        "ORS-002",
+        "ORS-003"
+      ],
+      "check_ids": [
+        "ORDER-RESOLUTION-TECHNICAL-EXECUTION",
+        "ORDER-RESOLUTION-BUSINESS-OUTCOME"
+      ],
+      "expected_output": {
+        "scenario_ids": [
+          "ORS-001",
+          "ORS-002",
+          "ORS-003"
+        ],
+        "technical_execution": {
+          "ORS-001": {
+            "native_checkpoint": "not_required",
+            "action_count": 1,
+            "terminal_state": "completed"
+          },
+          "ORS-002": {
+            "native_checkpoint": "pause_before_action",
+            "decision_count": 1,
+            "action_count": 1,
+            "terminal_state": "completed"
+          },
+          "ORS-003": {
+            "native_checkpoint": "pause_before_action",
+            "decision": "rejected",
+            "action_count": 0,
+            "terminal_state": "escalated"
+          }
+        },
+        "business_outcome": {
+          "ORS-001": {
+            "action": "partial_refund_10",
+            "amount": "USD 7.90",
+            "approval_required": false
+          },
+          "ORS-002": {
+            "action": "partial_refund_10",
+            "amount": "USD 18.50",
+            "approval_required": true
+          },
+          "ORS-003": {
+            "action": "replacement_shipment",
+            "approval_required": true,
+            "decision": "rejected"
+          }
+        }
+      }
+    },
+    {
+      "case_id": "OR-EVAL-IDEMPOTENCY-RECOVERY",
+      "query": "Evaluate the specified idempotency and restart outcomes for ORS-004 and ORS-005.",
+      "scenario_ids": [
+        "ORS-004",
+        "ORS-005"
+      ],
+      "check_ids": [
+        "ORDER-RESOLUTION-TECHNICAL-EXECUTION",
+        "ORDER-RESOLUTION-BUSINESS-OUTCOME"
+      ],
+      "expected_output": {
+        "scenario_ids": [
+          "ORS-004",
+          "ORS-005"
+        ],
+        "technical_execution": {
+          "ORS-004": {
+            "action_count": 1,
+            "duplicate_terminal_event": false,
+            "request_identity_reused": true
+          },
+          "ORS-005": {
+            "native_continuation_reconciled": true,
+            "original_decision_audit_preserved": true,
+            "action_count_maximum": 1,
+            "terminal_state": "completed"
+          }
+        },
+        "business_outcome": {
+          "ORS-004": {
+            "original_outcome_returned_or_reconciled": true,
+            "duplicate_action": false
+          },
+          "ORS-005": {
+            "original_decision": "approved",
+            "duplicate_action": false,
+            "terminal_state": "completed"
+          }
+        }
+      }
+    },
+    {
+      "case_id": "OR-EVAL-POLICY-AUTHORIZATION",
+      "query": "Evaluate the specified policy-evidence and authorization failures for ORS-006 through ORS-009.",
+      "scenario_ids": [
+        "ORS-006",
+        "ORS-007",
+        "ORS-008",
+        "ORS-009"
+      ],
+      "check_ids": [
+        "ORDER-RESOLUTION-TECHNICAL-EXECUTION",
+        "ORDER-RESOLUTION-BUSINESS-OUTCOME"
+      ],
+      "expected_output": {
+        "scenario_ids": [
+          "ORS-006",
+          "ORS-007",
+          "ORS-008",
+          "ORS-009"
+        ],
+        "technical_execution": {
+          "ORS-006": {
+            "authoritative_proposal_count": 0,
+            "approval_count": 0,
+            "action_count": 0
+          },
+          "ORS-007": {
+            "authoritative_proposal_count": 0,
+            "approval_count": 0,
+            "action_count": 0
+          },
+          "ORS-008": {
+            "authoritative_proposal_count": 0,
+            "approval_count": 0,
+            "action_count": 0
+          },
+          "ORS-009": {
+            "denial_audited": true,
+            "action_count": 0,
+            "terminal_state": "awaiting_approval"
+          }
+        },
+        "business_outcome": {
+          "ORS-006": {
+            "error_code": "policy_evidence_missing",
+            "terminal_state": "failed"
+          },
+          "ORS-007": {
+            "error_code": "policy_evidence_conflict",
+            "terminal_state": "failed"
+          },
+          "ORS-008": {
+            "error_code": "policy_evidence_invalid",
+            "terminal_state": "failed"
+          },
+          "ORS-009": {
+            "error_code": "authorization_denied",
+            "case_state": "awaiting_approval"
+          }
+        }
+      }
+    }
+  ]
+}
