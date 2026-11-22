@@ -142,7 +142,12 @@ local integration tree, source and independently generated backends each passed
 without skips, and the root verifier passed 56 tests with one expected
 `adapter-not-selected` skip. The pinned `agent-framework-core==1.26.0` wheel
 matched the approved SHA-256 `175b75f07e15d1bb7b6cea9cb35b965ac2528cd96e3eae8f791c85c48c7232b3`.
-These results precede the integration commit; PR #39 exact-head CI is pending.
+These results correspond to implementation commit
+`1724f3ef9bfdb7af07c575697cc1d0cd7b5d5af2`, whose exact-head Actions run
+[45033947068](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/45033947068)
+passed all six jobs. This validates the evaluation implementation, not live
+evaluation, browser evidence, trust, or hosted readiness. Subsequent
+documentation-only commits require their own exact-head CI.
 
 ### Execution sequence and work packages
 
