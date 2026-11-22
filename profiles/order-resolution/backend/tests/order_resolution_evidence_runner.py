@@ -336,6 +336,7 @@ def produce(
     _write_json(output / "readiness-matrix.json", matrix)
     release_evidence = {
         "schema_version": "1.0.0",
+        "authority": "diagnostic_non_authorizing",
         "source_revision": revision,
         "environment": environment,
         "agent_version": os.environ.get("AGENT_VERSION", "0.1.0"),

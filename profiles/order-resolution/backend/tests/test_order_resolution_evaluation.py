@@ -292,6 +292,7 @@ class OrderResolutionEvaluationTests(unittest.TestCase):
         states = {item["check_id"]: item["outcome"] for item in readiness["results"]}
         self.assertEqual(matrix["local_factory_status"], "passed")
         self.assertEqual(matrix["release_status"], "blocked")
+        self.assertEqual(release["authority"], "diagnostic_non_authorizing")
         self.assertEqual(release["dimensions"]["implementation"]["status"], "passed")
         self.assertEqual(release["dimensions"]["azure_runtime"]["status"], "unverified")
         self.assertEqual(release["dimensions"]["production"]["status"], "blocked")
