@@ -118,12 +118,19 @@ try {
     $generatedApiConfig = Get-Content `
         -LiteralPath (Join-Path $generatedRoot 'backend\app\config.py') `
         -Raw
+    $generatedHostedBridge = Get-Content `
+        -LiteralPath (
+            Join-Path $generatedRoot `
+                'hosted-agent\src\order_resolution_hosted\bridge.py'
+        ) `
+        -Raw
     if (
         $generatedApiApp -notmatch [regex]::Escape('/api/internal/hosted/v1') -or
         $generatedApiConfig -notmatch '\bHOSTED_SERVICE_PRINCIPAL_ID\b' -or
-        $generatedApiConfig -notmatch '\bHOSTED_SERVICE_APP_ROLE\b'
+        $generatedApiConfig -notmatch '\bHOSTED_SERVICE_APP_ROLE\b' -or
+        $generatedHostedBridge -notmatch '\bdef\s+build_workflow_host\s*\('
     ) {
-        throw 'Generated API does not expose the frozen hosted-service identity contract.'
+        throw 'Generated source does not expose the frozen hosted bridge and identity contract.'
     }
     $nginxPath = Join-Path $generatedRoot 'frontend\nginx.conf'
     $nginxSource = Get-Content -LiteralPath $nginxPath -Raw
@@ -139,6 +146,28 @@ try {
         )
     ) {
         throw 'Generated backend image does not install and verify the system CA bundle.'
+    }
+    $apiDockerfileSourcePath = Join-Path `
+        $root `
+        'infra\docker\order-resolution-api.Dockerfile'
+    $generatedApiBuildContext = Initialize-GeneratedApiImageContext `
+        -ProjectRoot $generatedRoot `
+        -DockerfileSource $apiDockerfileSourcePath
+    $apiDockerfilePath = Join-Path `
+        $generatedApiBuildContext `
+        '.azure-api.Dockerfile'
+    $apiDockerfile = Get-Content -LiteralPath $apiDockerfilePath -Raw
+    if (
+        $apiDockerfile -notmatch [regex]::Escape(
+            'COPY --chown=blueprint:blueprint order_resolution_hosted/'
+        ) -or
+        $apiDockerfile -notmatch [regex]::Escape(
+            'from order_resolution_hosted.bridge import build_workflow_host'
+        ) -or
+        $apiDockerfile -match '\bPYTHONPATH\b' -or
+        $apiDockerfile -match '\bhosted-agent\b'
+    ) {
+        throw 'Generated API image does not contain the bounded bridge import contract.'
     }
 
     & "$PSScriptRoot\preflight.ps1" `
@@ -269,13 +298,13 @@ try {
     $acrName = Get-RequiredValue $values 'AZURE_CONTAINER_REGISTRY_NAME'
     $registryEndpoint = Get-RequiredValue $values 'AZURE_CONTAINER_REGISTRY_ENDPOINT'
     $imageTag = (git -C $root rev-parse --short=12 HEAD).Trim()
-    Push-Location (Join-Path $generatedRoot 'backend')
+    Push-Location $generatedApiBuildContext
     try {
         az acr build `
             --subscription $SubscriptionId `
             --registry $acrName `
             --image "order-resolution-api:$imageTag" `
-            --file Dockerfile `
+            --file .azure-api.Dockerfile `
             . `
             --only-show-errors
         if ($LASTEXITCODE -ne 0) { throw 'Generated API image build failed.' }

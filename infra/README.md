@@ -67,6 +67,20 @@ must contain the known Compose upstream; deployment replaces that copy with the
 exact HTTPS API FQDN before the image build. Source files in this repository are
 not patched or used as runtime dependencies.
 
+The API ACR build stages only Agent A's API-side `client.py` and `bridge.py`
+modules into Agent C's generated backend with a side-effect-free package
+initializer. `infra/docker/order-resolution-api.Dockerfile` then builds from
+that backend context only. Hosted-agent source remains separately publishable;
+the API does not depend on sibling `PYTHONPATH` configuration or install/import
+the full hosted runtime.
+
+Before any live deployment, validate the composed generated image locally:
+
+```powershell
+pwsh ./scripts/azure/test-generated-api-image.ps1 `
+  -GeneratedProjectRoot <composed-generated-root>
+```
+
 The API is configured only for `WORKFLOW_HOST=hosted`,
 `HOSTED_WORKFLOW_ENDPOINT`, the `https://ai.azure.com/.default` scope,
 managed-identity PostgreSQL, TLS `verify-full`, Entra, and Azure Monitor. It
@@ -95,7 +109,7 @@ What-if is non-deploying and uses the verified Azure CLI context.
 ## Deployment
 
 Deployment is disabled unless `-Apply` is supplied. Required values are
-explicit; the command does not infer a hosted endpoint, agent scope, directory
+explicit; the command does not infer a hosted endpoint, agent name, directory
 administrator, or publish operation:
 
 ```powershell

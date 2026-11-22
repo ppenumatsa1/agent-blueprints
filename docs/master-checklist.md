@@ -82,7 +82,7 @@ model quota/capacity and dependent-service quota. Azure CLI mode validates the
 authorized active context and reports the unrelated azd mismatch without
 blocking; explicit azd mode still fails closed.
 
-Acceptance evidence: Bicep build/lint and 12 infrastructure contracts pass; the
+Acceptance evidence: Bicep build/lint and 17 infrastructure contracts pass; the
 root suite passes 68 tests with two expected adapter-selection skips; all new
 PowerShell/Python files parse. No Azure resource, RBAC assignment, database
 principal, migration, deployment, rollback, or teardown was executed.
@@ -99,9 +99,13 @@ and the fixed publisher agent name; wider or another-agent scopes fail closed.
 The hosted app role authenticates service identity only; API-owned exact
 case/principal/caller/session/conversation/channel binding must exist before
 Responses dispatch and cannot be inferred from the hosted token.
+Exact-head composition of A `228aa772` and C `60fd83fc` also builds the
+backend-only API image and imports `order_resolution_hosted.bridge` without a
+sibling path or full hosted runtime; broader live composition remains
+unverified.
 
 **Next action:** independently validate the exact PR revision, supply the
-deployment-specific hosted endpoint/agent scope/administrator/journal values,
+deployment-specific hosted endpoint/agent-name/administrator/journal values,
 review Azure CLI provider what-if, and approve resource
 inventory, cost, identity, and public-network controls before deployment.
 

@@ -168,7 +168,7 @@ single-tenant API/SPA registrations, exposes only the three workflow scopes,
 defines user/approver roles, and creates no secret or test user. Live app
 deployment fails closed when any generated Agent A/C interface is absent. The
 cloud route requires hosted mode, managed-identity PostgreSQL with TLS
-verification, an explicit hosted adapter endpoint and agent scope, and an
+verification, an explicit hosted adapter endpoint and fixed agent name, and an
 exact temporary-copy nginx upstream replacement. It prohibits source-blueprint
 runtime paths, local workflow hosting, synthetic application selection, and
 file checkpoints. The API UAMI is the sole database runtime principal. Hosted publication occurs
@@ -184,6 +184,9 @@ precede Responses dispatch.
 **Acceptance evidence:** exact base verified; read-only Azure discovery
 completed; Bicep build/lint and 17 infrastructure contracts pass; 68 root tests
 pass with two expected adapter-selection skips; script syntax checks pass.
+The exact A `228aa772` hosted source and C `60fd83fc` generated backend also
+produce a backend-only API image that imports the API bridge without sibling
+`PYTHONPATH` or the full hosted runtime. Live Azure composition is not proven.
 The current Azure CLI identity matches the authorized target, but azd is a
 different account and tenant. Azure CLI mode reports that mismatch without
 blocking; explicit azd mode still fails closed. No Azure mutation or deployment
