@@ -24,8 +24,10 @@
       "use": "Provide the surrounding Order Resolution MAF runtime and package boundary."
     },
     "agent_c": {
-      "state": "pending",
-      "use": "Provide durability and effect evidence consumed by integrated evaluation."
+      "pull_request": "https://github.com/ppenumatsa1/agent-blueprints/pull/41",
+      "head": "6b27a94c9d6d71ddb480c20c1a6d2520abc37305",
+      "ci": "six exact-head jobs passed",
+      "use": "Consume strict-identity durability and effect results after integration; isolated unit proof is not end-to-end runtime evidence."
     }
   },
   "contract_validation": {
@@ -43,7 +45,7 @@
       "dependencies": [
         "Agent A draft PR #42 executable nine-case fixture",
         "Agent B Order Resolution MAF runtime",
-        "Agent C durability and effect evidence"
+        "Agent C draft PR #41 durability and effect evidence"
       ]
     },
     {
@@ -54,7 +56,7 @@
       "dependencies": [
         "Agent A draft PR #42 executable nine-case fixture",
         "Agent B Order Resolution MAF runtime",
-        "Agent C durability and effect evidence"
+        "Agent C draft PR #41 durability and effect evidence"
       ]
     },
     {
@@ -91,7 +93,7 @@
   "integration_blockers": [
     "Agent A draft PR #42 is complete but intentionally not cherry-picked into this isolated overlay.",
     "Agent B profile runtime and package manifest are not yet available on this branch.",
-    "Agent C durability and effect evidence is not yet available on this branch.",
+    "Agent C draft PR #41 is complete but intentionally not cherry-picked into this isolated overlay.",
     "Shared documentation finalization is intentionally excluded from this overlay."
   ]
 }
