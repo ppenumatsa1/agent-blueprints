@@ -4,7 +4,7 @@ import asyncio
 from typing import Any, Protocol
 from uuid import UUID
 
-from azure.identity import DefaultAzureCredential
+from azure.identity import ManagedIdentityCredential
 
 from .client import (
     FOUNDRY_SCOPE,
@@ -179,7 +179,7 @@ def build_workflow_host(
         raise ValueError(f"The hosted workflow scope must be {FOUNDRY_SCOPE}.")
     if not isinstance(client_id, str) or not client_id.strip():
         raise ValueError("The API managed identity client ID is required.")
-    credential = DefaultAzureCredential(managed_identity_client_id=client_id)
+    credential = ManagedIdentityCredential(client_id=client_id)
     responses = ResponsesClient(
         getattr(settings, "hosted_workflow_endpoint", ""),
         operation_journal,

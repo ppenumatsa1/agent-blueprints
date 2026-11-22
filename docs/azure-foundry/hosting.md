@@ -110,7 +110,10 @@ authenticated reviewer and exact decision intent, then sends one structured
 bindings; Agent A does not apply or record the business decision in this API
 bridge. Stable operation IDs are `case:{id}:conversation`, `case:{id}:start`,
 and `case:{id}:decision:{proposal_version}`. There is no generic `/runs`
-protocol or fallback host, and missing factory composition fails closed.
+protocol or fallback host, and missing factory composition fails closed. The
+bridge acquires Foundry tokens only through
+`ManagedIdentityCredential(client_id=settings.api_managed_identity_client_id)`;
+it does not fall back to a developer or ambient credential.
 
 The API implements the exported `HostedBusinessStore` seam against its
 application-owned PostgreSQL state:
@@ -297,7 +300,7 @@ ID for the hosted version, so callers must not invent one.
   bindings pre-established by an authenticated application command, plus a
   repeated composed proof with absent/mismatched binding negatives.
 - Two independently built source archives matched SHA-256
-  `54158e3a429039c0dd7bb8788c522aa2c02d84ae6b7ac356526e88c8120950b2`
+  `52d7766740b8d05d1bbe25aeda6e856bdd644476cab11b48a8def6ebcc5837c4`
   and contained 56 files.
 
 ## Pinned SDKs
