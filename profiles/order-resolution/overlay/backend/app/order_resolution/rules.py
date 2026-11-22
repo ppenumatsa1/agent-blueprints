@@ -101,6 +101,7 @@ class OrderResolutionRules:
             "applicable": True,
             "digest_valid": True,
         }
+        policy_evidence_digest = hashlib.sha256(_canonical([normalized_evidence])).hexdigest()
         input_digest = hashlib.sha256(
             _canonical({"order": normalized_order, "policy_evidence": [normalized_evidence]})
         ).hexdigest()
@@ -108,7 +109,11 @@ class OrderResolutionRules:
             "version": 1,
             "input_digest": input_digest,
             "policy_id": policy_id,
+            "policy_evidence_digest": policy_evidence_digest,
             "action": action,
+            "destination_id": (
+                "synthetic-refund" if action == "partial_refund_10" else "synthetic-fulfillment"
+            ),
             "approval_required": approval_required,
             "reason_codes": reason_codes,
         }

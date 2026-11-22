@@ -31,10 +31,13 @@ failed case with its explicit failure code. It creates no proposal, native
 pause/checkpoint, decision, action claim, or effect. Other malformed or
 unsupported request data remains an HTTP validation failure.
 
-The action is deliberately database-only: it records the synthetic resolution
-in `order_resolution_actions` in the same PostgreSQL transaction as the action
-ledger. It does not call a fulfillment or payment service and is not evidence
-for a consequential external effect.
+The action targets a synthetic PostgreSQL destination and records the verified
+resolution projection in `order_resolution_actions`. Its effect key binds the
+case, proposal version, action, and destination; conflicting reuse fails
+closed. One bounded deadline is shared by authoritative observation and send.
+A timeout or process exit after send is an unknown outcome, so recovery
+observes the destination before retrying. This proves only the generated
+synthetic adapter and is not evidence for a real refund or shipment service.
 
 ## Verification assets and current integration limits
 
@@ -45,12 +48,16 @@ this project at generation time with
 the runtime. The canonical nine-case fixture and its acceptance test remain
 owned by merged PR #42 and are not duplicated in the profile.
 
-The baseline application initializes its profile table at startup. Its current
-database-only action and action claim commit in one PostgreSQL transaction; it
-does not claim remote exactly-once behavior. Versioned migrations,
-effect-ledger integration, and crash-window durability are downstream
-dependencies from draft PR #41. Evaluation adapters and full nine-case
-verification are downstream dependencies from draft PR #43. The source
-generator merges those profile-root backend and verification assets after this
-overlay. Their absence must remain visible; they are not replaced with
-synthetic success.
+Run `python -m app.order_resolution.migrations upgrade` with the schema-owner
+database identity before application startup. Runtime startup validates the
+profile schema and does not create it. PostgreSQL owns requests, proposals,
+decisions, effect state, audit records, and the synthetic downstream; native
+MAF checkpoint files remain separate and unmodified.
+
+The generated runtime adapter executes all nine canonical scenarios without
+reading expectations into runtime output. Focused process tests terminate
+before and after decision persistence and synthetic send, then recover with a
+new application lifecycle. Real downstream idempotency, authoritative
+reconciliation, and transport deadline enforcement remain unverified and
+blocked by [#32](https://github.com/ppenumatsa1/agent-blueprints/issues/32).
+Evaluation/readiness work remains separate in draft PR #43.

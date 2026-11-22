@@ -220,15 +220,25 @@ fixture and root acceptance tests. Passing those tests validates the contract
 encoding only; it does not prove a blueprint implementation, authorization,
 side effects, or readiness.
 
-Draft [PR #44](https://github.com/ppenumatsa1/agent-blueprints/pull/44) maps
+Merged [PR #44](https://github.com/ppenumatsa1/agent-blueprints/pull/44) maps
 that contract to one explicit MAF generation profile without adding a registry,
 template compiler, plugin runtime, or source-repository dependency. The
 generated application owns deterministic rules, authenticated FastAPI routes,
 PostgreSQL business state, native `Executor`/`WorkflowBuilder` composition,
 host-owned file checkpoints, and React rendering. Local generated-project
-tests execute `ORS-001`, `ORS-002`, and `ORS-006` through the real API,
-workflow, and database. Full durability/effect integration and
-evaluation/readiness remain separate draft #41 and #43 dependencies.
+tests execute the canonical fixture through the real API, workflow, and
+database.
+
+Draft [PR #41](https://github.com/ppenumatsa1/agent-blueprints/pull/41) adds
+the application-owned durability layer without changing MAF checkpoint
+ownership. PostgreSQL stores request claims, versioned proposals, bound
+decisions, effect status, authorization audit records, action projections, and
+the synthetic downstream result. The effect key is derived from case,
+proposal version, action, and destination. One bounded deadline covers
+observation and send; timeout or termination after send is `UNKNOWN` until an
+authoritative observation proves `APPLIED` or `ABSENT`. This is a verified
+synthetic pattern, not a claim about a real payment or fulfillment service.
+Evaluation/readiness remains the separate draft #43 dependency.
 
 Every future implementation must use its selected framework's native workflow
 and checkpoint provider. PostgreSQL is application-owned persistence for
