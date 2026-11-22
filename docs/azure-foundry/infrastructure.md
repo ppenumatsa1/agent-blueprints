@@ -178,8 +178,10 @@ The PostgreSQL role is created separately because Azure RBAC does not create
 database principals. Migration ownership and runtime DML remain distinct.
 No project-scoped API fallback is created. Deployment requires an exact,
 documented hosted-agent RBAC scope and applies the API assignment only after the publisher
-returns one acknowledged version whose provisioning status is `active` and
-whose dedicated identity identifiers are populated.
+returns one acknowledged version whose dedicated identity identifiers are
+populated. PostgreSQL access is granted while that version may still be
+`creating`; the same operation/journal is then polled with `--require-active`
+without issuing another create.
 
 ## Configuration and secret handling
 
@@ -192,6 +194,10 @@ whose dedicated identity identifiers are populated.
   It outputs identifiers only, never credentials.
 - PostgreSQL password authentication is disabled. Deployment tooling obtains a
   short-lived Entra token and restores affected process environment variables.
+- PostgreSQL uses hostname verification plus the trusted system CA store
+  (`sslmode=verify-full`, `sslrootcert=system`). Local operations require
+  PostgreSQL client 17 or later; the generated API image build fails if its
+  system CA bundle is absent.
 - The API receives hosted mode, the explicit HTTPS adapter endpoint and scope,
   identity client ID, PostgreSQL managed-identity/TLS settings, Entra, and
   telemetry configuration. It never receives `BLUEPRINT_APPLICATION`,
@@ -214,8 +220,8 @@ whose dedicated identity identifiers are populated.
 | `pwsh ./scripts/azure/preflight.ps1 -DeploymentMode Azd -FromAzdEnvironment` | Optional azd validation; fails closed unless Azure CLI and azd account/tenant match |
 | `pwsh ./scripts/azure/configure-entra.ps1 -DeploymentMode AzureCli ...` | Read-only validation of deterministic API/SPA registrations |
 | `pwsh ./scripts/azure/what-if.ps1 ...` | Runs subscription-scope Azure CLI what-if with `ProviderNoRbac`; it does not apply |
-| `pwsh ./scripts/azure/deploy.ps1 -Apply -DeploymentMode AzureCli ...` | Generates an independent ORS app, runs preflight/what-if/Bicep, configures Entra/PostgreSQL, runs both generated migrations, publishes hosted source, applies agent-scoped RBAC, builds immutable generated images, deploys, and verifies |
-| `pwsh ./scripts/azure/configure-postgres.ps1 -Apply -DeploymentMode AzureCli -ValuesFile <file> ...` | Reconciles exact API outbound IPv4 rules and creates the API Entra database principal |
+| `pwsh ./scripts/azure/deploy.ps1 -Apply -DeploymentMode AzureCli ...` | Generates an independent ORS app, runs preflight/what-if/Bicep, publishes once for pending identity, applies exact PostgreSQL/RBAC grants and migrations, requires the same version active without replay, builds immutable generated images, deploys, and verifies |
+| `pwsh ./scripts/azure/configure-postgres.ps1 -Apply -DeploymentMode AzureCli -ValuesFile <file> ...` | Reconciles exact API and reviewed hosted-runtime outbound IPv4 rules and creates object-ID-bound Entra database principals |
 | `pwsh ./scripts/azure/migrate.ps1 -Apply -GeneratedProjectRoot <temp-generated-root> ...` | Runs both generated migration modules and applies runtime grants inside a temporary operator-IP scope |
 | `python ./scripts/azure/health-check.py --deployment-mode azure-cli --values-file <file>` | Verifies immutable healthy revisions, hosted-only API settings, public health/auth boundaries, Foundry project, and model deployment |
 | `pwsh ./scripts/azure/rollback.ps1 -Apply -DeploymentMode AzureCli -ValuesFile <file> ...` | Restores reviewed immutable image digests and reruns health checks |
@@ -264,7 +270,8 @@ Before any live operation:
    `az account set` inside automation.
 2. Provide the reviewed PostgreSQL administrator, hosted adapter HTTPS
    endpoint, hosted agent name/resource ID, stable publish operation ID,
-   durable publish journal, environment name, operator IPv4, and output path.
+   durable publish journal, environment name, operator IPv4, output path, and
+   the platform-documented bounded hosted-runtime PostgreSQL egress IPv4 set.
 3. Ensure the integrated generator copies Agent A's hosted source/publisher and
    Agent C's managed-identity/hosted adapters into a new independent Order
    Resolution project. Missing generated paths fail before Azure mutation.
@@ -273,9 +280,10 @@ Before any live operation:
    Responses API, lifecycle, version, quota, and platform capacity.
 5. Review the subscription-scope what-if, including resource names, tags,
    roles, model capacity, public ingress, firewall inputs, and estimated cost.
-6. Ensure `psql`, `uv`, Azure CLI/Bicep, ACR remote-build support, and generated
-   application migration dependencies are available. azd is optional and is
-   not used by the supported application deployment route.
+6. Ensure PostgreSQL client 17+, `uv`, Azure CLI/Bicep, ACR remote-build
+   support, system CA bundles, and generated application migration dependencies
+   are available. azd is optional and is not used by the supported application
+   deployment route.
 7. Agent D must define the exact hosted revision, trace, evaluation, and
    browser evidence to retain after deployment.
 
@@ -287,6 +295,7 @@ version, data-plane version ID, agent GUID, dedicated principal/client IDs,
 provisioning status, documented RBAC scope, immutable image
 references, and exact API/web revisions to
 the selected output JSON file.
+It also records the reviewed hosted-runtime PostgreSQL egress addresses.
 
 The public SDK does not expose a documented hosted-agent ARM resource ID, so
 the deployment never invents one. The reviewed RBAC scope is a separate
@@ -306,7 +315,7 @@ person, prove a deployment, or establish production readiness.
 
 Local non-deploying evidence:
 
-- `pwsh ./scripts/azure/validate.ps1`: Bicep build and lint succeeded; 11
+- `pwsh ./scripts/azure/validate.ps1`: Bicep build and lint succeeded; 12
   infrastructure contract tests passed.
 - PowerShell parser validation passed for every `scripts/azure/*.ps1` file.
 - `python -m compileall -q ./scripts/azure ./infra/tests` passed.
@@ -320,7 +329,8 @@ Local non-deploying evidence:
   absent, and removed its temporary directory without output artifacts.
 - Agent C's generated application interface was reviewed at draft PR #48 head
   `b4c7ed825833c20fa6549aa5a8e206cfbe85a77d`; Agent A froze the required
-  publisher identity fields, but its final composed revision is not yet pushed.
+  two-phase publisher identity contract, but its final composed revision is not
+  yet pushed.
 - Azure validation did not advance to provider what-if because deployment
   inputs are intentionally unset.
 
@@ -328,6 +338,9 @@ Not verified by this workstream: resource provisioning, Azure RBAC writes,
 Container Apps image deployment, Hosted Agent creation/invocation, PostgreSQL
 connectivity/migration/restore, telemetry ingestion, browser execution,
 evaluation quality, rollback in Azure, teardown, or production readiness.
+Hosted PostgreSQL connectivity is additionally blocked unless the platform
+provides a reviewed bounded public egress set; no such set was verified by this
+workstream.
 
 The deployment route never targets the source blueprint. It instantiates an
 independent Order Resolution project, validates the generated hosted/app

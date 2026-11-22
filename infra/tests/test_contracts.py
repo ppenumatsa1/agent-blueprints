@@ -157,6 +157,7 @@ class InfrastructureContractTests(unittest.TestCase):
             "ENTRA_TENANT_ID",
             "HOSTED_WORKFLOW_ENDPOINT",
             "HOSTED_WORKFLOW_SCOPE",
+            "PGSSLROOTCERT",
             "TELEMETRY_MODE",
             "WORKFLOW_HOST",
         ):
@@ -167,6 +168,8 @@ class InfrastructureContractTests(unittest.TestCase):
             "env"
         ]
         self.assertIn("'WORKFLOW_HOST', 'value', 'hosted'", api_environment_expression)
+        self.assertIn("'PGSSLROOTCERT', 'value', 'system'", api_environment_expression)
+        self.assertIn("sslrootcert=system", api_environment_expression)
         self.assertNotIn("'WORKFLOW_HOST', 'value', 'local'", api_environment_expression)
 
         auth = self.of_type("Microsoft.App/containerApps/authConfigs")
@@ -268,6 +271,7 @@ class InfrastructureContractTests(unittest.TestCase):
             scripts["deploy.ps1"],
         )
         self.assertIn("HostedDatabaseRoleName", scripts["deploy.ps1"])
+        self.assertIn("HostedPostgresEgressIpv4", scripts["deploy.ps1"])
         self.assertIn("publishRecord.identity_principal_id", scripts["deploy.ps1"])
         self.assertIn("publishRecord.identity_client_id", scripts["deploy.ps1"])
         self.assertIn("publishRecord.provisioning_status", scripts["deploy.ps1"])
@@ -279,6 +283,14 @@ class InfrastructureContractTests(unittest.TestCase):
         self.assertIn(
             'environment.get("DATABASE_AUTH_MODE") != "managed-identity"',
             scripts["health-check.py"],
+        )
+        self.assertIn("hosted-agent-", scripts["configure-postgres.ps1"])
+        self.assertIn("Assert-PublicIpv4 -Address $address", scripts["configure-postgres.ps1"])
+        self.assertIn("sslrootcert=system", combined)
+        self.assertIn("PostgreSQL client 17 or later", scripts["common.ps1"])
+        self.assertIn(
+            "test -r /etc/ssl/certs/ca-certificates.crt",
+            scripts["deploy.ps1"],
         )
         self.assertIn("proxy_pass http://api:8000;", scripts["deploy.ps1"])
         self.assertNotIn("blueprints\\maf\\workflow", scripts["deploy.ps1"])
@@ -299,6 +311,24 @@ class InfrastructureContractTests(unittest.TestCase):
         self.assertIn("ConfirmEnvironmentName", scripts["teardown.ps1"])
         self.assertIn("azd down", scripts["teardown.ps1"])
         self.assertIn("az group delete", scripts["teardown.ps1"])
+
+    def test_hosted_publication_is_restart_safe_and_staged(self):
+        deploy = (ROOT / "scripts" / "azure" / "deploy.ps1").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("--require-active", deploy)
+        pending_publish = deploy.index("-Record (Invoke-HostedPublisher)")
+        hosted_grant = deploy.index(
+            "-AdditionalPrincipalObjectId $pendingPublishRecord.identity_principal_id"
+        )
+        active_publish = deploy.index(
+            "-Record (Invoke-HostedPublisher -RequireActive)"
+        )
+        self.assertLess(pending_publish, hosted_grant)
+        self.assertLess(hosted_grant, active_publish)
+        self.assertIn("-ExpectedIdentity $pendingPublishRecord", deploy)
+        self.assertEqual(deploy.count("'--publish'"), 1)
+        self.assertEqual(deploy.count("function Invoke-HostedPublisher"), 1)
 
     def test_parameter_binding_contains_only_nonsecret_required_inputs(self):
         binding = json.loads((INFRA / "main.parameters.json").read_text(encoding="utf-8"))

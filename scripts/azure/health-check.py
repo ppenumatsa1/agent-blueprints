@@ -163,6 +163,10 @@ def verify_api_runtime(subscription: str, resource_group: str, name: str) -> Non
         raise VerificationError("API database authentication is not managed identity.")
     if environment.get("DATABASE_TLS_MODE") != "verify-full":
         raise VerificationError("API database TLS verification is not enabled.")
+    if environment.get("PGSSLROOTCERT") != "system":
+        raise VerificationError("API database trust is not bound to the system CA store.")
+    if "sslrootcert=system" not in str(environment.get("DATABASE_URL", "")):
+        raise VerificationError("API database URL does not require the system CA store.")
 
 
 def request_status(url: str, expected: set[int]) -> int:

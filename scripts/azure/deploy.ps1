@@ -31,6 +31,8 @@ param(
     [Parameter(Mandatory)]
     [string]$HostedDatabaseRoleName,
     [Parameter(Mandatory)]
+    [string[]]$HostedPostgresEgressIpv4,
+    [Parameter(Mandatory)]
     [string]$HostedPublishOperationId,
     [Parameter(Mandatory)]
     [string]$HostedPublishJournal,
@@ -82,6 +84,12 @@ if (
 if ($HostedDatabaseRoleName -notmatch '^[A-Za-z0-9._-]+$') {
     throw 'HostedDatabaseRoleName contains unsupported characters.'
 }
+if ($HostedPostgresEgressIpv4.Count -eq 0) {
+    throw 'At least one reviewed hosted runtime PostgreSQL egress IPv4 address is required.'
+}
+foreach ($address in $HostedPostgresEgressIpv4) {
+    Assert-PublicIpv4 -Address $address
+}
 
 $root = (Resolve-Path "$PSScriptRoot\..\..").Path
 $temporaryRoot = Join-Path ([System.IO.Path]::GetTempPath()) (
@@ -110,6 +118,16 @@ try {
     $nginxSource = Get-Content -LiteralPath $nginxPath -Raw
     if ($nginxSource -notmatch [regex]::Escape('proxy_pass http://api:8000;')) {
         throw 'Generated frontend proxy contract changed; refusing to deploy an unverified upstream.'
+    }
+    $backendDockerfilePath = Join-Path $generatedRoot 'backend\Dockerfile'
+    $backendDockerfile = Get-Content -LiteralPath $backendDockerfilePath -Raw
+    if (
+        $backendDockerfile -notmatch '\bca-certificates\b' -or
+        $backendDockerfile -notmatch [regex]::Escape(
+            'test -r /etc/ssl/certs/ca-certificates.crt'
+        )
+    ) {
+        throw 'Generated backend image does not install and verify the system CA bundle.'
     }
 
     & "$PSScriptRoot\preflight.ps1" `
@@ -203,6 +221,7 @@ try {
         -Apply `
         -DeploymentMode AzureCli `
         -ValuesFile $OutputsFile `
+        -HostedRuntimeOutboundIp $HostedPostgresEgressIpv4 `
         -OperatorIp $OperatorIp
     $databaseUser = [uri]::EscapeDataString(
         (Get-RequiredValue $values 'AZURE_API_IDENTITY_NAME')
@@ -213,12 +232,76 @@ try {
     $databaseHost = Get-RequiredValue $values 'AZURE_POSTGRESQL_HOST'
     $databaseName = Get-RequiredValue $values 'AZURE_POSTGRESQL_DATABASE'
     $apiDatabaseUrl =
-        "postgresql://${databaseUser}@${databaseHost}:5432/${databaseName}?sslmode=verify-full"
+        "postgresql://${databaseUser}@${databaseHost}:5432/${databaseName}?sslmode=verify-full&sslrootcert=system"
     $hostedDatabaseUser = [uri]::EscapeDataString($HostedDatabaseRoleName)
     $hostedDatabaseUrl =
-        "postgresql://${hostedDatabaseUser}@${databaseHost}:5432/${databaseName}?sslmode=verify-full"
+        "postgresql://${hostedDatabaseUser}@${databaseHost}:5432/${databaseName}?sslmode=verify-full&sslrootcert=system"
     $publisher = Join-Path $generatedRoot 'scripts\foundry\publish_order_resolution_hosted.py'
     $hostedRequirements = Join-Path $generatedRoot 'hosted-agent\requirements.txt'
+    function Invoke-HostedPublisher {
+        param([switch]$RequireActive)
+        $arguments = @(
+            $publisher,
+            $generatedRoot,
+            '--archive',
+            $archivePath,
+            '--publish',
+            '--agent-name',
+            $HostedAgentName,
+            '--operation-id',
+            $HostedPublishOperationId,
+            '--journal',
+            $HostedPublishJournal
+        )
+        if ($RequireActive) {
+            $arguments += '--require-active'
+        }
+        $output = & uv run `
+            --with-requirements $hostedRequirements `
+            python @arguments
+        if ($LASTEXITCODE -ne 0) {
+            throw 'Hosted Agent publish failed or became ambiguous; do not replay automatically.'
+        }
+        return $output[-1] | ConvertFrom-Json
+    }
+
+    function Assert-HostedPublishRecord {
+        param(
+            [Parameter(Mandatory)]
+            [object]$Record,
+            [switch]$RequireActive,
+            [object]$ExpectedIdentity
+        )
+        if (
+            $Record.status -cne 'acknowledged' -or
+            $Record.provisioning_status -cnotin @('creating', 'active') -or
+            -not $Record.agent_version -or
+            -not $Record.identity_principal_id -or
+            -not $Record.identity_client_id -or
+            -not $Record.agent_version_id -or
+            -not $Record.agent_guid
+        ) {
+            throw 'Hosted Agent publisher did not return an acknowledged version identity.'
+        }
+        if ($RequireActive -and $Record.provisioning_status -cne 'active') {
+            throw 'Hosted Agent publisher did not confirm an active version.'
+        }
+        if ($ExpectedIdentity) {
+            foreach ($field in @(
+                'agent_version',
+                'agent_version_id',
+                'agent_guid',
+                'identity_principal_id',
+                'identity_client_id'
+            )) {
+                if ($Record.$field -cne $ExpectedIdentity.$field) {
+                    throw "Hosted Agent identity changed between publication stages: $field"
+                }
+            }
+        }
+        return $Record
+    }
+
     $previousPublisherEnvironment = @{
         FOUNDRY_PROJECT_ENDPOINT = $env:FOUNDRY_PROJECT_ENDPOINT
         FOUNDRY_PROJECT_ID = $env:FOUNDRY_PROJECT_ID
@@ -226,10 +309,13 @@ try {
         DATABASE_URL = $env:DATABASE_URL
         DATABASE_AUTH_MODE = $env:DATABASE_AUTH_MODE
         DATABASE_TLS_MODE = $env:DATABASE_TLS_MODE
+        PGSSLROOTCERT = $env:PGSSLROOTCERT
         ORDER_RESOLUTION_HOSTED_IDENTITY_BINDINGS =
             $env:ORDER_RESOLUTION_HOSTED_IDENTITY_BINDINGS
         ORDER_RESOLUTION_OPERATION_JOURNAL = $env:ORDER_RESOLUTION_OPERATION_JOURNAL
     }
+    $publishRecord = $null
+    $agentAssignment = $null
     try {
         $env:FOUNDRY_PROJECT_ENDPOINT = Get-RequiredValue $values 'AZURE_AI_PROJECT_ENDPOINT'
         $env:FOUNDRY_PROJECT_ID = Get-RequiredValue $values 'AZURE_AI_PROJECT_ID'
@@ -238,21 +324,49 @@ try {
         $env:DATABASE_URL = $hostedDatabaseUrl
         $env:DATABASE_AUTH_MODE = 'managed-identity'
         $env:DATABASE_TLS_MODE = 'verify-full'
+        $env:PGSSLROOTCERT = 'system'
         $env:ORDER_RESOLUTION_HOSTED_IDENTITY_BINDINGS =
             'app.order_resolution.hosted_bindings:build_hosted_identity_bindings'
         $env:ORDER_RESOLUTION_OPERATION_JOURNAL =
             'app.order_resolution.hosted_bindings:build_operation_journal'
-        $publishOutput = & uv run `
-            --with-requirements $hostedRequirements `
-            python $publisher $generatedRoot `
-            --archive $archivePath `
-            --publish `
-            --agent-name $HostedAgentName `
-            --operation-id $HostedPublishOperationId `
-            --journal $HostedPublishJournal
+        $pendingPublishRecord = Assert-HostedPublishRecord `
+            -Record (Invoke-HostedPublisher)
+
+        $agentAssignmentJson = az role assignment create `
+            --subscription $SubscriptionId `
+            --assignee-object-id (Get-RequiredValue $values 'AZURE_API_IDENTITY_PRINCIPAL_ID') `
+            --assignee-principal-type ServicePrincipal `
+            --role 'eed3b665-ab3a-47b6-8f48-c9382fb1dad6' `
+            --scope $HostedAgentRbacScope `
+            --output json `
+            --only-show-errors
         if ($LASTEXITCODE -ne 0) {
-            throw 'Hosted Agent publish failed or became ambiguous; do not replay automatically.'
+            throw 'Unable to grant Agent Consumer at the hosted agent scope.'
         }
+        $agentAssignment = $agentAssignmentJson | ConvertFrom-Json
+
+        & "$PSScriptRoot\configure-postgres.ps1" `
+            -Apply `
+            -DeploymentMode AzureCli `
+            -ValuesFile $OutputsFile `
+            -AdditionalPrincipalName $HostedDatabaseRoleName `
+            -AdditionalPrincipalObjectId $pendingPublishRecord.identity_principal_id `
+            -HostedRuntimeOutboundIp $HostedPostgresEgressIpv4 `
+            -OperatorIp $OperatorIp
+        if (-not $SkipMigration) {
+            & "$PSScriptRoot\migrate.ps1" `
+                -Apply `
+                -DeploymentMode AzureCli `
+                -ValuesFile $OutputsFile `
+                -GeneratedProjectRoot $generatedRoot `
+                -AdditionalRuntimePrincipalName $HostedDatabaseRoleName `
+                -OperatorIp $OperatorIp
+        }
+
+        $publishRecord = Assert-HostedPublishRecord `
+            -Record (Invoke-HostedPublisher -RequireActive) `
+            -RequireActive `
+            -ExpectedIdentity $pendingPublishRecord
     }
     finally {
         foreach ($name in $previousPublisherEnvironment.Keys) {
@@ -262,48 +376,6 @@ try {
                 Set-Item -Path "Env:$name" -Value $previousPublisherEnvironment[$name]
             }
         }
-    }
-    $publishRecord = $publishOutput[-1] | ConvertFrom-Json
-    if (
-        $publishRecord.status -cne 'acknowledged' -or
-        $publishRecord.provisioning_status -cne 'active' -or
-        -not $publishRecord.agent_version -or
-        -not $publishRecord.identity_principal_id -or
-        -not $publishRecord.identity_client_id -or
-        -not $publishRecord.agent_version_id -or
-        -not $publishRecord.agent_guid
-    ) {
-        throw 'Hosted Agent publisher did not return an active acknowledged version and identity.'
-    }
-
-    $agentAssignmentJson = az role assignment create `
-        --subscription $SubscriptionId `
-        --assignee-object-id (Get-RequiredValue $values 'AZURE_API_IDENTITY_PRINCIPAL_ID') `
-        --assignee-principal-type ServicePrincipal `
-        --role 'eed3b665-ab3a-47b6-8f48-c9382fb1dad6' `
-        --scope $HostedAgentRbacScope `
-        --output json `
-        --only-show-errors
-    if ($LASTEXITCODE -ne 0) {
-        throw 'Unable to grant Agent Consumer at the hosted agent scope.'
-    }
-    $agentAssignment = $agentAssignmentJson | ConvertFrom-Json
-
-    & "$PSScriptRoot\configure-postgres.ps1" `
-        -Apply `
-        -DeploymentMode AzureCli `
-        -ValuesFile $OutputsFile `
-        -AdditionalPrincipalName $HostedDatabaseRoleName `
-        -AdditionalPrincipalObjectId $publishRecord.identity_principal_id `
-        -OperatorIp $OperatorIp
-    if (-not $SkipMigration) {
-        & "$PSScriptRoot\migrate.ps1" `
-            -Apply `
-            -DeploymentMode AzureCli `
-            -ValuesFile $OutputsFile `
-            -GeneratedProjectRoot $generatedRoot `
-            -AdditionalRuntimePrincipalName $HostedDatabaseRoleName `
-            -OperatorIp $OperatorIp
     }
 
     $acrName = Get-RequiredValue $values 'AZURE_CONTAINER_REGISTRY_NAME'
@@ -378,6 +450,7 @@ try {
         'DATABASE_AUTH_MODE=managed-identity',
         'DATABASE_TLS_MODE=verify-full',
         "DATABASE_MANAGED_IDENTITY_CLIENT_ID=$(Get-RequiredValue $values 'AZURE_API_IDENTITY_CLIENT_ID')",
+        'PGSSLROOTCERT=system',
         "CORS_ORIGINS=https://$(Get-RequiredValue $values 'AZURE_WEB_FQDN')"
     )
     az containerapp update `
@@ -407,6 +480,7 @@ try {
     $values['AZURE_HOSTED_AGENT_PROVISIONING_STATUS'] =
         $publishRecord.provisioning_status
     $values['AZURE_HOSTED_AGENT_RBAC_SCOPE'] = $HostedAgentRbacScope
+    $values['AZURE_HOSTED_POSTGRES_EGRESS_IPV4'] = $HostedPostgresEgressIpv4
     $values['AZURE_API_HOSTED_AGENT_ROLE_ASSIGNMENT_ID'] = $agentAssignment.id
     $values['AZURE_HOSTED_DATABASE_ROLE_NAME'] = $HostedDatabaseRoleName
     $values['HOSTED_WORKFLOW_ENDPOINT'] = $HostedWorkflowEndpoint

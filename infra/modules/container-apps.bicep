@@ -143,7 +143,7 @@ resource api 'Microsoft.App/containerApps@2025-07-01' = {
             }
             {
               name: 'DATABASE_URL'
-              value: 'postgresql://${uriComponent(apiIdentityName)}@${postgresHost}:5432/${postgresDatabaseName}?sslmode=verify-full'
+              value: 'postgresql://${uriComponent(apiIdentityName)}@${postgresHost}:5432/${postgresDatabaseName}?sslmode=verify-full&sslrootcert=system'
             }
             {
               name: 'DATABASE_AUTH_MODE'
@@ -204,6 +204,10 @@ resource api 'Microsoft.App/containerApps@2025-07-01' = {
             {
               name: 'OBO_ENABLED'
               value: 'false'
+            }
+            {
+              name: 'PGSSLROOTCERT'
+              value: 'system'
             }
             {
               name: 'TELEMETRY_MODE'
