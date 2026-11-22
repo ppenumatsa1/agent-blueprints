@@ -1,0 +1,168 @@
+{
+  "schema_version": "0.3.0",
+  "contract_id": "ORDER-RESOLUTION-READINESS",
+  "contract_version": "0.1.0",
+  "title": "Local MAF Order Resolution readiness",
+  "extensions": {
+    "order_resolution": {
+      "scenario_set": "order-resolution-spec/0.1.0",
+      "evaluation_dataset": "order-resolution-evaluation/0.1.0"
+    }
+  },
+  "production_controls": {
+    "security": {
+      "applicability": "required"
+    },
+    "integration": {
+      "applicability": "required"
+    },
+    "operations": {
+      "applicability": "required"
+    },
+    "evaluation": {
+      "applicability": "required"
+    }
+  },
+  "requirements": [
+    {
+      "id": "OR-REQ-TECHNICAL",
+      "statement": "All nine canonical scenarios execute with native MAF workflow and checkpoint behavior, authorized decisions, idempotent effects, and restart recovery.",
+      "success_criteria": "Every canonical technical_execution result exactly matches the versioned golden case.",
+      "failure_criteria": "Any technical result is missing, malformed, duplicated, below threshold, or differs from the canonical case.",
+      "critical": true,
+      "security_critical": true,
+      "domains": [
+        "security",
+        "integration",
+        "operations"
+      ],
+      "checks": [
+        {
+          "id": "ORDER-RESOLUTION-TECHNICAL-EXECUTION",
+          "method": "integration",
+          "procedure": "Execute ORS-001 through ORS-009 through the generated API, native MAF host/checkpoints, PostgreSQL stores, and crash worker; normalize with native MAF evaluation.",
+          "evidence_types": [
+            "evaluation_result",
+            "trace"
+          ],
+          "evidence_max_age_seconds": 86400
+        }
+      ],
+      "gates": {
+        "prototype": "blocking",
+        "production_candidate": "blocking",
+        "customer_validated": "blocking"
+      }
+    },
+    {
+      "id": "OR-REQ-BUSINESS",
+      "statement": "All nine canonical scenarios produce the exact deterministic Order Resolution business outcomes.",
+      "success_criteria": "Every business_outcome result exactly matches order-resolution-spec/0.1.0.",
+      "failure_criteria": "Any proposal, approval, action, error, or terminal state differs from the canonical case.",
+      "critical": true,
+      "security_critical": false,
+      "domains": [
+        "integration"
+      ],
+      "checks": [
+        {
+          "id": "ORDER-RESOLUTION-BUSINESS-OUTCOME",
+          "method": "integration",
+          "procedure": "Compare generated application observations with the canonical golden business outcomes through native MAF LocalEvaluator checks.",
+          "evidence_types": [
+            "evaluation_result",
+            "trace"
+          ],
+          "evidence_max_age_seconds": 86400
+        }
+      ],
+      "gates": {
+        "prototype": "blocking",
+        "production_candidate": "blocking",
+        "customer_validated": "blocking"
+      }
+    },
+    {
+      "id": "OR-REQ-MODEL",
+      "statement": "Any configured real model explanation meets a declared quality rubric without changing deterministic business authority.",
+      "success_criteria": "An explicitly configured provider evaluation meets its declared threshold.",
+      "failure_criteria": "The configured evaluation fails, is malformed, or falls below threshold.",
+      "critical": false,
+      "security_critical": false,
+      "domains": [
+        "evaluation"
+      ],
+      "checks": [
+        {
+          "id": "ORDER-RESOLUTION-MODEL-QUALITY",
+          "method": "agent_evaluation",
+          "procedure": "Run a real configured provider/model evaluation; do not substitute deterministic fixture output.",
+          "evidence_types": [
+            "evaluation_result"
+          ],
+          "evidence_max_age_seconds": 86400
+        }
+      ],
+      "gates": {
+        "prototype": "non_blocking",
+        "production_candidate": "blocking",
+        "customer_validated": "blocking"
+      }
+    },
+    {
+      "id": "OR-REQ-BROWSER",
+      "statement": "The generated Order Resolution interface is exercised through an actual browser.",
+      "success_criteria": "Browser evidence demonstrates the intended authenticated user journey.",
+      "failure_criteria": "The browser journey fails or contradicts the recorded application state.",
+      "critical": false,
+      "security_critical": false,
+      "domains": [
+        "functional"
+      ],
+      "checks": [
+        {
+          "id": "ORDER-RESOLUTION-BROWSER-EVIDENCE",
+          "method": "e2e",
+          "procedure": "Run the generated UI through an actual browser and retain the result artifact.",
+          "evidence_types": [
+            "test_report"
+          ],
+          "evidence_max_age_seconds": 86400
+        }
+      ],
+      "gates": {
+        "prototype": "non_blocking",
+        "production_candidate": "blocking",
+        "customer_validated": "blocking"
+      }
+    },
+    {
+      "id": "OR-REQ-PROVENANCE",
+      "statement": "Readiness evidence is revision-bound and attested by an independently trusted producer.",
+      "success_criteria": "Evidence digests, revision, environment, and producer attestation validate against the independent trust root.",
+      "failure_criteria": "Evidence is stale, mismatched, altered, unsigned, self-attested, or from an untrusted producer.",
+      "critical": true,
+      "security_critical": true,
+      "domains": [
+        "security",
+        "operations"
+      ],
+      "checks": [
+        {
+          "id": "ORDER-RESOLUTION-PROVENANCE",
+          "method": "security",
+          "procedure": "Validate revision-bound evidence and a scoped producer attestation against an independently administered trust root.",
+          "evidence_types": [
+            "security_report"
+          ],
+          "evidence_max_age_seconds": 86400
+        }
+      ],
+      "gates": {
+        "prototype": "blocking",
+        "production_candidate": "blocking",
+        "customer_validated": "blocking"
+      }
+    }
+  ]
+}

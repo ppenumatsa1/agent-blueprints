@@ -408,10 +408,18 @@ class InstantiationTests(unittest.TestCase):
             (reserved_tests / "test_order_resolution_evaluation.py").write_text(
                 'SOURCE = "temporary-agent-d"\n', encoding="utf-8"
             )
-            reserved_verification = profile / "verification" / "evaluations"
+            (reserved_tests / "order_resolution_evidence_runner.py").write_text(
+                'SOURCE = "temporary-agent-d"\n', encoding="utf-8"
+            )
+            reserved_verification = (
+                profile / "verification" / "scenarios" / "order-resolution"
+            )
             reserved_verification.mkdir(parents=True)
-            (reserved_verification / "marker.json").write_text(
+            (reserved_verification / "verification-contract.json").write_text(
                 '{"source":"temporary-agent-d"}\n', encoding="utf-8"
+            )
+            (reserved_verification / "example-trust.json").write_text(
+                '{"source":"temporary-agent-d-trust"}\n', encoding="utf-8"
             )
             contract = root / "acceptance-contract.json"
             contract.write_text('{"version":"0.1.0"}\n', encoding="utf-8")
@@ -444,7 +452,11 @@ class InstantiationTests(unittest.TestCase):
             )
             self.assertEqual(
                 (
-                    target / "verification" / "evaluations" / "marker.json"
+                    target
+                    / "verification"
+                    / "scenarios"
+                    / "order-resolution"
+                    / "verification-contract.json"
                 ).read_text(encoding="utf-8"),
                 '{"source":"temporary-agent-d"}\n',
             )
@@ -455,6 +467,8 @@ class InstantiationTests(unittest.TestCase):
                 "backend/app/order_resolution/evaluation.py",
                 "backend/evaluations/order-resolution-0.1.0.json",
                 "backend/tests/test_order_resolution_evaluation.py",
+                "backend/tests/order_resolution_evidence_runner.py",
+                "verification/scenarios/order-resolution/example-trust.json",
             ):
                 self.assertTrue((target / relative).is_file(), relative)
 

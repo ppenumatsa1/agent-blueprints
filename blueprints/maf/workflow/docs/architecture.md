@@ -220,8 +220,18 @@ and does not establish remote exactly-once effects.
 
 Optional profile-root `backend/` and `verification/` trees merge after the
 explicit overlay. This is the deterministic integration seam for the reserved
-durability/effect/migration work in draft #41 and evaluation/readiness work in
-draft #43; the generator does not copy or emulate those implementations.
+durability/effect/migration and evaluation/readiness implementations. The
+generated Order Resolution application owns those merged files and does not
+read the source repository at runtime.
+
+The evaluation overlay uses MAF's native `Evaluator`, `LocalEvaluator`,
+`@evaluator`, and `evaluate_agent()` APIs and the existing application-owned
+readiness mapper. Its versioned dataset references `ORS-001` through `ORS-009`
+and derives expected values from the copied canonical golden cases rather than
+re-encoding them. The evidence runner keeps deterministic business and
+technical results separate from real model quality, browser evidence, and
+trusted provenance. Local result files and digests are not independently
+attested evidence.
 
 The [staged infrastructure](../infra/README.md) defines a Foundry
 account/project with public data-plane access disabled, a private PostgreSQL

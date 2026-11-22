@@ -1,0 +1,67 @@
+{
+  "schema_version": "1.0.0",
+  "dataset_id": "order-resolution-evaluation",
+  "dataset_version": "0.1.0",
+  "specification": {
+    "id": "order-resolution-spec",
+    "version": "0.1.0",
+    "golden_cases_path": "verification/scenarios/order-resolution/golden-cases.json"
+  },
+  "rubric": {
+    "rubric_id": "order-resolution-deterministic-assertions",
+    "rubric_version": "0.1.0",
+    "criteria": [
+      {
+        "criterion_id": "order-resolution-technical-execution",
+        "check_id": "ORDER-RESOLUTION-TECHNICAL-EXECUTION",
+        "minimum_score": 1.0
+      },
+      {
+        "criterion_id": "order-resolution-business-outcome",
+        "check_id": "ORDER-RESOLUTION-BUSINESS-OUTCOME",
+        "minimum_score": 1.0
+      }
+    ]
+  },
+  "cases": [
+    {
+      "case_id": "OR-EVAL-RESOLUTION",
+      "query": "Evaluate deterministic Order Resolution outcomes for ORS-001, ORS-002, and ORS-003.",
+      "scenario_ids": [
+        "ORS-001",
+        "ORS-002",
+        "ORS-003"
+      ],
+      "check_ids": [
+        "ORDER-RESOLUTION-TECHNICAL-EXECUTION",
+        "ORDER-RESOLUTION-BUSINESS-OUTCOME"
+      ]
+    },
+    {
+      "case_id": "OR-EVAL-IDEMPOTENCY-RECOVERY",
+      "query": "Evaluate deterministic Order Resolution outcomes for ORS-004 and ORS-005.",
+      "scenario_ids": [
+        "ORS-004",
+        "ORS-005"
+      ],
+      "check_ids": [
+        "ORDER-RESOLUTION-TECHNICAL-EXECUTION",
+        "ORDER-RESOLUTION-BUSINESS-OUTCOME"
+      ]
+    },
+    {
+      "case_id": "OR-EVAL-POLICY-AUTHORIZATION",
+      "query": "Evaluate deterministic Order Resolution outcomes for ORS-006 through ORS-009.",
+      "scenario_ids": [
+        "ORS-006",
+        "ORS-007",
+        "ORS-008",
+        "ORS-009"
+      ],
+      "check_ids": [
+        "ORDER-RESOLUTION-TECHNICAL-EXECUTION",
+        "ORDER-RESOLUTION-BUSINESS-OUTCOME"
+      ]
+    }
+  ]
+}

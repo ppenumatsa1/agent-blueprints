@@ -45,7 +45,7 @@ tests/build/CSP checks and a standalone Compose root/health/auth boundary also
 passed locally. These results are implementation evidence, not full nine-case,
 hosted, remote-effect, evaluation, or production-readiness evidence.
 
-Draft [PR #41](https://github.com/ppenumatsa1/agent-blueprints/pull/41)
+Merged [PR #41](https://github.com/ppenumatsa1/agent-blueprints/pull/41)
 integrates application-owned PostgreSQL requests, proposals, atomic decisions,
 effects, audit records, synthetic downstream reconciliation, and an explicit
 profile migration into that generated application. Effect identity includes
@@ -55,12 +55,27 @@ until authoritative observation. The generated runtime adapter executes
 `ORS-001` through `ORS-009` while keeping normalized business outcomes separate
 from API, native-checkpoint, and PostgreSQL execution evidence. Native MAF
 continues to own checkpoint bytes. Real downstream guarantees remain unverified
-and blocked by #32; draft #43 remains the separate evaluation/readiness work.
+and blocked by #32.
 A fresh external generation passed 136 backend tests, 10 frontend tests plus
 build/CSP, all nine canonical scenarios without skips, 20 repeated concurrent
 duplicate-request runs, source-independence checks, and Compose root
 `200`/health `204`/protected API `401`. Exact-head CI and independent review
 remain required before merge consideration.
+
+Draft [PR #43](https://github.com/ppenumatsa1/agent-blueprints/pull/43)
+integrates the versioned evaluation dataset, native MAF local deterministic
+checks, merged #39 result normalization, and a generated evidence producer.
+A fresh external generation passed 147 backend tests, all nine canonical
+scenarios without skips, 10 frontend tests plus production build/CSP, and
+Compose root `200`/health `204`/protected API `401`. The evidence producer
+reported every scenario plus deterministic technical and business evaluation
+as `passed`; the independent validator correctly retained an `unverified`
+gate because no trusted producer attestation exists. Real provider/model
+quality, actual browser evidence, and trusted provenance remain unverified,
+and release/deployment remains blocked.
+
+**Milestone decision:** READY for the local MAF software-factory milestone;
+NOT READY for production, release, or deployment.
 
 Specification Studio has not yet produced an artifact, so the proposed
 handoff is not an end-to-end compatibility claim. Phase 0 does not implement
@@ -467,7 +482,7 @@ the local HTTP smoke check. Its unsigned readiness report is unverified.
 | P1-07 | Implement typed FastAPI operations with Entra token validation, authorization, approvals, and optional OBO. | P1-01, P1-06 interfaces | Positive and negative tests cover scopes, roles, identity isolation, malformed and replayed requests; synthetic identities exist only in isolated tests. |
 | P1-08 | Implement an accessible MSAL React client for sign-in, submission, status, approval/rejection, and failure states. | P1-01, P1-07 API contract | UI tests cover visible states and safe retries; browser code contains no service secrets. |
 | P1-09 | Implement a native MAF workflow with local file checkpoints, isolated pause/resume, rejection, and recovery. | P1-01, P1-06 interfaces | Local tests cover repeated decisions, concurrent requests, and recovery without a universal orchestration wrapper; Foundry hosting is deferred to P1-12. |
-| P1-10 | Add integration/E2E tests, synthetic agent evaluations, and GitHub Actions; connect actual results and artifacts to the validator. | P1-04 through P1-09 | A local or CI run produces a report from real artifacts; blocking failures cannot pass, non-blocking outcomes follow the selected profile, and rubric/threshold decisions are recorded. The typed evaluation extension is only a local contract/mapping layer, not actual provider or browser evidence. |
+| P1-10 | Add integration/E2E tests, synthetic agent evaluations, and GitHub Actions; connect actual results and artifacts to the validator. | P1-04 through P1-09 | Draft #43 generates revision-bound Order Resolution case, evaluation, matrix, input, and validator artifacts from the real generated adapter. All nine deterministic cases and separate business/technical checks pass locally; the independent report remains unverified without producer attestation. Real model and browser evidence remain outstanding. |
 | P1-11 | Add privacy-safe logs, traces, correlation, and operational signals across API, workflow, approvals, and side effects. | P1-07, P1-09 interfaces | Manual telemetry tests cover redaction and correlation; owner-reported native global auto-instrumentation leaked a query canary and emitted duplicate FastAPI spans. Do not enable that path until exact-revision negative tests cover prompt/tool/identity and failure paths; hosted export remains environment-specific. |
 | P1-15 | Demonstrate the local prototype from a synthetic specification through approval, evaluation, and its readiness report. | P1-10, P1-11 | Record the scenario, evidence, limitations, and observed elapsed time; the 2–3 hour objective is a target until a representative run demonstrates it. |
 | P1-12 | Validate Foundry Hosted Agent compatibility for the selected MAF version, Responses protocol, request-aware workflow factory, identity, per-user session isolation, and host-managed checkpoints. | P1-09, P1-15 | Microsoft warns delegated users are not fenced from one another within a shared session. A trusted app must authorize each principal's session, verify mapping from the validated principal, map each authenticated caller to a distinct session, and reject unchecked client IDs; an opaque app-supplied `x-ms-user-identity` scoping value derived from that principal is not authorization. Platform-generated `x-agent-user-id` is a different header; do not assume their values match. Equivalence and binding to the validated principal are unsupported and unverified; this bridge and mapping are not implemented or tested. Local AgentServer Core 2.3.0/Responses 2.4.0 one-shot task IDs reran fresh after terminal completion and are not persistent deduplication; hosted semantics remain unknown. The exact `agent-framework-foundry-hosting==1.0.0b261112` source exposes `response_id` in the request-aware factory before checkpoint preparation/parsing/run claim, but this hook alone does not establish a safe owner-bound CAS claim, a reservation per continuation, pending-reply/action ordering, idempotent side effects, or same-response recovery. The scoping value is not a credential; hosted secret delivery/rotation and downstream OBO token lifecycle are not implemented, and end-user bearer/OBO tokens must not be persisted. Lost `response.id` recovery remains blocked; see the [investigation journal](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-21---hosted-caller-binding-and-lost-responses) and [session-isolation clarification](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-21---delegated-session-isolation-and-debugger-evidence). Local checks alone are not a hosted deployment. No Azure resources are provisioned. |
