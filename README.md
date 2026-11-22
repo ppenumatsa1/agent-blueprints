@@ -23,6 +23,7 @@ still be authenticated and authorized.
 - [Interactive architecture: original source](docs/software-factory.html)
 - [Living master checklist](docs/master-checklist.md)
 - [Agent Blueprints architecture and proposed structure](docs/agent-blueprints-architecture.md)
+- [Cross-framework Order Resolution specification proposal](docs/order-resolution-specification-proposal.md)
 - [Reference repository analysis](docs/reference-repository-analysis.md)
 - [Blueprint catalog and hosting compatibility](docs/blueprint-catalog.md)
 - [Engineering standards](docs/engineering-standards.md)
