@@ -10,10 +10,12 @@ import os
 import shutil
 import sys
 import tempfile
+import time
 import zipfile
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
+from urllib.parse import urlsplit
 from uuid import uuid4
 
 
@@ -24,6 +26,13 @@ DEPENDENCY_RESOLUTION = "remote_build"
 CPU = "0.5"
 MEMORY = "1Gi"
 PYTHON_NO_USER_SITE = "1"
+REQUIRED_RUNTIME_ENVIRONMENT = (
+    "FOUNDRY_PROJECT_ENDPOINT",
+    "AZURE_AI_MODEL_DEPLOYMENT_NAME",
+    "ORDER_RESOLUTION_API_ENDPOINT",
+    "ORDER_RESOLUTION_API_SCOPE",
+    "ORDER_RESOLUTION_API_TIMEOUT_SECONDS",
+)
 
 
 @dataclass(frozen=True)
@@ -34,6 +43,11 @@ class PublishRecord:
     status: str
     agent_version: str | None = None
     owner_token: str | None = None
+    agent_version_id: str | None = None
+    agent_guid: str | None = None
+    provisioning_status: str | None = None
+    identity_principal_id: str | None = None
+    identity_client_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -110,9 +124,54 @@ def build_azd_service_contract(project: str = "hosted-agent") -> dict[str, Any]:
     }
 
 
-def build_definition(model_deployment_name: str) -> Any:
-    if not model_deployment_name.strip():
-        raise ValueError("A configured model deployment name is required.")
+def hosted_runtime_environment(source: Mapping[str, str]) -> dict[str, str]:
+    environment = {}
+    for name in REQUIRED_RUNTIME_ENVIRONMENT:
+        value = source.get(name, "")
+        if not isinstance(value, str) or not value.strip() or len(value) > 4096:
+            raise ValueError(f"{name} is required and bounded.")
+        environment[name] = value.strip()
+    project = urlsplit(environment["FOUNDRY_PROJECT_ENDPOINT"])
+    if (
+        project.scheme != "https"
+        or not project.hostname
+        or project.username is not None
+        or project.password is not None
+    ):
+        raise ValueError("FOUNDRY_PROJECT_ENDPOINT must be an HTTPS project endpoint.")
+    api = urlsplit(environment["ORDER_RESOLUTION_API_ENDPOINT"])
+    if (
+        api.scheme != "https"
+        or not api.hostname
+        or api.username is not None
+        or api.password is not None
+        or api.query
+        or api.fragment
+    ):
+        raise ValueError(
+            "ORDER_RESOLUTION_API_ENDPOINT must be an explicit HTTPS base URL."
+        )
+    scope = environment["ORDER_RESOLUTION_API_SCOPE"]
+    if (
+        not scope.startswith("api://")
+        or not scope.endswith("/.default")
+        or any(character.isspace() for character in scope)
+    ):
+        raise ValueError("ORDER_RESOLUTION_API_SCOPE must use api://.../.default.")
+    try:
+        timeout = float(environment["ORDER_RESOLUTION_API_TIMEOUT_SECONDS"])
+    except ValueError as exc:
+        raise ValueError(
+            "ORDER_RESOLUTION_API_TIMEOUT_SECONDS must be numeric."
+        ) from exc
+    if timeout <= 0 or timeout > 300:
+        raise ValueError("ORDER_RESOLUTION_API_TIMEOUT_SECONDS must be in (0, 300].")
+    environment["PYTHONNOUSERSITE"] = PYTHON_NO_USER_SITE
+    return environment
+
+
+def build_definition(runtime_environment: Mapping[str, str]) -> Any:
+    environment = hosted_runtime_environment(runtime_environment)
     from azure.ai.projects.models import (
         CodeConfiguration,
         HostedAgentDefinition,
@@ -130,10 +189,7 @@ def build_definition(model_deployment_name: str) -> Any:
         protocol_versions=[
             ProtocolVersionRecord(protocol="responses", version=PROTOCOL_VERSION)
         ],
-        environment_variables={
-            "AZURE_AI_MODEL_DEPLOYMENT_NAME": model_deployment_name,
-            "PYTHONNOUSERSITE": PYTHON_NO_USER_SITE,
-        },
+        environment_variables=environment,
     )
 
 
@@ -143,7 +199,7 @@ def publication_identity(
     project_id: str,
     agent_name: str,
     archive_sha256: str,
-    model_deployment_name: str,
+    runtime_environment: Mapping[str, str],
 ) -> dict[str, Any]:
     endpoint = project_endpoint.rstrip("/")
     for value, label in (
@@ -151,12 +207,16 @@ def publication_identity(
         (project_id, "Foundry project ID"),
         (agent_name, "Agent name"),
         (archive_sha256, "Archive digest"),
-        (model_deployment_name, "Model deployment name"),
     ):
         if not isinstance(value, str) or not value.strip() or len(value) > 2048:
             raise ValueError(f"{label} is required and bounded.")
     if not endpoint.startswith("https://"):
         raise ValueError("The Foundry project endpoint must use HTTPS.")
+    environment = hosted_runtime_environment(runtime_environment)
+    if environment["FOUNDRY_PROJECT_ENDPOINT"].rstrip("/") != endpoint:
+        raise ValueError(
+            "The hosted runtime project endpoint must match the publication target."
+        )
     return {
         "schema_version": "1",
         "project_endpoint": endpoint,
@@ -170,10 +230,7 @@ def publication_identity(
             "entry_point": list(ENTRY_POINT),
             "dependency_resolution": DEPENDENCY_RESOLUTION,
             "protocols": [{"protocol": "responses", "version": PROTOCOL_VERSION}],
-            "environment": {
-                "AZURE_AI_MODEL_DEPLOYMENT_NAME": model_deployment_name,
-                "PYTHONNOUSERSITE": PYTHON_NO_USER_SITE,
-            },
+            "environment": environment,
         },
     }
 
@@ -268,6 +325,7 @@ def _finish_owned_publish(
     owner_token: str,
     status: str,
     agent_version: str | None = None,
+    details: Any | None = None,
 ) -> PublishRecord:
     with _journal_lock(journal_path):
         existing = _load_record(journal_path)
@@ -286,6 +344,7 @@ def _finish_owned_publish(
             status=status,
             agent_version=agent_version,
             owner_token=None if status != "pending" else owner_token,
+            **(_version_details(details) if details is not None else {}),
         )
         _save_record(journal_path, updated)
         return updated
@@ -299,7 +358,7 @@ def publish_once(
     agent_name: str,
     archive: Path,
     operation_id: str,
-    model_deployment_name: str,
+    runtime_environment: Mapping[str, str],
     journal_path: Path,
 ) -> PublishRecord:
     digest = hashlib.sha256(archive.read_bytes()).hexdigest()
@@ -309,10 +368,10 @@ def publish_once(
             project_id=project_id,
             agent_name=agent_name,
             archive_sha256=digest,
-            model_deployment_name=model_deployment_name,
+            runtime_environment=runtime_environment,
         )
     )
-    definition = build_definition(model_deployment_name)
+    definition = build_definition(runtime_environment)
     owner_token = uuid4().hex
     pending = PublishRecord(
         operation_id,
@@ -361,7 +420,99 @@ def publish_once(
         owner_token=owner_token,
         status="acknowledged",
         agent_version=version,
+        details=created,
     )
+
+
+def _text(value: Any) -> str | None:
+    if isinstance(value, str) and value:
+        return value
+    enum_value = getattr(value, "value", None)
+    return enum_value if isinstance(enum_value, str) and enum_value else None
+
+
+def _version_details(details: Any) -> dict[str, str | None]:
+    identity = (
+        details.get("instance_identity")
+        if isinstance(details, dict)
+        else getattr(details, "instance_identity", None)
+    )
+    read = (
+        (lambda name: details.get(name))
+        if isinstance(details, dict)
+        else (lambda name: getattr(details, name, None))
+    )
+    identity_read = (
+        (lambda name: identity.get(name))
+        if isinstance(identity, dict)
+        else (lambda name: getattr(identity, name, None))
+    )
+    return {
+        "agent_version_id": _text(read("id")),
+        "agent_guid": _text(read("agent_guid")),
+        "provisioning_status": _text(read("status")),
+        "identity_principal_id": _text(identity_read("principal_id")),
+        "identity_client_id": _text(identity_read("client_id")),
+    }
+
+
+def resolve_publish_identity(
+    *,
+    agents: Any,
+    agent_name: str,
+    journal_path: Path,
+    timeout_seconds: float = 600,
+    poll_seconds: float = 5,
+    require_active: bool = False,
+) -> PublishRecord:
+    if timeout_seconds < 0 or poll_seconds <= 0:
+        raise ValueError("Identity polling durations are invalid.")
+    deadline = time.monotonic() + timeout_seconds
+    while True:
+        with _journal_lock(journal_path):
+            record = _load_record(journal_path)
+        if (
+            record is None
+            or record.status != "acknowledged"
+            or not record.agent_version
+        ):
+            raise ValueError("An acknowledged agent version is required.")
+        details = agents.get_version(
+            agent_name=agent_name,
+            agent_version=record.agent_version,
+        )
+        resolved = _version_details(details)
+        identity_ready = (
+            resolved["identity_principal_id"]
+            and resolved["identity_client_id"]
+            and resolved["agent_version_id"]
+            and resolved["agent_guid"]
+        )
+        if identity_ready:
+            with _journal_lock(journal_path):
+                current = _load_record(journal_path)
+                if (
+                    current is None
+                    or current.operation_id != record.operation_id
+                    or current.publication_digest != record.publication_digest
+                    or current.archive_sha256 != record.archive_sha256
+                    or current.agent_version != record.agent_version
+                ):
+                    raise ValueError(
+                        "The publish journal changed during identity resolution."
+                    )
+                updated = replace(current, **resolved)
+                _save_record(journal_path, updated)
+            if not require_active or resolved["provisioning_status"] == "active":
+                return updated
+        if require_active and resolved["provisioning_status"] == "failed":
+            raise RuntimeError("The hosted agent version failed provisioning.")
+        if time.monotonic() >= deadline:
+            target = "active" if require_active else "its agent identity"
+            raise TimeoutError(
+                f"The hosted version is acknowledged but {target} is not ready."
+            )
+        time.sleep(poll_seconds)
 
 
 def reconcile_publish(
@@ -421,7 +572,11 @@ def main() -> int:
     parser.add_argument("--agent-name")
     parser.add_argument("--operation-id")
     parser.add_argument("--journal", type=Path)
+    parser.add_argument("--identity-timeout-seconds", type=float, default=600)
+    parser.add_argument("--require-active", action="store_true")
     args = parser.parse_args()
+    if args.identity_timeout_seconds < 0:
+        parser.error("--identity-timeout-seconds must be nonnegative")
     digest = build_source_archive(args.project_root, args.archive)
     print(f"ARCHIVE_SHA256={digest}")
     if not args.publish:
@@ -435,12 +590,11 @@ def main() -> int:
             parser.error(f"{name} is required with --publish")
     endpoint = os.environ.get("FOUNDRY_PROJECT_ENDPOINT", "").strip()
     project_id = os.environ.get("FOUNDRY_PROJECT_ID", "").strip()
-    model = os.environ.get("AZURE_AI_MODEL_DEPLOYMENT_NAME", "").strip()
-    if not endpoint or not project_id or not model:
+    if not endpoint or not project_id:
         raise ValueError(
-            "FOUNDRY_PROJECT_ENDPOINT, FOUNDRY_PROJECT_ID, and "
-            "AZURE_AI_MODEL_DEPLOYMENT_NAME are required."
+            "FOUNDRY_PROJECT_ENDPOINT and FOUNDRY_PROJECT_ID are required."
         )
+    runtime_environment = hosted_runtime_environment(os.environ)
     from azure.ai.projects import AIProjectClient
     from azure.identity import DefaultAzureCredential
 
@@ -454,8 +608,15 @@ def main() -> int:
             agent_name=args.agent_name,
             archive=args.archive,
             operation_id=args.operation_id,
-            model_deployment_name=model,
+            runtime_environment=runtime_environment,
             journal_path=args.journal,
+        )
+        record = resolve_publish_identity(
+            agents=project.agents,
+            agent_name=args.agent_name,
+            journal_path=args.journal,
+            timeout_seconds=args.identity_timeout_seconds,
+            require_active=args.require_active,
         )
     print(json.dumps(asdict(record), sort_keys=True))
     return 0

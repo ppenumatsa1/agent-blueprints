@@ -65,8 +65,8 @@ class HostedIdentityBindings(Protocol):
         case_id: UUID,
         caller: CallerContext,
         conversation_id: str,
-    ) -> None:
-        """Create or verify the authoritative case/caller/session/conversation binding."""
+    ) -> Any:
+        """Bind the owner and return its authoritative application principal when available."""
         ...
 
     def authorize_resume(
@@ -76,8 +76,8 @@ class HostedIdentityBindings(Protocol):
         caller: CallerContext,
         conversation_id: str,
         channel: str,
-    ) -> None:
-        """Reject a different caller, session, conversation, or channel."""
+    ) -> Any:
+        """Bind the reviewer and return its authoritative principal when available."""
         ...
 
 
@@ -139,23 +139,85 @@ class _HostedDecisionStore:
 
 
 class _HostedWorkflowStore:
-    def __init__(self, store: HostedBusinessStore) -> None:
+    def __init__(
+        self,
+        store: HostedBusinessStore,
+        caller: CallerContext,
+        conversation_id: str,
+    ) -> None:
         self._store = store
+        self._caller = caller
+        self._conversation_id = conversation_id
+
+    def _bound(self, principal_kind: str) -> HostedBusinessStore:
+        return _bound_store(
+            self._store,
+            self._caller,
+            self._conversation_id,
+            principal_kind,
+        )
 
     def get(self, case_id: UUID) -> Any:
-        return self._store.get(case_id)
+        return self._bound("owner").get(case_id)
 
     def apply_automatic(self, case_id: UUID, action: Any) -> None:
-        self._store.apply_automatic(case_id, action)
-        self._store.finish_hosted(case_id)
+        store = self._bound("owner")
+        store.apply_automatic(case_id, action)
+        store.finish_hosted(case_id)
 
     def apply_once(self, case_id: UUID, approved: bool, action: Any) -> None:
-        self._store.apply_once(case_id, approved, action)
-        self._store.finish_hosted(case_id)
+        store = self._bound("reviewer")
+        store.apply_once(case_id, approved, action)
+        store.finish_hosted(case_id)
+
+
+def _bound_store(
+    store: HostedBusinessStore,
+    caller: CallerContext,
+    conversation_id: str,
+    principal_kind: str,
+) -> HostedBusinessStore:
+    factory = getattr(store, "for_binding", None)
+    if callable(factory):
+        return factory(caller, conversation_id, principal_kind)
+    return store
+
+
+def _validate_hosted_decision(record: Any, command: Any, principal: Any) -> None:
+    decision = getattr(command.decision, "value", command.decision)
+    observed_decision = getattr(
+        getattr(record, "decision", None),
+        "value",
+        getattr(record, "decision", None),
+    )
+    expected = (
+        command.case_id,
+        command.proposal_version,
+        command.action,
+        command.destination_id,
+        decision,
+        principal.subject,
+        principal.tenant_id,
+        command.scope,
+        command.channel,
+    )
+    observed = (
+        getattr(record, "case_id", None),
+        getattr(record, "proposal_version", None),
+        getattr(record, "action", None),
+        getattr(record, "destination_id", None),
+        observed_decision,
+        getattr(record, "actor_id", None),
+        getattr(record, "tenant_id", None),
+        getattr(record, "scope", None),
+        getattr(record, "channel", None),
+    )
+    if observed != expected:
+        raise RuntimeError("The hosted decision acknowledgment is not authoritative.")
 
 
 class GeneratedOrderResolutionApplication:
-    """Bind the native workflow to application authorization and PostgreSQL state."""
+    """Bind the native workflow to authorization and the protected business API."""
 
     def __init__(
         self,
@@ -177,10 +239,13 @@ class GeneratedOrderResolutionApplication:
         return ("app.order_resolution.workflow:OrderResolutionDecision",)
 
     def build_workflow(self, caller: CallerContext, conversation_id: str) -> Any:
-        self._identity_bindings.resolve_principal(caller)
         if not conversation_id:
             raise PermissionError("A Foundry conversation binding is required.")
-        return self._workflow_factory(_HostedWorkflowStore(self._store), self._action, None)
+        return self._workflow_factory(
+            _HostedWorkflowStore(self._store, caller, conversation_id),
+            self._action,
+            None,
+        )
 
     def authorize_start(
         self,
@@ -188,22 +253,24 @@ class GeneratedOrderResolutionApplication:
         conversation_id: str,
         case_id: UUID,
     ) -> dict[str, str]:
-        principal = self._identity_bindings.resolve_principal(caller)
-        case = self._store.get(case_id)
+        principal = self._identity_bindings.bind_start(
+            case_id=case_id,
+            caller=caller,
+            conversation_id=conversation_id,
+        )
+        if principal is None:
+            principal = self._identity_bindings.resolve_principal(caller)
+        store = _bound_store(self._store, caller, conversation_id, "owner")
+        case = store.get(case_id)
         self._policy.authorize_read(principal, case)
         approval_required = case.payload["proposal"]["approval_required"]
         allowed_statuses = ("created", "pending") if approval_required else ("created",)
         if case.status not in allowed_statuses:
             raise ValueError("The case is not eligible for a new hosted workflow run.")
-        self._identity_bindings.bind_start(
-            case_id=case_id,
-            caller=caller,
-            conversation_id=conversation_id,
-        )
         workflow_input = {"case_id": str(case_id)}
         if approval_required:
             request_id = _approval_request_id(case_id, caller, conversation_id)
-            proposal = self._store.prepare_hosted_approval(
+            proposal = store.prepare_hosted_approval(
                 case_id,
                 request_id,
                 channel=FOUNDRY_RESPONSES_CHANNEL,
@@ -252,33 +319,41 @@ class GeneratedOrderResolutionApplication:
         if response.conversation_id != conversation_id or response.session_id != caller.session_id:
             raise PermissionError("The workflow resume binding does not match this conversation.")
 
-        principal = self._identity_bindings.resolve_principal(caller)
-        if not isinstance(principal, Principal):
-            raise TypeError("The hosted identity resolver must return an application Principal.")
-        case = self._store.get(response.case_id)
-        self._policy.authorize_decision(principal, case)
-        self._identity_bindings.authorize_resume(
+        principal = self._identity_bindings.authorize_resume(
             case_id=response.case_id,
             caller=caller,
             conversation_id=conversation_id,
             channel=response.channel,
         )
-        record_decision(
-            _HostedDecisionStore(self._store),
-            self._store.get_current_proposal(str(response.case_id)),
-            Actor(principal.tenant_id, principal.subject, principal.scopes, principal.roles),
-            DecisionCommand(
-                case_id=str(response.case_id),
-                proposal_version=response.proposal_version,
-                action=response.action,
-                destination_id=response.destination_id,
-                handle=response.handle,
-                decision=Decision(response.decision),
-                scope="workflow.approve",
-                channel=response.channel,
-            ),
-            now=datetime.now(timezone.utc),
+        if principal is None:
+            principal = self._identity_bindings.resolve_principal(caller)
+        if not isinstance(principal, Principal):
+            raise TypeError("The hosted identity resolver must return an application Principal.")
+        store = _bound_store(self._store, caller, conversation_id, "reviewer")
+        case = store.get(response.case_id)
+        self._policy.authorize_decision(principal, case)
+        command = DecisionCommand(
+            case_id=str(response.case_id),
+            proposal_version=response.proposal_version,
+            action=response.action,
+            destination_id=response.destination_id,
+            handle=response.handle,
+            decision=Decision(response.decision),
+            scope="workflow.approve",
+            channel=response.channel,
         )
+        record_hosted_decision = getattr(store, "record_hosted_decision", None)
+        if callable(record_hosted_decision):
+            decision = record_hosted_decision(command)
+            _validate_hosted_decision(decision, command, principal)
+        else:
+            record_decision(
+                _HostedDecisionStore(store),
+                store.get_current_proposal(str(response.case_id)),
+                Actor(principal.tenant_id, principal.subject, principal.scopes, principal.roles),
+                command,
+                now=datetime.now(timezone.utc),
+            )
         return response
 
 
@@ -294,28 +369,16 @@ def build_generated_application() -> GeneratedOrderResolutionApplication:
     """Compose the generated app without importing or attaching its local checkpoint host."""
 
     from app.domain.policy import CaseAccessPolicy
-    from app.order_resolution.action import RecordOrderResolutionAction
-    from app.order_resolution.migrations import validate_connection
-    from app.order_resolution.persistence import OrderResolutionStore
     from app.order_resolution.workflow import build_order_resolution_workflow
 
-    dsn = os.environ.get("DATABASE_URL", "").strip()
-    if not dsn:
-        raise ValueError("DATABASE_URL is required.")
-    bindings_spec = os.environ.get("ORDER_RESOLUTION_HOSTED_IDENTITY_BINDINGS", "").strip()
-    if not bindings_spec:
-        raise ValueError(
-            "ORDER_RESOLUTION_HOSTED_IDENTITY_BINDINGS must name an authorized module:function."
-        )
-    identity_bindings = _load_factory(bindings_spec)
-    store = OrderResolutionStore(dsn)
-    with store.connect() as connection:
-        validate_connection(connection)
+    from .business import HttpHostedBusinessStore
+
+    store = HttpHostedBusinessStore.from_environment()
     return GeneratedOrderResolutionApplication(
         store=store,
-        action=RecordOrderResolutionAction().bind(store),
+        action=object(),
         policy=CaseAccessPolicy(),
-        identity_bindings=identity_bindings,
+        identity_bindings=store,
         workflow_factory=build_order_resolution_workflow,
     )
 
