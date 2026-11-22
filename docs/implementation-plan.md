@@ -186,9 +186,10 @@ authority; the bridge does not send caller-selected session or actor metadata.
 **Acceptance evidence:** exact base verified; read-only Azure discovery
 completed; Bicep build/lint and 17 infrastructure contracts pass; 68 root tests
 pass with two expected adapter-selection skips; script syntax checks pass.
-Disposable replacement A `c3e733a8` plus C's aligned working tree built the
-canonical no-dev backend and passed image import/nonconnecting composition.
-Final proof remains blocked on C's immutable head plus normal
+Exact immutable A `c3e733a8` plus C `9e17dda4` generation produced
+byte-identical owned files, built the canonical no-dev backend, imported the
+bridge, and passed nonconnecting composition. Final proof remains blocked on
+C's explicit authority/correlation evidence plus normal
 entrypoint/lifespan/health against composed PostgreSQL. Live Azure composition
 is not proven.
 The current Azure CLI identity matches the authorized target, but azd is a

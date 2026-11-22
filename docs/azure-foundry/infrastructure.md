@@ -355,14 +355,16 @@ Local non-deploying evidence:
   `backend/app/api/routes/hosted_service.py` was absent, and removed its
   temporary directory without output artifacts.
 - Agent C's generated application interface is frozen at draft PR #48 head
-  `60fd83fc05acc290aab3ed96f8f8c255e493d28d` while its aligned replacement is
-  pending. Agent A's immutable replacement is
+  `9e17dda4f28012b683d583d820db61dcf3e45c17`. Agent A's immutable replacement is
   `c3e733a8c7d2e03e41e9045ee9277f504e028f6b`, archive SHA-256
   `3becbb28da4eae014a47d20fe5d8f93d7b56c2f93d9558f0afdf2218868d44ca`.
-- Disposable A replacement plus C's current aligned working tree built the
-  canonical backend with `--no-dev`; image import and nonconnecting hosted
-  composition/wire parity passed. Final evidence still requires C's immutable
-  head and normal entrypoint/lifespan/health against composed PostgreSQL.
+- Exact immutable A+C generation produced byte-identical bridge/client and C
+  composition files. The canonical backend built with `--no-dev`, verified the
+  Agent Framework wheel digest, imported the bridge, and selected
+  `ResponsesWorkflowHost`; local manifest-list digest was
+  `sha256:b8f2330b755e66b4b8a47cc73d19fbdf482a63e81a015734089feee57d1cb61a`.
+  Final evidence still requires C's explicit authority/correlation proof and
+  normal entrypoint/lifespan/health against composed PostgreSQL.
   Direct PyPI failed locally with a TLS handshake error; the credentialless
   Microsoft package mirror retained hash/digest verification. Live Azure
   remains unverified.

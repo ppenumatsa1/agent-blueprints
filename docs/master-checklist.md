@@ -101,10 +101,11 @@ human principal/case authority bound to the server-selected conversation and
 channel must exist before Responses dispatch and cannot be inferred from the
 hosted token. Foundry user/session/call values are opaque platform correlation,
 not human authority; no caller-selected session or actor metadata is sent.
-Disposable composition of replacement A `c3e733a8` and C's aligned working tree
-built/imported the canonical no-dev backend and passed nonconnecting wire
-composition. Final proof remains blocked on C's immutable head and normal
-entrypoint/lifespan/health against composed PostgreSQL.
+Exact immutable A `c3e733a8` plus C `9e17dda4` generation produced
+byte-identical owned files, built/imported the canonical no-dev backend, and
+passed nonconnecting wire composition. Final proof remains blocked on C's
+explicit authority/correlation evidence and normal entrypoint/lifespan/health
+against composed PostgreSQL.
 
 **Next action:** independently validate the exact PR revision, supply the
 deployment-specific hosted endpoint/agent-name/administrator/journal values,
