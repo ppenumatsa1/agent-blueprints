@@ -286,4 +286,3 @@ cannot establish conformance, authorization, execution, or release readiness.
   verified per blueprint.
 - This proposal adds no runtime code, schema, compatibility adapter, Azure
   resource, deployment asset, customer approval, or production-readiness claim.
-
