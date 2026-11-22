@@ -69,6 +69,11 @@ conversation, prebinds the authenticated owner or reviewer before Responses
 dispatch, and exposes only async `start(case_id, actor)` and
 `resume(case_id, actor, decision_command)`. There is no generic `/runs`
 fallback.
+The generator copies only the API bridge/client into
+`backend/order_resolution_hosted` with a non-eager initializer and adds that
+directory to the existing backend Docker context. The API does not import the
+sibling hosted-agent source or install the hosting SDK; parity tests require
+the backend and hosted copies to remain byte-identical.
 Foundry still owns native checkpoint state; the HTTP contract carries no
 checkpoint bytes or fabricated local checkpoint IDs. The copied
 `scripts/foundry/publish_order_resolution_hosted.py` packages the generated

@@ -4,8 +4,6 @@ import asyncio
 from typing import Any, Protocol
 from uuid import UUID
 
-from azure.identity import ManagedIdentityCredential
-
 from .client import (
     FOUNDRY_SCOPE,
     ConversationBinding,
@@ -16,6 +14,12 @@ from .client import (
 
 
 HOSTED_CHANNEL = "foundry-responses"
+
+
+def ManagedIdentityCredential(*args: Any, **kwargs: Any) -> Any:
+    from azure.identity import ManagedIdentityCredential as credential_type
+
+    return credential_type(*args, **kwargs)
 
 
 class HostedAuthorityBindings(Protocol):

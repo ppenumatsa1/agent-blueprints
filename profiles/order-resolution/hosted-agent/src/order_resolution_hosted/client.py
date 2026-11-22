@@ -1,18 +1,23 @@
 from __future__ import annotations
 
 import hashlib
-import json
+import json as json_module
 import threading
 from dataclasses import dataclass, replace
 from enum import Enum
 from typing import Any, Callable, Protocol
+from urllib.error import HTTPError
 from urllib.parse import urlsplit
-
-import httpx
-from azure.identity import DefaultAzureCredential
+from urllib.request import Request, urlopen
 
 
 FOUNDRY_SCOPE = "https://ai.azure.com/.default"
+
+
+def DefaultAzureCredential(*args: Any, **kwargs: Any) -> Any:
+    from azure.identity import DefaultAzureCredential as credential_type
+
+    return credential_type(*args, **kwargs)
 
 
 class OperationStatus(str, Enum):
@@ -95,6 +100,46 @@ class TokenProvider:
         return f"Bearer {token.token}"
 
 
+class _JsonResponse:
+    def __init__(self, status_code: int, body: bytes) -> None:
+        self.status_code = status_code
+        self._body = body
+
+    def json(self) -> Any:
+        return json_module.loads(self._body.decode("utf-8"))
+
+    def raise_for_status(self) -> None:
+        raise RuntimeError(f"Responses request failed with HTTP {self.status_code}.")
+
+
+def _post_json(
+    endpoint: str,
+    *,
+    headers: dict[str, str],
+    json: dict[str, Any],
+    timeout: float,
+) -> _JsonResponse:
+    request = Request(
+        endpoint,
+        data=json_module.dumps(
+            json,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode("utf-8"),
+        headers=headers,
+        method="POST",
+    )
+    try:
+        with urlopen(request, timeout=timeout) as response:
+            return _JsonResponse(response.status, response.read())
+    except HTTPError as error:
+        try:
+            return _JsonResponse(error.code, error.read())
+        finally:
+            error.close()
+
+
 @dataclass(frozen=True)
 class ConversationBinding:
     caller_id: str
@@ -131,7 +176,7 @@ class ResponsesClient:
         self._journal = journal
         self._token_provider = token_provider or TokenProvider()
         self._timeout_seconds = timeout_seconds
-        self._post = post or httpx.post
+        self._post = post or _post_json
 
     @staticmethod
     def _validated_endpoint(endpoint: str, label: str) -> str:
@@ -153,7 +198,7 @@ class ResponsesClient:
 
     @staticmethod
     def _digest(endpoint: str, payload: dict[str, Any]) -> str:
-        encoded = json.dumps(
+        encoded = json_module.dumps(
             {"endpoint": endpoint, "payload": payload},
             sort_keys=True,
             separators=(",", ":"),
@@ -265,7 +310,7 @@ class ResponsesClient:
                 "agent_session_id": binding.session_id,
                 "background": True,
                 "conversation": {"id": binding.conversation_id},
-                "input": json.dumps({"case_id": case_id}, separators=(",", ":")),
+                "input": json_module.dumps({"case_id": case_id}, separators=(",", ":")),
                 "metadata": {
                     "operation_id": operation_id,
                     "caller_id": binding.caller_id,
@@ -300,7 +345,7 @@ class ResponsesClient:
                     {
                         "type": "function_call_output",
                         "call_id": request_id,
-                        "output": json.dumps(
+                        "output": json_module.dumps(
                             decision,
                             sort_keys=True,
                             separators=(",", ":"),
