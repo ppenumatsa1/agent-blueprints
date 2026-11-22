@@ -30,6 +30,23 @@ assertions. This is contract encoding, not implementation or readiness
 evidence. Parallel workstreams B, C, and D depend on this contract and must not
 redefine its normalized facts or outcomes.
 
+Focused draft [PR #44](https://github.com/ppenumatsa1/agent-blueprints/pull/44)
+adds one explicit `order-resolution` generation profile to the existing safe
+copy generator. Default generation remains unchanged. The generated project
+owns its FastAPI/React/PostgreSQL/Compose application, deterministic policy
+rules, database-only synthetic action, native MAF `Executor` and
+`WorkflowBuilder`, host-selected file checkpoints, tests, locks, and copied
+acceptance assets. A fresh external generation passed 117 inherited and
+profile backend tests on PostgreSQL 17; those tests executed `ORS-001` as one
+automatic `USD 7.90` action, `ORS-002` as a native pause followed by one
+authorized `USD 18.50` action, and `ORS-006` as a persisted fail-closed case
+with no checkpoint, decision, action claim, or effect. Generated frontend
+tests/build/CSP checks and a standalone Compose root/health/auth boundary also
+passed locally. These results are implementation evidence, not full nine-case,
+hosted, remote-effect, evaluation, or production-readiness evidence. Exact-head
+CI remains required. Draft #41 supplies the reserved durability/effect/migration
+integration; draft #43 supplies reserved evaluation/readiness assets.
+
 Specification Studio has not yet produced an artifact, so the proposed
 handoff is not an end-to-end compatibility claim. Phase 0 does not implement
 the validator or an agent template, integrate Specification Studio, deploy

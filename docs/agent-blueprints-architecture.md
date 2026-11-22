@@ -214,11 +214,21 @@ bytes.
 The executable `order-resolution-spec/0.1.0` acceptance fixture carries exactly
 `ORS-001` through `ORS-009`. It fixes the synthetic policy arithmetic and
 business outcomes while leaving native checkpoint identity and implementation
-evidence to each framework mapping. Focused draft
+evidence to each framework mapping. Merged
 [PR #42](https://github.com/ppenumatsa1/agent-blueprints/pull/42) carries the
 fixture and root acceptance tests. Passing those tests validates the contract
 encoding only; it does not prove a blueprint implementation, authorization,
 side effects, or readiness.
+
+Draft [PR #44](https://github.com/ppenumatsa1/agent-blueprints/pull/44) maps
+that contract to one explicit MAF generation profile without adding a registry,
+template compiler, plugin runtime, or source-repository dependency. The
+generated application owns deterministic rules, authenticated FastAPI routes,
+PostgreSQL business state, native `Executor`/`WorkflowBuilder` composition,
+host-owned file checkpoints, and React rendering. Local generated-project
+tests execute `ORS-001`, `ORS-002`, and `ORS-006` through the real API,
+workflow, and database. Full durability/effect integration and
+evaluation/readiness remain separate draft #41 and #43 dependencies.
 
 Every future implementation must use its selected framework's native workflow
 and checkpoint provider. PostgreSQL is application-owned persistence for
