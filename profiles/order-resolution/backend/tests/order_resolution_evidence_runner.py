@@ -85,9 +85,7 @@ def execute_cases(
                 **(
                     {}
                     if outcome == "passed"
-                    else {
-                        "reason": "Actual result did not exactly match the canonical case."
-                    }
+                    else {"reason": "Actual result did not exactly match the canonical case."}
                 ),
             }
             actual_results[case_id] = actual
@@ -110,9 +108,7 @@ def produce(
     if not revision.strip() or not environment.strip():
         raise ValueError("A source revision and environment are required.")
     if not os.environ.get("MAF_TEST_DATABASE_URL"):
-        raise ValueError(
-            "MAF_TEST_DATABASE_URL must identify an isolated test database."
-        )
+        raise ValueError("MAF_TEST_DATABASE_URL must identify an isolated test database.")
     scenario_root = verification_root / "scenarios" / "order-resolution"
     golden_path = scenario_root / "golden-cases.json"
     golden = json.loads(golden_path.read_text(encoding="utf-8"))
@@ -168,9 +164,7 @@ def produce(
             BUSINESS_OUTCOME_CHECK_ID,
         }:
             check = next(
-                item
-                for item in assessment.check_results
-                if item.check_id == state.check_id
+                item for item in assessment.check_results if item.check_id == state.check_id
             )
             observations = [
                 {
@@ -296,9 +290,7 @@ def produce(
                 *(
                     []
                     if real_provider.enabled
-                    else [
-                        "Real model/provider evaluation was not explicitly configured."
-                    ]
+                    else ["Real model/provider evaluation was not explicitly configured."]
                 ),
                 "No browser end-to-end execution was performed by this producer.",
                 "Local evidence digests have no independently trusted producer attestation.",
@@ -380,9 +372,7 @@ def produce(
                         "environment": environment,
                         "recorded_at": recorded_at,
                         "sha256": hashlib.sha256(
-                            (
-                                output / f"{TECHNICAL_EXECUTION_CHECK_ID}.json"
-                            ).read_bytes()
+                            (output / f"{TECHNICAL_EXECUTION_CHECK_ID}.json").read_bytes()
                         ).hexdigest(),
                     },
                     {
