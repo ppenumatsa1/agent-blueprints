@@ -278,7 +278,7 @@ the same commands work in PowerShell, macOS and Linux shells:
 uv sync --locked
 uv run --locked ruff check .
 uv run --locked ruff format --check .
-uv run --locked python -m unittest -v tests.test_core tests.test_security tests.test_evidence_runner tests.test_telemetry tests.test_migrations
+uv run --locked python -m unittest -v tests.test_core tests.test_external_effect tests.test_security tests.test_evidence_runner tests.test_telemetry tests.test_migrations
 ```
 
 Set `MAF_TEST_DATABASE_URL` to an isolated PostgreSQL database first. Its test
