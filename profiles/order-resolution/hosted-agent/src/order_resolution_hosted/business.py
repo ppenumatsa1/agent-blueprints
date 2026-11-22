@@ -260,9 +260,6 @@ class HttpHostedBusinessStore:
     ) -> "_BoundBusinessStore":
         return _BoundBusinessStore(self, caller, conversation_id, principal_kind)
 
-    def resolve_principal(self, _caller: CallerContext) -> Any:
-        raise RuntimeError("The principal must be resolved by a case-bound API operation.")
-
     def _principal(self, body: dict[str, Any]) -> Any:
         from app.domain.models import Principal
 
@@ -274,7 +271,7 @@ class HttpHostedBusinessStore:
             roles=frozenset(value["roles"]),
         )
 
-    def bind_start(
+    def resolve_start_principal(
         self,
         *,
         case_id: UUID,
@@ -282,7 +279,7 @@ class HttpHostedBusinessStore:
         conversation_id: str,
     ) -> Any:
         operation_id = self._binding_operation(
-            "bind-start",
+            "verify-start-binding",
             case_id,
             caller.user_id,
             caller.session_id,
@@ -310,7 +307,7 @@ class HttpHostedBusinessStore:
         channel: str,
     ) -> Any:
         operation_id = self._binding_operation(
-            "bind-resume",
+            "verify-resume-binding",
             case_id,
             caller.user_id,
             caller.session_id,
