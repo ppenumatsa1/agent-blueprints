@@ -70,7 +70,9 @@ conversation, prebinds the authenticated owner or reviewer before Responses
 dispatch, omits caller-supplied `agent_session_id` so Foundry owns the stable
 session associated with the conversation, and exposes only async
 `start(case_id, actor)` and `resume(case_id, actor, decision_command)`. There is
-no generic `/runs` fallback.
+no generic `/runs` fallback. An identical authorized terminal resume reuses the
+acknowledged operation without another Responses dispatch; conflicting intent
+or an unauthorized actor fails closed.
 The generator copies only the API bridge/client into
 `backend/order_resolution_hosted` with a non-eager initializer and adds that
 directory to the existing backend Docker context. The API does not import the

@@ -434,20 +434,29 @@ journal](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-
 The Order Resolution profile now generates a separate native MAF Responses
 host and deterministic source bundle. The host uses a request-aware workflow
 factory and the standard Foundry checkpoint provider; it never attaches local
-filesystem checkpoints or writes whole workflow state to PostgreSQL. Strict
-structured resume binds the framework request ID to the case, proposal,
-action, destination, fixed hosted channel, caller, session and conversation.
-The application still owns authorization, decision and effect state.
+filesystem checkpoints or writes whole workflow state to PostgreSQL. The
+application still owns human authorization, decisions, effects, and business
+records behind its protected API.
 
-The narrow integration boundary is `HostedIdentityBindings`: resolve opaque
-Foundry request identity to an application principal, bind a start to the
-authorized case/session/conversation, and refuse a resume with any different
-binding. Responses and hosted-version creates use an application operation
-journal. Lost acknowledgments become `unknown` and are not replayed; only an
-authoritative unique remote match may reconcile them. Local compatibility is
-documented in [the hosting report](azure-foundry/hosting.md). Live hosted
-identity, checkpoint recovery, model calls, telemetry and networking remain
-unverified and cannot support production readiness.
+The authenticated API creates the server-selected Responses conversation and
+prebinds the validated owner or reviewer to the exact case, conversation, and
+channel before dispatch. Requests omit caller-selected `agent_session_id`;
+Foundry associates the conversation with its stable hosted session. Platform
+user, session, and call values are retained only as opaque workload
+correlation and cannot mint a human principal or role. The hosted container
+resolves the pre-established conversation binding and never receives
+PostgreSQL connectivity.
+
+Responses and hosted-version creates use application operation journals. An
+acknowledged identical terminal resume is reauthorized against the exact
+stored intent and returns through the existing operation without another
+Responses dispatch; conflicting content and unauthorized actors fail closed.
+Lost acknowledgments become `unknown` and are not replayed; only an
+authoritative unique remote match may reconcile them. Exact local A/C
+compatibility and its limits are documented in
+[the hosting report](azure-foundry/hosting.md). Live hosted identity,
+checkpoint recovery, model calls, telemetry and networking remain unverified
+and cannot support production readiness.
 
 The fallback hosts the framework runtime in Azure Container Apps and selects a
 tested framework-compatible checkpoint strategy. Do not assume that its

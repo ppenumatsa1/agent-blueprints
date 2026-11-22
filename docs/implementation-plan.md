@@ -673,22 +673,23 @@ Implementation and current local evidence are recorded in the
   [hosting report](azure-foundry/hosting.md). On 2026-11-22, 40 generated hosted
   tests, 16 publisher/generator tests, Ruff, 39 focused generated PostgreSQL
   tests, ORS-001..009, and the 68-test repository contract suite (2 documented
-  adapter skips) passed. Workstream C revision
-  `60fd83fc05acc290aab3ed96f8f8c255e493d28d` passed a composed
-  real-PostgreSQL protected-API business lifecycle and native
-  `/conversations` plus `/responses` wire proof, including restart duplicate
-  acknowledgment with zero replay, one decision/action, exact
-  `OperationClaim(record, acquired)`, and null business checkpoint fields, but
-  security review rejected that revision's creation of owner/reviewer bindings
-  from opaque hosted caller input. A now binds human authority only to the
-  authenticated case/conversation/channel command, treats platform user/session
-  as separate opaque workload correlation, and omits caller-supplied
-  `agent_session_id` so Foundry owns the stable conversation session. A exports
-  the explicit `order_resolution_hosted.bridge:build_workflow_host`
-  API-to-Responses factory; no generic `/runs` host is permitted. Final A/C
-  compatibility remains blocked until a new C revision and composed
-  absent/mismatched-binding plus normal API bridge tests pass. Agents B and D
-  consume the explicit API-only runtime
+  adapter skips) passed. The generated hosted total is now 41 after adding an
+  acknowledged terminal-resume no-redispatch regression. Exact Workstream C
+  revision `2a04d5be3013e782a7c1222b2a16a7047cbb15cd` passed a freshly generated
+  real-PostgreSQL 17 protected-API business lifecycle and native
+  `/conversations` plus `/responses` wire proof in 6.204 seconds, including
+  normal API factory composition, restart duplicate acknowledgment with zero
+  replay, terminal exact-intent replay with no new Responses dispatch,
+  conflicting-intent and unauthorized-actor refusal, one decision/action,
+  exact `OperationClaim(record, acquired)`, and null business checkpoint
+  fields. C's six PR checks also passed in run `45084615221`. A binds human
+  authority only to the authenticated case/conversation/channel command,
+  treats platform user/session as separate opaque workload correlation, and
+  omits caller-supplied `agent_session_id` so Foundry owns the stable
+  conversation session. A exports the explicit
+  `order_resolution_hosted.bridge:build_workflow_host` API-to-Responses
+  factory; no generic `/runs` host is permitted. Agents B and D consume the
+  explicit API-only runtime
   allowlist, atomic operation claim contract, and two-phase
   identity-then-active publication fields documented in the hosting report.
   Public hosted runtime never receives PostgreSQL connectivity; the protected

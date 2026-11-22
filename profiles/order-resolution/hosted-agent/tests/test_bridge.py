@@ -14,6 +14,8 @@ from order_resolution_hosted.client import (
     FOUNDRY_SCOPE,
     ConversationBinding,
     MemoryOperationJournal,
+    ResponsesClient,
+    TokenProvider,
 )
 
 
@@ -132,6 +134,51 @@ class BridgeTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertNotIn("session_id", request["decision"])
         self.assertNotIn("agent_session_id", request)
+
+    async def test_terminal_resume_uses_acknowledged_journal_without_redispatch(self):
+        requests = []
+
+        class Credential:
+            @staticmethod
+            def get_token(scope):
+                return SimpleNamespace(token="token")
+
+        class Response:
+            status_code = 200
+
+            @staticmethod
+            def json():
+                return {"id": "response-terminal"}
+
+        def post(*args, **kwargs):
+            requests.append((args, kwargs))
+            return Response()
+
+        authority = FakeAuthority(
+            [],
+            ConversationBinding("conversation-server-selected"),
+        )
+        responses = ResponsesClient(
+            "https://project.services.ai.azure.com/responses?api-version=v1",
+            MemoryOperationJournal(),
+            token_provider=TokenProvider(Credential()),
+            post=post,
+        )
+        host = ResponsesWorkflowHost(responses, authority)
+        command = self.command()
+
+        await host.resume(self.case_id, self.reviewer, command)
+        await host.resume(self.case_id, self.reviewer, command)
+
+        self.assertEqual(len(requests), 1)
+
+        with self.assertRaises(ValueError):
+            await host.resume(
+                self.case_id,
+                self.reviewer,
+                self.command(action="different-valid-action"),
+            )
+        self.assertEqual(len(requests), 1)
 
     async def test_invalid_decision_never_prebinds_or_dispatches(self):
         events = []
