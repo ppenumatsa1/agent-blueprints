@@ -3,3 +3,4 @@ docs/software-factory.html -text
 
 # The readiness trust anchor hashes the exact scenario contract bytes.
 scenarios/order-adjustment/verification-contract.json -text
+profiles/order-resolution/verification/scenarios/order-resolution/verification-contract.json -text
