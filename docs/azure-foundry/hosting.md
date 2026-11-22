@@ -64,7 +64,7 @@ grants the hosted version identity only the dedicated
 
 ```python
 class HostedIdentityBindings(Protocol):
-    def bind_start(
+    def resolve_start_principal(
         self, *, case_id: UUID, caller: CallerContext, conversation_id: str
     ) -> Principal: ...
     def authorize_resume(
@@ -77,13 +77,16 @@ class HostedIdentityBindings(Protocol):
     ) -> Principal: ...
 ```
 
-The opaque Foundry caller fields cannot independently establish an application
-principal. The start binding resolves the case owner from authoritative
-application state and returns that principal; the resume binding resolves and
-returns the reviewer. The API persists and checks the authoritative mapping
-from Foundry `user_id`, session and conversation to that principal and case. A
-different caller, session, conversation, channel, or unchecked client ID fails
-closed.
+The opaque Foundry caller fields and hosted managed-identity app role cannot
+establish end-user authority. Before native start or resume, an authenticated
+application command must pre-establish the exact case, principal, Foundry
+`user_id`, session, conversation and channel binding after server-selected
+conversation creation and before Responses dispatch. The hosted
+`/bindings/start` and `/bindings/resume` calls are verification-only gates: they
+return the already-bound owner or reviewer Principal and must return an
+authorization failure when the binding is absent or mismatched. They must never
+assign a case owner/reviewer from hosted correlation input. A different caller,
+session, conversation, channel, or unchecked client ID fails closed.
 
 The API implements the exported `HostedBusinessStore` seam against its
 application-owned PostgreSQL state:
@@ -229,8 +232,8 @@ ID for the hosted version, so callers must not invent one.
 | Standard hosted checkpoint provider | Verified locally | Public `CheckpointStoreProvider(allowed_checkpoint_types=...)`; no custom provider or local file storage in hosted composition |
 | Responses protocol `2.0.0` manifest | Verified locally | Deterministic publisher contract and SDK model construction test |
 | Structured native approval resume | Verified locally | Generated package tests validate stable hosted request identity, decision recording, business completion without a local checkpoint ID, and exact caller/session/conversation/channel binding |
-| Application-owned hosted business seam | Verified composed locally | Agent A's adapter and Workstream C `60fd83fc05acc290aab3ed96f8f8c255e493d28d` passed the real-PostgreSQL business lifecycle with one decision/action and null checkpoint fields |
-| Protected API business port | Verified composed locally; live authorization unverified | Exact C revision `60fd83fc05acc290aab3ed96f8f8c255e493d28d` passed bind/read/prepare/decision/effect/finish over loopback HTTP with stable idempotency and restart reconciliation |
+| Application-owned hosted business seam | Functional composition verified; authorization integration blocked | Agent A's adapter and Workstream C `60fd83fc05acc290aab3ed96f8f8c255e493d28d` passed the real-PostgreSQL lifecycle, but that C revision created owner/reviewer bindings from opaque hosted input and is rejected as authorization evidence |
+| Protected API business port | Wire/idempotency verified; binding correction required | Exact C revision `60fd83fc05acc290aab3ed96f8f8c255e493d28d` passed bind/read/prepare/decision/effect/finish over loopback HTTP, but integration must be rerun against verification-only binding endpoints backed by an authenticated application command |
 | Managed-identity token acquisition | Verified locally | Mock credentials verify `https://ai.azure.com/.default`, the dedicated internal API `api://.../.default` scope, and Authorization headers |
 | Source-code publishing API | Verified locally | Public signature/model test and no-retry mocked publish test |
 | Hosted version identity query | SDK surface verified; live identity unverified | Public `get_version` returns `AgentVersionDetails.instance_identity.principal_id/client_id`, `id`, `agent_guid`, and provisioning status |
@@ -247,7 +250,8 @@ ID for the hosted version, so callers must not invent one.
 
 ## Local validation evidence
 
-- 30 generated hosted-runtime tests passed.
+- 33 generated hosted-runtime tests passed, including absent and mismatched
+  pre-established owner/reviewer binding refusal before any business operation.
 - 16 publisher/generator tests passed, including restart/concurrent publish
   exclusion and complete publication identity conflicts.
 - Generated Ruff check and format check passed across 88 Python files.
@@ -260,7 +264,12 @@ ID for the hosted version, so callers must not invent one.
   protected-API and native `/conversations` plus `/responses` wire proof in
   6.273 seconds. The proof used A's exact `OperationClaim(record, acquired)`
   types, repeated acknowledged creates with zero replay, one decision/action,
-  and null business checkpoint fields.
+  and null business checkpoint fields. This is functional wire/idempotency
+  evidence only: security review rejected that C revision because its bind
+  endpoints manufactured owner/reviewer authority from opaque hosted caller
+  input. Final A/C compatibility requires a new C revision that only verifies
+  bindings pre-established by an authenticated application command, plus a
+  repeated composed proof with absent/mismatched binding negatives.
 - Two independently built source archives matched SHA-256
   `1d38a09d7b198debe0818b2cd7e1c2b113582fe9e6449ef5d18f876c4be470af`
   and contained 55 files.

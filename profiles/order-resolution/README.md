@@ -55,8 +55,11 @@ The generated `hosted-agent` package is a separate Foundry Responses entry
 point. It hosts a fresh native MAF workflow per request, uses the public
 Foundry hosting checkpoint provider, and never attaches the API's local
 `FileCheckpointStorage`. `HttpHostedBusinessStore` calls the protected API with
-the hosted platform identity for caller/conversation authorization and the
-narrow `HostedBusinessStore` lifecycle: stable opaque hosted request
+the hosted platform identity to verify a caller/conversation binding that an
+authenticated application command already established. The hosted identity and
+opaque Foundry caller fields cannot create owner/reviewer authority. Missing or
+mismatched owner/reviewer bindings fail before any business read or write. The
+narrow `HostedBusinessStore` lifecycle provides stable opaque hosted request
 correlation, hosted decision claim, idempotent action, and business completion.
 Foundry still owns native checkpoint state; the HTTP contract carries no
 checkpoint bytes or fabricated local checkpoint IDs. The copied

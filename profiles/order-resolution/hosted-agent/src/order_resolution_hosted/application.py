@@ -55,18 +55,14 @@ class CallerContext:
 class HostedIdentityBindings(Protocol):
     """Application-owned bridge from opaque Foundry identity to API authority."""
 
-    def resolve_principal(self, caller: CallerContext) -> Any:
-        """Resolve a current application principal without trusting client input."""
-        ...
-
-    def bind_start(
+    def resolve_start_principal(
         self,
         *,
         case_id: UUID,
         caller: CallerContext,
         conversation_id: str,
     ) -> Any:
-        """Bind the owner and return its authoritative application principal when available."""
+        """Verify a pre-established owner binding and return its principal."""
         ...
 
     def authorize_resume(
@@ -77,7 +73,7 @@ class HostedIdentityBindings(Protocol):
         conversation_id: str,
         channel: str,
     ) -> Any:
-        """Bind the reviewer and return its authoritative principal when available."""
+        """Verify a pre-established reviewer binding and return its principal."""
         ...
 
 
@@ -183,6 +179,14 @@ def _bound_store(
     return store
 
 
+def _require_application_principal(value: Any) -> Any:
+    from app.domain.models import Principal
+
+    if not isinstance(value, Principal):
+        raise TypeError("The hosted identity resolver must return an application Principal.")
+    return value
+
+
 def _validate_hosted_decision(record: Any, command: Any, principal: Any) -> None:
     decision = getattr(command.decision, "value", command.decision)
     observed_decision = getattr(
@@ -253,13 +257,13 @@ class GeneratedOrderResolutionApplication:
         conversation_id: str,
         case_id: UUID,
     ) -> dict[str, str]:
-        principal = self._identity_bindings.bind_start(
-            case_id=case_id,
-            caller=caller,
-            conversation_id=conversation_id,
+        principal = _require_application_principal(
+            self._identity_bindings.resolve_start_principal(
+                case_id=case_id,
+                caller=caller,
+                conversation_id=conversation_id,
+            )
         )
-        if principal is None:
-            principal = self._identity_bindings.resolve_principal(caller)
         store = _bound_store(self._store, caller, conversation_id, "owner")
         case = store.get(case_id)
         self._policy.authorize_read(principal, case)
@@ -296,7 +300,6 @@ class GeneratedOrderResolutionApplication:
         request_id: str,
         value: Any,
     ) -> Any:
-        from app.domain.models import Principal
         from app.order_resolution.durability import (
             Actor,
             Decision,
@@ -319,16 +322,14 @@ class GeneratedOrderResolutionApplication:
         if response.conversation_id != conversation_id or response.session_id != caller.session_id:
             raise PermissionError("The workflow resume binding does not match this conversation.")
 
-        principal = self._identity_bindings.authorize_resume(
-            case_id=response.case_id,
-            caller=caller,
-            conversation_id=conversation_id,
-            channel=response.channel,
+        principal = _require_application_principal(
+            self._identity_bindings.authorize_resume(
+                case_id=response.case_id,
+                caller=caller,
+                conversation_id=conversation_id,
+                channel=response.channel,
+            )
         )
-        if principal is None:
-            principal = self._identity_bindings.resolve_principal(caller)
-        if not isinstance(principal, Principal):
-            raise TypeError("The hosted identity resolver must return an application Principal.")
         store = _bound_store(self._store, caller, conversation_id, "reviewer")
         case = store.get(response.case_id)
         self._policy.authorize_decision(principal, case)

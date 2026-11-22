@@ -84,14 +84,21 @@ class FakeBindings:
         self.started = []
         self.resumed = []
 
-    def resolve_principal(self, caller):
-        return self.principal
-
-    def bind_start(self, **binding):
+    def resolve_start_principal(self, **binding):
         self.started.append(binding)
+        return self.principal
 
     def authorize_resume(self, **binding):
         self.resumed.append(binding)
+        return self.principal
+
+
+class RejectingBindings:
+    def resolve_start_principal(self, **_binding):
+        raise PermissionError("No pre-established owner binding exists.")
+
+    def authorize_resume(self, **_binding):
+        raise PermissionError("No pre-established reviewer binding exists.")
 
 
 class MismatchedDecisionStore(FakeStore):
@@ -189,6 +196,33 @@ class ApplicationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(value["request_id"], self.store.case.request_id)
         self.assertIsNone(self.store.case.checkpoint_id)
         self.assertEqual(self.bindings.started[0]["caller"], self.caller)
+
+    def test_missing_preestablished_api_binding_rejects_start_and_resume(self):
+        application = GeneratedOrderResolutionApplication(
+            store=self.store,
+            action=object(),
+            policy=CaseAccessPolicy(),
+            identity_bindings=RejectingBindings(),
+            workflow_factory=lambda *_args: object(),
+        )
+        with self.assertRaisesRegex(PermissionError, "pre-established owner"):
+            application.authorize_start(
+                CallerContext("wrong-user", "wrong-session", "start-call"),
+                "wrong-conversation",
+                self.case_id,
+            )
+        with self.assertRaisesRegex(PermissionError, "pre-established reviewer"):
+            application.authorize_resume(
+                CallerContext("wrong-user", "wrong-session", "resume-call"),
+                "wrong-conversation",
+                "request-1",
+                self.decision(
+                    conversation_id="wrong-conversation",
+                    session_id="wrong-session",
+                ),
+            )
+        self.assertEqual(self.store.prepared, [])
+        self.assertEqual(self.store.decisions, [])
 
     def test_structured_resume_records_authoritative_decision(self):
         started = self.application.authorize_start(

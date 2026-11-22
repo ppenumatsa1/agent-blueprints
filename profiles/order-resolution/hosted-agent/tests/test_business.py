@@ -156,7 +156,7 @@ class BusinessStoreTests(unittest.TestCase):
 
     def test_https_wire_uses_managed_identity_and_bound_flat_contract(self):
         store = self.store()
-        owner = store.bind_start(
+        owner = store.resolve_start_principal(
             case_id=self.case_id,
             caller=self.caller,
             conversation_id="conversation",
@@ -223,6 +223,52 @@ class BusinessStoreTests(unittest.TestCase):
             [payload["principal_kind"] for payload in read_payloads],
             ["owner", "owner"],
         )
+
+    def test_missing_preestablished_binding_fails_without_follow_on_business_calls(self):
+        calls = []
+
+        def missing(*args, **kwargs):
+            calls.append((args, kwargs))
+            return Response(404, {"detail": "binding not found"})
+
+        store = self.store(missing)
+        with self.assertRaises(httpx.HTTPStatusError):
+            store.resolve_start_principal(
+                case_id=self.case_id,
+                caller=self.caller,
+                conversation_id="conversation",
+            )
+        with self.assertRaises(httpx.HTTPStatusError):
+            store.authorize_resume(
+                case_id=self.case_id,
+                caller=self.caller,
+                conversation_id="conversation",
+                channel="foundry-responses",
+            )
+        self.assertEqual(len(calls), 2)
+
+    def test_wrong_preestablished_binding_fails_closed(self):
+        calls = []
+
+        def mismatch(*args, **kwargs):
+            calls.append((args, kwargs))
+            payload = kwargs["json"]
+            if (
+                payload["caller_id"] != self.caller.user_id
+                or payload["session_id"] != self.caller.session_id
+                or payload["conversation_id"] != "conversation"
+            ):
+                return Response(403, {"detail": "binding mismatch"})
+            raise AssertionError("The test must use a mismatched binding.")
+
+        store = self.store(mismatch)
+        with self.assertRaises(httpx.HTTPStatusError):
+            store.resolve_start_principal(
+                case_id=self.case_id,
+                caller=CallerContext("wrong-user", "wrong-session", "wrong-call"),
+                conversation_id="wrong-conversation",
+            )
+        self.assertEqual(len(calls), 1)
 
     def test_lost_write_acknowledgment_is_not_replayed(self):
         calls = []
