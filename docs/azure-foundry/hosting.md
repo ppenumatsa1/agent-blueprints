@@ -50,16 +50,23 @@ the workflow continues. Client/model-supplied identity is never treated as
 authority.
 
 AgentServer's `scope.user_id` is an opaque platform-resolved identity. It is not
-assumed to equal an Entra object ID or the API subject. Agents B-D must provide
-`ORDER_RESOLUTION_HOSTED_IDENTITY_BINDINGS=module:function`, returning an
-implementation of `HostedIdentityBindings`:
+assumed to equal an Entra object ID or the API subject. The hosted container
+uses `HttpHostedBusinessStore` for both `HostedIdentityBindings` and
+`HostedBusinessStore`. It calls only the authenticated internal API base in
+`ORDER_RESOLUTION_API_ENDPOINT`, with a `DefaultAzureCredential` token for
+`ORDER_RESOLUTION_API_SCOPE`.
+
+The frozen generated API base is `/api/internal/hosted/v1`. The deployment
+therefore sets `ORDER_RESOLUTION_API_ENDPOINT` to the API origin plus that
+prefix, requests the configured API application ID URI with `/.default`, and
+grants the hosted version identity only the dedicated
+`Hosted.Workflow.Invoke` application role.
 
 ```python
 class HostedIdentityBindings(Protocol):
-    def resolve_principal(self, caller: CallerContext) -> Principal: ...
     def bind_start(
         self, *, case_id: UUID, caller: CallerContext, conversation_id: str
-    ) -> None: ...
+    ) -> Principal: ...
     def authorize_resume(
         self,
         *,
@@ -67,16 +74,19 @@ class HostedIdentityBindings(Protocol):
         caller: CallerContext,
         conversation_id: str,
         channel: str,
-    ) -> None: ...
+    ) -> Principal: ...
 ```
 
-That adapter must persist and check the authoritative mapping from Foundry
-`user_id`, `session_id` and conversation to the authenticated application
-principal and case. A different channel or unchecked client session ID must
-fail closed.
+The opaque Foundry caller fields cannot independently establish an application
+principal. The start binding resolves the case owner from authoritative
+application state and returns that principal; the resume binding resolves and
+returns the reviewer. The API persists and checks the authoritative mapping
+from Foundry `user_id`, session and conversation to that principal and case. A
+different caller, session, conversation, channel, or unchecked client ID fails
+closed.
 
-The generated PostgreSQL store must also implement the exported
-`HostedBusinessStore` seam:
+The API implements the exported `HostedBusinessStore` seam against its
+application-owned PostgreSQL state:
 
 ```python
 class HostedBusinessStore(Protocol):
@@ -95,6 +105,29 @@ the business projection complete only after the native executor applies the
 approved/rejected or automatic result. These methods may correlate the opaque
 request ID, but must not store Foundry checkpoint bytes or fabricate a local
 filesystem checkpoint ID.
+
+The HTTP adapter uses the case-bound routes
+`POST /cases/{id}/bindings/start`, `/bindings/resume`, `/read`,
+`/proposal/read`, `/approvals/prepare`, `/decisions/claim`,
+`/effects/apply`, and `/finish`. Each request carries flat caller, session,
+conversation, channel, and principal-kind fields as applicable. The decision
+route receives the original native handle and resolves the authoritative actor
+API-side; the hosted process does not manufacture an actor identity. Every
+state-changing call carries a stable `Idempotency-Key`; lost or malformed
+acknowledgments become ambiguous and are not replayed automatically. Case
+responses omit checkpoint fields; the adapter constructs only local `None`
+placeholders required by the existing domain model and sends no checkpoint
+bytes.
+
+Public hosted-agent egress has no isolation or stable source-IP guarantee.
+Therefore the hosted container receives no database URL, PostgreSQL
+credential, TLS root, or database identity setting and never opens PostgreSQL.
+The protected API endpoint remains responsible for authorization, network
+access, migrations, and database pooling.
+The source requirements retain pinned `psycopg[binary]==3.3.9` only because
+the shared generated `app.domain.models` module imports `psycopg.Connection`
+at module load. Package presence is not a hosted database path and supplies no
+DSN, credential, network access, pool, or connection attempt.
 
 ## Responses client and lost acknowledgments
 
@@ -133,7 +166,7 @@ generated `backend/app` source. The source contract uses:
 - entry point `python main.py`;
 - remote dependency resolution;
 - Responses protocol `2.0.0`;
-- injected `AZURE_AI_MODEL_DEPLOYMENT_NAME`.
+- the explicit runtime allowlist documented below.
 
 The model deployment name is required configuration and is not hard-coded.
 The reported East US 2 catalog examples (`gpt-4.1-mini` `2025-04-14` and
@@ -152,8 +185,19 @@ ID, target agent name, source archive digest, CPU/memory, Python runtime, entry
 point, dependency resolution, protocol/version list, model deployment, and
 host environment inputs. Reusing an operation journal for any different target
 or configuration fails closed before an SDK create. Publishing requires
-`FOUNDRY_PROJECT_ENDPOINT`, `FOUNDRY_PROJECT_ID`, and
-`AZURE_AI_MODEL_DEPLOYMENT_NAME`.
+`FOUNDRY_PROJECT_ID` plus an explicit hosted runtime allowlist:
+
+- `FOUNDRY_PROJECT_ENDPOINT`;
+- `AZURE_AI_MODEL_DEPLOYMENT_NAME`;
+- `ORDER_RESOLUTION_API_ENDPOINT`;
+- `ORDER_RESOLUTION_API_SCOPE`;
+- `ORDER_RESOLUTION_API_TIMEOUT_SECONDS`.
+
+The project endpoint in the runtime environment must match the publication
+target. Every allowlisted value is injected into the public
+`HostedAgentDefinition` and bound into the publication digest. Embedded
+database settings, non-HTTPS API endpoints, invalid API scopes, undeclared
+runtime variables, and invalid timeout values fail before create.
 
 The file journal uses an OS-level lock and a unique owner token. Only the
 process that atomically creates a new `pending` claim may call the SDK. A
@@ -161,6 +205,21 @@ preexisting pending record becomes `unknown` and is not resent; a concurrent
 original owner may still record its one authoritative result. The helper
 packages or publishes only; it does not provision infrastructure or change
 RBAC.
+
+After an acknowledged create, the CLI safely polls the public
+`agents.get_version(agent_name, agent_version)` GET until the platform-created
+identity is available. The first phase returns the identity even when the
+version is still creating, so the infrastructure workstream can grant
+the hosted identity access to the protected API before any invocation.
+Rerunning the identical operation with `--require-active` performs no create and
+polls the same version until it is active. The JSON record includes the agent
+version, data-plane version ID, agent GUID, provisioning status, identity
+principal (object) ID, and identity client ID as `agent_version`,
+`agent_version_id`, `agent_guid`, `provisioning_status`,
+`identity_principal_id`, and `identity_client_id`. A polling timeout leaves the
+create acknowledged in the journal; rerunning the same operation may safely
+retry discovery/readiness. The SDK does not expose a documented ARM resource
+ID for the hosted version, so callers must not invent one.
 
 ## Compatibility matrix
 
@@ -170,9 +229,11 @@ RBAC.
 | Standard hosted checkpoint provider | Verified locally | Public `CheckpointStoreProvider(allowed_checkpoint_types=...)`; no custom provider or local file storage in hosted composition |
 | Responses protocol `2.0.0` manifest | Verified locally | Deterministic publisher contract and SDK model construction test |
 | Structured native approval resume | Verified locally | Generated package tests validate stable hosted request identity, decision recording, business completion without a local checkpoint ID, and exact caller/session/conversation/channel binding |
-| Application-owned hosted business seam | Interface and native composition verified locally | Agent A tests the exported `HostedBusinessStore` contract with no checkpoint ID; Workstream C supplies and PostgreSQL-tests the implementation before integration |
-| Managed-identity token acquisition | Verified locally | Mock credential verifies `https://ai.azure.com/.default` and Authorization header |
+| Application-owned hosted business seam | Verified composed locally | Agent A's adapter and Workstream C `60fd83fc05acc290aab3ed96f8f8c255e493d28d` passed the real-PostgreSQL business lifecycle with one decision/action and null checkpoint fields |
+| Protected API business port | Verified composed locally; live authorization unverified | Exact C revision `60fd83fc05acc290aab3ed96f8f8c255e493d28d` passed bind/read/prepare/decision/effect/finish over loopback HTTP with stable idempotency and restart reconciliation |
+| Managed-identity token acquisition | Verified locally | Mock credentials verify `https://ai.azure.com/.default`, the dedicated internal API `api://.../.default` scope, and Authorization headers |
 | Source-code publishing API | Verified locally | Public signature/model test and no-retry mocked publish test |
+| Hosted version identity query | SDK surface verified; live identity unverified | Public `get_version` returns `AgentVersionDetails.instance_identity.principal_id/client_id`, `id`, `agent_guid`, and provisioning status |
 | Exact dependency compatibility | Verified locally | Pinned environment imports and SDK-drift assertions |
 | Hosted per-user/session checkpoint isolation | Documented, not live verified | Platform behavior is relied on only after application mapping; no Azure deployment was performed |
 | Live MI/RBAC access and secret delivery | Unverified | Requires authorized deployed identities and least-privilege role validation |
@@ -186,17 +247,23 @@ RBAC.
 
 ## Local validation evidence
 
-- 23 generated hosted-runtime tests passed.
-- 14 publisher/generator tests passed, including restart/concurrent publish
+- 30 generated hosted-runtime tests passed.
+- 16 publisher/generator tests passed, including restart/concurrent publish
   exclusion and complete publication identity conflicts.
-- Generated Ruff check and format check passed across 76 Python files.
+- Generated Ruff check and format check passed across 88 Python files.
 - 39 focused generated backend tests passed on PostgreSQL 17.
 - ORS-001 through ORS-009 passed without skips on PostgreSQL 17.
 - The repository contract suite passed 68 tests with the two documented
   adapter-selection skips.
+- Exact Workstream C revision
+  `60fd83fc05acc290aab3ed96f8f8c255e493d28d` passed the composed PostgreSQL 17
+  protected-API and native `/conversations` plus `/responses` wire proof in
+  6.273 seconds. The proof used A's exact `OperationClaim(record, acquired)`
+  types, repeated acknowledged creates with zero replay, one decision/action,
+  and null business checkpoint fields.
 - Two independently built source archives matched SHA-256
-  `128b7206d04007a979fc0e57abb18770b742e6de473ddaa97262407e560a38e6`
-  and contained 54 files.
+  `1d38a09d7b198debe0818b2cd7e1c2b113582fe9e6449ef5d18f876c4be470af`
+  and contained 55 files.
 
 ## Pinned SDKs
 
@@ -223,6 +290,7 @@ private `_platform_headers` mutation is rejected.
 - [Foundry agent runtime components](https://learn.microsoft.com/en-us/azure/ai-foundry/agents/concepts/runtime-components?view=foundry)
 - [Azure AI Projects Python API reference](https://learn.microsoft.com/en-us/python/api/azure-ai-projects/azure.ai.projects.aiprojectclient?view=azure-python)
 - [Azure Identity `DefaultAzureCredential`](https://learn.microsoft.com/en-us/python/api/azure-identity/azure.identity.defaultazurecredential?view=azure-python)
+- [Foundry agent networking options](https://learn.microsoft.com/azure/foundry/agents/concepts/networking-options)
 
 The requested `ppenumatsa1/maf-monorepo` reference commit
 `45430753c5f3e75716ea3822d2b52fbb4f1c34` was unavailable. The inspected local

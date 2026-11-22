@@ -43,18 +43,33 @@ evidence, and trusted producer provenance remain unverified.
 The generated `hosted-agent` package is a separate Foundry Responses entry
 point. It hosts a fresh native MAF workflow per request, uses the public
 Foundry hosting checkpoint provider, and never attaches the API's local
-`FileCheckpointStorage`. The authenticated API/integration layer must supply
-the documented caller and conversation binding adapter before the hosted
-entry point starts. The application-owned PostgreSQL store supplies the narrow
-`HostedBusinessStore` lifecycle: stable opaque hosted request correlation,
-hosted decision claim, and business completion. Foundry still owns native
-checkpoint state; the database does not store or fabricate hosted checkpoint
-IDs. The copied
+`FileCheckpointStorage`. `HttpHostedBusinessStore` calls the protected API with
+the hosted platform identity for caller/conversation authorization and the
+narrow `HostedBusinessStore` lifecycle: stable opaque hosted request
+correlation, hosted decision claim, idempotent action, and business completion.
+Foundry still owns native checkpoint state; the HTTP contract carries no
+checkpoint bytes or fabricated local checkpoint IDs. The copied
 `scripts/foundry/publish_order_resolution_hosted.py` packages the generated
 backend and hosted package for source-code deployment; it does not provision
 resources or assign RBAC. Publishing requires an explicit Foundry project
-endpoint and resource ID. Its journal identity binds that target, agent name,
-archive, runtime, protocol, entry point, model deployment, and hosted
+endpoint and resource ID plus the model deployment and protected internal API
+endpoint, app scope, and timeout. The publisher injects only that allowlist;
+the hosted container receives no database URL, PostgreSQL credential, TLS
+root, or database identity setting.
+The endpoint includes the frozen `/api/internal/hosted/v1` prefix, the scope is
+the configured API application ID URI plus `/.default`, and the hosted version
+identity receives only the `Hosted.Workflow.Invoke` application role.
+The hosted requirements retain pinned `psycopg` only for the shared domain
+model's runtime type import; hosted execution receives no DSN and opens no
+database connection.
+Its journal identity binds the target, agent name, archive, runtime, protocol,
+entry point, model deployment, API target/scope/timeout, and hosted
 configuration; a different reuse fails before create. Responses journals must
 atomically distinguish a newly acquired claim from an existing pending record,
-which is never replayed after restart or concurrency.
+which is never replayed after restart or concurrency. After create, the
+publisher uses the public version GET to return the hosted identity principal
+and client IDs plus agent version identity before active readiness. External
+authorization must grant that hosted identity only the protected API access it
+needs, then rerun the same operation with `--require-active` without creating
+another version. The API remains the sole PostgreSQL owner and performs the
+idempotent prepare/decision/action/completion operations.

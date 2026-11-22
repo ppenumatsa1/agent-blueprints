@@ -2,11 +2,12 @@ import hashlib
 import unittest
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
+from unittest.mock import patch
 from uuid import uuid4
 
 from app.domain.models import Case, Principal
 from app.domain.policy import CaseAccessPolicy
-from app.order_resolution.durability import Proposal
+from app.order_resolution.durability import DecisionRecord, Proposal
 from app.order_resolution.workflow import (
     OrderResolutionDecision,
     build_order_resolution_workflow,
@@ -14,6 +15,7 @@ from app.order_resolution.workflow import (
 from order_resolution_hosted.application import (
     CallerContext,
     GeneratedOrderResolutionApplication,
+    build_generated_application,
 )
 
 
@@ -90,6 +92,25 @@ class FakeBindings:
 
     def authorize_resume(self, **binding):
         self.resumed.append(binding)
+
+
+class MismatchedDecisionStore(FakeStore):
+    def for_binding(self, _caller, _conversation_id, _principal_kind):
+        return self
+
+    def record_hosted_decision(self, command):
+        return DecisionRecord(
+            case_id=command.case_id,
+            proposal_version=command.proposal_version,
+            action=command.action,
+            destination_id=command.destination_id,
+            decision=command.decision,
+            actor_id="different-actor",
+            tenant_id="tenant",
+            scope=command.scope,
+            channel=command.channel,
+            decided_at=datetime.now(timezone.utc),
+        )
 
 
 class ApplicationTests(unittest.IsolatedAsyncioTestCase):
@@ -186,6 +207,28 @@ class ApplicationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.store.decisions[0].channel, "foundry-responses")
         self.assertEqual(self.bindings.resumed[0]["conversation_id"], "conversation-1")
 
+    def test_resume_rejects_mismatched_api_decision_acknowledgment(self):
+        store = MismatchedDecisionStore(self.case, self.proposal)
+        application = GeneratedOrderResolutionApplication(
+            store=store,
+            action=object(),
+            policy=CaseAccessPolicy(),
+            identity_bindings=self.bindings,
+            workflow_factory=lambda *_args: object(),
+        )
+        started = application.authorize_start(
+            self.caller,
+            "conversation-1",
+            self.case_id,
+        )
+        with self.assertRaisesRegex(RuntimeError, "not authoritative"):
+            application.authorize_resume(
+                self.caller,
+                "conversation-1",
+                started["request_id"],
+                self.decision(handle=started["request_id"]),
+            )
+
     def test_repeated_start_reuses_business_pending_request(self):
         first = self.application.authorize_start(
             self.caller,
@@ -206,6 +249,30 @@ class ApplicationTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(second, first)
         self.assertEqual(len(self.store.prepared), 1)
+
+    def test_generated_factory_uses_http_business_port(self):
+        with patch(
+            "order_resolution_hosted.business.HttpHostedBusinessStore.from_environment",
+            return_value=self.store,
+        ) as from_environment:
+            application = build_generated_application()
+        from_environment.assert_called_once_with()
+        self.assertIs(application._store, self.store)
+        self.assertIs(application._identity_bindings, self.store)
+
+    def test_generated_factory_opens_no_postgresql_connection(self):
+        environment = {
+            "ORDER_RESOLUTION_API_ENDPOINT": ("https://api.example.test/api/internal/hosted/v1"),
+            "ORDER_RESOLUTION_API_SCOPE": "api://order-resolution-api/.default",
+            "ORDER_RESOLUTION_API_TIMEOUT_SECONDS": "30",
+        }
+        with (
+            patch.dict("os.environ", environment),
+            patch("psycopg.connect") as connect,
+        ):
+            application = build_generated_application()
+        connect.assert_not_called()
+        self.assertEqual(type(application._store).__name__, "HttpHostedBusinessStore")
 
     async def test_native_hosted_workflow_finishes_business_state_without_checkpoint_id(self):
         application = GeneratedOrderResolutionApplication(
