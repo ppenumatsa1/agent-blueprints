@@ -270,8 +270,6 @@ class InfrastructureContractTests(unittest.TestCase):
             "eed3b665-ab3a-47b6-8f48-c9382fb1dad6",
             scripts["deploy.ps1"],
         )
-        self.assertIn("HostedDatabaseRoleName", scripts["deploy.ps1"])
-        self.assertIn("HostedPostgresEgressIpv4", scripts["deploy.ps1"])
         self.assertIn("publishRecord.identity_principal_id", scripts["deploy.ps1"])
         self.assertIn("publishRecord.identity_client_id", scripts["deploy.ps1"])
         self.assertIn("publishRecord.provisioning_status", scripts["deploy.ps1"])
@@ -284,8 +282,22 @@ class InfrastructureContractTests(unittest.TestCase):
             'environment.get("DATABASE_AUTH_MODE") != "managed-identity"',
             scripts["health-check.py"],
         )
-        self.assertIn("hosted-agent-", scripts["configure-postgres.ps1"])
         self.assertIn("Assert-PublicIpv4 -Address $address", scripts["configure-postgres.ps1"])
+        self.assertNotIn("hosted-agent-", scripts["configure-postgres.ps1"])
+        self.assertNotIn("AdditionalPrincipal", scripts["configure-postgres.ps1"])
+        self.assertEqual(
+            scripts["configure-postgres.ps1"].count(
+                "pgaadauth_create_principal_with_oid"
+            ),
+            1,
+        )
+        self.assertNotIn("AZURE_HOSTED_DATABASE_URL", scripts["deploy.ps1"])
+        self.assertIn("Hosted.Workflow.Invoke", scripts["configure-entra.ps1"])
+        self.assertIn("appRoleAssignments", scripts["configure-entra.ps1"])
+        self.assertIn(
+            "API bootstrap service principal must not hold the hosted-service role.",
+            scripts["configure-entra.ps1"],
+        )
         self.assertIn("sslrootcert=system", combined)
         self.assertIn("PostgreSQL client 17 or later", scripts["common.ps1"])
         self.assertIn(
@@ -318,17 +330,53 @@ class InfrastructureContractTests(unittest.TestCase):
         )
         self.assertIn("--require-active", deploy)
         pending_publish = deploy.index("-Record (Invoke-HostedPublisher)")
+        bootstrap_api = deploy.index("Generated API bootstrap deployment failed.")
+        bootstrap_identity = deploy.index(
+            "HOSTED_SERVICE_PRINCIPAL_ID=$($entra.apiServicePrincipalObjectId)"
+        )
         hosted_grant = deploy.index(
-            "-AdditionalPrincipalObjectId $pendingPublishRecord.identity_principal_id"
+            "-HostedServicePrincipalObjectId $pendingPublishRecord.identity_principal_id"
         )
         active_publish = deploy.index(
             "-Record (Invoke-HostedPublisher -RequireActive)"
         )
+        self.assertLess(bootstrap_api, pending_publish)
+        self.assertLess(bootstrap_identity, pending_publish)
         self.assertLess(pending_publish, hosted_grant)
         self.assertLess(hosted_grant, active_publish)
         self.assertIn("-ExpectedIdentity $pendingPublishRecord", deploy)
         self.assertEqual(deploy.count("'--publish'"), 1)
         self.assertEqual(deploy.count("function Invoke-HostedPublisher"), 1)
+        publisher_environment = deploy[
+            deploy.index("$env:FOUNDRY_PROJECT_ENDPOINT"):pending_publish
+        ]
+        self.assertIn("ORDER_RESOLUTION_API_ENDPOINT", publisher_environment)
+        self.assertIn("ORDER_RESOLUTION_API_SCOPE", publisher_environment)
+        self.assertNotIn("$env:DATABASE_URL =", publisher_environment)
+        self.assertNotIn("$env:DATABASE_AUTH_MODE =", publisher_environment)
+        self.assertNotIn("$env:PGSSLROOTCERT =", publisher_environment)
+        self.assertIn("StartsWith('DATABASE_')", deploy)
+        self.assertIn("/api/internal/hosted/v1", deploy)
+        self.assertIn("HOSTED_SERVICE_APP_ROLE=Hosted.Workflow.Invoke", deploy)
+        self.assertIn(
+            "backend\\app\\api\\routes\\hosted_service.py",
+            (ROOT / "scripts" / "azure" / "common.ps1").read_text(
+                encoding="utf-8"
+            ),
+        )
+        self.assertIn("/api/internal/hosted/v1", deploy)
+        self.assertIn("HOSTED_SERVICE_PRINCIPAL_ID", deploy)
+        self.assertIn("Suffix = '/responses'", deploy)
+        self.assertIn("Suffix = '/conversations'", deploy)
+        self.assertIn(
+            "HostedWorkflowEndpoint and HostedResponsesEndpoint must identify",
+            deploy,
+        )
+        self.assertNotIn("WORKFLOW_HOST=local", deploy)
+        self.assertNotIn("CHECKPOINT_ROOT", deploy)
+        self.assertNotIn("bootstrap.invalid", deploy)
+        self.assertIn("MIGRATION_DATABASE_PASSWORD_REFERENCE", deploy)
+        self.assertNotIn("$values['MIGRATION_DATABASE_PASSWORD']", deploy)
 
     def test_parameter_binding_contains_only_nonsecret_required_inputs(self):
         binding = json.loads((INFRA / "main.parameters.json").read_text(encoding="utf-8"))

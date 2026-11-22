@@ -29,10 +29,6 @@ param(
     [Parameter(Mandatory)]
     [string]$HostedAgentRbacScope,
     [Parameter(Mandatory)]
-    [string]$HostedDatabaseRoleName,
-    [Parameter(Mandatory)]
-    [string[]]$HostedPostgresEgressIpv4,
-    [Parameter(Mandatory)]
     [string]$HostedPublishOperationId,
     [Parameter(Mandatory)]
     [string]$HostedPublishJournal,
@@ -57,21 +53,40 @@ if (-not $SubscriptionId -or -not $TenantId -or -not $ExpectedUser) {
 }
 
 foreach ($endpoint in @{
-    HostedWorkflowEndpoint = $HostedWorkflowEndpoint
-    HostedResponsesEndpoint = $HostedResponsesEndpoint
-    HostedConversationEndpoint = $HostedConversationEndpoint
+    HostedWorkflowEndpoint = @{
+        Value = $HostedWorkflowEndpoint
+        Suffix = '/responses'
+    }
+    HostedResponsesEndpoint = @{
+        Value = $HostedResponsesEndpoint
+        Suffix = '/responses'
+    }
+    HostedConversationEndpoint = @{
+        Value = $HostedConversationEndpoint
+        Suffix = '/conversations'
+    }
 }.GetEnumerator()) {
     $hostedUri = $null
     if (
         -not [uri]::TryCreate(
-            $endpoint.Value,
+            $endpoint.Value.Value,
             [System.UriKind]::Absolute,
             [ref]$hostedUri
         ) -or
-        $hostedUri.Scheme -cne 'https'
+        $hostedUri.Scheme -cne 'https' -or
+        $hostedUri.UserInfo -or
+        $hostedUri.Fragment -or
+        -not $hostedUri.AbsolutePath.TrimEnd('/').EndsWith(
+            $endpoint.Value.Suffix,
+            [System.StringComparison]::Ordinal
+        ) -or
+        $hostedUri.Query -cnotmatch '^\?api-version=[A-Za-z0-9._~-]+$'
     ) {
-        throw "$($endpoint.Key) must be an absolute HTTPS URL."
+        throw "$($endpoint.Key) must be an explicit Foundry HTTPS $($endpoint.Value.Suffix) endpoint with one api-version."
     }
+}
+if ($HostedWorkflowEndpoint -cne $HostedResponsesEndpoint) {
+    throw 'HostedWorkflowEndpoint and HostedResponsesEndpoint must identify the same Responses endpoint.'
 }
 if (
     -not $HostedAgentRbacScope.StartsWith(
@@ -81,16 +96,6 @@ if (
 ) {
     throw 'HostedAgentRbacScope must be a documented full Azure RBAC scope.'
 }
-if ($HostedDatabaseRoleName -notmatch '^[A-Za-z0-9._-]+$') {
-    throw 'HostedDatabaseRoleName contains unsupported characters.'
-}
-if ($HostedPostgresEgressIpv4.Count -eq 0) {
-    throw 'At least one reviewed hosted runtime PostgreSQL egress IPv4 address is required.'
-}
-foreach ($address in $HostedPostgresEgressIpv4) {
-    Assert-PublicIpv4 -Address $address
-}
-
 $root = (Resolve-Path "$PSScriptRoot\..\..").Path
 $temporaryRoot = Join-Path ([System.IO.Path]::GetTempPath()) (
     "agent-blueprints-order-resolution-{0}" -f [guid]::NewGuid().ToString('N')
@@ -114,6 +119,19 @@ try {
         Pop-Location
     }
     $generatedRoot = Assert-GeneratedOrderResolutionProject -ProjectRoot $generatedRoot
+    $generatedApiApp = Get-Content `
+        -LiteralPath (Join-Path $generatedRoot 'backend\app\api\app.py') `
+        -Raw
+    $generatedApiConfig = Get-Content `
+        -LiteralPath (Join-Path $generatedRoot 'backend\app\config.py') `
+        -Raw
+    if (
+        $generatedApiApp -notmatch [regex]::Escape('/api/internal/hosted/v1') -or
+        $generatedApiConfig -notmatch '\bHOSTED_SERVICE_PRINCIPAL_ID\b' -or
+        $generatedApiConfig -notmatch '\bHOSTED_SERVICE_APP_ROLE\b'
+    ) {
+        throw 'Generated API does not expose the frozen hosted-service identity contract.'
+    }
     $nginxPath = Join-Path $generatedRoot 'frontend\nginx.conf'
     $nginxSource = Get-Content -LiteralPath $nginxPath -Raw
     if ($nginxSource -notmatch [regex]::Escape('proxy_pass http://api:8000;')) {
@@ -204,6 +222,10 @@ try {
     $values['AZURE_LOCATION'] = $Location
     $values['AZURE_ENV_NAME'] = $EnvironmentName
     $values['HOSTED_WORKFLOW_ENDPOINT'] = $HostedWorkflowEndpoint
+    $values['AZURE_API_ENTRA_SERVICE_PRINCIPAL_ID'] =
+        $entra.apiServicePrincipalObjectId
+    $values['AZURE_HOSTED_API_APP_ROLE_ID'] = $entra.hostedServiceAppRoleId
+    $values['AZURE_HOSTED_API_APP_ROLE_VALUE'] = $entra.hostedServiceRoleValue
     $values['AZURE_POSTGRES_ADMIN_PRINCIPAL_NAME'] =
         $PostgresAdministratorPrincipalName
     $values | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $OutputsFile
@@ -221,21 +243,100 @@ try {
         -Apply `
         -DeploymentMode AzureCli `
         -ValuesFile $OutputsFile `
-        -HostedRuntimeOutboundIp $HostedPostgresEgressIpv4 `
         -OperatorIp $OperatorIp
     $databaseUser = [uri]::EscapeDataString(
         (Get-RequiredValue $values 'AZURE_API_IDENTITY_NAME')
     )
-    if ($HostedDatabaseRoleName -ceq (Get-RequiredValue $values 'AZURE_API_IDENTITY_NAME')) {
-        throw 'HostedDatabaseRoleName must differ from the API managed-identity role.'
-    }
     $databaseHost = Get-RequiredValue $values 'AZURE_POSTGRESQL_HOST'
     $databaseName = Get-RequiredValue $values 'AZURE_POSTGRESQL_DATABASE'
     $apiDatabaseUrl =
         "postgresql://${databaseUser}@${databaseHost}:5432/${databaseName}?sslmode=verify-full&sslrootcert=system"
-    $hostedDatabaseUser = [uri]::EscapeDataString($HostedDatabaseRoleName)
-    $hostedDatabaseUrl =
-        "postgresql://${hostedDatabaseUser}@${databaseHost}:5432/${databaseName}?sslmode=verify-full&sslrootcert=system"
+    $migrationDatabaseUser = [uri]::EscapeDataString(
+        $PostgresAdministratorPrincipalName
+    )
+    $migrationDatabaseUrl =
+        "postgresql://${migrationDatabaseUser}@${databaseHost}:5432/${databaseName}?sslmode=verify-full&sslrootcert=system"
+    if (-not $SkipMigration) {
+        & "$PSScriptRoot\migrate.ps1" `
+            -Apply `
+            -DeploymentMode AzureCli `
+            -ValuesFile $OutputsFile `
+            -GeneratedProjectRoot $generatedRoot `
+            -OperatorIp $OperatorIp
+    }
+
+    $acrName = Get-RequiredValue $values 'AZURE_CONTAINER_REGISTRY_NAME'
+    $registryEndpoint = Get-RequiredValue $values 'AZURE_CONTAINER_REGISTRY_ENDPOINT'
+    $imageTag = (git -C $root rev-parse --short=12 HEAD).Trim()
+    Push-Location (Join-Path $generatedRoot 'backend')
+    try {
+        az acr build `
+            --subscription $SubscriptionId `
+            --registry $acrName `
+            --image "order-resolution-api:$imageTag" `
+            --file Dockerfile `
+            . `
+            --only-show-errors
+        if ($LASTEXITCODE -ne 0) { throw 'Generated API image build failed.' }
+    }
+    finally {
+        Pop-Location
+    }
+    $apiDigest = az acr manifest show-metadata `
+        --registry $acrName `
+        --name "order-resolution-api:$imageTag" `
+        --query digest `
+        --output tsv `
+        --only-show-errors
+    if (-not $apiDigest) {
+        throw 'Unable to resolve the generated API immutable image digest.'
+    }
+    $apiImage = "$registryEndpoint/order-resolution-api@$apiDigest"
+    $resourceGroup = Get-RequiredValue $values 'AZURE_RESOURCE_GROUP'
+    $apiName = Get-RequiredValue $values 'AZURE_API_CONTAINER_APP_NAME'
+    $webName = Get-RequiredValue $values 'AZURE_WEB_CONTAINER_APP_NAME'
+    $apiFqdn = Get-RequiredValue $values 'AZURE_API_FQDN'
+    $apiEnvironment = @(
+        'WORKFLOW_HOST=hosted',
+        'HOSTED_WORKFLOW_SCOPE=https://ai.azure.com/.default',
+        "API_MANAGED_IDENTITY_CLIENT_ID=$(Get-RequiredValue $values 'AZURE_API_IDENTITY_CLIENT_ID')",
+        "DATABASE_URL=$apiDatabaseUrl",
+        'DATABASE_AUTH_MODE=managed-identity',
+        'DATABASE_TLS_MODE=verify-full',
+        "DATABASE_MANAGED_IDENTITY_CLIENT_ID=$(Get-RequiredValue $values 'AZURE_API_IDENTITY_CLIENT_ID')",
+        'PGSSLROOTCERT=system',
+        "CORS_ORIGINS=https://$(Get-RequiredValue $values 'AZURE_WEB_FQDN')"
+    )
+    $bootstrapApiEnvironment = @(
+        $apiEnvironment
+        "HOSTED_WORKFLOW_ENDPOINT=$HostedWorkflowEndpoint"
+        "HOSTED_CONVERSATION_ENDPOINT=$HostedConversationEndpoint"
+        "HOSTED_SERVICE_PRINCIPAL_ID=$($entra.apiServicePrincipalObjectId)"
+        'HOSTED_SERVICE_APP_ROLE=Hosted.Workflow.Invoke'
+    )
+    az containerapp update `
+        --subscription $SubscriptionId `
+        --resource-group $resourceGroup `
+        --name $apiName `
+        --image $apiImage `
+        --set-env-vars $bootstrapApiEnvironment `
+        --only-show-errors | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'Generated API bootstrap deployment failed.' }
+    try {
+        $bootstrapHealth = Invoke-WebRequest `
+            -Uri "https://$apiFqdn/healthz" `
+            -Method Get `
+            -TimeoutSec 30
+    }
+    catch {
+        throw 'Generated API bootstrap health check failed.'
+    }
+    if ($bootstrapHealth.StatusCode -notin @(200, 204)) {
+        throw "Generated API bootstrap health returned $($bootstrapHealth.StatusCode)."
+    }
+
+    $orderResolutionApiEndpoint = "https://$apiFqdn/api/internal/hosted/v1"
+    $orderResolutionApiScope = "$($entra.apiAppIdUri)/.default"
     $publisher = Join-Path $generatedRoot 'scripts\foundry\publish_order_resolution_hosted.py'
     $hostedRequirements = Join-Path $generatedRoot 'hosted-agent\requirements.txt'
     function Invoke-HostedPublisher {
@@ -302,17 +403,27 @@ try {
         return $Record
     }
 
-    $previousPublisherEnvironment = @{
-        FOUNDRY_PROJECT_ENDPOINT = $env:FOUNDRY_PROJECT_ENDPOINT
-        FOUNDRY_PROJECT_ID = $env:FOUNDRY_PROJECT_ID
-        AZURE_AI_MODEL_DEPLOYMENT_NAME = $env:AZURE_AI_MODEL_DEPLOYMENT_NAME
-        DATABASE_URL = $env:DATABASE_URL
-        DATABASE_AUTH_MODE = $env:DATABASE_AUTH_MODE
-        DATABASE_TLS_MODE = $env:DATABASE_TLS_MODE
-        PGSSLROOTCERT = $env:PGSSLROOTCERT
-        ORDER_RESOLUTION_HOSTED_IDENTITY_BINDINGS =
-            $env:ORDER_RESOLUTION_HOSTED_IDENTITY_BINDINGS
-        ORDER_RESOLUTION_OPERATION_JOURNAL = $env:ORDER_RESOLUTION_OPERATION_JOURNAL
+    $publisherEnvironmentNames = @(
+        'FOUNDRY_PROJECT_ENDPOINT'
+        'FOUNDRY_PROJECT_ID'
+        'AZURE_AI_MODEL_DEPLOYMENT_NAME'
+        'ORDER_RESOLUTION_API_ENDPOINT'
+        'ORDER_RESOLUTION_API_SCOPE'
+        'ORDER_RESOLUTION_API_TIMEOUT_SECONDS'
+        'DATABASE_URL'
+        'PGSSLROOTCERT'
+        'ORDER_RESOLUTION_HOSTED_IDENTITY_BINDINGS'
+        'ORDER_RESOLUTION_OPERATION_JOURNAL'
+        @(
+            Get-ChildItem Env: |
+                Where-Object { $_.Name.StartsWith('DATABASE_') } |
+                ForEach-Object Name
+        )
+    ) | Sort-Object -Unique
+    $previousPublisherEnvironment = @{}
+    foreach ($name in $publisherEnvironmentNames) {
+        $previousPublisherEnvironment[$name] = [Environment]::GetEnvironmentVariable($name)
+        Remove-Item -Path "Env:$name" -ErrorAction SilentlyContinue
     }
     $publishRecord = $null
     $agentAssignment = $null
@@ -321,14 +432,9 @@ try {
         $env:FOUNDRY_PROJECT_ID = Get-RequiredValue $values 'AZURE_AI_PROJECT_ID'
         $env:AZURE_AI_MODEL_DEPLOYMENT_NAME =
             Get-RequiredValue $values 'AZURE_AI_MODEL_DEPLOYMENT_NAME'
-        $env:DATABASE_URL = $hostedDatabaseUrl
-        $env:DATABASE_AUTH_MODE = 'managed-identity'
-        $env:DATABASE_TLS_MODE = 'verify-full'
-        $env:PGSSLROOTCERT = 'system'
-        $env:ORDER_RESOLUTION_HOSTED_IDENTITY_BINDINGS =
-            'app.order_resolution.hosted_bindings:build_hosted_identity_bindings'
-        $env:ORDER_RESOLUTION_OPERATION_JOURNAL =
-            'app.order_resolution.hosted_bindings:build_operation_journal'
+        $env:ORDER_RESOLUTION_API_ENDPOINT = $orderResolutionApiEndpoint
+        $env:ORDER_RESOLUTION_API_SCOPE = $orderResolutionApiScope
+        $env:ORDER_RESOLUTION_API_TIMEOUT_SECONDS = '30'
         $pendingPublishRecord = Assert-HostedPublishRecord `
             -Record (Invoke-HostedPublisher)
 
@@ -345,23 +451,16 @@ try {
         }
         $agentAssignment = $agentAssignmentJson | ConvertFrom-Json
 
-        & "$PSScriptRoot\configure-postgres.ps1" `
+        $hostedEntraJson = & "$PSScriptRoot\configure-entra.ps1" `
             -Apply `
             -DeploymentMode AzureCli `
-            -ValuesFile $OutputsFile `
-            -AdditionalPrincipalName $HostedDatabaseRoleName `
-            -AdditionalPrincipalObjectId $pendingPublishRecord.identity_principal_id `
-            -HostedRuntimeOutboundIp $HostedPostgresEgressIpv4 `
-            -OperatorIp $OperatorIp
-        if (-not $SkipMigration) {
-            & "$PSScriptRoot\migrate.ps1" `
-                -Apply `
-                -DeploymentMode AzureCli `
-                -ValuesFile $OutputsFile `
-                -GeneratedProjectRoot $generatedRoot `
-                -AdditionalRuntimePrincipalName $HostedDatabaseRoleName `
-                -OperatorIp $OperatorIp
-        }
+            -SubscriptionId $SubscriptionId `
+            -TenantId $TenantId `
+            -ExpectedUser $ExpectedUser `
+            -Location $Location `
+            -FrontendRedirectUri "https://$(Get-RequiredValue $values 'AZURE_WEB_FQDN')" `
+            -HostedServicePrincipalObjectId $pendingPublishRecord.identity_principal_id
+        $hostedEntra = $hostedEntraJson | ConvertFrom-Json
 
         $publishRecord = Assert-HostedPublishRecord `
             -Record (Invoke-HostedPublisher -RequireActive) `
@@ -378,25 +477,21 @@ try {
         }
     }
 
-    $acrName = Get-RequiredValue $values 'AZURE_CONTAINER_REGISTRY_NAME'
-    $registryEndpoint = Get-RequiredValue $values 'AZURE_CONTAINER_REGISTRY_ENDPOINT'
-    $imageTag = (git -C $root rev-parse --short=12 HEAD).Trim()
-    Push-Location (Join-Path $generatedRoot 'backend')
-    try {
-        az acr build `
-            --subscription $SubscriptionId `
-            --registry $acrName `
-            --image "order-resolution-api:$imageTag" `
-            --file Dockerfile `
-            . `
-            --only-show-errors
-        if ($LASTEXITCODE -ne 0) { throw 'Generated API image build failed.' }
-    }
-    finally {
-        Pop-Location
-    }
+    az containerapp update `
+        --subscription $SubscriptionId `
+        --resource-group $resourceGroup `
+        --name $apiName `
+        --image $apiImage `
+        --set-env-vars @(
+            $apiEnvironment
+            "HOSTED_WORKFLOW_ENDPOINT=$HostedWorkflowEndpoint"
+            "HOSTED_CONVERSATION_ENDPOINT=$HostedConversationEndpoint"
+            "HOSTED_SERVICE_PRINCIPAL_ID=$($publishRecord.identity_principal_id)"
+            "HOSTED_SERVICE_APP_ROLE=$($hostedEntra.hostedServiceRoleValue)"
+        ) `
+        --only-show-errors | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'Generated API final deployment failed.' }
 
-    $apiFqdn = Get-RequiredValue $values 'AZURE_API_FQDN'
     $patchedNginx = $nginxSource.Replace(
         'proxy_pass http://api:8000;',
         "proxy_pass https://$apiFqdn;"
@@ -420,47 +515,16 @@ try {
         Pop-Location
     }
 
-    $apiDigest = az acr manifest show-metadata `
-        --registry $acrName `
-        --name "order-resolution-api:$imageTag" `
-        --query digest `
-        --output tsv `
-        --only-show-errors
     $webDigest = az acr manifest show-metadata `
         --registry $acrName `
         --name "order-resolution-web:$imageTag" `
         --query digest `
         --output tsv `
         --only-show-errors
-    if (-not $apiDigest -or -not $webDigest) {
-        throw 'Unable to resolve immutable image digests.'
+    if (-not $webDigest) {
+        throw 'Unable to resolve the generated frontend immutable image digest.'
     }
-    $apiImage = "$registryEndpoint/order-resolution-api@$apiDigest"
     $webImage = "$registryEndpoint/order-resolution-web@$webDigest"
-    $resourceGroup = Get-RequiredValue $values 'AZURE_RESOURCE_GROUP'
-    $apiName = Get-RequiredValue $values 'AZURE_API_CONTAINER_APP_NAME'
-    $webName = Get-RequiredValue $values 'AZURE_WEB_CONTAINER_APP_NAME'
-
-    $apiEnvironment = @(
-        'WORKFLOW_HOST=hosted',
-        "HOSTED_WORKFLOW_ENDPOINT=$HostedWorkflowEndpoint",
-        'HOSTED_WORKFLOW_SCOPE=https://ai.azure.com/.default',
-        "API_MANAGED_IDENTITY_CLIENT_ID=$(Get-RequiredValue $values 'AZURE_API_IDENTITY_CLIENT_ID')",
-        "DATABASE_URL=$apiDatabaseUrl",
-        'DATABASE_AUTH_MODE=managed-identity',
-        'DATABASE_TLS_MODE=verify-full',
-        "DATABASE_MANAGED_IDENTITY_CLIENT_ID=$(Get-RequiredValue $values 'AZURE_API_IDENTITY_CLIENT_ID')",
-        'PGSSLROOTCERT=system',
-        "CORS_ORIGINS=https://$(Get-RequiredValue $values 'AZURE_WEB_FQDN')"
-    )
-    az containerapp update `
-        --subscription $SubscriptionId `
-        --resource-group $resourceGroup `
-        --name $apiName `
-        --image $apiImage `
-        --set-env-vars $apiEnvironment `
-        --only-show-errors | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw 'Generated API deployment failed.' }
     az containerapp update `
         --subscription $SubscriptionId `
         --resource-group $resourceGroup `
@@ -480,15 +544,27 @@ try {
     $values['AZURE_HOSTED_AGENT_PROVISIONING_STATUS'] =
         $publishRecord.provisioning_status
     $values['AZURE_HOSTED_AGENT_RBAC_SCOPE'] = $HostedAgentRbacScope
-    $values['AZURE_HOSTED_POSTGRES_EGRESS_IPV4'] = $HostedPostgresEgressIpv4
     $values['AZURE_API_HOSTED_AGENT_ROLE_ASSIGNMENT_ID'] = $agentAssignment.id
-    $values['AZURE_HOSTED_DATABASE_ROLE_NAME'] = $HostedDatabaseRoleName
+    $values['AZURE_HOSTED_API_APP_ROLE_ASSIGNMENT_ID'] =
+        $hostedEntra.hostedServiceAssignmentId
+    $values['AZURE_HOSTED_API_APP_ROLE_ID'] = $hostedEntra.hostedServiceAppRoleId
+    $values['AZURE_HOSTED_API_APP_ROLE_VALUE'] = $hostedEntra.hostedServiceRoleValue
+    $values['ORDER_RESOLUTION_API_ENDPOINT'] = $orderResolutionApiEndpoint
+    $values['ORDER_RESOLUTION_API_SCOPE'] = $orderResolutionApiScope
     $values['HOSTED_WORKFLOW_ENDPOINT'] = $HostedWorkflowEndpoint
     $values['AZURE_HOSTED_AGENT_RESPONSES_ENDPOINT'] = $HostedResponsesEndpoint
     $values['AZURE_HOSTED_AGENT_CONVERSATION_ENDPOINT'] = $HostedConversationEndpoint
     $values['AZURE_HOSTED_AGENT_ADAPTER_ENDPOINT'] = $HostedWorkflowEndpoint
+    $values['AZURE_API_URL'] = "https://$apiFqdn"
+    $values['AZURE_WEB_URL'] =
+        "https://$(Get-RequiredValue $values 'AZURE_WEB_FQDN')"
     $values['AZURE_API_DATABASE_URL'] = $apiDatabaseUrl
-    $values['AZURE_HOSTED_DATABASE_URL'] = $hostedDatabaseUrl
+    $values['AZURE_API_DATABASE_USER'] =
+        Get-RequiredValue $values 'AZURE_API_IDENTITY_NAME'
+    $values['MIGRATION_DATABASE_URL'] = $migrationDatabaseUrl
+    $values['MIGRATION_DATABASE_USER'] = $PostgresAdministratorPrincipalName
+    $values['MIGRATION_DATABASE_PASSWORD_REFERENCE'] =
+        'transient-ref:azure-postgresql-access-token'
     $values['DATABASE_POOL_MIN_SIZE'] = '0'
     $values['DATABASE_POOL_MAX_SIZE'] = '8'
     $values['DATABASE_POOL_TIMEOUT_SECONDS'] = '30'

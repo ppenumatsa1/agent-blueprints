@@ -134,10 +134,10 @@ explicit azd mode still fails closed. Cloud configuration requires hosted
 workflow mode, managed-identity PostgreSQL with TLS verification, an explicit
 adapter endpoint, and agent-scoped API access. `BLUEPRINT_APPLICATION`,
 `CHECKPOINT_ROOT`, and local workflow hosting are excluded.
-Hosted publication is staged so the platform identity is granted database
-access before active readiness polling. Deployment remains blocked unless a
-reviewed bounded hosted-runtime PostgreSQL egress set is available; no broad
-Azure-services firewall exception is permitted.
+Hosted publication is staged after the protected API business-state boundary
+is deployed. The platform identity receives only a dedicated API application
+role before active readiness polling; it receives no PostgreSQL URL, role, or
+firewall access. Only API Container App outbound IPs are allowlisted.
 See the
 [infrastructure evidence and operator contract](azure-foundry/infrastructure.md).
 

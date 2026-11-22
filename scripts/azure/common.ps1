@@ -67,6 +67,9 @@ function Assert-GeneratedOrderResolutionProject {
     foreach ($relative in @(
         'backend\Dockerfile',
         'backend\app',
+        'backend\app\api\app.py',
+        'backend\app\api\routes\hosted_service.py',
+        'backend\app\config.py',
         'frontend\Dockerfile',
         'frontend\nginx.conf',
         'hosted-agent\main.py',

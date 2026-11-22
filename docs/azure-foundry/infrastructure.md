@@ -169,7 +169,7 @@ dependency. ACR stores only the generated API and frontend images.
 | Frontend user-assigned identity | ACR | AcrPull | Pull the frontend image |
 | API PostgreSQL principal | Application database | Connect, schema usage, table DML, and sequence use | Runtime business persistence without schema ownership |
 | Reviewed PostgreSQL administrator | PostgreSQL server | Entra administrator | Create the runtime principal and execute reviewed migrations |
-| Hosted-agent version principal | Application database | Object-ID-bound PostgreSQL role with connect, schema usage, table DML, and sequence use | Persist hosted workflow business operations without sharing the API UAMI |
+| Hosted-agent version principal | API application | `Hosted.Workflow.Invoke` application role | Call only the protected internal hosted-business API boundary |
 | Hosted-agent version principal | Foundry model/session plane | Platform-provided model/session access | No unrelated external-resource role is added |
 | End users | No Azure workload scope | Delegated API scopes plus `Workflow.User`/`Workflow.Approver` application roles | API validates tenant, audience, scopes/roles, and record-level authorization |
 | Deployment principal | New resource group/resources | Contributor plus Role Based Access Control Administrator or User Access Administrator; Owner is accepted for the authorized test subscription | Create resources and reviewed role assignments without runtime data-plane use |
@@ -179,9 +179,13 @@ database principals. Migration ownership and runtime DML remain distinct.
 No project-scoped API fallback is created. Deployment requires an exact,
 documented hosted-agent RBAC scope and applies the API assignment only after the publisher
 returns one acknowledged version whose dedicated identity identifiers are
-populated. PostgreSQL access is granted while that version may still be
-`creating`; the same operation/journal is then polled with `--require-active`
-without issuing another create.
+populated. The protected API state boundary is deployed first, then the hosted
+principal receives the dedicated API application role while it may still be
+`creating`; the same operation/journal is polled with `--require-active`
+without issuing another create. Bootstrap remains in hosted mode and uses the
+credentialless API resource service principal as the temporary authorized
+object. Because it has no `Hosted.Workflow.Invoke` assignment, the protected
+route fails closed until the final revision binds the authoritative principal.
 
 ## Configuration and secret handling
 
@@ -190,7 +194,8 @@ without issuing another create.
   deployment inputs, not committed defaults.
 - `configure-entra.ps1` creates or reuses the uniquely named single-tenant API
   and SPA registrations, exposes `workflow.read`, `workflow.write`, and
-  `workflow.approve`, and defines `Workflow.User` and `Workflow.Approver`.
+  `workflow.approve`, and defines `Workflow.User`, `Workflow.Approver`, and the
+  application-only `Hosted.Workflow.Invoke` role.
   It outputs identifiers only, never credentials.
 - PostgreSQL password authentication is disabled. Deployment tooling obtains a
   short-lived Entra token and restores affected process environment variables.
@@ -202,6 +207,9 @@ without issuing another create.
   identity client ID, PostgreSQL managed-identity/TLS settings, Entra, and
   telemetry configuration. It never receives `BLUEPRINT_APPLICATION`,
   `CHECKPOINT_ROOT`, or `WORKFLOW_HOST=local`.
+- The hosted definition receives only Foundry project/model settings and the
+  protected API endpoint/scope/timeout. It receives no PostgreSQL URL,
+  authentication mode, TLS setting, CA setting, or database credential.
 - Optional secrets are Key Vault references resolved with the API managed
   identity. No `listKeys`, passwords, or connection strings are exported from
   the root template.
@@ -221,12 +229,12 @@ without issuing another create.
 | `pwsh ./scripts/azure/configure-entra.ps1 -DeploymentMode AzureCli ...` | Read-only validation of deterministic API/SPA registrations |
 | `pwsh ./scripts/azure/what-if.ps1 ...` | Runs subscription-scope Azure CLI what-if with `ProviderNoRbac`; it does not apply |
 | `pwsh ./scripts/azure/deploy.ps1 -Apply -DeploymentMode AzureCli ...` | Generates an independent ORS app, runs preflight/what-if/Bicep, publishes once for pending identity, applies exact PostgreSQL/RBAC grants and migrations, requires the same version active without replay, builds immutable generated images, deploys, and verifies |
-| `pwsh ./scripts/azure/configure-postgres.ps1 -Apply -DeploymentMode AzureCli -ValuesFile <file> ...` | Reconciles exact API and reviewed hosted-runtime outbound IPv4 rules and creates object-ID-bound Entra database principals |
+| `pwsh ./scripts/azure/configure-postgres.ps1 -Apply -DeploymentMode AzureCli -ValuesFile <file> ...` | Reconciles exact API outbound IPv4 rules and creates only the API UAMI database principal |
 | `pwsh ./scripts/azure/migrate.ps1 -Apply -GeneratedProjectRoot <temp-generated-root> ...` | Runs both generated migration modules and applies runtime grants inside a temporary operator-IP scope |
 | `python ./scripts/azure/health-check.py --deployment-mode azure-cli --values-file <file>` | Verifies immutable healthy revisions, hosted-only API settings, public health/auth boundaries, Foundry project, and model deployment |
 | `pwsh ./scripts/azure/rollback.ps1 -Apply -DeploymentMode AzureCli -ValuesFile <file> ...` | Restores reviewed immutable image digests and reruns health checks |
 | `pwsh ./scripts/azure/teardown.ps1 -Apply -DeploymentMode AzureCli -ValuesFile <file> ...` | Destructive; verifies exact environment confirmation and ownership tag before scoped resource-group deletion |
-| `pwsh ./scripts/azure/teardown-entra.ps1 -Apply ...` | Separately destructive; deletes only the exactly confirmed registrations |
+| `pwsh ./scripts/azure/teardown-entra.ps1 -Apply ...` | Separately destructive; deletes only the exactly confirmed API/SPA registrations and their service principals, which removes the hosted app-role assignment without deleting the platform hosted principal |
 
 Deployment, configuration, migration, rollback, and teardown invoke the same
 selected identity mode. Teardown never runs automatically.
@@ -270,8 +278,7 @@ Before any live operation:
    `az account set` inside automation.
 2. Provide the reviewed PostgreSQL administrator, hosted adapter HTTPS
    endpoint, hosted agent name/resource ID, stable publish operation ID,
-   durable publish journal, environment name, operator IPv4, output path, and
-   the platform-documented bounded hosted-runtime PostgreSQL egress IPv4 set.
+   durable publish journal, environment name, operator IPv4, and output path.
 3. Ensure the integrated generator copies Agent A's hosted source/publisher and
    Agent C's managed-identity/hosted adapters into a new independent Order
    Resolution project. Missing generated paths fail before Azure mutation.
@@ -295,7 +302,8 @@ version, data-plane version ID, agent GUID, dedicated principal/client IDs,
 provisioning status, documented RBAC scope, immutable image
 references, and exact API/web revisions to
 the selected output JSON file.
-It also records the reviewed hosted-runtime PostgreSQL egress addresses.
+It also records the hosted-to-API endpoint/scope and exact API application-role
+assignment.
 
 The public SDK does not expose a documented hosted-agent ARM resource ID, so
 the deployment never invents one. The reviewed RBAC scope is a separate
@@ -304,7 +312,7 @@ operator input; the returned version ID remains a data-plane identifier.
 | Consumer | Outputs |
 | --- | --- |
 | Agent A - Foundry hosted runtime | `AZURE_AI_ACCOUNT_NAME`, `AZURE_AI_PROJECT_NAME`, `AZURE_AI_PROJECT_ID`, `AZURE_AI_PROJECT_ENDPOINT`, `AZURE_AI_MODEL_DEPLOYMENT_NAME`, `FOUNDRY_RUNTIME_CONNECTION_NAME`, `APPLICATIONINSIGHTS_RESOURCE_ID` |
-| Agent C - API/frontend and persistence | `AZURE_API_IDENTITY_CLIENT_ID`, `AZURE_API_IDENTITY_PRINCIPAL_ID`, `AZURE_API_IDENTITY_NAME`, web identity IDs, PostgreSQL host/database/server, ACR, Container Apps environment/app names/FQDNs, Key Vault, hosted endpoint, immutable images, and revisions |
+| Agent C - API/frontend and persistence | `AZURE_API_URL`, `AZURE_WEB_URL`, `AZURE_API_IDENTITY_CLIENT_ID`, `AZURE_API_IDENTITY_PRINCIPAL_ID`, `AZURE_API_IDENTITY_NAME`, API app ID URI/service-principal/app-role IDs, web identity IDs, runtime/migration database URLs and user names, transient migration-token reference, pool settings, PostgreSQL host/database/server, ACR, Container Apps environment/app names/FQDNs, hosted-to-API endpoint/scope, Key Vault, hosted endpoint, immutable images, and revisions |
 | Agent D - verification and operations | `AZURE_RESOURCE_GROUP`, `AZURE_LOCATION`, `APPLICATIONINSIGHTS_RESOURCE_ID`, `LOG_ANALYTICS_WORKSPACE_ID`, API/web names and FQDNs, Foundry project endpoint, and model deployment name |
 
 Application, workflow checkpoint, conversation/session, business state, and
@@ -338,9 +346,9 @@ Not verified by this workstream: resource provisioning, Azure RBAC writes,
 Container Apps image deployment, Hosted Agent creation/invocation, PostgreSQL
 connectivity/migration/restore, telemetry ingestion, browser execution,
 evaluation quality, rollback in Azure, teardown, or production readiness.
-Hosted PostgreSQL connectivity is additionally blocked unless the platform
-provides a reviewed bounded public egress set; no such set was verified by this
-workstream.
+Hosted code has no direct PostgreSQL connectivity by design; API-backed hosted
+business-state authorization remains unverified until the composed deployment
+is exercised.
 
 The deployment route never targets the source blueprint. It instantiates an
 independent Order Resolution project, validates the generated hosted/app

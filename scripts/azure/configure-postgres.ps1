@@ -4,9 +4,6 @@ param(
     [ValidateSet('AzureCli', 'Azd')]
     [string]$DeploymentMode = 'AzureCli',
     [string]$ValuesFile,
-    [string]$AdditionalPrincipalName,
-    [string]$AdditionalPrincipalObjectId,
-    [string[]]$HostedRuntimeOutboundIp = @(),
     [string]$OperatorIp
 )
 
@@ -35,24 +32,6 @@ if (
 ) {
     throw 'API managed-identity name or object ID is invalid.'
 }
-if (($AdditionalPrincipalName -and -not $AdditionalPrincipalObjectId) -or
-    ($AdditionalPrincipalObjectId -and -not $AdditionalPrincipalName)) {
-    throw 'AdditionalPrincipalName and AdditionalPrincipalObjectId must be supplied together.'
-}
-if ($AdditionalPrincipalName -and $HostedRuntimeOutboundIp.Count -eq 0) {
-    throw 'Hosted runtime outbound IPs are required for its PostgreSQL principal.'
-}
-$additionalPrincipalGuid = [guid]::Empty
-if (
-    $AdditionalPrincipalName -and
-    (
-        $AdditionalPrincipalName -notmatch '^[A-Za-z0-9._-]+$' -or
-        -not [guid]::TryParse($AdditionalPrincipalObjectId, [ref]$additionalPrincipalGuid)
-    )
-) {
-    throw 'Additional PostgreSQL principal input is invalid.'
-}
-
 $outbound = az containerapp show `
     --subscription $subscriptionId `
     --resource-group $resourceGroup `
@@ -66,17 +45,11 @@ if ($LASTEXITCODE -ne 0 -or -not $outbound) {
 $containerAppAddresses = @(
     $outbound -split '[,\s]+' | Where-Object { $_ } | Sort-Object -Unique
 )
-$hostedAddresses = @($HostedRuntimeOutboundIp | Sort-Object -Unique)
 $desiredRules = [ordered]@{}
 for ($index = 0; $index -lt $containerAppAddresses.Count; $index++) {
     $address = $containerAppAddresses[$index]
     Assert-PublicIpv4 -Address $address
     $desiredRules["container-apps-{0:D2}" -f ($index + 1)] = $address
-}
-for ($index = 0; $index -lt $hostedAddresses.Count; $index++) {
-    $address = $hostedAddresses[$index]
-    Assert-PublicIpv4 -Address $address
-    $desiredRules["hosted-agent-{0:D2}" -f ($index + 1)] = $address
 }
 foreach ($ruleName in $desiredRules.Keys) {
     $address = $desiredRules[$ruleName]
@@ -106,8 +79,7 @@ foreach ($ruleName in $managedRules) {
     if (
         $ruleName -and
         (
-            $ruleName.StartsWith('container-apps-') -or
-            $ruleName.StartsWith('hosted-agent-')
+            $ruleName.StartsWith('container-apps-')
         ) -and
         -not $desiredRules.Contains($ruleName)
     ) {
@@ -149,20 +121,6 @@ try {
         -OperatorIp $OperatorIp
     $operatorRuleCreated = $true
     $env:PGPASSWORD = $token
-    $additionalPrincipalSql = ''
-    if ($AdditionalPrincipalName) {
-        $additionalPrincipalSql = @"
-  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '$AdditionalPrincipalName') THEN
-    PERFORM * FROM pg_catalog.pgaadauth_create_principal_with_oid(
-      '$AdditionalPrincipalName',
-      '$AdditionalPrincipalObjectId',
-      'service',
-      false,
-      false
-    );
-  END IF;
-"@
-    }
     $sql = @"
 DO `$body`$
 BEGIN
@@ -175,7 +133,6 @@ BEGIN
       false
     );
   END IF;
-$additionalPrincipalSql
 END
 `$body`$;
 "@

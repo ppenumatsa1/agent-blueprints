@@ -59,6 +59,20 @@ if (
     throw 'DESTRUCTIVE: Entra application IDs do not match the selected deployment values.'
 }
 
+foreach ($applicationId in @($spaApplication.appId, $apiApplication.appId)) {
+    $servicePrincipal = az ad sp show `
+        --id $applicationId `
+        --output json `
+        --only-show-errors 2>$null
+    if ($LASTEXITCODE -eq 0 -and $servicePrincipal) {
+        $servicePrincipalId = ($servicePrincipal | ConvertFrom-Json).id
+        az ad sp delete --id $servicePrincipalId --only-show-errors
+        if ($LASTEXITCODE -ne 0) {
+            throw "Unable to delete Entra service principal $servicePrincipalId."
+        }
+    }
+}
+
 az ad app delete --id $spaApplication.appId --only-show-errors
 if ($LASTEXITCODE -ne 0) {
     throw "Unable to delete Entra application $SpaDisplayName."

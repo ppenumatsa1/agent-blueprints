@@ -171,10 +171,10 @@ cloud route requires hosted mode, managed-identity PostgreSQL with TLS
 verification, an explicit hosted adapter endpoint and agent scope, and an
 exact temporary-copy nginx upstream replacement. It prohibits source-blueprint
 runtime paths, local workflow hosting, synthetic application selection, and
-file checkpoints. Hosted publication captures the authoritative pending
-identity, applies PostgreSQL grants/migrations, then requires the same journaled
-version active without another create. A reviewed bounded hosted-runtime
-PostgreSQL egress set is mandatory.
+file checkpoints. The API UAMI is the sole database runtime principal. Hosted publication occurs
+after the protected API state boundary is deployed, captures the authoritative
+pending identity, assigns only a dedicated API application role, then requires
+the same journaled version active without another create.
 
 **Acceptance evidence:** exact base verified; read-only Azure discovery
 completed; Bicep build/lint and 12 infrastructure contracts pass; 68 root tests
@@ -186,7 +186,7 @@ has occurred.
 
 **Next action:** independent validation on the draft PR, then an approved
 Azure CLI provider what-if with exact deployment inputs. Deployment remains
-outside this PR and blocked if bounded hosted egress is unavailable.
+outside this PR.
 
 Specification Studio has not yet produced an artifact, so the proposed
 handoff is not an end-to-end compatibility claim. Phase 0 does not implement
