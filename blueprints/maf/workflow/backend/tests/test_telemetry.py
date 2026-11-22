@@ -14,6 +14,7 @@ from uuid import UUID
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from jsonschema import Draft202012Validator
 from opentelemetry.sdk.metrics.export import (
     AggregationTemporality,
     InMemoryMetricReader,
@@ -145,6 +146,107 @@ class TelemetryTests(unittest.TestCase):
         self.assertEqual(child.context.trace_id, int(trace_id, 16))
         self.assertTrue(any(s.context.span_id == child.parent.span_id for s in spans))
         self.assertNotIn(CANARY, str(records) + repr(spans) + "".join(s.to_json() for s in spans))
+
+    def test_end_to_end_correlation_usage_retries_and_business_outcomes_are_distinct(self):
+        telemetry = Telemetry(
+            agent_version="agent-1.2.3",
+            deployment_revision="revision-abc123",
+        )
+        self.addCleanup(telemetry.shutdown)
+        exporter = InMemorySpanExporter()
+        telemetry.provider.add_span_processor(SimpleSpanProcessor(exporter))
+        request_id = "10000000-0000-4000-8000-000000000001"
+        case_id = UUID("20000000-0000-4000-8000-000000000002")
+        with self.assertLogs("blueprint.telemetry", level="INFO") as logs:
+            with telemetry.request_scope(request_id):
+                telemetry.bind_case(case_id)
+                with telemetry.operation("http.request"):
+                    with telemetry.operation("foundry.invoke"):
+                        with telemetry.operation(
+                            "model.invoke",
+                            model_provider="azure-ai-foundry",
+                            model="configured-deployment",
+                        ) as model:
+                            model.record_retry("transient")
+                            model.record_model_usage(
+                                provider="azure-ai-foundry",
+                                model="configured-deployment",
+                                input_tokens=12,
+                                output_tokens=7,
+                                cached_tokens=3,
+                            )
+                        with telemetry.operation("tool.execute", tool="order.read"):
+                            pass
+                        with telemetry.operation("workflow.resume") as workflow:
+                            workflow.set_business_outcome("approved")
+                            with telemetry.operation("database.read"):
+                                pass
+
+        records = [json.loads(line.split(":", 2)[2]) for line in logs.output]
+        correlated = [
+            record
+            for record in records
+            if record.get("event") in {"operation", "model.usage", "retry"}
+        ]
+        self.assertTrue(correlated)
+        self.assertTrue(
+            all(
+                record["request_id"] == request_id
+                and record["case_id"] == str(case_id)
+                and record["agent_version"] == "agent-1.2.3"
+                and record["deployment_revision"] == "revision-abc123"
+                for record in correlated
+            )
+        )
+        usage = next(record for record in records if record["event"] == "model.usage")
+        self.assertEqual(
+            (usage["input_tokens"], usage["output_tokens"], usage["cached_tokens"]),
+            (12, 7, 3),
+        )
+        retry = next(record for record in records if record["event"] == "retry")
+        self.assertEqual((retry["reason"], retry["retry_count"]), ("transient", 1))
+        workflow = next(
+            record for record in records if record.get("operation") == "workflow.resume"
+        )
+        self.assertEqual(workflow["business_outcome"], "approved")
+        self.assertEqual(workflow["technical_status"], "succeeded")
+        operations = {
+            record["operation"] for record in records if record.get("event") == "operation"
+        }
+        self.assertEqual(
+            operations,
+            {
+                "http.request",
+                "foundry.invoke",
+                "model.invoke",
+                "tool.execute",
+                "workflow.resume",
+                "database.read",
+            },
+        )
+        spans = exporter.get_finished_spans()
+        trace_ids = {span.context.trace_id for span in spans}
+        self.assertEqual(len(trace_ids), 1)
+        self.assertTrue(
+            all(
+                span.attributes["blueprint.request.id"] == request_id
+                and span.attributes["blueprint.case.id"] == str(case_id)
+                and span.attributes["blueprint.agent.version"] == "agent-1.2.3"
+                and span.attributes["blueprint.deployment.revision"] == "revision-abc123"
+                for span in spans
+            )
+        )
+        schema_path = (
+            Path(__file__).resolve().parents[5] / "contracts" / "telemetry-event.schema.json"
+        )
+        schema = json.loads(schema_path.read_text(encoding="utf-8"))
+        validator = Draft202012Validator(schema)
+        for record in correlated:
+            self.assertFalse(
+                list(validator.iter_errors(record)),
+                record,
+            )
+        self.assertNotIn(CANARY, json.dumps(records) + "".join(span.to_json() for span in spans))
 
     def test_cors_preflight_allows_traceparent_and_exposes_correlation_id(self):
         origin = "https://client.example"

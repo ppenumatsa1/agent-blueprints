@@ -16,12 +16,23 @@ ORDER_RESOLUTION_CONTRACT = (
 ORDER_RESOLUTION_CASES = ROOT / "scenarios" / "order-resolution" / "golden-cases.json"
 ORDER_RESOLUTION_TEST = ROOT / "tests" / "test_order_resolution_contract.py"
 IGNORE = shutil.ignore_patterns(
-    ".git", ".env", ".env.*", ".venv", ".uv-cache", ".ruff_cache", "__pycache__", "*.pyc",
-    "node_modules", "dist", "coverage"
+    ".git",
+    ".env",
+    ".env.*",
+    ".venv",
+    ".uv-cache",
+    ".ruff_cache",
+    "__pycache__",
+    "*.pyc",
+    "node_modules",
+    "dist",
+    "coverage",
 )
 
 
-def _order_resolution_asset(override: Path | None, canonical: Path, option: str) -> Path:
+def _order_resolution_asset(
+    override: Path | None, canonical: Path, option: str
+) -> Path:
     source = override.resolve() if override is not None else canonical
     if not source.is_file():
         raise ValueError(
@@ -34,7 +45,9 @@ def _order_resolution_asset(override: Path | None, canonical: Path, option: str)
 def _configure_order_resolution(destination: Path) -> None:
     compose = destination / "compose.yaml"
     text = compose.read_text(encoding="utf-8")
-    required = "BLUEPRINT_APPLICATION: ${BLUEPRINT_APPLICATION:?Select an application factory}"
+    required = (
+        "BLUEPRINT_APPLICATION: ${BLUEPRINT_APPLICATION:?Select an application factory}"
+    )
     selected = (
         "BLUEPRINT_APPLICATION: "
         "${BLUEPRINT_APPLICATION:-app.order_resolution.application:build_application}"
@@ -47,7 +60,9 @@ def _configure_order_resolution(destination: Path) -> None:
 def _merge_order_resolution_backend(destination: Path) -> None:
     source = ORDER_RESOLUTION_PROFILE / "backend"
     if source.is_dir():
-        shutil.copytree(source, destination / "backend", dirs_exist_ok=True, ignore=IGNORE)
+        shutil.copytree(
+            source, destination / "backend", dirs_exist_ok=True, ignore=IGNORE
+        )
 
 
 def _merge_order_resolution_verification(verification: Path) -> None:
@@ -111,7 +126,9 @@ def instantiate(
 
     shutil.copytree(BLUEPRINT, destination, ignore=IGNORE)
     if profile == "order-resolution":
-        shutil.copytree(ORDER_RESOLUTION_OVERLAY, destination, dirs_exist_ok=True, ignore=IGNORE)
+        shutil.copytree(
+            ORDER_RESOLUTION_OVERLAY, destination, dirs_exist_ok=True, ignore=IGNORE
+        )
         _merge_order_resolution_backend(destination)
         _configure_order_resolution(destination)
     verification = destination / "verification"
@@ -131,7 +148,12 @@ def instantiate(
         shutil.copy2(cases, order_resolution / "golden-cases.json")
         _merge_order_resolution_verification(verification)
     (verification / "tests").mkdir()
-    for name in ("test_contracts.py", "test_golden_scenario.py", "test_readiness.py"):
+    for name in (
+        "test_contracts.py",
+        "test_golden_scenario.py",
+        "test_readiness.py",
+        "test_release_evidence.py",
+    ):
         shutil.copy2(ROOT / "tests" / name, verification / "tests" / name)
     if contract_test is not None:
         shutil.copy2(
@@ -139,11 +161,22 @@ def instantiate(
             verification / "tests" / "test_order_resolution_contract.py",
         )
     (verification / "docs").mkdir()
-    shutil.copy2(ROOT / "docs" / "readiness-validator.md", verification / "docs" / "readiness-validator.md")
+    shutil.copy2(
+        ROOT / "docs" / "readiness-validator.md",
+        verification / "docs" / "readiness-validator.md",
+    )
     shutil.copy2(ROOT / "requirements-dev.txt", verification / "requirements-dev.txt")
     shutil.copy2(ROOT / "LICENSE", destination / "LICENSE")
+    attributes = [
+        "verification/scenarios/order-adjustment/verification-contract.json -text",
+    ]
+    if profile == "order-resolution":
+        attributes.append(
+            "verification/scenarios/order-resolution/verification-contract.json -text"
+        )
     (destination / ".gitattributes").write_text(
-        "verification/scenarios/order-adjustment/verification-contract.json -text\n", encoding="utf-8"
+        "\n".join(attributes) + "\n",
+        encoding="utf-8",
     )
     with (destination / ".gitignore").open("a", encoding="utf-8") as file:
         file.write("\nverification/evidence/\nverification/readiness-report.json\n")
@@ -152,7 +185,9 @@ def instantiate(
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("destination", type=Path, help="A new directory outside this repository.")
+    parser.add_argument(
+        "destination", type=Path, help="A new directory outside this repository."
+    )
     parser.add_argument(
         "--profile",
         choices=("order-resolution",),

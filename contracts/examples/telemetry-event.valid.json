@@ -1,0 +1,16 @@
+{
+  "schema_version": "1.0.0",
+  "event": "operation",
+  "operation": "model.invoke",
+  "outcome": "success",
+  "technical_status": "succeeded",
+  "business_outcome": "approved",
+  "duration_ms": 42.5,
+  "trace_id": "1234567890abcdef1234567890abcdef",
+  "span_id": "1234567890abcdef",
+  "request_id": "10000000-0000-4000-8000-000000000001",
+  "correlation_id": "10000000-0000-4000-8000-000000000001",
+  "case_id": "20000000-0000-4000-8000-000000000002",
+  "agent_version": "0.1.0",
+  "deployment_revision": "revision-123"
+}

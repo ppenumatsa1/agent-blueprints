@@ -9,7 +9,13 @@ from jsonschema import Draft202012Validator, FormatChecker
 ROOT = Path(__file__).resolve().parents[1]
 CONTRACTS = ROOT / "contracts"
 EXAMPLES = CONTRACTS / "examples"
-SCHEMA_NAMES = ("blueprint-manifest", "verification-contract", "readiness-report")
+SCHEMA_NAMES = (
+    "blueprint-manifest",
+    "verification-contract",
+    "readiness-report",
+    "release-evidence",
+    "telemetry-event",
+)
 VALID_EXAMPLES = {
     "blueprint-manifest": ("blueprint-manifest.valid.json",),
     "verification-contract": ("verification-contract.valid.json",),
@@ -18,6 +24,8 @@ VALID_EXAMPLES = {
         "readiness-report.passed.valid.json",
         "readiness-report.production.valid.json",
     ),
+    "release-evidence": ("release-evidence.valid.json",),
+    "telemetry-event": ("telemetry-event.valid.json",),
 }
 
 
@@ -66,7 +74,9 @@ class ContractSchemaTests(unittest.TestCase):
         self.assert_invalid("blueprint-manifest", manifest)
         hosting["evidence"] = [{"kind": "test_run", "reference": "fixture://run"}]
         self.assert_invalid("blueprint-manifest", manifest)
-        hosting["evidence"][0].update(revision="fixture-revision", environment="fixture")
+        hosting["evidence"][0].update(
+            revision="fixture-revision", environment="fixture"
+        )
         self.assert_valid("blueprint-manifest", manifest)
         hosting.pop("protocol")
         self.assert_invalid("blueprint-manifest", manifest)
@@ -104,10 +114,14 @@ class ContractSchemaTests(unittest.TestCase):
                 report["results"][0]["check_results"][0]["evidence"][0].pop(field)
                 self.assert_invalid("readiness-report", report)
         report = copy.deepcopy(original)
-        report["results"][0]["check_results"][0]["evidence"][0]["sha256"] = "not-a-digest"
+        report["results"][0]["check_results"][0]["evidence"][0]["sha256"] = (
+            "not-a-digest"
+        )
         self.assert_invalid("readiness-report", report)
         report = copy.deepcopy(original)
-        report["results"][0]["check_results"][0]["evidence"][0]["recorded_at"] = "not-a-date"
+        report["results"][0]["check_results"][0]["evidence"][0]["recorded_at"] = (
+            "not-a-date"
+        )
         self.assert_invalid("readiness-report", report)
         report = copy.deepcopy(original)
         report.pop("environment")
@@ -155,7 +169,11 @@ class ContractSchemaTests(unittest.TestCase):
         result.pop("check_results")
         self.assert_invalid("readiness-report", report)
         result["check_results"] = [
-            {"check_id": "CHECK-001", "outcome": "failed", "reason": "Synthetic failure"}
+            {
+                "check_id": "CHECK-001",
+                "outcome": "failed",
+                "reason": "Synthetic failure",
+            }
         ]
         self.assert_invalid("readiness-report", report)
 
@@ -168,7 +186,9 @@ class ContractSchemaTests(unittest.TestCase):
         report = load_json(EXAMPLES / "readiness-report.passed.valid.json")
         self.assert_valid("readiness-report", report)
         self.assertEqual(report["results"][2]["status"], "unverified")
-        self.assertEqual(report["results"][2]["check_results"][0]["outcome"], "unverified")
+        self.assertEqual(
+            report["results"][2]["check_results"][0]["outcome"], "unverified"
+        )
         self.assertEqual(report["results"][3]["status"], "failed")
         self.assertEqual(report["results"][3]["check_results"][0]["outcome"], "failed")
         for field in ("assumptions", "incomplete_integrations", "limitations"):
@@ -184,7 +204,8 @@ class ContractSchemaTests(unittest.TestCase):
         ):
             original = load_json(EXAMPLES / filename)
             blocking_indices = [
-                index for index, result in enumerate(original["results"])
+                index
+                for index, result in enumerate(original["results"])
                 if result["gate"] == "blocking"
             ]
             for index in blocking_indices:
@@ -219,16 +240,27 @@ class ContractSchemaTests(unittest.TestCase):
                 result.pop("risk_acceptance")
                 self.assert_invalid("readiness-report", report)
         for field in (
-            "decision", "reviewer", "reference", "decided_at", "expires_at",
-            "rationale", "compensating_controls", "scope",
+            "decision",
+            "reviewer",
+            "reference",
+            "decided_at",
+            "expires_at",
+            "rationale",
+            "compensating_controls",
+            "scope",
         ):
             with self.subTest(missing_field=field):
                 report = copy.deepcopy(original)
                 report["results"][3]["risk_acceptance"].pop(field)
                 self.assert_invalid("readiness-report", report)
         for field in (
-            "requirement_id", "check_ids", "requirement_status", "contract_sha256", "target_maturity",
-            "source_revision", "environment",
+            "requirement_id",
+            "check_ids",
+            "requirement_status",
+            "contract_sha256",
+            "target_maturity",
+            "source_revision",
+            "environment",
         ):
             with self.subTest(missing_scope=field):
                 report = copy.deepcopy(original)
@@ -314,7 +346,9 @@ class ContractSchemaTests(unittest.TestCase):
     def test_customer_validated_pass_requires_approval(self):
         report = load_json(EXAMPLES / "readiness-report.production.valid.json")
         report["target_maturity"] = "customer_validated"
-        report["results"][3]["risk_acceptance"]["scope"]["target_maturity"] = "customer_validated"
+        report["results"][3]["risk_acceptance"]["scope"]["target_maturity"] = (
+            "customer_validated"
+        )
         self.assert_invalid("readiness-report", report)
         report["customer_approval"] = {
             "decision": "rejected",
@@ -360,10 +394,14 @@ class ContractSchemaTests(unittest.TestCase):
     def test_synthetic_reports_trace_to_contract(self):
         contract = load_json(EXAMPLES / "verification-contract.valid.json")
         requirements = contract["requirements"]
-        requirements_by_id = {requirement["id"]: requirement for requirement in requirements}
+        requirements_by_id = {
+            requirement["id"]: requirement for requirement in requirements
+        }
         self.assertEqual(len(requirements), len(requirements_by_id))
         all_check_ids = [
-            check["id"] for requirement in requirements for check in requirement["checks"]
+            check["id"]
+            for requirement in requirements
+            for check in requirement["checks"]
         ]
         self.assertEqual(len(all_check_ids), len(set(all_check_ids)))
 
@@ -371,7 +409,9 @@ class ContractSchemaTests(unittest.TestCase):
             with self.subTest(example=filename):
                 report = load_json(EXAMPLES / filename)
                 self.assertEqual(report["contract_id"], contract["contract_id"])
-                self.assertEqual(report["contract_version"], contract["contract_version"])
+                self.assertEqual(
+                    report["contract_version"], contract["contract_version"]
+                )
                 results = report["results"]
                 results_by_id = {result["requirement_id"]: result for result in results}
                 self.assertEqual(len(results), len(results_by_id))
@@ -393,10 +433,14 @@ class ContractSchemaTests(unittest.TestCase):
                         if check["outcome"] == "passed":
                             actual_types = {item["kind"] for item in check["evidence"]}
                             self.assertTrue(
-                                set(expected[check_id]["evidence_types"]).issubset(actual_types)
+                                set(expected[check_id]["evidence_types"]).issubset(
+                                    actual_types
+                                )
                             )
                         for item in check.get("evidence", []):
-                            self.assertEqual(item["revision"], report["source_revision"])
+                            self.assertEqual(
+                                item["revision"], report["source_revision"]
+                            )
                             self.assertEqual(item["environment"], report["environment"])
                     if "risk_acceptance" in result:
                         scope = result["risk_acceptance"]["scope"]
@@ -404,19 +448,32 @@ class ContractSchemaTests(unittest.TestCase):
                         self.assertEqual(scope["requirement_status"], result["status"])
                         self.assertEqual(
                             set(scope["check_ids"]),
-                            {check["check_id"] for check in checks if check["outcome"] != "passed"},
+                            {
+                                check["check_id"]
+                                for check in checks
+                                if check["outcome"] != "passed"
+                            },
                         )
-                        for field in ("contract_sha256", "target_maturity", "source_revision", "environment"):
+                        for field in (
+                            "contract_sha256",
+                            "target_maturity",
+                            "source_revision",
+                            "environment",
+                        ):
                             self.assertEqual(scope[field], report[field])
 
                 if report["target_maturity"] != "prototype":
                     for domain, control in contract["production_controls"].items():
                         if control["applicability"] == "required":
-                            self.assertTrue(any(
-                                domain in requirement["domains"]
-                                and requirement["gates"][report["target_maturity"]] == "blocking"
-                                for requirement in requirements
-                            ), domain)
+                            self.assertTrue(
+                                any(
+                                    domain in requirement["domains"]
+                                    and requirement["gates"][report["target_maturity"]]
+                                    == "blocking"
+                                    for requirement in requirements
+                                ),
+                                domain,
+                            )
 
 
 if __name__ == "__main__":

@@ -25,6 +25,8 @@ def create_app(
     telemetry = Telemetry(
         settings.telemetry_mode,
         settings.applicationinsights_connection_string,
+        agent_version=settings.agent_version,
+        deployment_revision=settings.deployment_revision,
     )
     try:
         workflow_host = LocalWorkflowHost(

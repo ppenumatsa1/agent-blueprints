@@ -120,3 +120,12 @@ above; none marks Phase 1 or deployment complete.
 | Phase 0 Specification Studio handoff | [#33](https://github.com/ppenumatsa1/agent-blueprints/issues/33); separate producer contract in [readiness-contract.md](readiness-contract.md#specification-studio-handoff) |
 | P1 permanent standalone reference application | [#30](https://github.com/ppenumatsa1/agent-blueprints/issues/30); separate explicit repository authorization is required |
 | Later App/API blueprint roadmap | [#34](https://github.com/ppenumatsa1/agent-blueprints/issues/34); out of phase and requires separate authorization |
+
+## Azure/Foundry Workstream D
+
+| Capability | Status | Acceptance criteria | Evidence | Next action |
+| --- | --- | --- | --- | --- |
+| Privacy-safe end-to-end correlation | In Progress | Correlate API, Foundry, native MAF workflow, model, tool, and PostgreSQL with request/case/trace/agent/deployment identifiers; record usage, latency, errors, retries, technical status, and separate business outcomes without content or secrets. | [Telemetry schema](../contracts/telemetry-event.schema.json), backend telemetry tests, and [readiness guide](azure-foundry/readiness.md). | Require exact-head CI, then verify exact hosted correlation in Application Insights. |
+| Real-provider evaluation and browser E2E | In Progress | Run real-provider evaluation only when explicitly configured, never synthesize provider success, and run actual local/live Chromium automation with revision-bound evidence. | Opt-in provider test, Playwright local/live suites, and additive `maf-browser` CI job. | Integrate Agent A-C live configuration and run the manual cloud-validation workflow. |
+| Hosted failure injection | In Progress | Observe all nine bounded synthetic failure/recovery cases without hidden retry or duplicate effects; preserve unknown outcomes until authoritative reconciliation. | Hosted adapter protocol, fake-adapter regression tests, and manual failure-injection gate. | Agent A/C must supply the live adapter and supported fault controls. |
+| Independent release readiness | In Progress | Validate immutable evidence as implementation, Azure runtime, and production dimensions with `passed`, `failed`, `blocked`, or `unverified`; bind cloud evidence to exact source/deployment revisions. | [Release schema](../contracts/release-evidence.schema.json), [validator](../readiness/release.py), and root tests. | Implementation needs exact-head CI; Azure remains unverified; production remains blocked pending runtime, security, cost, and human-review evidence. |

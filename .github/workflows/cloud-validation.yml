@@ -1,0 +1,410 @@
+name: Azure Foundry cloud validation
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_revision:
+        description: Exact source commit already validated by CI
+        required: true
+        type: string
+      deployment_revision:
+        description: Exact immutable deployment revision under test
+        required: true
+        type: string
+      agent_version:
+        description: Exact hosted agent package/version identifier
+        required: true
+        type: string
+      evidence_environment:
+        description: Stable environment identifier
+        required: true
+        type: string
+      ci_run_id:
+        description: Successful exact-head CI run containing maf-generated-evidence
+        required: true
+        type: string
+      deployment_run_id:
+        description: Agent A-C deployment run containing immutable deployment evidence
+        required: true
+        type: string
+      expected_backend_revision:
+        required: true
+        type: string
+      expected_frontend_revision:
+        required: true
+        type: string
+      expected_hosted_version:
+        required: true
+        type: string
+      base_url:
+        description: Live generated frontend URL
+        required: true
+        type: string
+      run_provider_evaluation:
+        required: true
+        default: true
+        type: boolean
+      run_browser_e2e:
+        required: true
+        default: true
+        type: boolean
+      run_failure_injection:
+        required: true
+        default: true
+        type: boolean
+      run_telemetry_correlation:
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  implementation-evidence:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ inputs.source_revision }}
+      - name: Require exact successful CI head
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CI_RUN_ID: ${{ inputs.ci_run_id }}
+          SOURCE_REVISION: ${{ inputs.source_revision }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$SOURCE_REVISION"
+          run_json="$(gh run view "$CI_RUN_ID" --json headSha,conclusion)"
+          test "$(jq -r .headSha <<<"$run_json")" = "$SOURCE_REVISION"
+          test "$(jq -r .conclusion <<<"$run_json")" = "success"
+          mkdir -p evidence/implementation
+          gh run download "$CI_RUN_ID" --name maf-generated-evidence \
+            --dir evidence/implementation
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: workstream-d-implementation
+          path: evidence/implementation
+          retention-days: 14
+
+  exact-active-revision:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ inputs.source_revision }}
+      - name: Download immutable deployment evidence from Agents A-C
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPLOYMENT_RUN_ID: ${{ inputs.deployment_run_id }}
+          SOURCE_REVISION: ${{ inputs.source_revision }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$SOURCE_REVISION"
+          mkdir -p evidence/deployment
+          gh run download "$DEPLOYMENT_RUN_ID" --name azure-foundry-deployment-evidence \
+            --dir evidence/deployment
+      - name: Verify exact active revisions, versions, and image digests
+        env:
+          SOURCE_REVISION: ${{ inputs.source_revision }}
+          DEPLOYMENT_REVISION: ${{ inputs.deployment_revision }}
+          EVIDENCE_ENVIRONMENT: ${{ inputs.evidence_environment }}
+          EXPECTED_BACKEND_REVISION: ${{ inputs.expected_backend_revision }}
+          EXPECTED_FRONTEND_REVISION: ${{ inputs.expected_frontend_revision }}
+          EXPECTED_HOSTED_VERSION: ${{ inputs.expected_hosted_version }}
+        run: |
+          python scripts/verify_active_revision.py \
+            --backend-revisions evidence/deployment/backend-revisions.json \
+            --frontend-revisions evidence/deployment/frontend-revisions.json \
+            --hosted-agent evidence/deployment/hosted-agent.json \
+            --output evidence/active-revision.json \
+            --source-revision "$SOURCE_REVISION" \
+            --deployment-revision "$DEPLOYMENT_REVISION" \
+            --environment "$EVIDENCE_ENVIRONMENT" \
+            --expected-backend-revision "$EXPECTED_BACKEND_REVISION" \
+            --expected-frontend-revision "$EXPECTED_FRONTEND_REVISION" \
+            --expected-hosted-version "$EXPECTED_HOSTED_VERSION"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: workstream-d-active-revision
+          path: evidence/active-revision.json
+          retention-days: 14
+
+  real-provider-evaluation:
+    if: inputs.run_provider_evaluation
+    runs-on: ubuntu-latest
+    environment: azure-foundry-validation
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ inputs.source_revision }}
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+      - name: Instantiate and install the generated Order Resolution backend
+        run: |
+          python scripts/instantiate_maf.py "$RUNNER_TEMP/order-resolution" \
+            --profile order-resolution
+          python -m pip install uv==0.9.26
+          uv sync --locked --project "$RUNNER_TEMP/order-resolution/backend"
+          mkdir -p evidence/provider
+      - name: Restore scoped real-provider authentication
+        env:
+          MAF_REAL_PROVIDER_AUTH_JSON: ${{ secrets.MAF_REAL_PROVIDER_AUTH_JSON }}
+        run: |
+          printf '%s' "$MAF_REAL_PROVIDER_AUTH_JSON" \
+            > "$RUNNER_TEMP/real-provider-auth.json"
+          chmod 600 "$RUNNER_TEMP/real-provider-auth.json"
+      - name: Run explicitly configured real-provider evaluation
+        env:
+          MAF_REAL_EVALUATION_ENABLED: "true"
+          MAF_REAL_EVALUATION_PROVIDER: ${{ vars.MAF_REAL_EVALUATION_PROVIDER }}
+          MAF_REAL_EVALUATION_MODEL: ${{ vars.MAF_REAL_EVALUATION_MODEL }}
+          MAF_REAL_EVALUATOR_FACTORY: ${{ vars.MAF_REAL_EVALUATOR_FACTORY }}
+          MAF_REAL_RESULT_FACTORY: ${{ vars.MAF_REAL_RESULT_FACTORY }}
+          MAF_REAL_BASE_URL: ${{ inputs.base_url }}
+          MAF_REAL_AUTH_FILE: ${{ runner.temp }}/real-provider-auth.json
+          MAF_REAL_EVALUATION_MINIMUM_SCORE: ${{ vars.MAF_REAL_EVALUATION_MINIMUM_SCORE }}
+          SOURCE_REVISION: ${{ inputs.source_revision }}
+          DEPLOYMENT_REVISION: ${{ inputs.deployment_revision }}
+          EVIDENCE_ENVIRONMENT: ${{ inputs.evidence_environment }}
+          REAL_PROVIDER_EVIDENCE_FILE: ${{ github.workspace }}/evidence/provider/model-quality.json
+        run: |
+          cd "$RUNNER_TEMP/order-resolution/backend"
+          uv run --locked python -m unittest -v \
+            tests.test_order_resolution_real_provider
+      - name: Remove real-provider authentication material
+        if: always()
+        run: rm -f "$RUNNER_TEMP/real-provider-auth.json"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: workstream-d-provider-evaluation
+          path: evidence/provider/model-quality.json
+          retention-days: 14
+
+  browser-e2e:
+    if: inputs.run_browser_e2e
+    runs-on: ubuntu-latest
+    environment: azure-foundry-validation
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ inputs.source_revision }}
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "22"
+      - name: Instantiate generated frontend and install browser
+        run: |
+          python scripts/instantiate_maf.py "$RUNNER_TEMP/order-resolution" \
+            --profile order-resolution
+          cd "$RUNNER_TEMP/order-resolution/frontend"
+          npm ci --no-audit --no-fund
+          npx playwright install --with-deps chromium
+      - name: Restore explicit authenticated browser state
+        env:
+          E2E_STORAGE_STATE_JSON: ${{ secrets.E2E_STORAGE_STATE_JSON }}
+          E2E_SESSION_STORAGE_JSON: ${{ secrets.E2E_SESSION_STORAGE_JSON }}
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/evidence/browser"
+          printf '%s' "$E2E_STORAGE_STATE_JSON" \
+            > "$RUNNER_TEMP/e2e-storage-state.json"
+          printf '%s' "$E2E_SESSION_STORAGE_JSON" \
+            > "$RUNNER_TEMP/e2e-session-storage.json"
+          chmod 600 "$RUNNER_TEMP/e2e-storage-state.json"
+          chmod 600 "$RUNNER_TEMP/e2e-session-storage.json"
+      - name: Run authenticated live browser E2E
+        env:
+          E2E_LIVE: "true"
+          E2E_BASE_URL: ${{ inputs.base_url }}
+          E2E_STORAGE_STATE: ${{ runner.temp }}/e2e-storage-state.json
+          E2E_SESSION_STORAGE: ${{ runner.temp }}/e2e-session-storage.json
+          E2E_EXPECTED_TENANT_ID: ${{ vars.E2E_ENTRA_TENANT_ID }}
+          E2E_EXPECTED_SPA_CLIENT_ID: ${{ vars.E2E_ENTRA_SPA_CLIENT_ID }}
+          E2E_EXPECTED_API_APP_ID_URI: ${{ vars.E2E_ENTRA_API_APP_ID_URI }}
+          E2E_REVIEWER_ID: ${{ vars.E2E_REVIEWER_ID }}
+          E2E_PAYLOAD_JSON: ${{ vars.E2E_PAYLOAD_JSON }}
+          E2E_EVIDENCE_FILE: ${{ github.workspace }}/evidence/browser/live-browser-evidence.json
+          SOURCE_REVISION: ${{ inputs.source_revision }}
+          DEPLOYMENT_REVISION: ${{ inputs.deployment_revision }}
+          EVIDENCE_ENVIRONMENT: ${{ inputs.evidence_environment }}
+        run: |
+          cd "$RUNNER_TEMP/order-resolution/frontend"
+          npm run e2e:live
+      - name: Remove authenticated browser state
+        if: always()
+        run: |
+          rm -f "$RUNNER_TEMP/e2e-storage-state.json"
+          rm -f "$RUNNER_TEMP/e2e-session-storage.json"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: workstream-d-browser
+          path: evidence/browser/live-browser-evidence.json
+          retention-days: 14
+
+  failure-injection:
+    if: inputs.run_failure_injection
+    runs-on: ubuntu-latest
+    environment: azure-foundry-validation
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ inputs.source_revision }}
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+      - name: Instantiate and install the generated hosted harness
+        run: |
+          python scripts/instantiate_maf.py "$RUNNER_TEMP/order-resolution" \
+            --profile order-resolution
+          python -m pip install uv==0.9.26
+          uv sync --locked --project "$RUNNER_TEMP/order-resolution/backend"
+          mkdir -p evidence/failure
+      - name: Run bounded hosted failure injection
+        env:
+          MAF_HOSTED_FAILURE_ENABLED: "true"
+          MAF_HOSTED_FAILURE_ADAPTER: ${{ vars.MAF_HOSTED_FAILURE_ADAPTER }}
+          MAF_HOSTED_BASE_URL: ${{ inputs.base_url }}
+          SOURCE_REVISION: ${{ inputs.source_revision }}
+          DEPLOYMENT_REVISION: ${{ inputs.deployment_revision }}
+          EVIDENCE_ENVIRONMENT: ${{ inputs.evidence_environment }}
+        run: |
+          cd "$RUNNER_TEMP/order-resolution/backend"
+          uv run --locked python -m tests.hosted_failure_runner \
+            --output "$GITHUB_WORKSPACE/evidence/failure/hosted-failure.json"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: workstream-d-failure-injection
+          path: evidence/failure/hosted-failure.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  telemetry-correlation:
+    if: inputs.run_telemetry_correlation && inputs.run_failure_injection
+    needs: failure-injection
+    runs-on: ubuntu-latest
+    environment: azure-foundry-validation
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ inputs.source_revision }}
+      - uses: azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5 # v2.3.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Download hosted failure correlations
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p evidence/failure
+          gh run download "$GITHUB_RUN_ID" \
+            --name workstream-d-failure-injection \
+            --dir evidence/failure
+      - name: Query exact correlated App Insights pairs
+        env:
+          SOURCE_REVISION: ${{ inputs.source_revision }}
+          DEPLOYMENT_REVISION: ${{ inputs.deployment_revision }}
+          EVIDENCE_ENVIRONMENT: ${{ inputs.evidence_environment }}
+          AZURE_LOG_ANALYTICS_WORKSPACE_ID: ${{ vars.AZURE_LOG_ANALYTICS_WORKSPACE_ID }}
+        run: |
+          mkdir -p evidence/telemetry
+          python scripts/verify_app_insights_correlation.py \
+            --evidence evidence/failure/hosted-failure.json \
+            --workspace "$AZURE_LOG_ANALYTICS_WORKSPACE_ID" \
+            --output evidence/telemetry/app-insights-correlation.json \
+            --source-revision "$SOURCE_REVISION" \
+            --deployment-revision "$DEPLOYMENT_REVISION" \
+            --environment "$EVIDENCE_ENVIRONMENT" \
+            --attempts 12 --wait-seconds 10
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: workstream-d-telemetry
+          path: evidence/telemetry/app-insights-correlation.json
+          retention-days: 14
+
+  release-evidence:
+    if: always()
+    needs:
+      - implementation-evidence
+      - exact-active-revision
+      - real-provider-evaluation
+      - browser-e2e
+      - failure-injection
+      - telemetry-correlation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ inputs.source_revision }}
+      - name: Download this run's Workstream D evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p evidence
+          gh run download "$GITHUB_RUN_ID" \
+            --pattern 'workstream-d-*' \
+            --dir evidence
+      - name: Build and independently validate revision-bound release evidence
+        env:
+          SOURCE_REVISION: ${{ inputs.source_revision }}
+          DEPLOYMENT_REVISION: ${{ inputs.deployment_revision }}
+          EVIDENCE_ENVIRONMENT: ${{ inputs.evidence_environment }}
+          AGENT_VERSION: ${{ inputs.agent_version }}
+        run: |
+          implementation="$(find evidence/workstream-d-implementation \
+            -name ORDER-RESOLUTION-TECHNICAL-EXECUTION.json -print -quit)"
+          test -n "$implementation"
+          implementation_root="$(dirname "$implementation")"
+          args=(
+            --evidence-root evidence
+            --implementation-root "$implementation_root"
+            --output evidence/release-evidence.json
+            --source-revision "$SOURCE_REVISION"
+            --deployment-revision "$DEPLOYMENT_REVISION"
+            --environment "$EVIDENCE_ENVIRONMENT"
+            --agent-version "$AGENT_VERSION"
+          )
+          add_if_present() {
+            if [ -f "$2" ]; then args+=("$1" "$2"); fi
+          }
+          add_if_present --active-revision \
+            evidence/workstream-d-active-revision/active-revision.json
+          add_if_present --provider-evaluation \
+            evidence/workstream-d-provider-evaluation/model-quality.json
+          add_if_present --browser \
+            evidence/workstream-d-browser/live-browser-evidence.json
+          add_if_present --failure-injection \
+            evidence/workstream-d-failure-injection/hosted-failure.json
+          add_if_present --telemetry \
+            evidence/workstream-d-telemetry/app-insights-correlation.json
+          python scripts/build_release_evidence.py "${args[@]}"
+          set +e
+          python -m readiness.release \
+            --manifest evidence/release-evidence.json \
+            --evidence-root evidence \
+            --output evidence/release-evidence-report.json
+          status=$?
+          set -e
+          test "$status" -eq 1
+          python - <<'PY'
+          import json
+          report = json.load(open("evidence/release-evidence-report.json"))
+          assert report["dimensions"]["implementation"]["status"] == "passed"
+          assert report["dimensions"]["production"]["status"] == "blocked"
+          PY
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: workstream-d-release-evidence
+          path: |
+            evidence/release-evidence.json
+            evidence/release-evidence-report.json
+          if-no-files-found: warn
+          retention-days: 30
