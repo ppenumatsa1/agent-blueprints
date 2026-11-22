@@ -34,13 +34,12 @@ Managed database operations and live backup/restore remain unverified
 resource or permanent repository creation is authorized by this PRD.
 
 The latest verified integrated snapshot is PR #17 head
-`b63353944372f2b6dcd91546cca3a350250be78b`, based on foundation
+`8b3c3578f36c30f32f4539ef1d181e1ff3984ab4`, based on foundation
 `1e99e038dc31c0ae25e5ea7712030d204ee35bc0`; all six jobs passed in run
-`44955776238`. Merge ref `0a54717118879bab6be56633dc29c313178d9081` had
-exact base/head parents and a tree identical to the head. This documentation
-correction is newer than that tested snapshot and needs its own exact-head
-CI. Any later tree or base change also requires revalidation. Neither result
-makes the blueprint or a generated application complete or deployment-ready.
+`44960731511`. Merge ref `2ab8f3c92ebde95aa5c0bfb2cd33b0e5ab558c52` had
+exact base/head parents and a tree identical to the head. Any later tree or
+base change also requires revalidation. Neither result makes the blueprint
+or a generated application complete or deployment-ready.
 Track hosted implementation, trust, and evidence work in
 [#18](https://github.com/ppenumatsa1/agent-blueprints/issues/18),
 [#19](https://github.com/ppenumatsa1/agent-blueprints/issues/19),
@@ -52,8 +51,11 @@ Track hosted implementation, trust, and evidence work in
 [#28](https://github.com/ppenumatsa1/agent-blueprints/issues/28).
 Hosted recovery was explicitly deferred to a separate scoped follow-up; this
 is not a security waiver.
+The reusable MAF extension patterns tracked in
+[#35](https://github.com/ppenumatsa1/agent-blueprints/issues/35) now have
+typed blueprint contracts and a generated synthetic fixture; exact test/CI
+evidence is pending. No live model call or hosted capability is implied.
 Other tracked verification and separately authorized work includes
-reusable MAF extension patterns [#35](https://github.com/ppenumatsa1/agent-blueprints/issues/35),
 cross-platform tooling [#23](https://github.com/ppenumatsa1/agent-blueprints/issues/23),
 managed database operations [#24](https://github.com/ppenumatsa1/agent-blueprints/issues/24),
 the measured local demo [#29](https://github.com/ppenumatsa1/agent-blueprints/issues/29),

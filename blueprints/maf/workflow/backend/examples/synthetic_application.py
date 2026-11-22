@@ -1,15 +1,76 @@
 import os
+from collections.abc import Callable, Mapping
+from pathlib import Path
+from uuid import UUID
 
+from agent_framework import (
+    Agent,
+    CheckpointStorage,
+    Executor,
+    FunctionTool,
+    SupportsChatGetResponse,
+    Workflow,
+    WorkflowBuilder,
+    WorkflowContext,
+    handler,
+    response_handler,
+    tool,
+)
 from psycopg import Connection
 
 from app.application import ApplicationComponents
-from app.domain.models import Case, StateRepository
+from app.domain.errors import AccessDenied
+from app.domain.models import Case, Principal, StateRepository, TransactionalAction
 from app.domain.policy import CaseAccessPolicy, JsonObjectRules
+from app.extensions.model import ModelSelection
+from app.extensions.prompts import load_prompt_asset
+from app.extensions.tools import ToolAuthorization
+from app.workflows.workflow import WORKFLOW_NAME
+
+
+PROMPT_PATH = Path(__file__).parent / "prompts" / "synthetic-review.v1.md"
+SYNTHETIC_AGENT_NAME = "synthetic-review"
+SYNTHETIC_AGENT_DESCRIPTION = "Reviews synthetic case data and returns findings for a human."
+SYNTHETIC_TOOL_NAME = "inspect_synthetic_case"
 
 
 class SyntheticAction:
     def apply(self, connection: Connection, case: Case) -> None:
         connection.execute("INSERT INTO synthetic_effects (case_id) VALUES (%s)", (case.id,))
+
+
+class SyntheticApprovalExecutor(Executor):
+    def __init__(self, store: StateRepository, action: TransactionalAction):
+        super().__init__(id="approval")
+        self._store = store
+        self._action = action
+
+    @handler
+    async def request_approval(self, message: dict[str, str], ctx: WorkflowContext) -> None:
+        await ctx.request_info(request_data=message, response_type=bool)
+
+    @response_handler
+    async def handle_approval(
+        self, original_request: dict[str, str], approved: bool, ctx: WorkflowContext
+    ) -> None:
+        case_id = UUID(original_request["case_id"])
+        self._store.apply_once(case_id, approved, self._action)
+        await ctx.yield_output(
+            {"case_id": str(case_id), "decision": "approved" if approved else "rejected"}
+        )
+
+
+def build_synthetic_workflow(
+    store: StateRepository,
+    action: TransactionalAction,
+    checkpoint_storage: CheckpointStorage | None = None,
+) -> Workflow:
+    """Build an application-owned native workflow using the host's checkpoint contract."""
+    return WorkflowBuilder(
+        name=WORKFLOW_NAME,
+        start_executor=SyntheticApprovalExecutor(store, action),
+        checkpoint_storage=checkpoint_storage,
+    ).build()
 
 
 def prepare(store: StateRepository) -> None:
@@ -33,9 +94,75 @@ def initialize(store: StateRepository) -> None:
             raise RuntimeError("The synthetic example table is missing; run its preparation step.")
 
 
+class SyntheticToolAuthorization:
+    def authorize_tool(
+        self, principal: Principal, tool_name: str, resource_id: str | None = None
+    ) -> bool:
+        if (
+            tool_name != SYNTHETIC_TOOL_NAME
+            or "workflow.read" not in principal.scopes
+            or resource_id != "synthetic-case"
+        ):
+            raise AccessDenied()
+        return True
+
+
+def _read_synthetic_case_reference(case_id: str) -> str:
+    return f"Synthetic case reference: {case_id}"
+
+
+async def _inspect_synthetic_case(
+    principal: Principal,
+    authorization: ToolAuthorization,
+    case_id: str,
+) -> str:
+    if authorization.authorize_tool(principal, SYNTHETIC_TOOL_NAME, case_id) is not True:
+        raise AccessDenied()
+    return _read_synthetic_case_reference(case_id)
+
+
+def build_synthetic_tools(
+    principal: Principal, authorization: ToolAuthorization
+) -> tuple[FunctionTool, ...]:
+    @tool(
+        name=SYNTHETIC_TOOL_NAME,
+        description="Read an application-authorized synthetic case reference.",
+    )
+    async def inspect_synthetic_case(case_id: str) -> str:
+        return await _inspect_synthetic_case(principal, authorization, case_id)
+
+    return (inspect_synthetic_case,)
+
+
+def build_synthetic_agent(
+    selection: ModelSelection,
+    providers: Mapping[str, Callable[[str], SupportsChatGetResponse]],
+    principal: Principal,
+    authorization: ToolAuthorization,
+) -> Agent:
+    """Build a request-scoped agent; do not share its principal-bound tools."""
+    provider = providers.get(selection.provider_id)
+    if provider is None:
+        raise ValueError(f"No model provider is configured for {selection.provider_id!r}.")
+    client = provider(selection.model_id)
+    prompt = load_prompt_asset(SYNTHETIC_AGENT_NAME, "v1", PROMPT_PATH)
+    tools = build_synthetic_tools(principal, authorization)
+    return Agent(
+        client=client,
+        name=SYNTHETIC_AGENT_NAME,
+        description=SYNTHETIC_AGENT_DESCRIPTION,
+        instructions=prompt.instructions,
+        tools=tools,
+    )
+
+
 def build_application() -> ApplicationComponents:
     return ApplicationComponents(
-        JsonObjectRules(), CaseAccessPolicy(), SyntheticAction(), initialize
+        JsonObjectRules(),
+        CaseAccessPolicy(),
+        SyntheticAction(),
+        initialize,
+        workflow_factory=build_synthetic_workflow,
     )
 
 

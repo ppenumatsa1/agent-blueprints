@@ -74,12 +74,11 @@ remaining acceptance criteria, dependencies and evidence in these issues:
   [#33](https://github.com/ppenumatsa1/agent-blueprints/issues/33), and
   [#34](https://github.com/ppenumatsa1/agent-blueprints/issues/34).
 
-Draft PR [#40](https://github.com/ppenumatsa1/agent-blueprints/pull/40)
-proposes a standardized Order Resolution specification only. Review its
-terminology for documentation compatibility; do not treat its business
-scenario as an implementation request. The current order-adjustment scenario
-remains a synthetic test fixture, and no #40 runtime behavior or contract is
-included in this blueprint.
+Merged PR [#40](https://github.com/ppenumatsa1/agent-blueprints/pull/40)
+adds a standardized Order Resolution specification only. Treat its business
+scenario as a separate proposal, not an implementation request. The current
+order-adjustment scenario remains a synthetic test fixture, and no #40 runtime
+behavior or contract is included in this blueprint.
 
 Hosted recovery remains explicitly deferred, not waived. Azure deployment
 requires the implemented and independently verified offline prerequisites,
@@ -93,6 +92,39 @@ engineering check as release authorization.
 The dated [issue and fix journal](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-22---issue-and-fix-status)
 summarizes open PR evidence, unresolved issues and the review sequence. Its
 draft work is not represented as merged functionality on this branch.
+
+The #35 extension workstream keeps only seams that add application-owned
+configuration or policy beyond MAF's native APIs. `ModelSelection` is a small
+validated provider/model configuration value; the application constructs the
+selected `SupportsChatGetResponse` client and passes it directly to MAF
+`Agent`. `PromptAsset` supplies an explicit file version and source-byte digest
+because MAF accepts instructions but does not manage versioned prompt files.
+The example uses MAF's native `Agent` and `@tool` APIs directly; only the
+request-scoped `ToolAuthorization` protocol remains application-owned, since
+MAF tool registration is not business authorization. No generic
+`ModelClientFactory`, `AgentDefinition`, `build_chat_agent`, or `ToolRegistry`
+is needed. The workflow continues to use the host's `WorkflowFactory`,
+framework-native `Executor`/`WorkflowBuilder`, and host-provided
+`FileCheckpointStorage`.
+
+The pinned `foundry-public` source at
+[`4543075`](https://github.com/ppenumatsa1/maf-monorepo/tree/45430753c5f3e75716ea3822d2b2b52fbb4f1c34/agents/underwriting/foundry-public/backend)
+likewise constructs its provider client in application code and builds
+concrete MAF executors with `WorkflowBuilder`. Its client fallback is not
+copied: unavailable model calls must not silently produce synthetic output.
+Evaluation remains separate from #37; #39 should compose MAF's native
+`Evaluator`, `LocalEvaluator`, `@evaluator`, and `evaluate_agent()` rather
+than add a generic evaluator registry.
+
+The generated synthetic fixture tests provider selection, explicit versioned
+prompt loading, native agent/tool composition, affirmative authorization,
+approval/rejection and restart/crash recovery without invoking a real model.
+The fixture tool is read-only. Arbitrary trusted Python callbacks remain
+unsandboxed, so the absolute extension non-bypass criterion is unverified.
+Consequential remote effects remain blocked by #32; hosted identity,
+checkpoints and recovery (#19/#20/#22) and trusted readiness evidence (#21)
+remain unverified. Do not mark #35 or hosted capabilities complete beyond the
+evidence on the current draft PR.
 
 ### Execution sequence and work packages
 
@@ -125,15 +157,15 @@ that the verifier passed; logs for the prior PR heads recorded 44 tests and
 passed all five jobs for foundation head `d0e1727`. The dependent PRs had
 separate successful head-specific runs, which are not evidence for the
 reconciled tree.
-The #17 implementation reconciliation is commit
-`91eaa6392082c1084c05bc9b07cb9052857d5b2f`, with the non-rewriting merge of
-`main` at `de1cbe4cc3a93f2473a6f8f5f9e063d1ae278fa3` as its second parent.
-It targets `main`; exact-head
-[run 45027035643](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/45027035643)
-passed all six jobs. Merge ref `d421eeb98024810465c1ac9ce77cfa1ac4ac7a70`
-has the expected base/head parents and a tree equal to the head. These results
-cover the implementation commit, not later documentation edits or other tree
-changes. Local validation and network/harness caveats are recorded in the
+PR #17 is merged into `main` at
+`0c1297cc8e93c62f69d61d0eb3bdabf3c27c683d`; exact-main
+[run 45027884271](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/45027884271)
+passed all six jobs for that baseline. Later merged work advances current
+`main` to `9b6e0194c1b2b005792b68a95e46275e25817a8a`; #37 is being
+reconciled against this exact base, and its fresh exact-head results are
+tracked on the PR. Earlier PR #17 commit and merge-ref results below are
+historical snapshots and do not replace current-base validation. Local
+validation and network/harness caveats are recorded in the
 [integration journal](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-22---main-reconciliation-and-local-validation).
 The [targeted MAF supply-chain audit](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-22---targeted-maf-supply-chain-audit)
 distinguishes the approved `agent-framework-core==1.26.0` dependency from the
@@ -362,23 +394,22 @@ the local HTTP smoke check. Its unsigned readiness report is unverified.
 | P1-15 | Demonstrate the local prototype from a synthetic specification through approval, evaluation, and its readiness report. | P1-10, P1-11 | Record the scenario, evidence, limitations, and observed elapsed time; the 2–3 hour objective is a target until a representative run demonstrates it. |
 | P1-12 | Validate Foundry Hosted Agent compatibility for the selected MAF version, Responses protocol, request-aware workflow factory, identity, per-user session isolation, and host-managed checkpoints. | P1-09, P1-15 | Microsoft warns delegated users are not fenced from one another within a shared session. A trusted app must authorize each principal's session, verify mapping from the validated principal, map each authenticated caller to a distinct session, and reject unchecked client IDs; an opaque app-supplied `x-ms-user-identity` scoping value derived from that principal is not authorization. Platform-generated `x-agent-user-id` is a different header; do not assume their values match. Equivalence and binding to the validated principal are unsupported and unverified; this bridge and mapping are not implemented or tested. Local AgentServer Core 2.3.0/Responses 2.4.0 one-shot task IDs reran fresh after terminal completion and are not persistent deduplication; hosted semantics remain unknown. The exact `agent-framework-foundry-hosting==1.0.0b261112` source exposes `response_id` in the request-aware factory before checkpoint preparation/parsing/run claim, but this hook alone does not establish a safe owner-bound CAS claim, a reservation per continuation, pending-reply/action ordering, idempotent side effects, or same-response recovery. The scoping value is not a credential; hosted secret delivery/rotation and downstream OBO token lifecycle are not implemented, and end-user bearer/OBO tokens must not be persisted. Lost `response.id` recovery remains blocked; see the [investigation journal](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-21---hosted-caller-binding-and-lost-responses) and [session-isolation clarification](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-21---delegated-session-isolation-and-debugger-evidence). Local checks alone are not a hosted deployment. No Azure resources are provisioned. |
 | P1-13 | Prepare the explicitly selected ACA fallback and a framework-compatible checkpoint strategy. | P1-09, P1-15 | Separate local/container recovery and idempotency checks pass; no claim that ACA shares Foundry checkpoint ownership or silently replaces a failed model call. |
-| P1-14 | Prepare Bicep, least-privilege identities, authenticated public endpoints, GitHub-hosted CI, and deployment/handoff instructions. Deploy only after separate Azure authorization. | Offline: P1-10, P1-11, P1-12 design decisions; P1-13 only if selected. Live deployment supplies evidence for hosted/cloud issues and must not wait for all live-verification issues to be closed. | Exact PR #17 head `b633539` passed `maf-infrastructure` and generated infrastructure checks in run 44955776238; the staged graph is not wired or deployed. Track IaC wiring [#18](https://github.com/ppenumatsa1/agent-blueprints/issues/18), managed PostgreSQL operations [#24](https://github.com/ppenumatsa1/agent-blueprints/issues/24), and separately authorized live deployment [#28](https://github.com/ppenumatsa1/agent-blueprints/issues/28). |
+| P1-14 | Prepare Bicep, least-privilege identities, authenticated public endpoints, GitHub-hosted CI, and deployment/handoff instructions. Deploy only after separate Azure authorization. | Offline: P1-10, P1-11, P1-12 design decisions; P1-13 only if selected. Live deployment supplies evidence for hosted/cloud issues and must not wait for all live-verification issues to be closed. | Exact PR #17 head `8b3c357` passed `maf-infrastructure` and generated infrastructure checks in run [44960731511](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44960731511); the staged graph is not wired or deployed. Track IaC wiring [#18](https://github.com/ppenumatsa1/agent-blueprints/issues/18), managed PostgreSQL operations [#24](https://github.com/ppenumatsa1/agent-blueprints/issues/24), and separately authorized live deployment [#28](https://github.com/ppenumatsa1/agent-blueprints/issues/28). |
 
 ### Current integrated review baseline and issue-linked backlog
 
 The latest verified integrated snapshot is head
-`b63353944372f2b6dcd91546cca3a350250be78b`, based on
+`8b3c3578f36c30f32f4539ef1d181e1ff3984ab4`, based on
 `1e99e038dc31c0ae25e5ea7712030d204ee35bc0`. Run
-[44955776238](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44955776238)
+[44960731511](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44960731511)
 passed all six jobs. Merge ref
-`0a54717118879bab6be56633dc29c313178d9081` had exact base/head parents and a
-tree identical to the head (`1e0a7994da25cbf63c9e3f6b7284f1a660260c55`).
-Generated acceptance passed 44 tests with no skips or expected failures.
+`2ab8f3c92ebde95aa5c0bfb2cd33b0e5ab558c52` had exact base/head parents and a
+tree identical to the head (`304b2b02432bc8bf9a63b641c853e7f07467e860`).
+Generated acceptance passed 44 tests without skips or expected failures.
 Synthetic producer evidence remains limited: approval/recovery passed,
 explanation/hint remain unverified, and the unsigned validator exited 1.
-This documentation correction is newer than that tested snapshot and needs
-fresh exact-head CI; any later tree or base change also requires revalidation.
-Neither result makes the blueprint, readiness report, or deployment complete. See the
+Any later tree or base change requires exact-head revalidation. Neither result
+makes the blueprint, readiness report, or deployment complete. See the
 [journal](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-21---integrated-gap-reconciliation-and-backlog).
 
 | Work package | Open issue(s) and acceptance boundary |
@@ -387,12 +418,12 @@ Neither result makes the blueprint, readiness report, or deployment complete. Se
 | P0: consequential external side effects | [#32](https://github.com/ppenumatsa1/agent-blueprints/issues/32); the action ledger covers only effects in the same PostgreSQL transaction. Block consequential remote actions until service-specific authorization, downstream idempotency and authoritative reconciliation are independently verified; otherwise fail closed and use manual resolution. An outbox only persists intent; it cannot deduplicate an external effect after a lost acknowledgment. The opt-in [pattern](../blueprints/maf/workflow/backend/examples/external_effect_boundary.py) and [synthetic tests](../blueprints/maf/workflow/backend/tests/test_external_effect.py) cover exact-request authorization, a five-second downstream budget, conflicts, concurrency, timeouts, reconciliation and process death, not real services or hosted guarantees. Its case-level key represents one immutable action only; future proposal-version/action/target identity must follow merged #40. Independently verify generated revision and each integration's authorization, retention, timeout and reconciliation; keep #32 open. |
 | P1-07–08: real identity and browser experience | [#27](https://github.com/ppenumatsa1/agent-blueprints/issues/27); interactive Entra/OBO, generated UI and accessibility remain unverified. |
 | P1-09/P1-12: hosted MAF packaging and checkpoint integration | [#19](https://github.com/ppenumatsa1/agent-blueprints/issues/19); caller/session binding [#22](https://github.com/ppenumatsa1/agent-blueprints/issues/22); lost-response/effect recovery [#20](https://github.com/ppenumatsa1/agent-blueprints/issues/20). Hosted recovery was explicitly deferred; this is not a security waiver. |
-| P1-10: agent evaluation and browser-hint evidence | [#25](https://github.com/ppenumatsa1/agent-blueprints/issues/25); current synthetic producer leaves explanation and hint unverified. |
+| Typed MAF extensions | [#35](https://github.com/ppenumatsa1/agent-blueprints/issues/35), [draft PR #37](https://github.com/ppenumatsa1/agent-blueprints/pull/37); use validated model-selection configuration, explicitly versioned prompt assets, direct native MAF `Agent`, `@tool`, `Executor` and `WorkflowBuilder` composition, and request-scoped application authorization. Source/generated suites previously passed 81 tests, including approval, rejection, restart and crash recovery; local source/generated Compose smoke checks passed UI 200, health 204, protected API 401, CSP and private checkpoint permissions. After the genuine CI/docs merge conflicts were reconciled against current `main` `9b6e0194c1b2b005792b68a95e46275e25817a8a`, exact-head run [45040560075](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/45040560075) passed all six jobs on integration commit `245cbe2`. The example requires affirmative `True` authorization. Arbitrary trusted Python callbacks remain unsandboxed, so absolute non-bypass is unverified. External effects remain blocked by [#32](https://github.com/ppenumatsa1/agent-blueprints/issues/32); hosted identity/recovery, trusted readiness and a live model response are not claimed. |
+| P1-10: agent evaluation and browser-hint evidence | [#25](https://github.com/ppenumatsa1/agent-blueprints/issues/25); current synthetic producer leaves explanation and hint unverified. Use native MAF `Evaluator`, `LocalEvaluator`, `@evaluator`, and `evaluate_agent()` rather than adding a generic evaluator extension seam. |
 | P1-11: privacy-safe cloud telemetry | [#26](https://github.com/ppenumatsa1/agent-blueprints/issues/26); native auto-instrumentation remains disabled after the query-canary leak and duplicate spans. |
 | Developer experience | [#23](https://github.com/ppenumatsa1/agent-blueprints/issues/23); macOS, interactive debugging and Restricted Mode remain unverified. |
 | P1-13: optional ACA workflow runtime | [#31](https://github.com/ppenumatsa1/agent-blueprints/issues/31); alternative remains unselected, not a silent fallback. |
 | P1-14: Azure graph wiring, managed database operations, deployment | [#18](https://github.com/ppenumatsa1/agent-blueprints/issues/18), [#24](https://github.com/ppenumatsa1/agent-blueprints/issues/24), [#28](https://github.com/ppenumatsa1/agent-blueprints/issues/28); no Azure resource was provisioned. |
-| P1: reusable MAF adopter extensions | [#35](https://github.com/ppenumatsa1/agent-blueprints/issues/35); specify and test model, agent, prompt, tool/authorization, and executor/workflow patterns in an independently generated synthetic app. |
 | P1-15: measured local demonstration | [#29](https://github.com/ppenumatsa1/agent-blueprints/issues/29); the 2–3 hour objective has not been measured. |
 | Phase 0 Specification Studio handoff | [#33](https://github.com/ppenumatsa1/agent-blueprints/issues/33); no producer artifact or lossless adapter exists, and this does not authorize implementation. |
 | P1 permanent standalone reference application | [#30](https://github.com/ppenumatsa1/agent-blueprints/issues/30); required as an independent deliverable, but repository creation still requires separate explicit authorization. |

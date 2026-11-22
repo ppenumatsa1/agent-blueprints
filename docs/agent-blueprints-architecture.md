@@ -58,14 +58,13 @@ Security-hardened PR #11 merged to `main` as
 integrated with the canonical uv lock: source and generated installations
 reject the compromised `agent-framework` umbrella distribution and verify the
 approved core wheel digest against the lock and downloaded artifact before
-installation. The lock remains the sole dependency graph. The local #17 tree
-contains the normal merge of `main` at
-`de1cbe4cc3a93f2473a6f8f5f9e063d1ae278fa3` in implementation commit
-`91eaa6392082c1084c05bc9b07cb9052857d5b2f`, and PR #17 targets `main`.
-Exact-head
-[run 45027035643](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/45027035643)
-passed all six jobs. This result is scoped to that implementation commit;
-later tree or base changes require fresh validation. Local evidence is
+installation. The lock remains the sole dependency graph. PR #17 is merged
+into `main` at `0c1297cc8e93c62f69d61d0eb3bdabf3c27c683d`; exact-main
+[run 45027884271](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/45027884271)
+passed all six jobs for that baseline. Current `main` has since advanced to
+`9b6e0194c1b2b005792b68a95e46275e25817a8a`; #37's integration is validated
+separately on its exact PR head. Earlier PR #17 head and merge-ref checks are
+historical snapshots; changes on top of this baseline require fresh validation. Local evidence is
 recorded in the
 [integration journal](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-22---main-reconciliation-and-local-validation);
 
@@ -77,9 +76,8 @@ Hosting the workflow runtime in ACA is a deferred alternative requiring its own
 verified checkpoint strategy. Neither topology is a verified deployment;
 provisioning requires separate authorization.
 
-[PR #11](https://github.com/ppenumatsa1/agent-blueprints/pull/11) is merged
-to `main`; the integrated #17 branch is being reconciled with that base.
-Its cleaned foundation commit `9efeef0` removes the compatibility aliases and
+[PR #11](https://github.com/ppenumatsa1/agent-blueprints/pull/11) and PR #17
+are merged to `main`. The cleaned foundation commit `9efeef0` removes the compatibility aliases and
 uses canonical imports. Follow-up foundation commit `d0e1727` fixes propagation
 of generated-verifier failures through CI's `tee` pipeline and adds regression
 coverage for failure, skipped, expected-failure, and success outputs; its
@@ -136,21 +134,40 @@ causes of earlier intermittent evidence failures remain unproven. Local
 source and generated tests passed on PostgreSQL 16.15 and 17.12 at `7cd99ac`;
 this does not verify Azure database configuration or live restoration.
 
+The #35 MAF extension patterns keep only application-owned model-selection
+configuration, explicitly versioned prompt assets, and request-scoped
+authorization around direct MAF `Agent`, `@tool`, `Executor`, and
+`WorkflowBuilder` APIs. Redundant `ModelClientFactory`, `AgentDefinition`,
+`build_chat_agent`, and `ToolRegistry` wrappers are removed; the host retains
+workflow identity, response contract, and `FileCheckpointStorage`. The
+generated synthetic fixture exercises construction, affirmative authorization,
+approval/rejection, restart and crash recovery without a model call or
+fabricated response. Arbitrary trusted Python callbacks are not sandboxed, so
+absolute non-bypass remains unverified. Provider credentials and behavior,
+live hosted identity and recovery, trusted readiness evidence, and consequential
+external effects remain unverified or blocked; see the
+[MAF extension guidance](../blueprints/maf/workflow/docs/architecture.md#typed-maf-extension-patterns).
+Evaluation stays separate from #37; downstream evaluation uses native MAF
+`Evaluator`, `LocalEvaluator`, `@evaluator`, and `evaluate_agent()` APIs.
+
 Local PostgreSQL container initialization can briefly accept Unix socket
 connections before the final TCP server starts. Issue [#38](https://github.com/ppenumatsa1/agent-blueprints/issues/38)
 records this on disposable PostgreSQL 16.15 and 17, including a failed initial
 `createdb` and a successful 72/72 source/generated retry at historical head
 `8b3c357`. CI startup loops and Compose health checks use bounded loopback TCP
-probes; validate the resulting exact head. This does not establish managed
-PostgreSQL readiness.
+probes; these remain in current `main` at
+`9b6e0194c1b2b005792b68a95e46275e25817a8a`. Exact-head run
+[45040560075](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/45040560075)
+passed all six jobs on the reconciled #37 integration commit. This does not
+establish managed PostgreSQL readiness.
 
 The local integration at `af3955a` combined the engineering layers. Source and
 independently generated backends each passed 68 tests on PostgreSQL 16.15 and
 17.12, generated verification passed 44 without skips, and both Compose stacks
 and offline infrastructure checks passed. The unsigned independent readiness
 report remained unverified. See the [integration journal](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-21---combined-engineering-layer-integration)
-for failed attempts and scope. Final combined-revision CI and cloud behavior
-remain separate checks; the individual PRs are still open.
+for failed attempts and scope. These are historical local results; current
+merged-main CI and the separate #37 validation are recorded independently.
 
 | Layer | Responsibility | Examples |
 | --- | --- | --- |

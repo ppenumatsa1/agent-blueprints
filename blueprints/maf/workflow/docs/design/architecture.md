@@ -87,14 +87,12 @@ canary into exported span JSON. The integrated fix from `3aa389f` removes the
 opt-in and disables auto-instrumentation; all 23 focused telemetry regressions
 passed locally, including recovery redaction and restricted-origin CORS.
 Public metric APIs replace private SDK fields. Exact PR #17 head
-`b63353944372f2b6dcd91546cca3a350250be78b`, based on
+`8b3c3578f36c30f32f4539ef1d181e1ff3984ab4`, based on
 `1e99e038dc31c0ae25e5ea7712030d204ee35bc0`, passed all six jobs in run
-`44955776238`; its merge ref `0a54717118879bab6be56633dc29c313178d9081`
-had the exact base/head parents and identical tree. This run predates this
-documentation correction and does not cover the new tree; fresh exact-head CI
-is required. Cloud ingestion remains unverified and native
-auto-instrumentation is not approved. Any later tree or base change also
-requires revalidation.
+`44960731511`; its merge ref `2ab8f3c92ebde95aa5c0bfb2cd33b0e5ab558c52`
+had the exact base/head parents and identical tree. Cloud ingestion remains
+unverified and native auto-instrumentation is not approved. Any later tree or
+base change also requires revalidation.
 Track safe cloud export and end-to-end propagation separately in
 [#26](https://github.com/ppenumatsa1/agent-blueprints/issues/26).
 
@@ -266,14 +264,25 @@ propagation or a telemetry exporter.
 
 - `ApplicationComponents` supplies application-owned business rules, access
   policy, transactional action, optional initialization, and optionally a
-  workflow factory. Reusable typed patterns for models, agents, prompts,
-  tools, and executors remain to be specified and verified in
-  [#35](https://github.com/ppenumatsa1/agent-blueprints/issues/35).
+  workflow factory. `app/extensions/` defines typed provider selection,
+  versioned prompt assets, native MAF `Agent` construction, and an
+  authorization-aware MAF tool registry. Provider factories, policy, and
+  tools remain application-owned; the generated synthetic fixture tests
+  construction and denial paths without calling a model.
+- `WorkflowFactory` retains its native MAF `Executor`/`WorkflowBuilder`
+  signature and passes host-owned checkpoint storage through unchanged.
+  Preserve workflow/executor identity, pending request and response
+  semantics, and host checkpoint ownership; the local native workflow test
+  does not verify Foundry hosting or recovery.
 - `StateRepository` and `WorkflowHost` are narrow domain boundaries. Replacing
   either requires preserving identity isolation, decision ordering,
   idempotency, recovery, and failure semantics.
 - MAF input and application payloads are untrusted. A model/tool response is
   not authorization; no model recommendation can approve an action.
+- Tool factories bind a trusted principal per request, and handlers must
+  authorize again at invocation using application policy and the supplied
+  resource identifier. This read-only synthetic tool is not evidence of
+  external-effect authorization, idempotency, or human approval.
 - Entra identities are validated by the API. Test providers and signing keys
   are not runtime authentication modes.
 - Optional OBO is server-side, explicitly configured and scope-allowlisted;

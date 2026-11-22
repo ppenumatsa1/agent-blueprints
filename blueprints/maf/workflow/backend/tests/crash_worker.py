@@ -42,8 +42,21 @@ class BarrierStore(PostgresStore):
 
 async def run(args) -> None:
     store = BarrierStore(os.environ["MAF_TEST_DATABASE_URL"], args.barrier, args.marker)
-    host = LocalWorkflowHost(store, FixtureAction(), args.checkpoint_root)
-    service = WorkflowService(store, host, JsonObjectRules(), CaseAccessPolicy())
+    if args.application == "synthetic":
+        from examples.synthetic_application import build_application
+
+        application = build_application()
+        host = LocalWorkflowHost(
+            store,
+            application.action,
+            args.checkpoint_root,
+            workflow_factory=application.workflow_factory,
+        )
+        rules, policy = application.rules, application.policy
+    else:
+        host = LocalWorkflowHost(store, FixtureAction(), args.checkpoint_root)
+        rules, policy = JsonObjectRules(), CaseAccessPolicy()
+    service = WorkflowService(store, host, rules, policy)
     if args.operation == "decide":
         actor = Principal(
             tenant_id="test-tenant",
@@ -61,6 +74,7 @@ def main() -> None:
     parser.add_argument("operation", choices=("decide", "resume"))
     parser.add_argument("case_id", type=UUID)
     parser.add_argument("checkpoint_root", type=Path)
+    parser.add_argument("--application", choices=("fixture", "synthetic"), default="fixture")
     parser.add_argument("--barrier", choices=("after-decision", "after-action"))
     parser.add_argument("--marker", type=Path)
     asyncio.run(run(parser.parse_args()))
