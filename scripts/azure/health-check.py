@@ -221,6 +221,7 @@ def main() -> int:
         project_name = required(values, "AZURE_AI_PROJECT_NAME")
         model_name = required(values, "AZURE_AI_MODEL_DEPLOYMENT_NAME")
         for hosted_name in (
+            "AZURE_HOSTED_AGENT_NAME",
             "AZURE_HOSTED_AGENT_VERSION",
             "AZURE_HOSTED_AGENT_VERSION_ID",
             "AZURE_HOSTED_AGENT_GUID",
@@ -230,6 +231,8 @@ def main() -> int:
             "AZURE_HOSTED_AGENT_RESPONSES_ENDPOINT",
             "AZURE_HOSTED_AGENT_CONVERSATION_ENDPOINT",
             "AZURE_HOSTED_AGENT_ADAPTER_ENDPOINT",
+            "AZURE_HOSTED_AGENT_RBAC_SCOPE",
+            "AZURE_HOSTED_AGENT_RBAC_SCOPE_SOURCE",
             "AZURE_HOSTED_API_APP_ROLE_ASSIGNMENT_ID",
             "AZURE_HOSTED_API_APP_ROLE_ID",
             "AZURE_HOSTED_API_APP_ROLE_VALUE",
@@ -246,6 +249,17 @@ def main() -> int:
             required(values, hosted_name)
         if values["AZURE_HOSTED_AGENT_PROVISIONING_STATUS"] != "active":
             raise VerificationError("Hosted Agent version is not active.")
+        expected_agent_scope = (
+            f"{required(values, 'AZURE_AI_PROJECT_ID').rstrip('/')}/agents/"
+            f"{values['AZURE_HOSTED_AGENT_NAME']}"
+        )
+        if values["AZURE_HOSTED_AGENT_RBAC_SCOPE"].lower() != expected_agent_scope.lower():
+            raise VerificationError("Hosted Agent RBAC scope is not the exact agent scope.")
+        if (
+            values["AZURE_HOSTED_AGENT_RBAC_SCOPE_SOURCE"]
+            != "official-foundry-agent-scope"
+        ):
+            raise VerificationError("Hosted Agent RBAC scope source is not authoritative.")
 
         api = verify_container_app(subscription, resource_group, api_name)
         web = verify_container_app(subscription, resource_group, web_name)

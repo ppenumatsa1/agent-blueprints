@@ -57,7 +57,9 @@ synthetic application selector, local workflow host, and file checkpoints.
 The protected API state boundary and API-only PostgreSQL access are established
 before publication. The pending hosted identity receives only a dedicated API
 application role before the same journaled version is required active; hosted
-code receives no direct database access.
+code receives no direct database access. Agent Consumer assignment additionally
+uses only the official exact agent scope derived from validated project output
+and the fixed publisher agent name; wider or another-agent scopes fail closed.
 
 **Next action:** independently validate the exact PR revision, supply the
 deployment-specific hosted endpoint/agent scope/administrator/journal values,

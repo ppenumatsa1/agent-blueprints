@@ -337,6 +337,8 @@ class InfrastructureContractTests(unittest.TestCase):
         hosted_grant = deploy.index(
             "-HostedServicePrincipalObjectId $pendingPublishRecord.identity_principal_id"
         )
+        scope_verification = deploy.index("verify_hosted_agent_scope.py")
+        role_assignment = deploy.index("az role assignment create")
         active_publish = deploy.index(
             "-Record (Invoke-HostedPublisher -RequireActive)"
         )
@@ -344,6 +346,7 @@ class InfrastructureContractTests(unittest.TestCase):
         self.assertLess(bootstrap_identity, pending_publish)
         self.assertLess(pending_publish, hosted_grant)
         self.assertLess(hosted_grant, active_publish)
+        self.assertLess(scope_verification, role_assignment)
         self.assertIn("-ExpectedIdentity $pendingPublishRecord", deploy)
         self.assertEqual(deploy.count("'--publish'"), 1)
         self.assertEqual(deploy.count("function Invoke-HostedPublisher"), 1)
@@ -377,6 +380,8 @@ class InfrastructureContractTests(unittest.TestCase):
         self.assertNotIn("bootstrap.invalid", deploy)
         self.assertIn("MIGRATION_DATABASE_PASSWORD_REFERENCE", deploy)
         self.assertNotIn("$values['MIGRATION_DATABASE_PASSWORD']", deploy)
+        self.assertIn("AZURE_HOSTED_AGENT_RBAC_SCOPE_SOURCE", deploy)
+        self.assertNotIn("[string]$HostedAgentRbacScope", deploy)
 
     def test_parameter_binding_contains_only_nonsecret_required_inputs(self):
         binding = json.loads((INFRA / "main.parameters.json").read_text(encoding="utf-8"))

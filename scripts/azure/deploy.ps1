@@ -27,8 +27,6 @@ param(
     [Parameter(Mandatory)]
     [string]$HostedAgentName,
     [Parameter(Mandatory)]
-    [string]$HostedAgentRbacScope,
-    [Parameter(Mandatory)]
     [string]$HostedPublishOperationId,
     [Parameter(Mandatory)]
     [string]$HostedPublishJournal,
@@ -50,6 +48,9 @@ if ($DeploymentMode -ceq 'Azd') {
 }
 if (-not $SubscriptionId -or -not $TenantId -or -not $ExpectedUser) {
     throw 'SubscriptionId, TenantId, and ExpectedUser are required in AzureCli mode.'
+}
+if ($HostedAgentName -cnotmatch '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$') {
+    throw 'HostedAgentName must be one safe ARM path segment.'
 }
 
 foreach ($endpoint in @{
@@ -87,14 +88,6 @@ foreach ($endpoint in @{
 }
 if ($HostedWorkflowEndpoint -cne $HostedResponsesEndpoint) {
     throw 'HostedWorkflowEndpoint and HostedResponsesEndpoint must identify the same Responses endpoint.'
-}
-if (
-    -not $HostedAgentRbacScope.StartsWith(
-        "/subscriptions/$SubscriptionId/",
-        [System.StringComparison]::OrdinalIgnoreCase
-    )
-) {
-    throw 'HostedAgentRbacScope must be a documented full Azure RBAC scope.'
 }
 $root = (Resolve-Path "$PSScriptRoot\..\..").Path
 $temporaryRoot = Join-Path ([System.IO.Path]::GetTempPath()) (
@@ -228,6 +221,14 @@ try {
     $values['AZURE_HOSTED_API_APP_ROLE_VALUE'] = $entra.hostedServiceRoleValue
     $values['AZURE_POSTGRES_ADMIN_PRINCIPAL_NAME'] =
         $PostgresAdministratorPrincipalName
+    $hostedAgentScopeJson = python `
+        "$PSScriptRoot\verify_hosted_agent_scope.py" `
+        --project-id (Get-RequiredValue $values 'AZURE_AI_PROJECT_ID') `
+        --agent-name $HostedAgentName
+    if ($LASTEXITCODE -ne 0 -or -not $hostedAgentScopeJson) {
+        throw 'Unable to derive the documented exact Foundry agent scope.'
+    }
+    $hostedAgentScope = $hostedAgentScopeJson | ConvertFrom-Json
     $values | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $OutputsFile
 
     & "$PSScriptRoot\configure-entra.ps1" `
@@ -443,7 +444,7 @@ try {
             --assignee-object-id (Get-RequiredValue $values 'AZURE_API_IDENTITY_PRINCIPAL_ID') `
             --assignee-principal-type ServicePrincipal `
             --role 'eed3b665-ab3a-47b6-8f48-c9382fb1dad6' `
-            --scope $HostedAgentRbacScope `
+            --scope $hostedAgentScope.scope `
             --output json `
             --only-show-errors
         if ($LASTEXITCODE -ne 0) {
@@ -543,7 +544,8 @@ try {
     $values['AZURE_HOSTED_AGENT_CLIENT_ID'] = $publishRecord.identity_client_id
     $values['AZURE_HOSTED_AGENT_PROVISIONING_STATUS'] =
         $publishRecord.provisioning_status
-    $values['AZURE_HOSTED_AGENT_RBAC_SCOPE'] = $HostedAgentRbacScope
+    $values['AZURE_HOSTED_AGENT_RBAC_SCOPE'] = $hostedAgentScope.scope
+    $values['AZURE_HOSTED_AGENT_RBAC_SCOPE_SOURCE'] = $hostedAgentScope.source
     $values['AZURE_API_HOSTED_AGENT_ROLE_ASSIGNMENT_ID'] = $agentAssignment.id
     $values['AZURE_HOSTED_API_APP_ROLE_ASSIGNMENT_ID'] =
         $hostedEntra.hostedServiceAssignmentId

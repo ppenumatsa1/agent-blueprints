@@ -113,7 +113,6 @@ administrator, or publish operation:
   -HostedResponsesEndpoint '<https-responses-endpoint>' `
   -HostedConversationEndpoint '<https-conversation-endpoint>' `
   -HostedAgentName '<agent-name>' `
-  -HostedAgentRbacScope '<documented-agent-rbac-scope>' `
   -HostedPublishOperationId '<stable-operation-id>' `
   -HostedPublishJournal '<durable-journal-path>' `
   -OutputsFile '<deployment-values.json>'
@@ -135,7 +134,9 @@ The orchestrator:
    and captures the authoritative
    version identity while its provisioning status may still be `creating`;
 7. grants the API UAMI `Foundry Agent Consumer` and assigns the dedicated
-   `Hosted.Workflow.Invoke` API application role to the hosted principal;
+   `Hosted.Workflow.Invoke` API application role to the hosted principal, but
+   only at the exact agent scope derived from the validated project resource ID
+   and the same fixed agent name passed to the publisher;
 8. reruns the identical journaled publisher operation with `--require-active`,
    which performs no create and verifies the same version identity is active;
 9. binds the API to the authoritative hosted principal and final Foundry
@@ -169,6 +170,11 @@ Rollback uses exact prior revisions whose images are immutable digests:
 Hosted Agent versions are immutable. Reconcile ambiguous publishes before any
 retry; otherwise publish a reviewed replacement version rather than overwriting
 evidence.
+
+No RBAC scope input is accepted. `deploy.ps1` derives the official
+`<project-resource-id>/agents/<agent-name>` scope from validated outputs and
+the fixed publisher name. Project, account, resource-group, subscription,
+agent-version, role-assignment, and another-agent scopes are prohibited.
 
 Resource teardown is destructive, never automatic, and checks both the exact
 environment name and ownership tag:

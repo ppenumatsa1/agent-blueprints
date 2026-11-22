@@ -162,7 +162,7 @@ dependency. ACR stores only the generated API and frontend images.
 | Principal | Scope | Role or database privilege | Reason |
 | --- | --- | --- | --- |
 | Foundry project system identity | Foundry account | Cognitive Services OpenAI User | Invoke the selected model deployment |
-| API user-assigned identity | Exact supplied hosted-agent resource | Foundry Agent Consumer | Invoke only the published hosted workflow |
+| API user-assigned identity | Exact `<project-resource-id>/agents/<agent-name>` scope | Foundry Agent Consumer | Invoke only the published hosted workflow; the scope is derived, never supplied |
 | API user-assigned identity | Application Insights | Monitoring Metrics Publisher | Send Entra-authenticated telemetry |
 | API user-assigned identity | Key Vault | Key Vault Secrets User | Resolve only configured secret references |
 | API user-assigned identity | ACR | AcrPull | Pull the API image |
@@ -176,10 +176,12 @@ dependency. ACR stores only the generated API and frontend images.
 
 The PostgreSQL role is created separately because Azure RBAC does not create
 database principals. Migration ownership and runtime DML remain distinct.
-No project-scoped API fallback is created. Deployment requires an exact,
-documented hosted-agent RBAC scope and applies the API assignment only after the publisher
-returns one acknowledged version whose dedicated identity identifiers are
-populated. The protected API state boundary is deployed first, then the hosted
+No project-scoped API fallback is created. Deployment derives the documented
+agent scope exclusively from the validated Foundry project resource ID and the
+same fixed agent name passed to the journaled publisher. It accepts no arbitrary
+scope input. This follows the official
+[Foundry agent-scope role assignment contract](https://learn.microsoft.com/azure/foundry/concepts/rbac-foundry#agent-scope-role-assignments).
+The protected API state boundary is deployed first, then the hosted
 principal receives the dedicated API application role while it may still be
 `creating`; the same operation/journal is polled with `--require-active`
 without issuing another create. Bootstrap remains in hosted mode and uses the
@@ -312,7 +314,7 @@ operator input; the returned version ID remains a data-plane identifier.
 | Consumer | Outputs |
 | --- | --- |
 | Agent A - Foundry hosted runtime | `AZURE_AI_ACCOUNT_NAME`, `AZURE_AI_PROJECT_NAME`, `AZURE_AI_PROJECT_ID`, `AZURE_AI_PROJECT_ENDPOINT`, `AZURE_AI_MODEL_DEPLOYMENT_NAME`, `FOUNDRY_RUNTIME_CONNECTION_NAME`, `APPLICATIONINSIGHTS_RESOURCE_ID` |
-| Agent C - API/frontend and persistence | `AZURE_API_URL`, `AZURE_WEB_URL`, `AZURE_API_IDENTITY_CLIENT_ID`, `AZURE_API_IDENTITY_PRINCIPAL_ID`, `AZURE_API_IDENTITY_NAME`, API app ID URI/service-principal/app-role IDs, web identity IDs, runtime/migration database URLs and user names, transient migration-token reference, pool settings, PostgreSQL host/database/server, ACR, Container Apps environment/app names/FQDNs, hosted-to-API endpoint/scope, Key Vault, hosted endpoint, immutable images, and revisions |
+| Agent C - API/frontend and persistence | `AZURE_API_URL`, `AZURE_WEB_URL`, `AZURE_API_IDENTITY_CLIENT_ID`, `AZURE_API_IDENTITY_PRINCIPAL_ID`, `AZURE_API_IDENTITY_NAME`, API app ID URI/service-principal/app-role IDs, web identity IDs, runtime/migration database URLs and user names, transient migration-token reference, pool settings, PostgreSQL host/database/server, ACR, Container Apps environment/app names/FQDNs, hosted-to-API endpoint/scope, derived agent RBAC scope/source, Key Vault, hosted endpoint, immutable images, and revisions |
 | Agent D - verification and operations | `AZURE_RESOURCE_GROUP`, `AZURE_LOCATION`, `APPLICATIONINSIGHTS_RESOURCE_ID`, `LOG_ANALYTICS_WORKSPACE_ID`, API/web names and FQDNs, Foundry project endpoint, and model deployment name |
 
 Application, workflow checkpoint, conversation/session, business state, and
@@ -333,10 +335,11 @@ Local non-deploying evidence:
   while reporting mismatched azd, wrong Azure CLI context fails before azd
   inspection, and explicit azd mode blocks mismatch.
 - A deployment negative check instantiated the current unintegrated ORS profile,
-  stopped before Azure preflight/mutation when `hosted-agent/main.py` was
-  absent, and removed its temporary directory without output artifacts.
-- Agent C's generated application interface was reviewed at draft PR #48 head
-  `b4c7ed825833c20fa6549aa5a8e206cfbe85a77d`; Agent A froze the required
+  stopped before Azure preflight/mutation when
+  `backend/app/api/routes/hosted_service.py` was absent, and removed its
+  temporary directory without output artifacts.
+- Agent C's generated application interface is frozen at draft PR #48 head
+  `60fd83fc05acc290aab3ed96f8f8c255e493d28d`; Agent A froze the required
   two-phase publisher identity contract, but its final composed revision is not
   yet pushed.
 - Azure validation did not advance to provider what-if because deployment
