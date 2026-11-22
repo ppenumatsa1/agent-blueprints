@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import threading
 from dataclasses import dataclass, replace
 from enum import Enum
 from typing import Any, Callable, Protocol
+from urllib.parse import urlsplit
 
 import httpx
 from azure.identity import DefaultAzureCredential
@@ -28,8 +30,14 @@ class OperationRecord:
     remote_id: str | None = None
 
 
+@dataclass(frozen=True)
+class OperationClaim:
+    record: OperationRecord
+    acquired: bool
+
+
 class OperationJournal(Protocol):
-    def claim(self, operation_id: str, request_digest: str) -> OperationRecord: ...
+    def claim(self, operation_id: str, request_digest: str) -> OperationClaim: ...
 
     def update(self, record: OperationRecord) -> OperationRecord: ...
 
@@ -41,33 +49,37 @@ class MemoryOperationJournal:
 
     def __init__(self) -> None:
         self._records: dict[str, OperationRecord] = {}
+        self._lock = threading.RLock()
 
-    def claim(self, operation_id: str, request_digest: str) -> OperationRecord:
-        existing = self._records.get(operation_id)
-        if existing is not None:
-            if existing.request_digest != request_digest:
-                raise ValueError("The operation ID is bound to different request content.")
-            return existing
-        record = OperationRecord(operation_id, request_digest, OperationStatus.PENDING)
-        self._records[operation_id] = record
-        return record
+    def claim(self, operation_id: str, request_digest: str) -> OperationClaim:
+        with self._lock:
+            existing = self._records.get(operation_id)
+            if existing is not None:
+                if existing.request_digest != request_digest:
+                    raise ValueError("The operation ID is bound to different request content.")
+                return OperationClaim(existing, acquired=False)
+            record = OperationRecord(operation_id, request_digest, OperationStatus.PENDING)
+            self._records[operation_id] = record
+            return OperationClaim(record, acquired=True)
 
     def update(self, record: OperationRecord) -> OperationRecord:
-        existing = self._records.get(record.operation_id)
-        if existing is None or existing.request_digest != record.request_digest:
-            raise ValueError("The operation claim is missing or conflicts.")
-        if existing.status is OperationStatus.ACKNOWLEDGED:
-            if (
-                record.status is OperationStatus.ACKNOWLEDGED
-                and existing.remote_id == record.remote_id
-            ):
-                return existing
-            raise ValueError("An acknowledged operation cannot change outcome.")
-        self._records[record.operation_id] = record
-        return record
+        with self._lock:
+            existing = self._records.get(record.operation_id)
+            if existing is None or existing.request_digest != record.request_digest:
+                raise ValueError("The operation claim is missing or conflicts.")
+            if existing.status is OperationStatus.ACKNOWLEDGED:
+                if (
+                    record.status is OperationStatus.ACKNOWLEDGED
+                    and existing.remote_id == record.remote_id
+                ):
+                    return existing
+                raise ValueError("An acknowledged operation cannot change outcome.")
+            self._records[record.operation_id] = record
+            return record
 
     def get(self, operation_id: str) -> OperationRecord | None:
-        return self._records.get(operation_id)
+        with self._lock:
+            return self._records.get(operation_id)
 
 
 class AmbiguousCreate(RuntimeError):
@@ -124,10 +136,17 @@ class ResponsesClient:
     @staticmethod
     def _validated_endpoint(endpoint: str, label: str) -> str:
         value = endpoint.rstrip("/")
-        if not (
-            value.startswith("https://")
-            or value.startswith("http://127.0.0.1")
-            or value.startswith("http://localhost")
+        parsed = urlsplit(value)
+        if (
+            not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+            or (
+                parsed.scheme != "https"
+                and not (
+                    parsed.scheme == "http" and parsed.hostname in {"localhost", "127.0.0.1", "::1"}
+                )
+            )
         ):
             raise ValueError(f"The {label} endpoint must use HTTPS or loopback HTTP.")
         return value
@@ -149,20 +168,22 @@ class ResponsesClient:
         operation_id: str,
         payload: dict[str, Any],
     ) -> str:
-        if (
-            not isinstance(operation_id, str)
-            or not operation_id.strip()
-            or len(operation_id) > 256
-        ):
+        if not isinstance(operation_id, str) or not operation_id.strip() or len(operation_id) > 256:
             raise ValueError("A bounded operation ID is required.")
         digest = self._digest(endpoint, payload)
-        record = self._journal.claim(operation_id, digest)
+        claim = self._journal.claim(operation_id, digest)
+        record = claim.record
         if record.status is OperationStatus.ACKNOWLEDGED:
             return record.remote_id or ""
         if record.status is OperationStatus.UNKNOWN:
             raise AmbiguousCreate("The operation is unknown and cannot be replayed.")
         if record.status is OperationStatus.REJECTED:
             raise RuntimeError("The operation was previously rejected.")
+        if not claim.acquired:
+            self._journal.update(replace(record, status=OperationStatus.UNKNOWN))
+            raise AmbiguousCreate(
+                "The pending operation has no active owner proof and cannot be replayed."
+            )
         headers = {
             "Authorization": self._token_provider.authorization_header(),
             "Content-Type": "application/json",
@@ -174,16 +195,25 @@ class ResponsesClient:
                 json=payload,
                 timeout=self._timeout_seconds,
             )
-        except Exception as exc:
+        except Exception:
             self._journal.update(replace(record, status=OperationStatus.UNKNOWN))
-            raise AmbiguousCreate("The create acknowledgment was lost; do not retry.") from exc
+            raise AmbiguousCreate("The create acknowledgment was lost; do not retry.") from None
         if response.status_code >= 500:
             self._journal.update(replace(record, status=OperationStatus.UNKNOWN))
             raise AmbiguousCreate("The service error is ambiguous; do not retry the create.")
         if response.status_code >= 400:
             self._journal.update(replace(record, status=OperationStatus.REJECTED))
             response.raise_for_status()
-        body = response.json()
+        malformed = object()
+        try:
+            body = response.json()
+        except Exception:
+            body = malformed
+        if body is malformed:
+            self._journal.update(replace(record, status=OperationStatus.UNKNOWN))
+            raise AmbiguousCreate(
+                "The successful response acknowledgment was malformed; do not retry."
+            )
         remote_id = body.get("id") if isinstance(body, dict) else None
         if not isinstance(remote_id, str) or not remote_id:
             self._journal.update(replace(record, status=OperationStatus.UNKNOWN))

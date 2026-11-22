@@ -19,9 +19,9 @@ The state boundary is deliberate:
 
 | State | Owner |
 | --- | --- |
-| Hosted workflow checkpoint, pending request, response/session state | Foundry hosting and native MAF checkpoint provider |
+| Hosted workflow checkpoint, pending-response authority, response/session state | Foundry hosting and native MAF checkpoint provider |
 | Local development workflow checkpoint | Generated API's private `FileCheckpointStorage` |
-| Case, proposal, approval decision, audit, effect claim and reconciliation | Application-owned PostgreSQL |
+| Case, proposal, opaque hosted request correlation, approval decision, audit, effect claim and reconciliation | Application-owned PostgreSQL |
 | Ambiguous Responses/publish operation claim | Durable application/operator journal implementing the narrow interfaces below |
 
 No custom workflow orchestrator or checkpoint provider is present. PostgreSQL
@@ -45,8 +45,9 @@ The parser first calls the public `HostedResponseRequest.get_workflow_responses(
 API so the SDK validates native pending-request authority. The application
 adapter then reauthorizes the resolved principal, rejects a different caller,
 session, conversation or channel, binds the native handle to the current
-proposal, and records the application-owned decision before the workflow
-continues. Client/model-supplied identity is never treated as authority.
+proposal at pause creation, and records the application-owned decision before
+the workflow continues. Client/model-supplied identity is never treated as
+authority.
 
 AgentServer's `scope.user_id` is an opaque platform-resolved identity. It is not
 assumed to equal an Entra object ID or the API subject. Agents B-D must provide
@@ -74,6 +75,27 @@ That adapter must persist and check the authoritative mapping from Foundry
 principal and case. A different channel or unchecked client session ID must
 fail closed.
 
+The generated PostgreSQL store must also implement the exported
+`HostedBusinessStore` seam:
+
+```python
+class HostedBusinessStore(Protocol):
+    def prepare_hosted_approval(
+        self, case_id: UUID, candidate_request_id: str, *, channel: str
+    ) -> Proposal: ...
+    def claim_hosted_decision(self, decision: DecisionRecord) -> DecisionRecord: ...
+    def finish_hosted(self, case_id: UUID) -> None: ...
+```
+
+`prepare_hosted_approval` atomically persists or returns one stable opaque
+request ID for the business pending state. Agent A supplies that ID to native
+`request_info(request_id=...)`. `claim_hosted_decision` authorizes and records
+one decision without requiring a local checkpoint ID. `finish_hosted` marks
+the business projection complete only after the native executor applies the
+approved/rejected or automatic result. These methods may correlate the opaque
+request ID, but must not store Foundry checkpoint bytes or fabricate a local
+filesystem checkpoint ID.
+
 ## Responses client and lost acknowledgments
 
 `order_resolution_hosted.client.ResponsesClient` uses
@@ -82,16 +104,23 @@ fail closed.
 structured `function_call_output` resumes.
 
 Every create has an application operation ID and canonical request digest.
-Identical acknowledged duplicates return the recorded remote ID. Conflicting
-duplicates fail. A connection error, timeout, 5xx, or success body without an
-authoritative ID changes the operation to `unknown`; the client does not replay
-that POST. `reconcile_acknowledgment` requires exactly one authoritative remote
-ID supplied by a trusted query/operator path. An empty or ambiguous search does
-not prove absence and leaves the operation `unknown`.
+`OperationJournal.claim` must atomically return `OperationClaim(acquired=True)`
+only for the process that inserted the new claim. An existing `pending` record
+has no current owner proof, becomes `unknown`, and is not sent again. A
+concurrent original owner may still complete its one in-flight request and
+record the authoritative acknowledgment. Identical acknowledged duplicates
+return the recorded remote ID; conflicting duplicates fail.
+
+A connection error, timeout, 5xx, malformed 2xx JSON, or success body without
+an authoritative ID changes the operation to `unknown`; the client does not
+replay that POST. Malformed response bodies are not retained in the journal or
+surfaced in the error. `reconcile_acknowledgment` requires exactly one
+authoritative remote ID supplied by a trusted query/operator path. An empty or
+ambiguous search does not prove absence and leaves the operation `unknown`.
 
 The included in-memory journal is only for local tests. Agents B-D must supply
-a durable journal with atomic claim/update semantics and an operator-visible
-reconciliation path before hosted use.
+a durable journal with atomic insert/claim ownership and update semantics and
+an operator-visible reconciliation path before hosted use.
 
 ## Source package and publishing
 
@@ -115,9 +144,23 @@ The publisher fallback calls the public
 `AIProjectClient.agents.create_version_from_code` API with a
 `HostedAgentDefinition`, ZIP SHA-256, operation metadata, and `retry_total=0`.
 An exception or missing returned version is `unknown` and cannot be replayed
-until `list_versions` finds exactly one version with both matching operation ID
-and archive digest. The helper packages or publishes only; it does not
-provision infrastructure or change RBAC.
+until `list_versions` finds exactly one version with matching operation ID,
+publication digest, and archive digest.
+
+The publication digest binds the project endpoint, explicit project resource
+ID, target agent name, source archive digest, CPU/memory, Python runtime, entry
+point, dependency resolution, protocol/version list, model deployment, and
+host environment inputs. Reusing an operation journal for any different target
+or configuration fails closed before an SDK create. Publishing requires
+`FOUNDRY_PROJECT_ENDPOINT`, `FOUNDRY_PROJECT_ID`, and
+`AZURE_AI_MODEL_DEPLOYMENT_NAME`.
+
+The file journal uses an OS-level lock and a unique owner token. Only the
+process that atomically creates a new `pending` claim may call the SDK. A
+preexisting pending record becomes `unknown` and is not resent; a concurrent
+original owner may still record its one authoritative result. The helper
+packages or publishes only; it does not provision infrastructure or change
+RBAC.
 
 ## Compatibility matrix
 
@@ -126,7 +169,8 @@ provision infrastructure or change RBAC.
 | Native MAF request-aware workflow hosting | Verified locally | `ResponsesHostServer(workflow=..., parse_response=...)` signature and mocked protocol tests |
 | Standard hosted checkpoint provider | Verified locally | Public `CheckpointStoreProvider(allowed_checkpoint_types=...)`; no custom provider or local file storage in hosted composition |
 | Responses protocol `2.0.0` manifest | Verified locally | Deterministic publisher contract and SDK model construction test |
-| Structured native approval resume | Verified locally | Generated package test validates decision recording and exact caller/session/conversation/channel binding |
+| Structured native approval resume | Verified locally | Generated package tests validate stable hosted request identity, decision recording, business completion without a local checkpoint ID, and exact caller/session/conversation/channel binding |
+| Application-owned hosted business seam | Interface and native composition verified locally | Agent A tests the exported `HostedBusinessStore` contract with no checkpoint ID; Workstream C supplies and PostgreSQL-tests the implementation before integration |
 | Managed-identity token acquisition | Verified locally | Mock credential verifies `https://ai.azure.com/.default` and Authorization header |
 | Source-code publishing API | Verified locally | Public signature/model test and no-retry mocked publish test |
 | Exact dependency compatibility | Verified locally | Pinned environment imports and SDK-drift assertions |
@@ -134,8 +178,25 @@ provision infrastructure or change RBAC.
 | Live MI/RBAC access and secret delivery | Unverified | Requires authorized deployed identities and least-privilege role validation |
 | Live pause, restart and cross-instance resume | Unverified | Requires a deployed hosted agent and controlled recovery test |
 | Lost Responses/conversation create negative proof | Unsupported/unverified | No documented idempotency key or bounded negative read-after-write guarantee; remain `unknown` |
+| Restart/concurrent pending client claim | Verified locally | Existing pending claims are not resent; only the atomic original claimant may complete the one in-flight POST |
+| Malformed successful create acknowledgment | Verified locally | Malformed 2xx JSON becomes `unknown` without response-body evidence and cannot be replayed |
+| Publication target/configuration identity | Verified locally | Digest covers project endpoint/ID, agent, archive, runtime, entry point, protocol, model and hosted configuration; conflicting reuse fails |
 | Model response quality and catalog availability | Unverified | Model name is injected; no model was deployed or invoked |
 | Telemetry export and hosted trace correlation | Unverified | Requires deployed Application Insights integration |
+
+## Local validation evidence
+
+- 23 generated hosted-runtime tests passed.
+- 14 publisher/generator tests passed, including restart/concurrent publish
+  exclusion and complete publication identity conflicts.
+- Generated Ruff check and format check passed across 76 Python files.
+- 39 focused generated backend tests passed on PostgreSQL 17.
+- ORS-001 through ORS-009 passed without skips on PostgreSQL 17.
+- The repository contract suite passed 68 tests with the two documented
+  adapter-selection skips.
+- Two independently built source archives matched SHA-256
+  `128b7206d04007a979fc0e57abb18770b742e6de473ddaa97262407e560a38e6`
+  and contained 54 files.
 
 ## Pinned SDKs
 

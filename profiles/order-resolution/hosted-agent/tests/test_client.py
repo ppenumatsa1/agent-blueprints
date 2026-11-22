@@ -1,3 +1,4 @@
+import threading
 import unittest
 from types import SimpleNamespace
 
@@ -30,6 +31,11 @@ class FakeResponse:
 
     def raise_for_status(self):
         raise RuntimeError(f"HTTP {self.status_code}")
+
+
+class MalformedResponse(FakeResponse):
+    def json(self):
+        raise ValueError("private-response-body")
 
 
 class ClientTests(unittest.TestCase):
@@ -93,13 +99,32 @@ class ClientTests(unittest.TestCase):
         self.assertIn("/conversations", requests[0][0][0])
 
     def test_rejects_insecure_conversation_endpoint(self):
-        with self.assertRaises(ValueError):
-            ResponsesClient(
-                "https://example.test/responses",
-                self.journal,
-                conversation_endpoint="http://example.test/conversations",
-                token_provider=TokenProvider(self.credential),
-            )
+        for endpoint in (
+            "http://example.test/conversations",
+            "http://localhost.example/conversations",
+            "https://user:password@example.test/conversations",
+        ):
+            with self.subTest(endpoint=endpoint):
+                with self.assertRaises(ValueError):
+                    ResponsesClient(
+                        "https://example.test/responses",
+                        self.journal,
+                        conversation_endpoint=endpoint,
+                        token_provider=TokenProvider(self.credential),
+                    )
+
+    def test_accepts_exact_loopback_http_endpoint(self):
+        for endpoint in (
+            "http://localhost:8080/responses",
+            "http://127.0.0.1:8080/responses",
+            "http://[::1]:8080/responses",
+        ):
+            with self.subTest(endpoint=endpoint):
+                ResponsesClient(
+                    endpoint,
+                    self.journal,
+                    token_provider=TokenProvider(self.credential),
+                )
 
     def test_lost_acknowledgment_is_unknown_and_never_replayed(self):
         calls = 0
@@ -122,6 +147,102 @@ class ClientTests(unittest.TestCase):
             self.journal.get("start-unknown").status,
             OperationStatus.UNKNOWN,
         )
+
+    def test_existing_pending_claim_is_unknown_and_never_sent(self):
+        case_id = "c3dc94c3-7772-4249-bf63-95597591f49c"
+        client = self.client(lambda *_args, **_kwargs: self.fail("POST must not run"))
+        payload = {
+            "agent_session_id": self.binding.session_id,
+            "background": True,
+            "conversation": {"id": self.binding.conversation_id},
+            "input": '{"case_id":"' + case_id + '"}',
+            "metadata": {
+                "operation_id": "start-pending",
+                "caller_id": self.binding.caller_id,
+            },
+            "store": True,
+        }
+        claim = self.journal.claim(
+            "start-pending",
+            client._digest(client._endpoint, payload),
+        )
+        self.assertTrue(claim.acquired)
+        with self.assertRaises(AmbiguousCreate):
+            client.start(
+                operation_id="start-pending",
+                binding=self.binding,
+                case_id=case_id,
+            )
+        self.assertEqual(
+            self.journal.get("start-pending").status,
+            OperationStatus.UNKNOWN,
+        )
+
+    def test_concurrent_pending_claim_does_not_duplicate_post(self):
+        entered = threading.Event()
+        release = threading.Event()
+        calls = 0
+
+        def post(*_args, **_kwargs):
+            nonlocal calls
+            calls += 1
+            entered.set()
+            release.wait(timeout=5)
+            return FakeResponse()
+
+        client = self.client(post)
+        errors = []
+
+        def first():
+            try:
+                client.start(
+                    operation_id="start-concurrent",
+                    binding=self.binding,
+                    case_id="c3dc94c3-7772-4249-bf63-95597591f49c",
+                )
+            except Exception as exc:
+                errors.append(exc)
+
+        thread = threading.Thread(target=first)
+        thread.start()
+        self.assertTrue(entered.wait(timeout=5))
+        with self.assertRaises(AmbiguousCreate):
+            client.start(
+                operation_id="start-concurrent",
+                binding=self.binding,
+                case_id="c3dc94c3-7772-4249-bf63-95597591f49c",
+            )
+        release.set()
+        thread.join(timeout=5)
+        self.assertFalse(thread.is_alive())
+        self.assertEqual(errors, [])
+        self.assertEqual(calls, 1)
+        self.assertEqual(
+            self.journal.get("start-concurrent").status,
+            OperationStatus.ACKNOWLEDGED,
+        )
+
+    def test_malformed_success_is_unknown_without_private_response_evidence(self):
+        client = self.client(lambda *_args, **_kwargs: MalformedResponse())
+        with self.assertRaises(AmbiguousCreate) as captured:
+            client.start(
+                operation_id="start-malformed",
+                binding=self.binding,
+                case_id="c3dc94c3-7772-4249-bf63-95597591f49c",
+            )
+        self.assertNotIn("private-response-body", str(captured.exception))
+        self.assertIsNone(captured.exception.__cause__)
+        self.assertIsNone(captured.exception.__context__)
+        self.assertEqual(
+            self.journal.get("start-malformed").status,
+            OperationStatus.UNKNOWN,
+        )
+        with self.assertRaises(AmbiguousCreate):
+            client.start(
+                operation_id="start-malformed",
+                binding=self.binding,
+                case_id="c3dc94c3-7772-4249-bf63-95597591f49c",
+            )
 
     def test_authoritative_reconciliation_requires_one_remote_id(self):
         client = self.client(lambda *_args, **_kwargs: (_ for _ in ()).throw(TimeoutError()))

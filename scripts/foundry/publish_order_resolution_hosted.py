@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import json
 import os
@@ -10,21 +11,35 @@ import shutil
 import sys
 import tempfile
 import zipfile
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 
 PROTOCOL_VERSION = "2.0.0"
 PYTHON_RUNTIME = "python_3_13"
+ENTRY_POINT = ("python", "main.py")
+DEPENDENCY_RESOLUTION = "remote_build"
+CPU = "0.5"
+MEMORY = "1Gi"
+PYTHON_NO_USER_SITE = "1"
 
 
 @dataclass(frozen=True)
 class PublishRecord:
     operation_id: str
+    publication_digest: str
     archive_sha256: str
     status: str
     agent_version: str | None = None
+    owner_token: str | None = None
+
+
+@dataclass(frozen=True)
+class PublishClaim:
+    record: PublishRecord
+    acquired: bool
 
 
 class AmbiguousPublish(RuntimeError):
@@ -88,10 +103,10 @@ def build_azd_service_contract(project: str = "hosted-agent") -> dict[str, Any]:
         "protocols": [{"protocol": "responses", "version": PROTOCOL_VERSION}],
         "codeConfiguration": {
             "runtime": PYTHON_RUNTIME,
-            "entryPoint": ["python", "main.py"],
-            "dependencyResolution": "remote_build",
+            "entryPoint": list(ENTRY_POINT),
+            "dependencyResolution": DEPENDENCY_RESOLUTION,
         },
-        "env": {"PYTHONNOUSERSITE": "1"},
+        "env": {"PYTHONNOUSERSITE": PYTHON_NO_USER_SITE},
     }
 
 
@@ -105,27 +120,108 @@ def build_definition(model_deployment_name: str) -> Any:
     )
 
     return HostedAgentDefinition(
-        cpu="0.5",
-        memory="1Gi",
+        cpu=CPU,
+        memory=MEMORY,
         code_configuration=CodeConfiguration(
             runtime=PYTHON_RUNTIME,
-            entry_point=["python", "main.py"],
-            dependency_resolution="remote_build",
+            entry_point=list(ENTRY_POINT),
+            dependency_resolution=DEPENDENCY_RESOLUTION,
         ),
         protocol_versions=[
             ProtocolVersionRecord(protocol="responses", version=PROTOCOL_VERSION)
         ],
         environment_variables={
             "AZURE_AI_MODEL_DEPLOYMENT_NAME": model_deployment_name,
-            "PYTHONNOUSERSITE": "1",
+            "PYTHONNOUSERSITE": PYTHON_NO_USER_SITE,
         },
     )
+
+
+def publication_identity(
+    *,
+    project_endpoint: str,
+    project_id: str,
+    agent_name: str,
+    archive_sha256: str,
+    model_deployment_name: str,
+) -> dict[str, Any]:
+    endpoint = project_endpoint.rstrip("/")
+    for value, label in (
+        (endpoint, "Foundry project endpoint"),
+        (project_id, "Foundry project ID"),
+        (agent_name, "Agent name"),
+        (archive_sha256, "Archive digest"),
+        (model_deployment_name, "Model deployment name"),
+    ):
+        if not isinstance(value, str) or not value.strip() or len(value) > 2048:
+            raise ValueError(f"{label} is required and bounded.")
+    if not endpoint.startswith("https://"):
+        raise ValueError("The Foundry project endpoint must use HTTPS.")
+    return {
+        "schema_version": "1",
+        "project_endpoint": endpoint,
+        "project_id": project_id,
+        "agent_name": agent_name,
+        "archive_sha256": archive_sha256,
+        "hosted_definition": {
+            "cpu": CPU,
+            "memory": MEMORY,
+            "runtime": PYTHON_RUNTIME,
+            "entry_point": list(ENTRY_POINT),
+            "dependency_resolution": DEPENDENCY_RESOLUTION,
+            "protocols": [{"protocol": "responses", "version": PROTOCOL_VERSION}],
+            "environment": {
+                "AZURE_AI_MODEL_DEPLOYMENT_NAME": model_deployment_name,
+                "PYTHONNOUSERSITE": PYTHON_NO_USER_SITE,
+            },
+        },
+    }
+
+
+def publication_digest(identity: dict[str, Any]) -> str:
+    encoded = json.dumps(
+        identity,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def _load_record(path: Path) -> PublishRecord | None:
     if not path.is_file():
         return None
     return PublishRecord(**json.loads(path.read_text(encoding="utf-8")))
+
+
+@contextlib.contextmanager
+def _journal_lock(path: Path):
+    lock_path = path.with_suffix(path.suffix + ".lock")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with lock_path.open("a+b") as handle:
+        if os.name == "nt":
+            import msvcrt
+
+            handle.seek(0, os.SEEK_END)
+            if handle.tell() == 0:
+                handle.write(b"\0")
+                handle.flush()
+            handle.seek(0)
+            msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
+            try:
+                yield
+            finally:
+                handle.seek(0)
+                msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
 def _save_record(path: Path, record: PublishRecord) -> None:
@@ -138,9 +234,68 @@ def _save_record(path: Path, record: PublishRecord) -> None:
     temporary.replace(path)
 
 
+def _claim_publish(journal_path: Path, requested: PublishRecord) -> PublishClaim:
+    with _journal_lock(journal_path):
+        existing = _load_record(journal_path)
+        if existing is None:
+            _save_record(journal_path, requested)
+            return PublishClaim(requested, acquired=True)
+        if (
+            existing.operation_id != requested.operation_id
+            or existing.publication_digest != requested.publication_digest
+            or existing.archive_sha256 != requested.archive_sha256
+        ):
+            raise ValueError(
+                "The publish journal is bound to different publication identity."
+            )
+        if existing.status == "acknowledged":
+            return PublishClaim(existing, acquired=False)
+        if existing.status == "unknown":
+            raise AmbiguousPublish(
+                "The prior publish is unknown and cannot be replayed."
+            )
+        if existing.status == "pending":
+            _save_record(journal_path, replace(existing, status="unknown"))
+            raise AmbiguousPublish(
+                "The pending publish has no active owner proof and cannot be replayed."
+            )
+        raise ValueError("The publish journal contains an invalid status.")
+
+
+def _finish_owned_publish(
+    journal_path: Path,
+    *,
+    owner_token: str,
+    status: str,
+    agent_version: str | None = None,
+) -> PublishRecord:
+    with _journal_lock(journal_path):
+        existing = _load_record(journal_path)
+        if existing is None:
+            raise ValueError("The publish journal is missing.")
+        if existing.status == "acknowledged":
+            if status == "acknowledged" and existing.agent_version == agent_version:
+                return existing
+            raise ValueError("An acknowledged publish cannot change outcome.")
+        if existing.owner_token != owner_token:
+            raise AmbiguousPublish(
+                "The publish owner claim is no longer authoritative."
+            )
+        updated = replace(
+            existing,
+            status=status,
+            agent_version=agent_version,
+            owner_token=None if status != "pending" else owner_token,
+        )
+        _save_record(journal_path, updated)
+        return updated
+
+
 def publish_once(
     *,
     agents: Any,
+    project_endpoint: str,
+    project_id: str,
     agent_name: str,
     archive: Path,
     operation_id: str,
@@ -148,18 +303,28 @@ def publish_once(
     journal_path: Path,
 ) -> PublishRecord:
     digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+    identity_digest = publication_digest(
+        publication_identity(
+            project_endpoint=project_endpoint,
+            project_id=project_id,
+            agent_name=agent_name,
+            archive_sha256=digest,
+            model_deployment_name=model_deployment_name,
+        )
+    )
     definition = build_definition(model_deployment_name)
-    existing = _load_record(journal_path)
-    if existing is not None:
-        if existing.operation_id != operation_id or existing.archive_sha256 != digest:
-            raise ValueError("The publish journal is bound to a different operation.")
-        if existing.status == "acknowledged":
-            return existing
-        if existing.status == "unknown":
-            raise AmbiguousPublish("The prior publish is unknown and cannot be replayed.")
+    owner_token = uuid4().hex
+    pending = PublishRecord(
+        operation_id,
+        identity_digest,
+        digest,
+        "pending",
+        owner_token=owner_token,
+    )
+    claim = _claim_publish(journal_path, pending)
+    if not claim.acquired:
+        return claim.record
     with archive.open("rb") as code:
-        pending = PublishRecord(operation_id, digest, "pending")
-        _save_record(journal_path, pending)
         try:
             created = agents.create_version_from_code(
                 agent_name=agent_name,
@@ -169,25 +334,34 @@ def publish_once(
                 description="Order Resolution native MAF Responses host.",
                 metadata={
                     "publish_operation_id": operation_id,
+                    "publication_digest": identity_digest,
                     "source_archive_sha256": digest,
                 },
                 retry_total=0,
             )
         except Exception as exc:
-            _save_record(
+            _finish_owned_publish(
                 journal_path,
-                PublishRecord(operation_id, digest, "unknown"),
+                owner_token=owner_token,
+                status="unknown",
             )
             raise AmbiguousPublish(
                 "Hosted version creation may have applied; reconcile before any retry."
             ) from exc
     version = getattr(created, "version", None)
     if not isinstance(version, str) or not version:
-        _save_record(journal_path, PublishRecord(operation_id, digest, "unknown"))
+        _finish_owned_publish(
+            journal_path,
+            owner_token=owner_token,
+            status="unknown",
+        )
         raise AmbiguousPublish("The create response did not contain an agent version.")
-    acknowledged = PublishRecord(operation_id, digest, "acknowledged", version)
-    _save_record(journal_path, acknowledged)
-    return acknowledged
+    return _finish_owned_publish(
+        journal_path,
+        owner_token=owner_token,
+        status="acknowledged",
+        agent_version=version,
+    )
 
 
 def reconcile_publish(
@@ -196,7 +370,8 @@ def reconcile_publish(
     agent_name: str,
     journal_path: Path,
 ) -> PublishRecord:
-    record = _load_record(journal_path)
+    with _journal_lock(journal_path):
+        record = _load_record(journal_path)
     if record is None:
         raise ValueError("The publish journal is missing.")
     matches = []
@@ -209,20 +384,33 @@ def reconcile_publish(
             version = getattr(item, "version", None)
         if (
             metadata.get("publish_operation_id") == record.operation_id
+            and metadata.get("publication_digest") == record.publication_digest
             and metadata.get("source_archive_sha256") == record.archive_sha256
             and version
         ):
             matches.append(str(version))
     if len(set(matches)) != 1:
         return record
-    reconciled = PublishRecord(
-        record.operation_id,
-        record.archive_sha256,
-        "acknowledged",
-        matches[0],
-    )
-    _save_record(journal_path, reconciled)
-    return reconciled
+    with _journal_lock(journal_path):
+        current = _load_record(journal_path)
+        if current is None:
+            raise ValueError("The publish journal is missing.")
+        if (
+            current.operation_id != record.operation_id
+            or current.publication_digest != record.publication_digest
+            or current.archive_sha256 != record.archive_sha256
+        ):
+            raise ValueError("The publish journal changed during reconciliation.")
+        if current.status == "acknowledged":
+            return current
+        reconciled = replace(
+            current,
+            status="acknowledged",
+            agent_version=matches[0],
+            owner_token=None,
+        )
+        _save_record(journal_path, reconciled)
+        return reconciled
 
 
 def main() -> int:
@@ -246,17 +434,23 @@ def main() -> int:
         if not value:
             parser.error(f"{name} is required with --publish")
     endpoint = os.environ.get("FOUNDRY_PROJECT_ENDPOINT", "").strip()
+    project_id = os.environ.get("FOUNDRY_PROJECT_ID", "").strip()
     model = os.environ.get("AZURE_AI_MODEL_DEPLOYMENT_NAME", "").strip()
-    if not endpoint or not model:
+    if not endpoint or not project_id or not model:
         raise ValueError(
-            "FOUNDRY_PROJECT_ENDPOINT and AZURE_AI_MODEL_DEPLOYMENT_NAME are required."
+            "FOUNDRY_PROJECT_ENDPOINT, FOUNDRY_PROJECT_ID, and "
+            "AZURE_AI_MODEL_DEPLOYMENT_NAME are required."
         )
     from azure.ai.projects import AIProjectClient
     from azure.identity import DefaultAzureCredential
 
-    with AIProjectClient(endpoint=endpoint, credential=DefaultAzureCredential()) as project:
+    with AIProjectClient(
+        endpoint=endpoint, credential=DefaultAzureCredential()
+    ) as project:
         record = publish_once(
             agents=project.agents,
+            project_endpoint=endpoint,
+            project_id=project_id,
             agent_name=args.agent_name,
             archive=args.archive,
             operation_id=args.operation_id,

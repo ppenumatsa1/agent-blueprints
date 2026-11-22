@@ -1,14 +1,37 @@
 from __future__ import annotations
 
 import importlib
+import hashlib
+import hmac
+import json
 import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Protocol
-from uuid import UUID
+from uuid import NAMESPACE_URL, UUID, uuid5
 
 
 FOUNDRY_RESPONSES_CHANNEL = "foundry-responses"
+
+
+def _approval_request_id(
+    case_id: UUID,
+    caller: "CallerContext",
+    conversation_id: str,
+) -> str:
+    identity = json.dumps(
+        [
+            "order-resolution-hosted-approval-v1",
+            str(case_id),
+            caller.user_id,
+            caller.session_id,
+            conversation_id,
+            FOUNDRY_RESPONSES_CHANNEL,
+        ],
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    return str(uuid5(NAMESPACE_URL, identity))
 
 
 @dataclass(frozen=True)
@@ -80,13 +103,64 @@ class HostedApplication(Protocol):
     ) -> Any: ...
 
 
+class HostedBusinessStore(Protocol):
+    """Application-owned business lifecycle correlated to hosted workflow state."""
+
+    def get(self, case_id: UUID) -> Any: ...
+
+    def prepare_hosted_approval(
+        self,
+        case_id: UUID,
+        candidate_request_id: str,
+        *,
+        channel: str,
+    ) -> Any: ...
+
+    def get_current_proposal(self, case_id: str) -> Any: ...
+
+    def claim_hosted_decision(self, decision: Any) -> Any: ...
+
+    def apply_automatic(self, case_id: UUID, action: Any) -> None: ...
+
+    def apply_once(self, case_id: UUID, approved: bool, action: Any) -> None: ...
+
+    def finish_hosted(self, case_id: UUID) -> None: ...
+
+
+class _HostedDecisionStore:
+    def __init__(self, store: HostedBusinessStore) -> None:
+        self._store = store
+
+    def get_current_proposal(self, case_id: str) -> Any:
+        return self._store.get_current_proposal(case_id)
+
+    def claim_decision(self, decision: Any) -> Any:
+        return self._store.claim_hosted_decision(decision)
+
+
+class _HostedWorkflowStore:
+    def __init__(self, store: HostedBusinessStore) -> None:
+        self._store = store
+
+    def get(self, case_id: UUID) -> Any:
+        return self._store.get(case_id)
+
+    def apply_automatic(self, case_id: UUID, action: Any) -> None:
+        self._store.apply_automatic(case_id, action)
+        self._store.finish_hosted(case_id)
+
+    def apply_once(self, case_id: UUID, approved: bool, action: Any) -> None:
+        self._store.apply_once(case_id, approved, action)
+        self._store.finish_hosted(case_id)
+
+
 class GeneratedOrderResolutionApplication:
     """Bind the native workflow to application authorization and PostgreSQL state."""
 
     def __init__(
         self,
         *,
-        store: Any,
+        store: HostedBusinessStore,
         action: Any,
         policy: Any,
         identity_bindings: HostedIdentityBindings,
@@ -106,7 +180,7 @@ class GeneratedOrderResolutionApplication:
         self._identity_bindings.resolve_principal(caller)
         if not conversation_id:
             raise PermissionError("A Foundry conversation binding is required.")
-        return self._workflow_factory(self._store, self._action, None)
+        return self._workflow_factory(_HostedWorkflowStore(self._store), self._action, None)
 
     def authorize_start(
         self,
@@ -117,14 +191,36 @@ class GeneratedOrderResolutionApplication:
         principal = self._identity_bindings.resolve_principal(caller)
         case = self._store.get(case_id)
         self._policy.authorize_read(principal, case)
-        if case.status != "created":
+        approval_required = case.payload["proposal"]["approval_required"]
+        allowed_statuses = ("created", "pending") if approval_required else ("created",)
+        if case.status not in allowed_statuses:
             raise ValueError("The case is not eligible for a new hosted workflow run.")
         self._identity_bindings.bind_start(
             case_id=case_id,
             caller=caller,
             conversation_id=conversation_id,
         )
-        return {"case_id": str(case_id)}
+        workflow_input = {"case_id": str(case_id)}
+        if approval_required:
+            request_id = _approval_request_id(case_id, caller, conversation_id)
+            proposal = self._store.prepare_hosted_approval(
+                case_id,
+                request_id,
+                channel=FOUNDRY_RESPONSES_CHANNEL,
+            )
+            expected_digest = hashlib.sha256(request_id.encode("utf-8")).hexdigest()
+            if (
+                not hmac.compare_digest(
+                    getattr(proposal, "decision_handle_digest", "") or "",
+                    expected_digest,
+                )
+                or getattr(proposal, "decision_channel", None) != FOUNDRY_RESPONSES_CHANNEL
+            ):
+                raise RuntimeError(
+                    "The hosted business store did not bind the native request identity."
+                )
+            workflow_input["request_id"] = request_id
+        return workflow_input
 
     def authorize_resume(
         self,
@@ -148,13 +244,12 @@ class GeneratedOrderResolutionApplication:
             else OrderResolutionDecision.model_validate(value)
         )
         if response.handle != request_id:
-            raise PermissionError("The approval handle does not match the pending workflow request.")
+            raise PermissionError(
+                "The approval handle does not match the pending workflow request."
+            )
         if response.channel != FOUNDRY_RESPONSES_CHANNEL:
             raise PermissionError("Cross-channel workflow resume is not authorized.")
-        if (
-            response.conversation_id != conversation_id
-            or response.session_id != caller.session_id
-        ):
+        if response.conversation_id != conversation_id or response.session_id != caller.session_id:
             raise PermissionError("The workflow resume binding does not match this conversation.")
 
         principal = self._identity_bindings.resolve_principal(caller)
@@ -168,14 +263,9 @@ class GeneratedOrderResolutionApplication:
             conversation_id=conversation_id,
             channel=response.channel,
         )
-        proposal = self._store.bind_decision_handle(
-            response.case_id,
-            request_id,
-            channel=response.channel,
-        )
         record_decision(
-            self._store,
-            proposal,
+            _HostedDecisionStore(self._store),
+            self._store.get_current_proposal(str(response.case_id)),
             Actor(principal.tenant_id, principal.subject, principal.scopes, principal.roles),
             DecisionCommand(
                 case_id=str(response.case_id),

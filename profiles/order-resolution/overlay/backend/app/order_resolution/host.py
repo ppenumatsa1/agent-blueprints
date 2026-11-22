@@ -18,9 +18,7 @@ class OrderResolutionWorkflowHost(LocalWorkflowHost):
         self._private_directory(directory)
         return FileCheckpointStorage(
             directory,
-            allowed_checkpoint_types=[
-                "app.order_resolution.workflow:OrderResolutionDecision"
-            ],
+            allowed_checkpoint_types=["app.order_resolution.workflow:OrderResolutionDecision"],
         )
 
     async def _events(self, stream, case_id: UUID) -> tuple[list[str], list[object]]:
@@ -129,9 +127,7 @@ class OrderResolutionWorkflowHost(LocalWorkflowHost):
             expected = {"case_id": str(case_id), "decision": case.decision}
             outputs = []
             try:
-                async for event in workflow.run(
-                    responses={case.request_id: response}, stream=True
-                ):
+                async for event in workflow.run(responses={case.request_id: response}, stream=True):
                     if event.type == "output":
                         outputs.append(event.data)
             except ActionError:
@@ -142,7 +138,8 @@ class OrderResolutionWorkflowHost(LocalWorkflowHost):
             checkpoints = await self._checkpoints(storage)
             terminal_id = workflow.get_last_checkpoint_id()
             terminal = next(
-                (item for item in checkpoints if item.checkpoint_id == terminal_id), None
+                (item for item in checkpoints if item.checkpoint_id == terminal_id),
+                None,
             )
             if terminal is None or not self._is_terminal(terminal, case.checkpoint_id):
                 raise CheckpointError("The completed workflow checkpoint was not saved.")

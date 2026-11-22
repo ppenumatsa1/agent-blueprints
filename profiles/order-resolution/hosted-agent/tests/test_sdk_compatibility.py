@@ -39,7 +39,9 @@ class SdkCompatibilityTests(unittest.TestCase):
         for member in ("get_input_items", "get_input_text", "get_workflow_responses"):
             self.assertTrue(inspect.iscoroutinefunction(getattr(HostedResponseRequest, member)))
         self.assertIn("responses", inspect.signature(WorkflowTurn).parameters)
-        self.assertIn("allowed_checkpoint_types", inspect.signature(CheckpointStoreProvider).parameters)
+        self.assertIn(
+            "allowed_checkpoint_types", inspect.signature(CheckpointStoreProvider).parameters
+        )
 
         publish = inspect.signature(AgentsOperations.create_version_from_code)
         for parameter in (
@@ -58,9 +60,7 @@ class SdkCompatibilityTests(unittest.TestCase):
                 entry_point=["python", "main.py"],
                 dependency_resolution="remote_build",
             ),
-            protocol_versions=[
-                ProtocolVersionRecord(protocol="responses", version="2.0.0")
-            ],
+            protocol_versions=[ProtocolVersionRecord(protocol="responses", version="2.0.0")],
         )
         self.assertEqual(definition.code_configuration.runtime, "python_3_13")
         self.assertEqual(definition.protocol_versions[0].version, "2.0.0")
