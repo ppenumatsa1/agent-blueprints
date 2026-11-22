@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import sys
 import threading
 import unittest
@@ -33,7 +32,6 @@ from app.order_resolution.effects import (  # noqa: E402
     EffectLedgerRecord,
     EffectRequest,
     EffectStatus,
-    Observation,
     OutcomeUnknown,
     SyntheticIdempotentDestination,
 )
@@ -82,8 +80,8 @@ def actor(**changes):
     value = Actor(
         tenant_id="tenant-1",
         subject="REVIEWER-A",
-        scopes=frozenset({"order-resolution.decide"}),
-        roles=frozenset({"OrderResolution.Approver"}),
+        scopes=frozenset({"workflow.approve"}),
+        roles=frozenset({"Workflow.Approver"}),
     )
     return replace(value, **changes)
 
@@ -96,7 +94,7 @@ def command(**changes):
         destination_id="refund-api",
         handle="opaque-handle",
         decision=Decision.APPROVED,
-        scope="order-resolution.decide",
+        scope="workflow.approve",
         channel="web",
     )
     return replace(value, **changes)
@@ -148,10 +146,7 @@ class MemoryStore:
             current = self.effects[request.identity]
             if current.request != request:
                 raise Conflict("effect_identity_conflict", "Conflicting effect request.")
-            if (
-                current.status is EffectStatus.VERIFIED
-                and current.result_digest != result_digest
-            ):
+            if current.status is EffectStatus.VERIFIED and current.result_digest != result_digest:
                 raise Conflict("effect_result_conflict", "Conflicting verified effect result.")
             self.effects[request.identity] = EffectLedgerRecord(
                 request=request,
@@ -226,9 +221,7 @@ class RequestAndDecisionTests(unittest.TestCase):
         with self.assertRaises(Conflict):
             claim_request(
                 self.store,
-                RequestClaim(
-                    "tenant-1", "USER-A", "request-1", "b" * 64, OTHER_CASE_ID
-                ),
+                RequestClaim("tenant-1", "USER-A", "request-1", "b" * 64, OTHER_CASE_ID),
             )
 
     def test_decision_is_bound_to_actor_proposal_action_handle_channel_and_expiry(self):
@@ -244,15 +237,11 @@ class RequestAndDecisionTests(unittest.TestCase):
         ):
             with self.subTest(actor=bad_actor, command=bad_command, now=now):
                 with self.assertRaises(AuthorizationDenied):
-                    record_decision(
-                        self.store, self.proposal, bad_actor, bad_command, now=now
-                    )
+                    record_decision(self.store, self.proposal, bad_actor, bad_command, now=now)
         self.assertEqual(self.store.decisions, {})
 
     def test_duplicate_decision_is_idempotent_and_conflicting_decision_loses(self):
-        approved = record_decision(
-            self.store, self.proposal, actor(), command(), now=NOW
-        )
+        approved = record_decision(self.store, self.proposal, actor(), command(), now=NOW)
         duplicate = record_decision(
             self.store, self.proposal, actor(), command(), now=NOW + timedelta(seconds=1)
         )
@@ -288,9 +277,7 @@ class RequestAndDecisionTests(unittest.TestCase):
         self.assertEqual(sum(isinstance(item, Conflict) for item in results), 1)
 
     def test_restart_reuses_original_durable_decision(self):
-        original = record_decision(
-            self.store, self.proposal, actor(), command(), now=NOW
-        )
+        original = record_decision(self.store, self.proposal, actor(), command(), now=NOW)
         restarted_store = self.store
         duplicate = record_decision(
             restarted_store,
@@ -313,9 +300,7 @@ class EffectTests(unittest.TestCase):
     def setUp(self):
         self.proposal = proposal()
         self.store = MemoryStore(self.proposal)
-        self.decision = record_decision(
-            self.store, self.proposal, actor(), command(), now=NOW
-        )
+        self.decision = record_decision(self.store, self.proposal, actor(), command(), now=NOW)
         self.destination = SyntheticIdempotentDestination()
 
     def coordinator(self):
@@ -329,9 +314,7 @@ class EffectTests(unittest.TestCase):
             replace(self.proposal, action="replacement_shipment"),
             replace(self.proposal, destination_id="shipping-api"),
         ):
-            self.assertNotEqual(
-                request.key, EffectRequest.create(changed, {"amount": "18.50"}).key
-            )
+            self.assertNotEqual(request.key, EffectRequest.create(changed, {"amount": "18.50"}).key)
 
     def test_timeout_after_send_is_unknown_then_restart_reconciles_without_resend(self):
         self.destination.timeout_after_send_once = True
@@ -343,9 +326,7 @@ class EffectTests(unittest.TestCase):
                 {"amount": "18.50"},
             )
         self.assertEqual(self.destination.effect_count(), 1)
-        self.assertEqual(
-            next(iter(self.store.effects.values())).status, EffectStatus.UNKNOWN
-        )
+        self.assertEqual(next(iter(self.store.effects.values())).status, EffectStatus.UNKNOWN)
 
         restarted = EffectCoordinator(self.store, self.destination, deadline_seconds=1.0)
         restarted.apply(
@@ -355,9 +336,7 @@ class EffectTests(unittest.TestCase):
             {"amount": "18.50"},
         )
         self.assertEqual(self.destination.effect_count(), 1)
-        self.assertEqual(
-            next(iter(self.store.effects.values())).status, EffectStatus.VERIFIED
-        )
+        self.assertEqual(next(iter(self.store.effects.values())).status, EffectStatus.VERIFIED)
 
     def test_unknown_observation_blocks_retry(self):
         self.destination.force_unknown = True
@@ -369,9 +348,7 @@ class EffectTests(unittest.TestCase):
                 {"amount": "18.50"},
             )
         self.assertEqual(self.destination.effect_count(), 0)
-        self.assertEqual(
-            next(iter(self.store.effects.values())).status, EffectStatus.UNKNOWN
-        )
+        self.assertEqual(next(iter(self.store.effects.values())).status, EffectStatus.UNKNOWN)
 
     def test_duplicate_and_concurrent_retries_apply_one_synthetic_effect(self):
         def apply():
@@ -386,9 +363,7 @@ class EffectTests(unittest.TestCase):
             requests = list(pool.map(lambda _: apply(), range(8)))
         self.assertEqual(self.destination.effect_count(), 1)
         self.assertEqual(len({request.key for request in requests}), 1)
-        self.assertEqual(
-            next(iter(self.store.effects.values())).status, EffectStatus.VERIFIED
-        )
+        self.assertEqual(next(iter(self.store.effects.values())).status, EffectStatus.VERIFIED)
 
     def test_conflicting_effect_body_fails_closed(self):
         self.coordinator().apply(
@@ -433,9 +408,7 @@ class EffectTests(unittest.TestCase):
         )
         self.assertEqual(len(self.destination.timeouts), 3)
         self.assertTrue(all(0 < value <= 1.0 for value in self.destination.timeouts))
-        self.assertGreaterEqual(
-            self.destination.timeouts[0], self.destination.timeouts[-1]
-        )
+        self.assertGreaterEqual(self.destination.timeouts[0], self.destination.timeouts[-1])
 
 
 if __name__ == "__main__":

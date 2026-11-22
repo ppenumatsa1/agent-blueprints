@@ -10,6 +10,7 @@ from app.infrastructure.store import PostgresStore
 from app.infrastructure.telemetry import Telemetry
 from app.lifecycle import create_lifespan
 from app.order_resolution.host import OrderResolutionWorkflowHost
+from app.order_resolution.action import RecordOrderResolutionAction
 from app.order_resolution.persistence import OrderResolutionStore
 from app.order_resolution.rules import OrderResolutionRules
 from app.order_resolution.service import OrderResolutionService
@@ -41,9 +42,14 @@ def create_app(
     )
     try:
         host_type = OrderResolutionWorkflowHost if order_resolution else LocalWorkflowHost
+        action = (
+            components.action.bind(repository)
+            if order_resolution and isinstance(components.action, RecordOrderResolutionAction)
+            else components.action
+        )
         workflow_host = host_type(
             repository,
-            components.action,
+            action,
             settings.checkpoint_root,
             components.workflow_factory,
             telemetry=telemetry,

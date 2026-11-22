@@ -20,14 +20,14 @@ with `tests/test_order_resolution_contract.py`. Explicit
 `--order-resolution-test` paths remain available for isolated generator tests.
 
 The generated integration tests exercise the real FastAPI boundary, native MAF
-workflow/checkpoint host, and PostgreSQL state. They verify the automatic
-`ORS-001` `USD 7.90` refund, the paused and authorized `ORS-002` `USD 18.50`
-refund, and the persisted fail-closed `ORS-006` outcome with no proposal,
-checkpoint, decision, action claim, or effect.
+workflow/checkpoint host, and PostgreSQL state. The runtime adapter executes
+canonical `ORS-001` through `ORS-009` from the generated verification assets
+and derives separate business and technical results from API, checkpoint, and
+database observations rather than fixture expectations.
 
-Advanced crash-window durability, effects, and migrations are downstream
-integration dependencies from draft PR #41. Evaluation and verification assets
-are a downstream dependency from draft PR #43. The generator merges #41's
-profile-root `backend/` tree and #43's profile-root `backend/` and
-`verification/` trees after this overlay, so the stacked result is
-deterministic without moving or duplicating reserved files.
+The profile-root backend adds an explicit PostgreSQL migration, request and
+proposal stores, atomic decision persistence, an effect ledger, authorization
+audit records, and a synthetic downstream destination. Consequential effect
+identity binds case, proposal version, action, and destination. Native MAF
+continues to own workflow checkpoints. Draft PR #43 remains the separate
+evaluation/readiness dependency and is not integrated here.

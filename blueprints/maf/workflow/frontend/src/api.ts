@@ -7,6 +7,7 @@ export interface WorkflowCase {
   status: "created" | "pending" | "approved" | "rejected" | "completed" | "failed";
   decision: Decision;
   payload: Record<string, unknown>;
+  decision_handle?: string | null;
   execution_complete: boolean;
   failure_code: string | null;
 }
@@ -14,7 +15,17 @@ export interface WorkflowCase {
 export interface WorkflowClient {
   submit(reviewer: string, payload: Record<string, unknown>, idempotencyKey: string): Promise<WorkflowCase>;
   read(id: string): Promise<WorkflowCase>;
-  decide(id: string, decision: "approved" | "rejected"): Promise<WorkflowCase>;
+  decide(
+    id: string,
+    decision: "approved" | "rejected",
+    binding?: {
+      proposal_version: number;
+      action: string;
+      destination_id: string;
+      handle: string;
+      channel: string;
+    },
+  ): Promise<WorkflowCase>;
 }
 
 export class WorkflowClientError extends Error {}
@@ -43,6 +54,9 @@ function isWorkflowCase(value: unknown): value is WorkflowCase {
     typeof record.payload === "object" &&
     record.payload !== null &&
     !Array.isArray(record.payload) &&
+    (record.decision_handle === undefined ||
+      record.decision_handle === null ||
+      typeof record.decision_handle === "string") &&
     typeof record.execution_complete === "boolean" &&
     (record.failure_code === null || typeof record.failure_code === "string")
   );
@@ -102,7 +116,19 @@ export class HttpWorkflowClient implements WorkflowClient {
     return this.request("read", `/api/cases/${encodeURIComponent(id)}`);
   }
 
-  decide(id: string, decision: "approved" | "rejected"): Promise<WorkflowCase> {
-    return this.request("approve", `/api/cases/${encodeURIComponent(id)}/decision`, { body: { decision } });
+  decide(
+    id: string,
+    decision: "approved" | "rejected",
+    binding?: {
+      proposal_version: number;
+      action: string;
+      destination_id: string;
+      handle: string;
+      channel: string;
+    },
+  ): Promise<WorkflowCase> {
+    return this.request("approve", `/api/cases/${encodeURIComponent(id)}/decision`, {
+      body: { decision, ...binding },
+    });
   }
 }

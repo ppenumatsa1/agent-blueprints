@@ -4,14 +4,14 @@ CREATE TABLE IF NOT EXISTS order_resolution_requests (
     owner_id TEXT NOT NULL,
     request_key TEXT NOT NULL,
     request_digest TEXT NOT NULL CHECK (request_digest ~ '^[0-9a-f]{64}$'),
-    case_id UUID NOT NULL,
+    case_id UUID NOT NULL REFERENCES wf_cases(id),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (tenant_id, owner_id, request_key),
     UNIQUE (case_id)
 );
 
 CREATE TABLE IF NOT EXISTS order_resolution_proposals (
-    case_id UUID NOT NULL,
+    case_id UUID NOT NULL REFERENCES wf_cases(id),
     proposal_version INTEGER NOT NULL CHECK (proposal_version > 0),
     tenant_id TEXT NOT NULL,
     owner_id TEXT NOT NULL,
@@ -31,11 +31,11 @@ CREATE TABLE IF NOT EXISTS order_resolution_proposals (
     PRIMARY KEY (case_id, proposal_version),
     UNIQUE (case_id, proposal_version, action, destination_id),
     CHECK (
+        (decision_handle_digest IS NULL AND decision_expires_at IS NULL
+            AND decision_channel IS NULL)
+        OR
         (approval_required AND decision_handle_digest IS NOT NULL
             AND decision_expires_at IS NOT NULL AND decision_channel IS NOT NULL)
-        OR
-        (NOT approval_required AND decision_handle_digest IS NULL
-            AND decision_expires_at IS NULL AND decision_channel IS NULL)
     )
 );
 
@@ -80,4 +80,37 @@ CREATE TABLE IF NOT EXISTS order_resolution_effects (
         (status = 'verified' AND result_digest IS NOT NULL)
         OR (status <> 'verified' AND result_digest IS NULL)
     )
+);
+
+CREATE TABLE IF NOT EXISTS order_resolution_synthetic_effects (
+    effect_key TEXT PRIMARY KEY,
+    request_digest TEXT NOT NULL CHECK (request_digest ~ '^[0-9a-f]{64}$'),
+    request_body BYTEA NOT NULL,
+    result_digest TEXT NOT NULL CHECK (result_digest ~ '^[0-9a-f]{64}$'),
+    applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS order_resolution_actions (
+    case_id UUID NOT NULL,
+    proposal_version INTEGER NOT NULL,
+    order_id TEXT NOT NULL,
+    action TEXT NOT NULL,
+    destination_id TEXT NOT NULL,
+    effect_key TEXT NOT NULL UNIQUE,
+    amount NUMERIC(18, 2),
+    currency TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (case_id, proposal_version, action, destination_id),
+    FOREIGN KEY (case_id, proposal_version, action, destination_id)
+        REFERENCES order_resolution_proposals
+            (case_id, proposal_version, action, destination_id)
+);
+
+CREATE TABLE IF NOT EXISTS order_resolution_audit (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    case_id UUID NOT NULL REFERENCES wf_cases(id),
+    event TEXT NOT NULL,
+    actor_id TEXT,
+    reason_code TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );

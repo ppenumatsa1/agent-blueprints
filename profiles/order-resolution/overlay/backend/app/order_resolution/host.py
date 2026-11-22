@@ -60,6 +60,7 @@ class OrderResolutionWorkflowHost(LocalWorkflowHost):
                 if restored != requests:
                     raise CheckpointError("The pending request could not be restored.")
                 self.store.save_pending(case_id, pending.checkpoint_id, requests[0])
+                self.store.bind_decision_handle(case_id, requests[0])
                 return
 
             expected = [{"case_id": str(case_id), "decision": "automatic"}]
@@ -76,3 +77,14 @@ class OrderResolutionWorkflowHost(LocalWorkflowHost):
             if not isinstance(self.store, OrderResolutionStore):
                 raise CheckpointError("The Order Resolution persistence adapter is required.")
             self.store.finish_automatic(case_id, terminal.checkpoint_id)
+
+    @instrumented("workflow.resume")
+    async def resume(self, case_id: UUID) -> None:
+        case = self.store.get(case_id)
+        if (
+            not case.execution_complete
+            and case.request_id
+            and case.payload.get("proposal", {}).get("approval_required") is True
+        ):
+            self.store.bind_decision_handle(case_id, case.request_id)
+        await super().resume(case_id)

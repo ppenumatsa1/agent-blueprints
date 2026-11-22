@@ -14,7 +14,7 @@ from uuid import UUID
 
 
 _SAFE_ID = re.compile(r"[A-Za-z0-9._:@/-]{1,256}")
-DECISION_SCOPE = "order-resolution.decide"
+DECISION_SCOPE = "workflow.approve"
 
 
 class DurabilityError(RuntimeError):
@@ -231,17 +231,24 @@ class Proposal:
             if not re.fullmatch(r"[0-9a-f]{64}", digest):
                 raise DurabilityError("invalid_digest", "A proposal digest is invalid.")
         if self.approval_required:
-            if (
-                not self.decision_handle_digest
-                or not re.fullmatch(r"[0-9a-f]{64}", self.decision_handle_digest)
-                or self.decision_expires_at is None
-                or self.decision_channel is None
+            bindings = (
+                self.decision_handle_digest,
+                self.decision_expires_at,
+                self.decision_channel,
+            )
+            if any(value is not None for value in bindings) and not all(
+                value is not None for value in bindings
             ):
                 raise DurabilityError(
                     "invalid_approval_binding",
-                    "Approval proposals require a handle, expiry, and channel binding.",
+                    "Approval bindings must set handle, expiry, and channel together.",
                 )
-            _safe(self.decision_channel, "Decision channel")
+            if self.decision_handle_digest is not None:
+                if not re.fullmatch(r"[0-9a-f]{64}", self.decision_handle_digest):
+                    raise DurabilityError(
+                        "invalid_approval_binding", "The decision handle digest is invalid."
+                    )
+                _safe(self.decision_channel or "", "Decision channel")
         elif any(
             value is not None
             for value in (
@@ -352,8 +359,17 @@ def record_decision(
     if not proposal.approval_required:
         raise Conflict("approval_not_required", "This proposal does not accept a decision.")
     if (
+        proposal.decision_handle_digest is None
+        or proposal.decision_expires_at is None
+        or proposal.decision_channel is None
+    ):
+        raise Conflict(
+            "approval_not_ready",
+            "The native approval pause has not been durably bound.",
+        )
+    if (
         DECISION_SCOPE not in actor.scopes
-        or "OrderResolution.Approver" not in actor.roles
+        or "Workflow.Approver" not in actor.roles
         or actor.tenant_id != proposal.tenant_id
         or actor.subject != proposal.reviewer_id
         or actor.subject == proposal.owner_id
