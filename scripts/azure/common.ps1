@@ -132,13 +132,12 @@ function Assert-GeneratedApiImageContext {
     ) {
         throw 'The API bridge depends on the full hosted runtime; refusing to package it.'
     }
-
-    $projectManifest = Get-Content `
-        -LiteralPath (Join-Path $backend 'pyproject.toml') `
-        -Raw
-    $runtimeProject = $projectManifest.Split('[dependency-groups]')[0]
-    if ($runtimeProject -notmatch '"httpx==0\.28\.1"') {
-        throw 'Generated backend runtime dependencies must pin httpx==0.28.1.'
+    if (
+        $client -match '\bagent_session_id\b' -or
+        $client -match '"caller_id"' -or
+        $client -match '"actor(?:\.|_)subject"'
+    ) {
+        throw 'The API bridge sends caller-selected Foundry identity or session metadata.'
     }
 
     $dockerfile = Get-Content `

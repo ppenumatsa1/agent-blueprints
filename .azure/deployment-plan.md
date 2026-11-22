@@ -162,8 +162,8 @@ backend/frontend, and `WORKFLOW_HOST=local` are prohibited.
 | Azure CLI identity preflight with mismatched azd | Passed the authorized Azure CLI context, preserved the active subscription/tenant/user exactly, and reported the unrelated azd mismatch |
 | Azure CLI negative identity contracts | Wrong subscription fails before azd inspection; explicit azd mode blocks mismatch |
 | Generated hosted-composition deployment gate | Current unintegrated source generation stopped before preflight/mutation on missing `backend/app/api/routes/hosted_service.py` and cleaned temporary artifacts |
-| Exploratory A/C API image composition | C `60fd83fc05acc290aab3ed96f8f8c255e493d28d` plus A `228aa7721be5f0c418f01a16ad505f42ad47cba8` built and imported the bridge only after B staged the files and included C's dev dependency group. This proves the module boundary but is not accepted as final generator/runtime-lock proof. |
-| Required final API image composition | Pending immutable A generator output containing byte-identical backend `client.py`/`bridge.py` plus a side-effect-free initializer, and immutable C runtime `httpx==0.28.1` dependency/lock. B then requires a backend-only no-dev image import/composition/wire-parity pass. Normal entrypoint/lifespan/health remains a composed PostgreSQL gate. |
+| Disposable A/C API image composition | Replacement A `c3e733a8c7d2e03e41e9045ee9277f504e028f6b` plus C's current aligned working tree built the canonical backend with `--no-dev`; actual image import and nonconnecting hosted composition/wire parity passed. This is diagnostic evidence only until C publishes an immutable head. |
+| Required final API image composition | Pending immutable C authority/persistence head composed with immutable A `c3e733a8c7d2e03e41e9045ee9277f504e028f6b`. B then reruns the backend-only no-dev image import/composition/wire-parity pass. Normal entrypoint/lifespan/health remains a composed PostgreSQL gate. |
 | Package-index boundary during exploratory proof | Direct PyPI failed on this laptop with a TLS handshake error; rerun with credentialless `https://packagefeedproxy.microsoft.io/pypi/simple` passed while retaining lockfile hashes and Agent Framework wheel-digest verification |
 | Subscription what-if | Not run: deployment-specific Entra/admin/hosted endpoint and fixed agent-name values are intentionally unset |
 
@@ -214,16 +214,19 @@ runtime database principal. API PostgreSQL clients use `verify-full` with
 bundle is absent.
 
 The generated application interface is frozen at Agent C draft PR #48 head
-`60fd83fc05acc290aab3ed96f8f8c255e493d28d`. Agent A's current pushed draft
-head is `228aa7721be5f0c418f01a16ad505f42ad47cba8`, with explicit bridge factory
-`order_resolution_hosted.bridge:build_workflow_host`. Its final
-post-composition revision remains pending; live A/C
+`60fd83fc05acc290aab3ed96f8f8c255e493d28d` while its aligned replacement is
+pending. Agent A's immutable replacement head is
+`c3e733a8c7d2e03e41e9045ee9277f504e028f6b`, archive SHA-256
+`3becbb28da4eae014a47d20fe5d8f93d7b56c2f93d9558f0afdf2218868d44ca`,
+with explicit bridge factory
+`order_resolution_hosted.bridge:build_workflow_host`. Live A/C
 compatibility beyond the API image import remains unverified and deployment
 remains outside this plan. Agent A owns generator production of byte-identical
 API-only `client.py` and `bridge.py` modules, a side-effect-free backend package
-initializer, and the canonical backend Dockerfile copy/import smoke. Agent C
-owns the runtime `httpx==0.28.1` dependency and lock. B validates those outputs
-without copying or replacing them, then builds that canonical backend context.
+initializer, and the canonical backend Dockerfile copy. The API-only client
+uses the Python standard library plus existing runtime `azure-identity`; test-only
+`httpx` remains outside the production dependency set. B validates those
+outputs without copying or replacing them, then builds that canonical backend context.
 Hosted-agent source remains a separate publishable context. The API image
 neither relies on a sibling `PYTHONPATH` nor imports the full hosted runtime.
 The non-deploying
@@ -247,10 +250,14 @@ credentials or users.
 
 The hosted app role authenticates only the platform service identity; it never
 mints or substitutes human authority. Before any Responses dispatch, the
-application must pre-establish the exact case/principal/Foundry
-caller/session/conversation/channel binding. Hosted binding calls verify that
-server-owned record and fail closed on absence or mismatch. This infrastructure
-workstream does not implement or weaken that business authorization boundary.
+application must pre-establish exact human principal/case authority bound to
+the server-selected conversation and channel. Foundry platform user, session,
+and call identifiers are opaque workload correlation and continuity values,
+not human authority; the API bridge sends neither caller-selected
+`agent_session_id` nor actor-subject metadata to Foundry. Hosted binding calls
+verify the server-owned authority record and fail closed on absence or
+mismatch. This infrastructure workstream does not implement or weaken that
+business authorization boundary.
 
 Directory permissions are independent of subscription `Owner`. The operator
 must be allowed to create/update the two app registrations, create the API

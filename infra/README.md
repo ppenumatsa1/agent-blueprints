@@ -73,8 +73,9 @@ package initializer. B validates that output without copying it.
 The canonical generated backend Dockerfile builds that context with production
 dependencies only. Hosted-agent source remains separately publishable; the API
 does not depend on sibling `PYTHONPATH` configuration or install/import the
-full hosted runtime. Agent C must pin `httpx==0.28.1` in the backend runtime
-dependencies and lock.
+full hosted runtime. The API-only Responses client uses stdlib HTTP and the
+existing runtime `azure-identity`; test-only `httpx` remains outside the
+production dependency set.
 
 Before any live deployment, validate the composed generated image locally:
 

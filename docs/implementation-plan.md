@@ -117,17 +117,19 @@ the same journaled version active without another create. Foundry Agent
 Consumer scope is derived only from the validated project resource ID and the
 same fixed publisher agent name; no scope input or project/subscription fallback
 is permitted. The hosted app role is service authentication only; exact
-API-owned case/principal/caller/session/conversation/channel binding must
-precede Responses dispatch.
+API-owned human principal/case authority bound to the server-selected
+conversation and channel must precede Responses dispatch. Foundry
+user/session/call values remain opaque platform correlation rather than human
+authority; the bridge does not send caller-selected session or actor metadata.
 
 **Acceptance evidence:** exact base verified; read-only Azure discovery
 completed; Bicep build/lint and 17 infrastructure contracts pass; 68 root tests
 pass with two expected adapter-selection skips; script syntax checks pass.
-Exploratory A `228aa772` and C `60fd83fc` composition imported the backend
-bridge, but final proof remains blocked on generator-owned byte-identical
-backend modules, runtime `httpx==0.28.1`, and a no-dev image
-import/composition/wire-parity pass plus normal entrypoint/lifespan/health
-against composed PostgreSQL. Live Azure composition is not proven.
+Disposable replacement A `c3e733a8` plus C's aligned working tree built the
+canonical no-dev backend and passed image import/nonconnecting composition.
+Final proof remains blocked on C's immutable head plus normal
+entrypoint/lifespan/health against composed PostgreSQL. Live Azure composition
+is not proven.
 The current Azure CLI identity matches the authorized target, but azd is a
 different account and tenant. Azure CLI mode reports that mismatch without
 blocking; explicit azd mode still fails closed. No Azure mutation or deployment

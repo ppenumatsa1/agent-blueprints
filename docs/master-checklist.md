@@ -61,12 +61,13 @@ code receives no direct database access. Agent Consumer assignment additionally
 uses only the official exact agent scope derived from validated project output
 and the fixed publisher agent name; wider or another-agent scopes fail closed.
 The hosted app role authenticates service identity only; API-owned exact
-case/principal/caller/session/conversation/channel binding must exist before
-Responses dispatch and cannot be inferred from the hosted token.
-Exploratory composition of A `228aa772` and C `60fd83fc` built and imported the
-backend bridge, but used B-side file staging and C's dev dependency group.
-Final proof remains blocked on A-owned generator output, C-owned runtime
-`httpx==0.28.1`, a no-dev image import/composition/wire-parity pass, and normal
+human principal/case authority bound to the server-selected conversation and
+channel must exist before Responses dispatch and cannot be inferred from the
+hosted token. Foundry user/session/call values are opaque platform correlation,
+not human authority; no caller-selected session or actor metadata is sent.
+Disposable composition of replacement A `c3e733a8` and C's aligned working tree
+built/imported the canonical no-dev backend and passed nonconnecting wire
+composition. Final proof remains blocked on C's immutable head and normal
 entrypoint/lifespan/health against composed PostgreSQL.
 
 **Next action:** independently validate the exact PR revision, supply the
