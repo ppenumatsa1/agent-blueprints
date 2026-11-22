@@ -671,8 +671,9 @@ Acceptance requires:
 4. all nine hosted fault/recovery cases with unknown-outcome reconciliation
    and no hidden retry;
 5. exact active revision/image/version and App Insights corroboration; and
-6. independent implementation, Azure runtime, and production readiness
-   dimensions with immutable artifact hashes.
+6. independent implementation and Azure runtime diagnostics with immutable
+   artifact hashes, plus a permanently non-authorizing production dimension
+   that defers to the signed trust validator.
 
 The exact commands, GitHub environment inputs, evidence schemas, baseline CI,
 region reference, current blocked/unverified matrix, and dependencies on
@@ -681,3 +682,7 @@ Next action: complete exact-head local/CI validation, then consume the immutable
 deployment and live adapter outputs from Agents A-C. Credential-free CI is
 implementation evidence only; Azure runtime remains unverified until the
 manual live gates produce matching evidence.
+The release manifest cannot waive or authorize production checks; production
+requires the baseline-pinned trust validator, signed result attestations, and
+scoped, unexpired risk decisions, while critical/security-critical blocking
+checks remain non-waivable.

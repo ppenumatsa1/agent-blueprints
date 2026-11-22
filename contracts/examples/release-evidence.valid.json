@@ -1,5 +1,6 @@
 {
   "schema_version": "1.0.0",
+  "authority": "diagnostic_non_authorizing",
   "source_revision": "886b628fdea02f9089c385b4ed0fc46d90f375e8",
   "environment": "local-generated-order-resolution",
   "agent_version": "0.1.0",

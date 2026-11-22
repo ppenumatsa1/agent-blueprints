@@ -5,6 +5,7 @@
   "additionalProperties": false,
   "required": [
     "schema_version",
+    "authority",
     "source_revision",
     "environment",
     "agent_version",
@@ -14,6 +15,7 @@
   ],
   "properties": {
     "schema_version": { "const": "1.0.0" },
+    "authority": { "const": "diagnostic_non_authorizing" },
     "source_revision": { "$ref": "#/$defs/text" },
     "environment": { "$ref": "#/$defs/text" },
     "agent_version": { "$ref": "#/$defs/identifier" },

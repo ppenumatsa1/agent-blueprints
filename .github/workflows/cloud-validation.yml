@@ -343,6 +343,11 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           ref: ${{ inputs.source_revision }}
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+      - name: Install pinned release-validator dependencies
+        run: python -m pip install -r requirements-dev.txt
       - name: Download this run's Workstream D evidence
         env:
           GH_TOKEN: ${{ github.token }}
@@ -357,6 +362,10 @@ jobs:
           DEPLOYMENT_REVISION: ${{ inputs.deployment_revision }}
           EVIDENCE_ENVIRONMENT: ${{ inputs.evidence_environment }}
           AGENT_VERSION: ${{ inputs.agent_version }}
+          RUN_PROVIDER_EVALUATION: ${{ inputs.run_provider_evaluation }}
+          RUN_BROWSER_E2E: ${{ inputs.run_browser_e2e }}
+          RUN_FAILURE_INJECTION: ${{ inputs.run_failure_injection }}
+          RUN_TELEMETRY_CORRELATION: ${{ inputs.run_telemetry_correlation }}
         run: |
           implementation="$(find evidence/workstream-d-implementation \
             -name ORDER-RESOLUTION-TECHNICAL-EXECUTION.json -print -quit)"
@@ -395,9 +404,21 @@ jobs:
           test "$status" -eq 1
           python - <<'PY'
           import json
+          import os
           report = json.load(open("evidence/release-evidence-report.json"))
           assert report["dimensions"]["implementation"]["status"] == "passed"
           assert report["dimensions"]["production"]["status"] == "blocked"
+          all_runtime_gates_requested = all(
+              os.environ[name].lower() == "true"
+              for name in (
+                  "RUN_PROVIDER_EVALUATION",
+                  "RUN_BROWSER_E2E",
+                  "RUN_FAILURE_INJECTION",
+                  "RUN_TELEMETRY_CORRELATION",
+              )
+          )
+          if all_runtime_gates_requested:
+              assert report["dimensions"]["azure_runtime"]["status"] == "passed", report
           PY
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()

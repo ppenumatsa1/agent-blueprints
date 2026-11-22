@@ -8,6 +8,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
+STATE_PRECEDENCE = ("failed", "blocked", "unverified", "passed")
+
+
 def _read(path):
     return json.loads(Path(path).read_text(encoding="utf-8"))
 
@@ -17,6 +20,29 @@ def _find(root, name):
     if len(matches) != 1:
         raise ValueError(f"Expected exactly one {name} artifact.")
     return matches[0]
+
+
+def _combined_state(states):
+    observed = set(states)
+    return next(state for state in STATE_PRECEDENCE if state in observed)
+
+
+def _artifact_state(kind, document):
+    if kind in {"hosted_test", "failure_injection"}:
+        scenarios = document.get("scenarios")
+        if not isinstance(scenarios, dict) or not scenarios:
+            return "unverified"
+        statuses = []
+        for item in scenarios.values():
+            if not isinstance(item, dict):
+                return "unverified"
+            status = item.get("status")
+            if status not in STATE_PRECEDENCE:
+                return "unverified"
+            statuses.append(status)
+        return _combined_state(statuses)
+    outcome = document.get("outcome")
+    return outcome if outcome in STATE_PRECEDENCE else "unverified"
 
 
 def _check_metadata(
@@ -137,10 +163,10 @@ def build(
         ("APP-INSIGHTS-CORRELATION", "telemetry_query", telemetry),
     )
     cloud_evidence = []
-    cloud_passed = True
+    cloud_states = []
     for check_id, kind, path in cloud_sources:
         if path is None:
-            cloud_passed = False
+            cloud_states.append("unverified")
             continue
         document = _read(path)
         _check_metadata(
@@ -149,14 +175,7 @@ def build(
             deployment_revision=deployment_revision,
             environment=environment,
         )
-        if kind in {"hosted_test", "failure_injection"}:
-            passed = all(
-                item.get("status") == "passed"
-                for item in document.get("scenarios", {}).values()
-            )
-        else:
-            passed = document.get("outcome") == "passed"
-        cloud_passed &= passed
+        cloud_states.append(_artifact_state(kind, document))
         cloud_evidence.append(
             _evidence(
                 evidence_root,
@@ -176,10 +195,8 @@ def build(
         ("HUMAN-RISK-ACCEPTANCE", "human_review", human_review),
     )
     production_evidence = []
-    production_passed = implementation_passed and cloud_passed
     for check_id, kind, path in production_sources:
         if path is None:
-            production_passed = False
             continue
         document = _read(path)
         _check_metadata(
@@ -188,7 +205,6 @@ def build(
             deployment_revision=deployment_revision,
             environment=environment,
         )
-        production_passed &= document.get("outcome") == "passed"
         production_evidence.append(
             _evidence(
                 evidence_root,
@@ -202,8 +218,10 @@ def build(
             )
         )
 
+    cloud_status = _combined_state(cloud_states)
     manifest = {
         "schema_version": "1.0.0",
+        "authority": "diagnostic_non_authorizing",
         "source_revision": source_revision,
         "environment": environment,
         "agent_version": agent_version,
@@ -222,30 +240,34 @@ def build(
                 "blockers": [],
             },
             "azure_runtime": {
-                "status": "passed" if cloud_passed else "unverified",
-                "reason": (
-                    "Every exact-revision hosted gate passed."
-                    if cloud_passed
-                    else "One or more exact-revision hosted gates lack passing evidence."
-                ),
+                "status": cloud_status,
+                "reason": {
+                    "passed": "Every exact-revision hosted gate passed.",
+                    "failed": "One or more exact-revision hosted gates explicitly failed.",
+                    "blocked": "One or more exact-revision hosted gates are blocked.",
+                    "unverified": "One or more exact-revision hosted gates lack verified evidence.",
+                }[cloud_status],
                 "required_checks": [item[0] for item in cloud_sources],
                 "evidence": cloud_evidence,
-                "blockers": [],
+                "blockers": (
+                    ["One or more hosted gates reported blocked."]
+                    if cloud_status == "blocked"
+                    else []
+                ),
             },
             "production": {
-                "status": "passed" if production_passed else "blocked",
+                "status": "blocked",
                 "reason": (
-                    "Production evidence and scoped human review passed."
-                    if production_passed
-                    else "Production readiness requires passed implementation, Azure runtime, security, cost, and human review."
+                    "This release manifest is diagnostic and non-authorizing. "
+                    "Production readiness requires the independently administered "
+                    "readiness validator with signed result attestations and scoped "
+                    "risk decisions."
                 ),
                 "required_checks": [item[0] for item in production_sources],
                 "evidence": production_evidence,
-                "blockers": (
-                    []
-                    if production_passed
-                    else ["Production prerequisites are incomplete or not passed."]
-                ),
+                "blockers": [
+                    "Independent trust validation and production authorization are required."
+                ],
             },
         },
     }

@@ -19,7 +19,6 @@ AZURE_REQUIRED_KINDS = {
     "failure_injection",
     "telemetry_query",
 }
-PRODUCTION_REQUIRED_KINDS = {"security_report", "cost_report", "human_review"}
 STATE_PRECEDENCE = ("failed", "blocked", "unverified", "passed")
 
 
@@ -132,6 +131,7 @@ def validate_release_evidence(manifest_path, evidence_root):
 
     report = {
         "schema_version": "1.0.0",
+        "authority": manifest["authority"],
         "source_revision": manifest["source_revision"],
         "environment": manifest["environment"],
         "agent_version": manifest["agent_version"],
@@ -172,12 +172,6 @@ def validate_release_evidence(manifest_path, evidence_root):
             elif name == "implementation" and "local_test" not in valid_kinds:
                 issues.append("Implementation readiness requires local_test evidence.")
             elif name == "production":
-                missing_kinds = PRODUCTION_REQUIRED_KINDS - valid_kinds
-                if missing_kinds:
-                    issues.append(
-                        "Production evidence is missing kinds: "
-                        + ", ".join(sorted(missing_kinds))
-                    )
                 dependencies = report["dimensions"]
                 if any(
                     dependencies[dependency]["status"] != "passed"
@@ -186,9 +180,16 @@ def validate_release_evidence(manifest_path, evidence_root):
                     issues.append(
                         "Production readiness requires passed implementation and Azure runtime readiness."
                     )
+                issues.append(
+                    "Release evidence is diagnostic and non-authorizing. Production "
+                    "readiness requires the independently administered readiness "
+                    "validator, signed result attestations, and scoped risk decisions."
+                )
 
         status = dimension["status"]
-        if status == "passed" and issues:
+        if name == "production" and status == "passed":
+            status = "blocked"
+        elif status == "passed" and issues:
             status = "blocked" if name == "production" else "unverified"
         report["dimensions"][name] = {
             "status": status,

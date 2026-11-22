@@ -1,5 +1,6 @@
 {
   "schema_version": "1.0.0",
+  "authority": "diagnostic_non_authorizing",
   "source_revision": "revision",
   "environment": "local",
   "agent_version": "0.1.0",

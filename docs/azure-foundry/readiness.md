@@ -45,19 +45,25 @@ inspect content fields.
 
 `contracts/release-evidence.schema.json` and `readiness/release.py` define
 three independent dimensions with `passed`, `failed`, `blocked`, and
-`unverified` states:
+`unverified` states. This manifest is explicitly
+`diagnostic_non_authorizing`: it preserves exact artifact state and binding,
+but it cannot authorize production.
 
 | Dimension | Pass boundary |
 | --- | --- |
 | Implementation | Exact-source local tests plus independently hashed evaluation artifacts. |
 | Azure runtime | Exact source, environment, and deployment revision with active revision, hosted execution, real-provider evaluation, live browser, failure injection, and telemetry-query evidence. |
-| Production | Passed implementation and Azure runtime dimensions plus independently scoped security, cost, and human risk-acceptance evidence. |
+| Production | Always blocked in this diagnostic manifest; authorization belongs to the independently administered readiness validator. |
 
 Schema validation checks shape only. The validator also reads each local
 artifact, verifies SHA-256, revision/environment binding, timestamps, required
 check IDs, and required evidence kinds. Azure runtime cannot pass without an
-exact deployment revision. Production cannot pass from implementation or
-runtime evidence alone.
+exact deployment revision. Production cannot pass from this release manifest. Production authorization
+must run `python -m readiness` with the approved verification contract,
+baseline-pinned trust store, signed result attestations, and any scoped,
+unexpired risk decisions. Critical and security-critical blocking checks are
+not waivable through the release manifest or a self-authored `human_review`
+artifact.
 
 The pre-cloud state is deliberately:
 
