@@ -37,6 +37,23 @@ and checkpoint facilities. This proposal does not define a universal workflow
 API, a custom cross-framework checkpointer, compatibility shims, Azure
 resources, or customer-specific rules.
 
+### Independent generated-application boundary
+
+A future blueprint implementation and every generated application MUST own its
+framework runtime, canonical dependency manifest and lock, tests, configuration,
+deployment assets, migrations, and operational documentation. Generated
+applications MUST build, run, test, and migrate without importing or mounting
+this repository. Dependency installation MUST use the framework-specific
+approved package graph and supply-chain checks; an umbrella package,
+compatibility alias, or alternate lock MUST NOT silently replace that graph.
+
+The security baseline remains application-enforced: authenticated protected
+endpoints, server-side record and action authorization, least privilege,
+restrictive CORS, safe secret delivery, privacy-safe telemetry, bounded tools,
+and explicit failure. This proposal does not weaken the repository's
+[engineering standards](engineering-standards.md) or make generated-project
+verification a shared runtime dependency.
+
 ## Responsibility and state boundaries
 
 | Concern | Authority | Proposed invariant |
@@ -107,6 +124,49 @@ executor types, or hosting protocols.
 Transitions MUST be monotonic for one proposal version. Retrying a command MUST
 return the existing outcome or continue recovery; it MUST NOT create a second
 approval, rejection, or side effect.
+
+## Versioned synthetic scenario set
+
+**Scenario set:** `order-resolution-spec/0.1.0`
+
+These fixtures are framework-neutral proposal inputs, not executable schemas,
+approved customer rules, or replacements for the existing order-adjustment
+acceptance fixture. Implementations MAY encode them in framework-specific test
+formats but MUST preserve the normalized facts, rules, commands, and outcomes.
+
+### Synthetic facts and rules
+
+| Identifier | Proposed value |
+| --- | --- |
+| `ORDER-LOW` | amount `79.00`; issue `late_delivery`; delay `4 days`; owner `USER-A` |
+| `ORDER-HIGH` | amount `185.00`; issue `late_delivery`; delay `5 days`; owner `USER-A` |
+| `ORDER-DAMAGED` | amount `79.00`; issue `damaged_item`; owner `USER-A` |
+| `POLICY-LATE@1` | an applicable delay over 3 days proposes `partial_refund_10`; approval is required when amount is at least `100.00` |
+| `POLICY-DAMAGED@1` | an applicable damaged-item case proposes `replacement_or_full_refund`; approval is required |
+| Reviewer rule | `REVIEWER-A` may decide `USER-A` cases; `USER-B` and `REVIEWER-B` may not |
+| Idempotency rule | one action claim per `(case_id, proposal_version, action)` |
+| Evidence rule | exactly one current, applicable, digest-valid policy evidence set is required before a proposal is authoritative |
+
+### Cases
+
+| ID | Input and command | Required outcome |
+| --- | --- | --- |
+| `ORS-001` low-risk auto-resolution | `USER-A` submits `ORDER-LOW` with `POLICY-LATE@1`. | Deterministic proposal `partial_refund_10`; no approval pause; one verified action; terminal `completed`. |
+| `ORS-002` high-risk approval | `USER-A` submits `ORDER-HIGH`; `REVIEWER-A` approves the current proposal. | Native pause/checkpoint before action; one authorized decision; one verified `partial_refund_10`; terminal `completed`. |
+| `ORS-003` human rejection | `USER-A` submits `ORDER-DAMAGED`; `REVIEWER-A` rejects the current proposal. | Native pause/checkpoint; one rejection; no action claim or side effect; terminal `escalated`. |
+| `ORS-004` duplicate request/action | Repeat `ORS-001` with the same server-recognized request/idempotency identity before and after completion. | Return or reconcile the original case/outcome; action count remains one; no duplicate terminal event is emitted. |
+| `ORS-005` worker restart/recovery | For `ORS-002`, terminate the worker after the decision commit and before native resume acknowledgement, then restart. | Restore/reconcile the native continuation and stored decision; execute at most one action; terminal `completed` with the original decision audit. |
+| `ORS-006` missing policy evidence | Submit `ORDER-LOW` without `POLICY-LATE@1`. | No authoritative proposal, approval, or action; terminal `failed` with `policy_evidence_missing`. |
+| `ORS-007` conflicting policy evidence | Submit `ORDER-LOW` with two current applicable evidence items that disagree on action or approval. | No authoritative proposal, approval, or action; terminal `failed` with `policy_evidence_conflict`. |
+| `ORS-008` invalid policy evidence | Submit `ORDER-LOW` with a digest-invalid, expired, or non-applicable `POLICY-LATE@1` item. | No authoritative proposal, approval, or action; terminal `failed` with `policy_evidence_invalid`. |
+| `ORS-009` authorization failure | While `ORS-002` is pending, `REVIEWER-B` or `USER-B` attempts approval. | Decision rejected with `authorization_denied`; case remains `awaiting_approval`; no action occurs; the denial is privacy-safe and auditable. |
+
+Each implementation MUST add its native checkpoint assertions to `ORS-002`,
+`ORS-003`, and `ORS-005` without changing the normalized business outcome.
+The framework checkpoint identifier and bytes are deliberately absent from the
+shared fixture. PostgreSQL application records MAY correlate the case,
+proposal, decision, and action, but MUST NOT impersonate a framework's native
+checkpoint contract.
 
 ## Stage requirements
 

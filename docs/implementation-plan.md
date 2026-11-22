@@ -13,9 +13,11 @@ The [cross-framework Order Resolution specification
 proposal](order-resolution-specification-proposal.md) adds a documentation-only
 business contract for triage, policy retrieval, deterministic resolution,
 authorized approval/rejection, idempotency, crash/restart recovery, and
-evaluations. It requires framework-native workflow/checkpoint providers and
-keeps PostgreSQL application persistence separate; it does not add a runtime,
-custom checkpointer, compatibility shim, or Azure resource.
+evaluations. Its versioned synthetic set covers automatic completion, approval,
+rejection, duplicate commands, worker recovery, policy-evidence failures, and
+authorization denial. It requires framework-native workflow/checkpoint
+providers and keeps PostgreSQL application persistence separate; it does not
+add a runtime, custom checkpointer, compatibility shim, or Azure resource.
 
 Specification Studio has not yet produced an artifact, so the proposed
 handoff is not an end-to-end compatibility claim. Phase 0 does not implement
@@ -29,18 +31,300 @@ independently buildable generated project, with durable human approval and
 recovery and an independent Verification/Readiness Validator. Start locally
 with FastAPI, React, PostgreSQL, Docker Compose, tests, and evaluations.
 Business logic is supplied by the generated application; order adjustment is
-only a synthetic test fixture. Foundry Hosted Agents are the preferred later
-deployment target, subject to compatibility verification; Azure Container Apps
-(ACA) is the explicit fallback.
+only a synthetic test fixture. The primary deployment targets a Foundry
+Hosted Agent for the native workflow, with separate Azure Container Apps
+(ACA) for the UI and API. Hosting the workflow itself in ACA is a deferred
+alternative, not a verified fallback.
 
 The local workflow uses MAF-native file checkpoints on a persistent single-host
 volume, separate from PostgreSQL business state and approval records. A future
 Foundry host owns its managed checkpoint provider; the adapter and hosted
 pause/resume validation are P1-12, not local durability evidence. Interactive
 sign-in uses Entra ID and existing registrations, while isolated automated
-tests may use synthetic identities. Do not provision Azure resources.
+tests may use synthetic identities. Azure provisioning requires explicit
+approval of the resource inventory, estimated cost, and deployment plan.
+
+### Reconciled gaps and sequencing
+
+The engineering foundation and [integrated review #17](https://github.com/ppenumatsa1/agent-blueprints/pull/17)
+are not proof of completed hosted or deployment capabilities. Track the
+remaining acceptance criteria, dependencies and evidence in these issues:
+
+- Hosted security and durability: [#22](https://github.com/ppenumatsa1/agent-blueprints/issues/22),
+  [#19](https://github.com/ppenumatsa1/agent-blueprints/issues/19),
+  [#20](https://github.com/ppenumatsa1/agent-blueprints/issues/20), and
+  [#32](https://github.com/ppenumatsa1/agent-blueprints/issues/32).
+- Reusable MAF extension contracts (P1): [#35](https://github.com/ppenumatsa1/agent-blueprints/issues/35)
+  covers typed model, agent, prompt, tool/authorization, and executor/workflow
+  patterns, demonstrated in a generated synthetic application.
+- Independent trust and evaluation: [#21](https://github.com/ppenumatsa1/agent-blueprints/issues/21)
+  and [#25](https://github.com/ppenumatsa1/agent-blueprints/issues/25).
+- Azure, data, telemetry and identity: [#18](https://github.com/ppenumatsa1/agent-blueprints/issues/18),
+  [#24](https://github.com/ppenumatsa1/agent-blueprints/issues/24),
+  [#26](https://github.com/ppenumatsa1/agent-blueprints/issues/26),
+  [#27](https://github.com/ppenumatsa1/agent-blueprints/issues/27), and
+  [#28](https://github.com/ppenumatsa1/agent-blueprints/issues/28).
+- Developer experience and demonstration: [#23](https://github.com/ppenumatsa1/agent-blueprints/issues/23)
+  and [#29](https://github.com/ppenumatsa1/agent-blueprints/issues/29).
+- P1 permanent standalone reference application: [#30](https://github.com/ppenumatsa1/agent-blueprints/issues/30)
+  is required but requires separate repository authorization.
+- Reusable MAF extensions and PostgreSQL readiness: [#35](https://github.com/ppenumatsa1/agent-blueprints/issues/35)
+  and [#38](https://github.com/ppenumatsa1/agent-blueprints/issues/38).
+- Separately scoped/future work: [#31](https://github.com/ppenumatsa1/agent-blueprints/issues/31),
+  [#33](https://github.com/ppenumatsa1/agent-blueprints/issues/33), and
+  [#34](https://github.com/ppenumatsa1/agent-blueprints/issues/34).
+
+Draft PR [#40](https://github.com/ppenumatsa1/agent-blueprints/pull/40)
+proposes a standardized Order Resolution specification only. Review its
+terminology for documentation compatibility; do not treat its business
+scenario as an implementation request. The current order-adjustment scenario
+remains a synthetic test fixture, and no #40 runtime behavior or contract is
+included in this blueprint.
+
+Hosted recovery remains explicitly deferred, not waived. Azure deployment
+requires the implemented and independently verified offline prerequisites,
+separately approved subscription access, and approval of the concrete
+deployment plan. Read-only subscription and resource-group listing succeeded;
+this is not evidence of deployment write access or application/service
+connectivity. Its live checks provide evidence to close the related hosted and
+operational issues.
+Do not merge overlapping workstream histories blindly or treat a green
+engineering check as release authorization.
+The dated [issue and fix journal](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-22---issue-and-fix-status)
+summarizes open PR evidence, unresolved issues and the review sequence. Its
+draft work is not represented as merged functionality on this branch.
 
 ### Execution sequence and work packages
+
+The modularity foundation reorganizes the local blueprint and generated
+copies into sibling backend/frontend contexts and separates backend
+responsibilities using canonical imports and no compatibility aliases. Acceptance
+requires source and generated security/recovery tests, both crash windows,
+independent golden verification and exact contract bytes, credential-free
+CI and Compose smoke checks. Local evidence is recorded in the
+[checklist](master-checklist.md). [PR #11](https://github.com/ppenumatsa1/agent-blueprints/pull/11)
+merged into `main` as `de1cbe4`; its security-hardened head is
+`587e6cc1abc23a67845c8193d486cc65c8b52854`. Foundation commit `9efeef0`
+removes compatibility aliases and corrects checkpoint selection. Its
+[hosted run 44936094798](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44936094798)
+passed all five checks on that exact commit. An intermittent local restore
+failure occurred during migration testing; a deterministic equal-timestamp
+reproduction showed a real selection defect but does not prove the
+unretained original failure had the same cause. The foundation selects
+MAF-native persisted checkpoints and rejects incomplete terminal state on
+completion and replay. Local source/generated backend suites passed 36 tests
+each; the selected-adapter root suite passed 46 and the generated verifier
+passed 44 without skips. Reconcile dependent PRs and verify the combined
+revision separately. Hosted checks do not prove live hosting.
+An independent CI regression exposed that the generated-verifier command's
+failure could be masked by `tee`. The workflow now propagates pipeline
+failures and the [regression test](../tests/test_ci_workflow.py) exercises
+failure, skip and success behavior. Prior CI job status alone is not proof
+that the verifier passed; logs for the prior PR heads recorded 44 tests and
+`OK`. [Run 44939172266](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44939172266)
+passed all five jobs for foundation head `d0e1727`. The dependent PRs had
+separate successful head-specific runs, which are not evidence for the
+reconciled tree.
+The #17 implementation reconciliation is commit
+`91eaa6392082c1084c05bc9b07cb9052857d5b2f`, with the non-rewriting merge of
+`main` at `de1cbe4cc3a93f2473a6f8f5f9e063d1ae278fa3` as its second parent.
+It targets `main`; exact-head
+[run 45027035643](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/45027035643)
+passed all six jobs. Merge ref `d421eeb98024810465c1ac9ce77cfa1ac4ac7a70`
+has the expected base/head parents and a tree equal to the head. These results
+cover the implementation commit, not later documentation edits or other tree
+changes. Local validation and network/harness caveats are recorded in the
+[integration journal](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-22---main-reconciliation-and-local-validation).
+The [targeted MAF supply-chain audit](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-22---targeted-maf-supply-chain-audit)
+distinguishes the approved `agent-framework-core==1.26.0` dependency from the
+compromised `agent-framework` umbrella releases. Source and generated installs
+must reject the umbrella distribution and verify the approved core wheel hash
+against the canonical `uv.lock` before locked installation.
+The copied evidence producer observed approval and recovery passing while
+explanation and browser hint remained unverified; the independent unsigned
+readiness report remained unverified. The first local container build could
+not reach the public Python package host; a retry using the operator-approved
+package proxies built and passed the generated Compose smoke checks.
+Independent workstreams cover locked tooling, migrations, observability,
+Foundry hosting, infrastructure and integration evidence. Do not merge PRs
+without approval. Azure deployment is a deliverable but requires prior
+approval of its resource inventory, estimated cost and deployment plan;
+permanent reference repository creation requires separate approval. As of
+2026-11-21, locked tooling is proposed in open
+[PR #13](https://github.com/ppenumatsa1/agent-blueprints/pull/13), currently
+at `7325765cbbfb809e2064ec0e78a5567b465e3621`. Actions run
+[44947297321](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44947297321)
+passed all five jobs on that exact head. The owner reports a headless
+generated-project debugpy/DAP smoke using `.vscode/launch.json`'s
+`Backend: FastAPI` configuration: execution stopped at `health.py:9`, the
+stack was inspected, and continuing returned HTTP 204 with exit code 0;
+temporary resources were cleaned. The report did not identify an immutable
+revision. It does not verify the interactive VS Code UI, Restricted Mode, or
+macOS.
+
+Earlier, the owner reported Windows/Linux Compose verification using an
+approved mirror after public TLS failures and could not run uv in a separate
+validation environment. PR #13's previous reported head was
+`b78634b3b746c7adbf5f8500e4b7023c96c67963`; its
+[run 44928260607](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44928260607)
+passed five checks for prior exact revision
+`e1d953662e615e547fa641ad0831907c363318e3` only. The integrated tooling
+revision is `543b137a432ca054920d629b943fc42a729df676`; its
+[run 44937692067](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44937692067)
+passed five checks for that exact head, not the combined PR #17 tree. None of
+these results establishes that tooling is merged or validates this branch,
+interactive debugging, Restricted Mode, or macOS.
+
+For PR #16, the owner reports guarded Alembic adoption only after exact
+baseline-manifest validation and checking that no later-revision-owned tables
+exist; fresh databases run revision `0001`, and validation never stamps.
+Source/generated suites each passed 48 tests on PostgreSQL 16.15 and 17.12;
+the root suite passed 47 with one expected adapter-not-selected skip. Run
+44944613749 passed five jobs for `897aae8` against `d0e1727`, but is stale
+relative to foundation head `8144918`; reconcile and rerun before relying
+on this evidence. Follow-up commit `ce86252324dca041fd5430602a3fc2c28a355274`
+was reported to pass 12 focused migration regressions on isolated PostgreSQL
+17 and Ruff 0.14.13 checks. It is local integration evidence, not final
+combined CI; reconcile ancestry and validate the combined revision.
+The owner later reported merge commit
+`d1251352835c2d02e91690104b4dcabf465f5f05` with parents `897aae8` and
+foundation `8144918`; its generated instantiation/link check, root suite
+(47 passed, one expected skip), and all five Actions jobs in run 44947337144
+passed. This is PR #16-specific and does not verify PR #17's combined tree.
+
+Each PR must remove obsolete compatibility layers, use direct imports,
+update affected `docs/design` specifications and the cumulative engineering
+journal, and record actual regression, security, durability, independent
+verification and CI outcomes for its final revision. PR #12 is deepening the
+six generated-project guides and eight documents under
+`blueprints/maf/workflow/docs/design/`; these documents must evolve alongside
+implementation, remain in generated applications, and use actual
+source/configuration references, meaningful Mermaid diagrams, and accurate
+implemented/planned labels. An earlier documentation working tree passed three focused
+instantiation and generated-verifier pipeline tests. PR #11 is now pushed at
+`44ee18b886d409b0b59cf6df6b4893917370307d`. Its canonical source separates
+`composition.py`, `api/app.py`, route handlers, schemas, dependencies,
+errors, middleware, and `lifecycle.py`; the current PR #12 source-map links
+now point to these exact paths. The owner reports 37 backend tests passed.
+Actions run 44944929394 completed with four jobs passing and `contracts`
+failing on the stale `specs.md` API link; the root suite had 47 tests, one
+failure from that link, and one expected adapter-not-selected skip. Rebase
+onto the new head and rerun root/contracts before final PR validation. The
+coordinator reports the minimal link correction was then pushed at
+`814491811eac457826108b70fc213fdc564af0e5`; root tests passed 47/47 and
+Actions run
+[44945419570](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44945419570)
+passed all five jobs on that exact head, including generated checks without
+skips. PR #12 is rebased onto that tip; its isolated root suite passed 47
+tests with one expected adapter-not-selected skip, including generated
+copy/link and verifier-pipeline tests, and `git diff --check` passed. Actual
+head run
+[44946550709](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44946550709)
+passed all five jobs on exact head
+`c247bf737acabe47e7af0023eaebf69c0b393fdf`. Hosted checks for this combined
+PR #17 revision remain to be run.
+Maintain the
+engineering journal without inventing historical findings. For each meaningful PR update
+this plan, `docs/master-checklist.md`, and relevant architecture documentation
+with acceptance criteria, evidence, status, and next action.
+
+### Cross-cutting PR acceptance gates
+
+Before any PR is ready for approval, keep one canonical implementation and
+use direct imports. Remove compatibility shims, forwarding modules, legacy
+import aliases, obsolete directories, duplicate code, unused dependencies,
+and stale configuration; backward compatibility with prior internal
+implementations is not required for this greenfield blueprint. Update
+dependent call sites, tests, Dockerfiles/build contexts, CI, documentation,
+and instantiation scripts in the same coherent change while preserving
+functional behavior and verification contracts.
+
+Before requesting approval, run applicable regression, security, durability,
+and independent verification tests; do not weaken or relabel failed or
+unverified checks. Confirm GitHub Actions for the actual PR head revision.
+Live Entra/OBO, Foundry-hosted recovery, cloud telemetry, and Azure deployment
+remain unverified until separately implemented and evidenced. Azure
+provisioning and permanent repository creation still require separate
+authorization; never merge automatically.
+
+The dependent developer-tooling branch adds `backend/pyproject.toml` and a
+public-registry `uv.lock`, locked development and container installs, Ruff,
+portable development commands and VS Code configurations. Acceptance requires
+source and generated lint/tests and locked builds without Azure credentials,
+then passing hosted CI on the actual reviewed head. Local Windows source and
+generated backend tests, Ruff, generated UI tests/build and Linux Compose
+204/401 smoke passed using an approved temporary mirror after public artifact
+downloads failed locally with a TLS handshake error. On foundation `9efeef0`,
+source and generated backend suites passed 36 tests each, independent
+verification passed 44 without skips, generated frontend passed 8 tests/build/
+CSP, and Ruff passed in both backends. Hosted run
+[44940616666](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44940616666)
+passed all five jobs for PR head `b78634b`, not for any combined revision.
+macOS, interactive debugging and a clean public-only local installation
+remain unverified. Next verify integrated work and review the separate PRs.
+
+The migration workstream, based on `modularity-foundation`, adds Alembic
+baseline `0001`, per-revision catalog manifests, an explicit schema-owner
+upgrade and read-only startup validation. Local PostgreSQL 17 evidence:
+12 migration tests including a test-only second revision, 43 source and 43
+generated backend tests, 44 generated verifier tests, and two generator tests
+after rebasing; source and generated Compose smokes each returned UI 200,
+health 204 and protected API 401. The
+[migration tests](../blueprints/maf/workflow/backend/tests/test_migrations.py),
+[operations guide](../blueprints/maf/workflow/README.md#business-database-migrations)
+and [journal](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md) record
+the acceptance evidence and limitations. Two later local evidence runs failed;
+their subprocess stderr was not retained. An independently reproduced native
+checkpoint timestamp-tie defect was fixed in foundation `9efeef0`, whose
+[CI run](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44936094798)
+passed all five jobs. The original failures' causes remain unproven. Local
+PostgreSQL 16.15 migration tests passed at `031fdb4`, after an initial
+auxiliary readiness probe failed before tests.
+At `7cd99ac`, local source and independently generated backend suites passed
+48 tests each on both PostgreSQL 16.15 and 17.12; the generated verifier
+passed 44 and generator tests passed two. The generated evidence producer
+passed approval/recovery observations but left explanation/hint unverified;
+the independent unsigned readiness report remained unverified.
+[PR #16](https://github.com/ppenumatsa1/agent-blueprints/pull/16) remains open;
+[run 44940559106](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44940559106)
+passed all five jobs for head `eb898f6`, not on the combined
+revision. Next verify the integrated revision; live backup/restore remains
+unverified.
+
+P1-14 now has a staged, independently copied
+[Foundry-first resource graph](../blueprints/maf/workflow/infra/README.md)
+and offline compiler/configuration tests. Optional model, project-wide API
+agent-consumer grant, registry and API/UI services default off; the remaining
+resources would still incur cost. Foundry and monitoring private connectivity,
+PostgreSQL Entra token use, API/UI binding and the hosted-agent contract are
+not implemented or verified. Source and independent generated static checks
+and nine infrastructure security/configuration tests per copy passed locally
+on the rebased working tree; two instantiation tests also passed.
+[PR #15](https://github.com/ppenumatsa1/agent-blueprints/pull/15)
+[run 44939817209](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44939817209)
+passed all six jobs for head `2023e16`. Follow with separately authorized
+network, identity, cost and deployment review; no cloud mutation has occurred.
+
+The staged PostgreSQL server selects 16 while Compose uses 17. The pinned
+API's documented enum and examples
+conflict, and the compiler accepts arbitrary version strings; neither resolves
+17 support for that API. The [version-gap review](../blueprints/maf/workflow/infra/README.md#open-postgresql-version-gap)
+records a newer API as an unverified candidate. Separately, migration revision
+`031fdb440908092cf09801232fe7f5d15048f065` passed 12 migration tests on local
+PostgreSQL 16.15 after an initial auxiliary locale probe failed and was
+corrected. The integration worktree combines the migrations and infrastructure,
+but that result belongs to the separate migration revision. Resolve the target
+major before deployment; local evidence does not prove Azure compatibility or
+safe downgrade.
+
+The local combined code revision `af3955a85036d3a6a01465648437a184a790309c`
+passed 68 source and 68 generated backend tests on each of PostgreSQL 16.15
+and 17.12, 47 selected-adapter root tests, 44 generated verification tests
+without skips, Ruff, frontend tests/build/CSP, offline IaC checks, and source
+and generated Compose smoke. Its unsigned readiness report remained
+unverified. The [integration journal](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-21---combined-engineering-layer-integration)
+records failed attempts and limitations. Exact final combined-revision CI
+and review are still required; none of these open PRs has been merged.
 
 P1-01 through P1-04 have an initial local foundation and a test-only
 application adapter, but the scenario has no authorized contract approval.
@@ -64,20 +348,55 @@ the local HTTP smoke check. Its unsigned readiness report is unverified.
 | ID | Bounded work package | Dependencies | Independently verifiable outcome |
 | --- | --- | --- | --- |
 | P1-01 | Define the synthetic scenario, golden acceptance tests, and contract; obtain authorized approval. | None | [Scenario, golden cases, and test-only adapter](../scenarios/order-adjustment/README.md) exist; independent authorized approval remains outstanding. |
-| P1-02 | Define normalized result, evidence, baseline, and signed-decision inputs; map actual runner output. | P1-01 | The [synthetic runner](../blueprints/maf/workflow/tests/evidence_runner.py) records actual observations; independent result attestation remains outstanding. |
+| P1-02 | Define normalized result, evidence, baseline, and signed-decision inputs; map actual runner output. | P1-01 | The [synthetic runner](../blueprints/maf/workflow/backend/tests/evidence_runner.py) records actual observations; independent result attestation remains outstanding. |
 | P1-03 | Implement local traceability, evidence integrity, freshness, decisions, and profile gates. | P1-02 | [Validator](../readiness/validator.py) and [acceptance tests](../tests/test_readiness.py) exercise the policy; actual trust and provenance require independent administration. |
 | P1-04 | Expose the validator as a local CLI with a machine-readable report. | P1-03 | [CLI](../readiness/__main__.py) and [usage](readiness-validator.md) preserve outcomes and disclose unapproved inputs. |
 | P1-05 | Create a self-contained blueprint with the local React, FastAPI, PostgreSQL, and Docker Compose stack. | P1-01 interfaces | The stack starts; one temporary generated project builds, runs, tests, and verifies independently. Automated tests need no Azure credentials; interactive sign-in requires existing Entra configuration. |
-| P1-06 | Implement PostgreSQL business records, approval/audit state, and an idempotent action ledger. | P1-01, P1-05 interfaces | Real restart tests cover crashes after decision persistence and after action commit, with no unauthorized or duplicate actions. |
+| P1-05 readiness | Avoid the transient socket-only initialization race in source/generated CI and Compose. | P1-05 | [#38](https://github.com/ppenumatsa1/agent-blueprints/issues/38) records socket-ready/TCP-unready observations on PostgreSQL 16.15 and 17, an initial `createdb` failure, and a 72/72 source/generated retry on historical head `8b3c357`. Both CI waits and the Compose health check use bounded loopback TCP readiness. Verify the resulting exact head and generated Compose; managed PostgreSQL remains unverified. |
+| P1-06 | Implement PostgreSQL business records, approval/audit state, and an idempotent action ledger for effects inside the same transaction. | P1-01, P1-05 interfaces | Real restart tests cover crashes after decision persistence and after action commit, with no unauthorized or duplicate database actions. Consequential remote effects are separately P0-blocked by [#32](https://github.com/ppenumatsa1/agent-blueprints/issues/32). |
 | P1-07 | Implement typed FastAPI operations with Entra token validation, authorization, approvals, and optional OBO. | P1-01, P1-06 interfaces | Positive and negative tests cover scopes, roles, identity isolation, malformed and replayed requests; synthetic identities exist only in isolated tests. |
 | P1-08 | Implement an accessible MSAL React client for sign-in, submission, status, approval/rejection, and failure states. | P1-01, P1-07 API contract | UI tests cover visible states and safe retries; browser code contains no service secrets. |
 | P1-09 | Implement a native MAF workflow with local file checkpoints, isolated pause/resume, rejection, and recovery. | P1-01, P1-06 interfaces | Local tests cover repeated decisions, concurrent requests, and recovery without a universal orchestration wrapper; Foundry hosting is deferred to P1-12. |
 | P1-10 | Add integration/E2E tests, synthetic agent evaluations, and GitHub Actions; connect actual results and artifacts to the validator. | P1-04 through P1-09 | A local or CI run produces a report from real artifacts; blocking failures cannot pass, non-blocking outcomes follow the selected profile, and rubric/threshold decisions are recorded. |
-| P1-11 | Add privacy-safe logs, traces, correlation, and operational signals across API, workflow, approvals, and side effects. | P1-07, P1-09 interfaces | Tests verify redaction and correlation; actual export remains environment-specific. |
+| P1-11 | Add privacy-safe logs, traces, correlation, and operational signals across API, workflow, approvals, and side effects. | P1-07, P1-09 interfaces | Manual telemetry tests cover redaction and correlation; owner-reported native global auto-instrumentation leaked a query canary and emitted duplicate FastAPI spans. Do not enable that path until exact-revision negative tests cover prompt/tool/identity and failure paths; hosted export remains environment-specific. |
 | P1-15 | Demonstrate the local prototype from a synthetic specification through approval, evaluation, and its readiness report. | P1-10, P1-11 | Record the scenario, evidence, limitations, and observed elapsed time; the 2–3 hour objective is a target until a representative run demonstrates it. |
-| P1-12 | Validate Foundry Hosted Agent compatibility for the selected MAF version, Responses protocol, request-aware workflow factory, identity, and host-managed checkpoints. | P1-09, P1-15 | Record versions and evidence for the compatibility assessment; local checks alone are not a hosted deployment. No Azure resources are provisioned. |
+| P1-12 | Validate Foundry Hosted Agent compatibility for the selected MAF version, Responses protocol, request-aware workflow factory, identity, per-user session isolation, and host-managed checkpoints. | P1-09, P1-15 | Microsoft warns delegated users are not fenced from one another within a shared session. A trusted app must authorize each principal's session, verify mapping from the validated principal, map each authenticated caller to a distinct session, and reject unchecked client IDs; an opaque app-supplied `x-ms-user-identity` scoping value derived from that principal is not authorization. Platform-generated `x-agent-user-id` is a different header; do not assume their values match. Equivalence and binding to the validated principal are unsupported and unverified; this bridge and mapping are not implemented or tested. Local AgentServer Core 2.3.0/Responses 2.4.0 one-shot task IDs reran fresh after terminal completion and are not persistent deduplication; hosted semantics remain unknown. The exact `agent-framework-foundry-hosting==1.0.0b261112` source exposes `response_id` in the request-aware factory before checkpoint preparation/parsing/run claim, but this hook alone does not establish a safe owner-bound CAS claim, a reservation per continuation, pending-reply/action ordering, idempotent side effects, or same-response recovery. The scoping value is not a credential; hosted secret delivery/rotation and downstream OBO token lifecycle are not implemented, and end-user bearer/OBO tokens must not be persisted. Lost `response.id` recovery remains blocked; see the [investigation journal](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-21---hosted-caller-binding-and-lost-responses) and [session-isolation clarification](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-21---delegated-session-isolation-and-debugger-evidence). Local checks alone are not a hosted deployment. No Azure resources are provisioned. |
 | P1-13 | Prepare the explicitly selected ACA fallback and a framework-compatible checkpoint strategy. | P1-09, P1-15 | Separate local/container recovery and idempotency checks pass; no claim that ACA shares Foundry checkpoint ownership or silently replaces a failed model call. |
-| P1-14 | Prepare Bicep, least-privilege identities, authenticated public endpoints, GitHub-hosted CI, and deployment/handoff instructions. Deploy only after separate Azure authorization. | P1-10, P1-11, P1-12; P1-13 if selected | Static checks work without Azure credentials; an authorized deployment later records its revision, versions, identity, network, evidence, cost, and teardown owner. |
+| P1-14 | Prepare Bicep, least-privilege identities, authenticated public endpoints, GitHub-hosted CI, and deployment/handoff instructions. Deploy only after separate Azure authorization. | Offline: P1-10, P1-11, P1-12 design decisions; P1-13 only if selected. Live deployment supplies evidence for hosted/cloud issues and must not wait for all live-verification issues to be closed. | Exact PR #17 head `b633539` passed `maf-infrastructure` and generated infrastructure checks in run 44955776238; the staged graph is not wired or deployed. Track IaC wiring [#18](https://github.com/ppenumatsa1/agent-blueprints/issues/18), managed PostgreSQL operations [#24](https://github.com/ppenumatsa1/agent-blueprints/issues/24), and separately authorized live deployment [#28](https://github.com/ppenumatsa1/agent-blueprints/issues/28). |
+
+### Current integrated review baseline and issue-linked backlog
+
+The latest verified integrated snapshot is head
+`b63353944372f2b6dcd91546cca3a350250be78b`, based on
+`1e99e038dc31c0ae25e5ea7712030d204ee35bc0`. Run
+[44955776238](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44955776238)
+passed all six jobs. Merge ref
+`0a54717118879bab6be56633dc29c313178d9081` had exact base/head parents and a
+tree identical to the head (`1e0a7994da25cbf63c9e3f6b7284f1a660260c55`).
+Generated acceptance passed 44 tests with no skips or expected failures.
+Synthetic producer evidence remains limited: approval/recovery passed,
+explanation/hint remain unverified, and the unsigned validator exited 1.
+This documentation correction is newer than that tested snapshot and needs
+fresh exact-head CI; any later tree or base change also requires revalidation.
+Neither result makes the blueprint, readiness report, or deployment complete. See the
+[journal](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-21---integrated-gap-reconciliation-and-backlog).
+
+| Work package | Open issue(s) and acceptance boundary |
+| --- | --- |
+| P1-01–03: authorized exact contract and independent trust/provenance | [#21](https://github.com/ppenumatsa1/agent-blueprints/issues/21); synthetic schemas and validator tests do not establish authorized approval or trust administration. |
+| P0: consequential external side effects | [#32](https://github.com/ppenumatsa1/agent-blueprints/issues/32); the action ledger covers only effects in the same PostgreSQL transaction. Block consequential remote actions until service-specific authorization, downstream idempotency and authoritative reconciliation are independently verified; otherwise fail closed and use manual resolution. An outbox only persists intent; it cannot deduplicate an external effect after a lost acknowledgment. |
+| P1-07–08: real identity and browser experience | [#27](https://github.com/ppenumatsa1/agent-blueprints/issues/27); interactive Entra/OBO, generated UI and accessibility remain unverified. |
+| P1-09/P1-12: hosted MAF packaging and checkpoint integration | [#19](https://github.com/ppenumatsa1/agent-blueprints/issues/19); caller/session binding [#22](https://github.com/ppenumatsa1/agent-blueprints/issues/22); lost-response/effect recovery [#20](https://github.com/ppenumatsa1/agent-blueprints/issues/20). Hosted recovery was explicitly deferred; this is not a security waiver. |
+| P1-10: agent evaluation and browser-hint evidence | [#25](https://github.com/ppenumatsa1/agent-blueprints/issues/25); current synthetic producer leaves explanation and hint unverified. |
+| P1-11: privacy-safe cloud telemetry | [#26](https://github.com/ppenumatsa1/agent-blueprints/issues/26); native auto-instrumentation remains disabled after the query-canary leak and duplicate spans. |
+| Developer experience | [#23](https://github.com/ppenumatsa1/agent-blueprints/issues/23); macOS, interactive debugging and Restricted Mode remain unverified. |
+| P1-13: optional ACA workflow runtime | [#31](https://github.com/ppenumatsa1/agent-blueprints/issues/31); alternative remains unselected, not a silent fallback. |
+| P1-14: Azure graph wiring, managed database operations, deployment | [#18](https://github.com/ppenumatsa1/agent-blueprints/issues/18), [#24](https://github.com/ppenumatsa1/agent-blueprints/issues/24), [#28](https://github.com/ppenumatsa1/agent-blueprints/issues/28); no Azure resource was provisioned. |
+| P1: reusable MAF adopter extensions | [#35](https://github.com/ppenumatsa1/agent-blueprints/issues/35); specify and test model, agent, prompt, tool/authorization, and executor/workflow patterns in an independently generated synthetic app. |
+| P1-15: measured local demonstration | [#29](https://github.com/ppenumatsa1/agent-blueprints/issues/29); the 2–3 hour objective has not been measured. |
+| Phase 0 Specification Studio handoff | [#33](https://github.com/ppenumatsa1/agent-blueprints/issues/33); no producer artifact or lossless adapter exists, and this does not authorize implementation. |
+| P1 permanent standalone reference application | [#30](https://github.com/ppenumatsa1/agent-blueprints/issues/30); required as an independent deliverable, but repository creation still requires separate explicit authorization. |
+| Later separate App/API blueprint roadmap | [#34](https://github.com/ppenumatsa1/agent-blueprints/issues/34); remains out of phase and requires separate authorization. |
 
 ### Validator acceptance contract
 
@@ -131,6 +450,69 @@ prerelease. Establish package/protocol compatibility and the approval/resume
 path before promising it. Foundry-managed checkpoints do not replace PostgreSQL
 business state; ACA recovery requires separate evidence. Select a fallback
 explicitly and never provision Azure resources without approval.
+
+### P1-11 observability increment
+
+The MAF backend now has manually instrumented request, workflow, database
+operations and OBO boundaries, allowlisted JSON operational logs and optional
+Azure Monitor trace and metric export. Missing or invalid hosted configuration
+fails startup; subsequent export failures are signaled without changing workflow
+outcomes. Metric dimensions are limited to operation/outcome and exemplars are
+disabled. Span creation, metadata, context and closure failures are isolated
+without retrying work or masking application exceptions; startup failures clean
+up telemetry resources. Logger failures produce a fixed stderr-only failure
+signal without payloads; a stderr write failure cannot change the workflow
+result. Acceptance requires canary, correlation, injected SDK, logger and
+export failure tests, credential-free generated-project CI, and no workflow
+changes.
+Evidence: [tests](../blueprints/maf/workflow/backend/tests/test_telemetry.py)
+and [operational guidance](../blueprints/maf/workflow/README.md#operational-telemetry).
+After reconciliation onto the checkpoint foundation, the source backend suite
+passed 51 tests and the independent generated backend suite passed 56 tests
+(including evidence-runner tests); the generated standalone verifier passed
+44 tests and two instantiation tests passed. Recovery coverage includes tied
+checkpoint selection, pending and terminal validation, and completed replay
+rejection. Earlier Compose returned UI 200, health 204 and protected API 401
+after an initial failed startup attempt. [PR #14](https://github.com/ppenumatsa1/agent-blueprints/pull/14)
+head `8c643df` passed all five jobs in
+[run 44938368000](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44938368000);
+these checks do not prove cloud export or the combined revision.
+This increment remains in progress pending review and real hosted
+verification. Outbound/Foundry propagation, sampling,
+retention, regional placement and access policy require separate validation.
+The common design suite and engineering journal record the implementation and
+limitations. The local integration tree combines the public locked telemetry
+dependencies with tooling. Its source and generated backend suites passed 50
+tests each, its generated verifier 44, and generation tests two; full Ruff
+checks passed. Both backend images built with an approved mirror after public
+Python TLS failures.
+Revision `fe4550a` passed 50 source and 50 generated backend tests, the
+44-test generated verifier, and two instantiation tests; changed Python files
+passed Ruff with the tooling workstream's configuration. These historical
+results are not combined-revision evidence. Hosted configuration and cloud
+ingestion remain unverified. No Azure provisioning or ingestion is implied.
+
+## API-boundary integration follow-up
+
+The final PR #14 code from `3aa389f` is reconciled with migrations and the
+canonical dependency lock. All 23 focused privacy regressions passed locally;
+native automatic instrumentation remains disabled following the measured
+query-canary leak. Complete source/generated and final-revision CI checks
+before review; hosted caller binding and lost-response recovery remain blocked.
+
+The PR #11 API split and source-map fix are being reconciled with integrated
+telemetry rather than replaying earlier workstream history. The
+[integration journal](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-21---reconcile-api-boundaries-with-integration-telemetry)
+records focused local evidence and limitations. Acceptance still requires the
+remaining workstream changes and source/generated checks on the final combined
+revision; earlier runs do not establish that result.
+
+The exact PR #16 delta `897aae8` adopts a validated existing baseline through
+Alembic `stamp` inside the existing transaction; fresh schemas still execute
+the baseline revision. Its 12 migration regressions passed locally on isolated
+PostgreSQL 17 after restoring cached HTTP test dependencies, and locked-version
+Ruff checks passed. This focused result is not final combined verification.
+The design-document owner will consolidate the engineering journal.
 
 ## Later phases
 

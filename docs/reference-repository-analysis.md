@@ -39,6 +39,7 @@ proposal](order-resolution-specification-proposal.md) was informed by the
 pinned reference's [architecture](https://github.com/ppenumatsa1/maf-monorepo/blob/45430753c5f3e75716ea3822d2b2b52fbb4f1c34/agents/order-resolution/foundry-public/docs/design/architecture.md),
 [approval conditions](https://github.com/ppenumatsa1/maf-monorepo/blob/45430753c5f3e75716ea3822d2b2b52fbb4f1c34/agents/order-resolution/foundry-public/docs/design/hitl-approval-conditions.md),
 [workflow tests](https://github.com/ppenumatsa1/maf-monorepo/blob/45430753c5f3e75716ea3822d2b2b52fbb4f1c34/agents/order-resolution/foundry-public/backend/tests/test_workflow.py),
+the [synthetic hosted cases](https://github.com/ppenumatsa1/maf-monorepo/blob/45430753c5f3e75716ea3822d2b2b52fbb4f1c34/agents/order-resolution/foundry-public/backend/.foundry/datasets/order-resolution-hosted-cases.jsonl),
 and [deterministic evaluation runner](https://github.com/ppenumatsa1/maf-monorepo/blob/45430753c5f3e75716ea3822d2b2b52fbb4f1c34/agents/order-resolution/foundry-public/backend/evals/eval_runner.py).
 These sources demonstrate useful synthetic behavior for ordered triage,
 retrieval, deterministic approval triggers, approve/reject paths, duplicate
