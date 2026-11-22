@@ -147,8 +147,10 @@ Consumer assignment uses the official exact agent scope derived from validated
 project output and the fixed publisher name; parent or another-agent scopes are
 rejected.
 The hosted application role establishes service identity only. Human authority
-remains server-bound to the exact case, principal, Foundry caller, session,
-conversation, and channel before any Responses dispatch.
+remains server-bound to the exact principal/case, server-selected conversation,
+and channel before any Responses dispatch. Foundry user/session/call values are
+opaque platform correlation and continuity, not human authority; the API bridge
+sends no caller-selected session or actor metadata.
 See the
 [infrastructure evidence and operator contract](azure-foundry/infrastructure.md).
 

@@ -410,13 +410,16 @@ class InfrastructureContractTests(unittest.TestCase):
             common,
         )
         self.assertIn(
-            "Generated backend runtime dependencies must pin httpx==0.28.1.",
-            common,
-        )
-        self.assertIn(
             "The API bridge depends on the full hosted runtime",
             common,
         )
+        self.assertIn(
+            "The API bridge sends caller-selected Foundry identity or session metadata.",
+            common,
+        )
+        self.assertIn(r"\bagent_session_id\b", common)
+        self.assertIn('"caller_id"', common)
+        self.assertIn(r'"actor(?:\.|_)subject"', common)
         self.assertIn(
             "Generated backend Dockerfile does not contain the canonical bridge contract.",
             common,

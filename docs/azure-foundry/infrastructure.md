@@ -177,10 +177,13 @@ dependency. ACR stores only the generated API and frontend images.
 The PostgreSQL role is created separately because Azure RBAC does not create
 database principals. Migration ownership and runtime DML remain distinct.
 `Hosted.Workflow.Invoke` authenticates a service principal only and conveys no
-human authority. The API must create the exact
-case/principal/caller/session/conversation/channel binding before Responses
-dispatch; hosted binding endpoints verify that server-owned record and fail
-closed on absence or mismatch.
+human authority. The API must create exact human principal/case authority bound
+to the server-selected conversation and channel before Responses dispatch.
+Foundry platform user, session, and call identifiers are opaque workload
+correlation/continuity values, not human authority. The API bridge sends no
+caller-selected `agent_session_id` or actor-subject metadata to Foundry.
+Hosted binding endpoints verify the server-owned record and fail closed on
+absence or mismatch.
 No project-scoped API fallback is created. Deployment derives the documented
 agent scope exclusively from the validated Foundry project resource ID and the
 same fixed agent name passed to the journaled publisher. It accepts no arbitrary
@@ -291,9 +294,10 @@ Before any live operation:
    Agent C's managed-identity/hosted adapters into a new independent Order
    Resolution project. Missing generated paths fail before Azure mutation.
    Run the generated API image regression; A's generator must already place
-   byte-identical `client.py` and `bridge.py` in the backend, C's runtime lock
-   must contain `httpx==0.28.1`, and the factory must import without loading
-   hosted server/application modules.
+   byte-identical `client.py` and `bridge.py` in the backend, and the factory
+   must import without loading hosted server/application modules or production
+   dev dependencies. The API-only client uses stdlib HTTP plus the existing
+   runtime `azure-identity` pin.
 4. Rerun the complete preflight. East US 2 remains selected only if every
    model/dependency check passes at deployment time, including `agentsV2`,
    Responses API, lifecycle, version, quota, and platform capacity.
@@ -351,18 +355,17 @@ Local non-deploying evidence:
   `backend/app/api/routes/hosted_service.py` was absent, and removed its
   temporary directory without output artifacts.
 - Agent C's generated application interface is frozen at draft PR #48 head
-  `60fd83fc05acc290aab3ed96f8f8c255e493d28d`. Agent A's current pushed draft
-  head is `228aa7721be5f0c418f01a16ad505f42ad47cba8`, with explicit generated
-  bridge factory `order_resolution_hosted.bridge:build_workflow_host`.
-- Exploratory exact-head API image composition built and imported the bridge
-  without sibling `PYTHONPATH`, hosted server/application modules, or hosting
-  SDKs, but B had staged the files and included C's dev dependency group. That
-  is not final generator/runtime-lock proof. Final evidence requires A-owned
-  byte-identical backend generation, C-owned runtime `httpx==0.28.1`, and a
-  backend-only no-dev import/composition/wire-parity pass followed by normal
-  entrypoint/lifespan/health against composed PostgreSQL. Direct PyPI failed
-  locally with a TLS handshake error; the credentialless Microsoft package
-  mirror retained hash/digest verification. Live Azure remains unverified.
+  `60fd83fc05acc290aab3ed96f8f8c255e493d28d` while its aligned replacement is
+  pending. Agent A's immutable replacement is
+  `c3e733a8c7d2e03e41e9045ee9277f504e028f6b`, archive SHA-256
+  `3becbb28da4eae014a47d20fe5d8f93d7b56c2f93d9558f0afdf2218868d44ca`.
+- Disposable A replacement plus C's current aligned working tree built the
+  canonical backend with `--no-dev`; image import and nonconnecting hosted
+  composition/wire parity passed. Final evidence still requires C's immutable
+  head and normal entrypoint/lifespan/health against composed PostgreSQL.
+  Direct PyPI failed locally with a TLS handshake error; the credentialless
+  Microsoft package mirror retained hash/digest verification. Live Azure
+  remains unverified.
 - Azure validation did not advance to provider what-if because deployment
   inputs are intentionally unset.
 
