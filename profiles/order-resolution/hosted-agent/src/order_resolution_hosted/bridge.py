@@ -23,15 +23,13 @@ def ManagedIdentityCredential(*args: Any, **kwargs: Any) -> Any:
 
 
 class HostedAuthorityBindings(Protocol):
-    """Application-owned authority established before hosted dispatch."""
+    """Application-owned human authority bound to a Foundry conversation."""
 
     def bind_start(
         self,
         case_id: UUID,
         principal: Any,
         *,
-        caller_id: str,
-        session_id: str,
         conversation_id: str,
         channel: str,
     ) -> None: ...
@@ -43,19 +41,16 @@ class HostedAuthorityBindings(Protocol):
         case_id: UUID,
         principal: Any,
         *,
-        caller_id: str,
-        session_id: str,
         conversation_id: str,
         channel: str,
         decision_command: Any,
     ) -> None: ...
 
 
-def _actor_correlation(actor: Any) -> str:
+def _require_authenticated_actor(actor: Any) -> None:
     value = getattr(actor, "subject", None)
     if not isinstance(value, str) or not value.strip() or len(value) > 256:
         raise PermissionError("An authenticated application actor is required.")
-    return value
 
 
 def _decision_payload(
@@ -96,7 +91,6 @@ def _decision_payload(
         **values,
         "decision": decision,
         "conversation_id": binding.conversation_id,
-        "session_id": binding.session_id,
         "channel": HOSTED_CHANNEL,
     }
 
@@ -113,20 +107,15 @@ class ResponsesWorkflowHost:
         self._authority_bindings = authority_bindings
 
     async def start(self, case_id: UUID, actor: Any) -> None:
-        caller_id = _actor_correlation(actor)
-        session_id = f"case:{case_id}"
+        _require_authenticated_actor(actor)
         binding = await asyncio.to_thread(
             self._responses.create_conversation,
             operation_id=f"case:{case_id}:conversation",
-            caller_id=caller_id,
-            session_id=session_id,
         )
         await asyncio.to_thread(
             self._authority_bindings.bind_start,
             case_id,
             actor,
-            caller_id=binding.caller_id,
-            session_id=binding.session_id,
             conversation_id=binding.conversation_id,
             channel=HOSTED_CHANNEL,
         )
@@ -138,22 +127,16 @@ class ResponsesWorkflowHost:
         )
 
     async def resume(self, case_id: UUID, actor: Any, decision_command: Any) -> None:
-        caller_id = _actor_correlation(actor)
+        _require_authenticated_actor(actor)
         existing = await asyncio.to_thread(self._authority_bindings.load_binding, case_id)
         if not isinstance(existing, ConversationBinding):
             raise TypeError("The hosted authority adapter returned an invalid binding.")
-        binding = ConversationBinding(
-            caller_id=caller_id,
-            conversation_id=existing.conversation_id,
-            session_id=existing.session_id,
-        )
+        binding = ConversationBinding(conversation_id=existing.conversation_id)
         payload = _decision_payload(case_id, decision_command, binding)
         await asyncio.to_thread(
             self._authority_bindings.bind_resume,
             case_id,
             actor,
-            caller_id=binding.caller_id,
-            session_id=binding.session_id,
             conversation_id=binding.conversation_id,
             channel=HOSTED_CHANNEL,
             decision_command=decision_command,

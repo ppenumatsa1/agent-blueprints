@@ -142,14 +142,15 @@ def _post_json(
 
 @dataclass(frozen=True)
 class ConversationBinding:
-    caller_id: str
     conversation_id: str
-    session_id: str
 
     def __post_init__(self) -> None:
-        for value in (self.caller_id, self.conversation_id, self.session_id):
-            if not isinstance(value, str) or not value.strip() or len(value) > 256:
-                raise ValueError("Caller, conversation, and session bindings are required.")
+        if (
+            not isinstance(self.conversation_id, str)
+            or not self.conversation_id.strip()
+            or len(self.conversation_id) > 256
+        ):
+            raise ValueError("A server-selected conversation binding is required.")
 
 
 class ResponsesClient:
@@ -276,25 +277,15 @@ class ResponsesClient:
         self,
         *,
         operation_id: str,
-        caller_id: str,
-        session_id: str,
     ) -> ConversationBinding:
         if self._conversation_endpoint is None:
             raise ValueError("An explicit conversation endpoint is required.")
-        if not caller_id or not session_id:
-            raise ValueError("Caller and session bindings are required.")
         conversation_id = self._post_once(
             self._conversation_endpoint,
             operation_id,
-            {
-                "metadata": {
-                    "operation_id": operation_id,
-                    "caller_id": caller_id,
-                    "session_id": session_id,
-                }
-            },
+            {"metadata": {"operation_id": operation_id}},
         )
-        return ConversationBinding(caller_id, conversation_id, session_id)
+        return ConversationBinding(conversation_id)
 
     def start(
         self,
@@ -307,14 +298,10 @@ class ResponsesClient:
             self._endpoint,
             operation_id,
             {
-                "agent_session_id": binding.session_id,
                 "background": True,
                 "conversation": {"id": binding.conversation_id},
                 "input": json_module.dumps({"case_id": case_id}, separators=(",", ":")),
-                "metadata": {
-                    "operation_id": operation_id,
-                    "caller_id": binding.caller_id,
-                },
+                "metadata": {"operation_id": operation_id},
                 "store": True,
             },
         )
@@ -329,7 +316,6 @@ class ResponsesClient:
     ) -> str:
         if (
             decision.get("conversation_id") != binding.conversation_id
-            or decision.get("session_id") != binding.session_id
             or decision.get("channel") != "foundry-responses"
             or decision.get("handle") != request_id
         ):
@@ -338,7 +324,6 @@ class ResponsesClient:
             self._endpoint,
             operation_id,
             {
-                "agent_session_id": binding.session_id,
                 "background": True,
                 "conversation": {"id": binding.conversation_id},
                 "input": [
@@ -354,10 +339,7 @@ class ResponsesClient:
                         ),
                     }
                 ],
-                "metadata": {
-                    "operation_id": operation_id,
-                    "caller_id": binding.caller_id,
-                },
+                "metadata": {"operation_id": operation_id},
                 "store": True,
             },
         )

@@ -593,8 +593,9 @@ the independently generated Order Resolution application. Acceptance requires:
 - a request-aware native workflow factory using Foundry-managed hosted
   checkpoints, never the API's local file store or a PostgreSQL workflow
   serializer;
-- structured approval resume with application authorization and exact
-  caller/session/conversation/channel binding;
+- structured approval resume with application authorization, exact
+  conversation/channel binding, and platform-managed session scope that never
+  treats the API workload user as the human actor;
 - an application-owned hosted business lifecycle that persists only opaque
   request correlation, decision, and completion while Foundry retains native
   checkpoint ownership;
@@ -606,7 +607,7 @@ the independently generated Order Resolution application. Acceptance requires:
   repository contract tests.
 
 Implementation and current local evidence are recorded in the
-  [hosting report](azure-foundry/hosting.md). On 2026-11-22, 38 generated hosted
+  [hosting report](azure-foundry/hosting.md). On 2026-11-22, 40 generated hosted
   tests, 16 publisher/generator tests, Ruff, 39 focused generated PostgreSQL
   tests, ORS-001..009, and the 68-test repository contract suite (2 documented
   adapter skips) passed. Workstream C revision
@@ -616,12 +617,15 @@ Implementation and current local evidence are recorded in the
   acknowledgment with zero replay, one decision/action, exact
   `OperationClaim(record, acquired)`, and null business checkpoint fields, but
   security review rejected that revision's creation of owner/reviewer bindings
-  from opaque hosted caller input. A now requires verification-only binding
-  gates backed by an authenticated application command and exports the explicit
-  `order_resolution_hosted.bridge:build_workflow_host` API-to-Responses factory;
-  no generic `/runs` host is permitted. Final A/C compatibility remains blocked
-  until a new C revision and composed absent/mismatched-binding plus normal API
-  bridge tests pass. Agents B and D consume the explicit API-only runtime
+  from opaque hosted caller input. A now binds human authority only to the
+  authenticated case/conversation/channel command, treats platform user/session
+  as separate opaque workload correlation, and omits caller-supplied
+  `agent_session_id` so Foundry owns the stable conversation session. A exports
+  the explicit `order_resolution_hosted.bridge:build_workflow_host`
+  API-to-Responses factory; no generic `/runs` host is permitted. Final A/C
+  compatibility remains blocked until a new C revision and composed
+  absent/mismatched-binding plus normal API bridge tests pass. Agents B and D
+  consume the explicit API-only runtime
   allowlist, atomic operation claim contract, and two-phase
   identity-then-active publication fields documented in the hosting report.
   Public hosted runtime never receives PostgreSQL connectivity; the protected
