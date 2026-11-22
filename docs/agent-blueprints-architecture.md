@@ -26,8 +26,14 @@ idempotency evidence [#32](https://github.com/ppenumatsa1/agent-blueprints/issue
 See the [master checklist](master-checklist.md#reconciled-engineering-backlog)
 for the complete issue-linked backlog, including live identity, telemetry,
 database operations, evaluations, and separately authorized alternatives.
+The dated [issue and fix journal](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-22---issue-and-fix-status)
+distinguishes local and draft-PR evidence from merged or hosted capabilities.
 Do not conflate an approved engineering merge with verified hosted execution,
 human approval, or production readiness.
+Draft [PR #40](https://github.com/ppenumatsa1/agent-blueprints/pull/40)
+proposes documentation-only Order Resolution terminology and requirements.
+It is not this blueprint's business implementation; order-adjustment remains
+a synthetic fixture.
 
 ## MAF modularity foundation and target
 
@@ -47,6 +53,21 @@ The copied project owns the same lock and does not import the source checkout.
 Local Windows and Linux-container checks do not prove macOS. Hosted
 [run 44940616666](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44940616666)
 passed all five checks for tooling head `b78634b`, not this combined revision.
+Security-hardened PR #11 merged to `main` as
+`587e6cc1abc23a67845c8193d486cc65c8b52854`. Its MAF core approval guard is
+integrated with the canonical uv lock: source and generated installations
+reject the compromised `agent-framework` umbrella distribution and verify the
+approved core wheel digest against the lock and downloaded artifact before
+installation. The lock remains the sole dependency graph. The local #17 tree
+contains the normal merge of `main` at
+`de1cbe4cc3a93f2473a6f8f5f9e063d1ae278fa3` in implementation commit
+`91eaa6392082c1084c05bc9b07cb9052857d5b2f`, and PR #17 targets `main`.
+Exact-head
+[run 45027035643](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/45027035643)
+passed all six jobs. This result is scoped to that implementation commit;
+later tree or base changes require fresh validation. Local evidence is
+recorded in the
+[integration journal](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-22---main-reconciliation-and-local-validation);
 
 The longer-term target adds a Foundry Responses adapter and host-managed
 checkpoints, neither of which is implemented. Staged Foundry-first Bicep/azd describes
@@ -56,7 +77,8 @@ Hosting the workflow runtime in ACA is a deferred alternative requiring its own
 verified checkpoint strategy. Neither topology is a verified deployment;
 provisioning requires separate authorization.
 
-[PR #11](https://github.com/ppenumatsa1/agent-blueprints/pull/11) remains open.
+[PR #11](https://github.com/ppenumatsa1/agent-blueprints/pull/11) is merged
+to `main`; the integrated #17 branch is being reconciled with that base.
 Its cleaned foundation commit `9efeef0` removes the compatibility aliases and
 uses canonical imports. Follow-up foundation commit `d0e1727` fixes propagation
 of generated-verifier failures through CI's `tee` pipeline and adds regression

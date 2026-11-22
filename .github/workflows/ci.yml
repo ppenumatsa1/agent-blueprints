@@ -46,9 +46,12 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install uv and locked blueprint dependencies
+        working-directory: blueprints/maf/workflow/backend
         run: |
+          wheel_dir="$RUNNER_TEMP/maf-framework-core"
+          python scripts/verify_framework_supply_chain.py --output-dir "$wheel_dir"
           python -m pip install uv==0.9.26
-          uv sync --locked --project blueprints/maf/workflow/backend
+          uv sync --locked
       - name: Check backend lint and formatting
         working-directory: blueprints/maf/workflow/backend
         run: |
@@ -164,6 +167,9 @@ jobs:
           echo "GENERATED_DIR=$destination" >> "$GITHUB_ENV"
       - name: Install generated project test dependencies
         run: |
+          wheel_dir="$RUNNER_TEMP/maf-generated-framework-core"
+          python "$GENERATED_DIR/backend/scripts/verify_framework_supply_chain.py" \
+            --output-dir "$wheel_dir"
           python -m pip install uv==0.9.26
           uv sync --locked --project "$GENERATED_DIR/backend"
           cd "$GENERATED_DIR/frontend"
