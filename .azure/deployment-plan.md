@@ -163,7 +163,7 @@ backend/frontend, and `WORKFLOW_HOST=local` are prohibited.
 | Azure CLI negative identity contracts | Wrong subscription fails before azd inspection; explicit azd mode blocks mismatch |
 | Generated hosted-composition deployment gate | Current unintegrated source generation stopped before preflight/mutation on missing `backend/app/api/routes/hosted_service.py` and cleaned temporary artifacts |
 | Exploratory A/C API image composition | C `60fd83fc05acc290aab3ed96f8f8c255e493d28d` plus A `228aa7721be5f0c418f01a16ad505f42ad47cba8` built and imported the bridge only after B staged the files and included C's dev dependency group. This proves the module boundary but is not accepted as final generator/runtime-lock proof. |
-| Required final API image composition | Pending immutable A generator output containing byte-identical backend `client.py`/`bridge.py` plus a side-effect-free initializer, and immutable C runtime `httpx==0.28.1` dependency/lock. B then requires a backend-only no-dev image import/startup/wire-parity pass. |
+| Required final API image composition | Pending immutable A generator output containing byte-identical backend `client.py`/`bridge.py` plus a side-effect-free initializer, and immutable C runtime `httpx==0.28.1` dependency/lock. B then requires a backend-only no-dev image import/composition/wire-parity pass. Normal entrypoint/lifespan/health remains a composed PostgreSQL gate. |
 | Package-index boundary during exploratory proof | Direct PyPI failed on this laptop with a TLS handshake error; rerun with credentialless `https://packagefeedproxy.microsoft.io/pypi/simple` passed while retaining lockfile hashes and Agent Framework wheel-digest verification |
 | Subscription what-if | Not run: deployment-specific Entra/admin/hosted endpoint and fixed agent-name values are intentionally unset |
 
@@ -228,8 +228,9 @@ Hosted-agent source remains a separate publishable context. The API image
 neither relies on a sibling `PYTHONPATH` nor imports the full hosted runtime.
 The non-deploying
 `test-generated-api-image.ps1` regression must build the composed generated
-project with production dependencies only and prove import/startup/wire parity
-before live validation.
+project with production dependencies only and prove import/composition/wire
+parity before live validation. It does not replace the normal
+entrypoint/lifespan/health smoke against composed PostgreSQL.
 
 ## Directory application contract
 

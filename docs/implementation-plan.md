@@ -187,7 +187,8 @@ pass with two expected adapter-selection skips; script syntax checks pass.
 Exploratory A `228aa772` and C `60fd83fc` composition imported the backend
 bridge, but final proof remains blocked on generator-owned byte-identical
 backend modules, runtime `httpx==0.28.1`, and a no-dev image
-import/startup/wire-parity pass. Live Azure composition is not proven.
+import/composition/wire-parity pass plus normal entrypoint/lifespan/health
+against composed PostgreSQL. Live Azure composition is not proven.
 The current Azure CLI identity matches the authorized target, but azd is a
 different account and tenant. Azure CLI mode reports that mismatch without
 blocking; explicit azd mode still fails closed. No Azure mutation or deployment

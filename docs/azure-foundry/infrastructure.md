@@ -231,7 +231,7 @@ route fails closed until the final revision binds the authoritative principal.
 | Command | Behavior |
 | --- | --- |
 | `pwsh ./scripts/azure/validate.ps1` | Builds and lints Bicep, then runs non-deploying infrastructure contract tests |
-| `pwsh ./scripts/azure/test-generated-api-image.ps1 -GeneratedProjectRoot <composed-generated-root>` | Verifies the generator-owned API bridge is byte-identical to hosted source, builds the canonical backend Dockerfile with production dependencies only, and proves import plus hosted startup composition/wire parity without Azure or PostgreSQL connections |
+| `pwsh ./scripts/azure/test-generated-api-image.ps1 -GeneratedProjectRoot <composed-generated-root>` | Verifies the generator-owned API bridge is byte-identical to hosted source, builds the canonical backend Dockerfile with production dependencies only, and proves import plus hosted composition/wire parity without Azure or PostgreSQL connections; normal entrypoint/lifespan/health remains a composed PostgreSQL gate |
 | `pwsh ./scripts/azure/preflight.ps1 -DeploymentMode AzureCli ...` | Validates the active Azure CLI context, permissions, providers, exact region, model, quota, Container Apps, and PostgreSQL; reports azd mismatch without blocking |
 | `pwsh ./scripts/azure/preflight.ps1 -DeploymentMode Azd -FromAzdEnvironment` | Optional azd validation; fails closed unless Azure CLI and azd account/tenant match |
 | `pwsh ./scripts/azure/configure-entra.ps1 -DeploymentMode AzureCli ...` | Read-only validation of deterministic API/SPA registrations |
@@ -359,7 +359,8 @@ Local non-deploying evidence:
   SDKs, but B had staged the files and included C's dev dependency group. That
   is not final generator/runtime-lock proof. Final evidence requires A-owned
   byte-identical backend generation, C-owned runtime `httpx==0.28.1`, and a
-  backend-only no-dev import/startup/wire-parity pass. Direct PyPI failed
+  backend-only no-dev import/composition/wire-parity pass followed by normal
+  entrypoint/lifespan/health against composed PostgreSQL. Direct PyPI failed
   locally with a TLS handshake error; the credentialless Microsoft package
   mirror retained hash/digest verification. Live Azure remains unverified.
 - Azure validation did not advance to provider what-if because deployment
