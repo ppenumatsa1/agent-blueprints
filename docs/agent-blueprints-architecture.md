@@ -16,6 +16,7 @@ includes [hosted caller binding #22](https://github.com/ppenumatsa1/agent-bluepr
 [hosted recovery #20](https://github.com/ppenumatsa1/agent-blueprints/issues/20),
 [external effects #32](https://github.com/ppenumatsa1/agent-blueprints/issues/32),
 [independent trust #21](https://github.com/ppenumatsa1/agent-blueprints/issues/21),
+[agent evaluation and browser evidence #25](https://github.com/ppenumatsa1/agent-blueprints/issues/25),
 and [deployment integration #18](https://github.com/ppenumatsa1/agent-blueprints/issues/18).
 Reusable MAF extension contracts for model, agent, prompt, tool, and executor
 patterns are tracked in [#35](https://github.com/ppenumatsa1/agent-blueprints/issues/35).
@@ -61,11 +62,13 @@ approved core wheel digest against the lock and downloaded artifact before
 installation. The lock remains the sole dependency graph. PR #17 is merged
 into `main` at `0c1297cc8e93c62f69d61d0eb3bdabf3c27c683d`; exact-main
 [run 45027884271](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/45027884271)
-passed all six jobs for that baseline. Current `main` has since advanced to
-`9b6e0194c1b2b005792b68a95e46275e25817a8a`; #37's integration is validated
-separately on its exact PR head. Earlier PR #17 head and merge-ref checks are
-historical snapshots; changes on top of this baseline require fresh validation. Local evidence is
-recorded in the
+passed all six jobs for that baseline. PRs #36, #37 and #40 are now merged;
+current `main` is `49932ee0cd61ee653a5f86be0f43873cec197ff9`, with exact-head
+run [45041465032](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/45041465032)
+passing all six jobs. PR #39 is being reconciled directly onto this baseline;
+its exact-head CI is required independently. Earlier PR #17 head and
+merge-ref checks are historical snapshots; changes on top of this baseline
+require fresh validation. Local evidence is recorded in the
 [integration journal](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-22---main-reconciliation-and-local-validation);
 
 The longer-term target adds a Foundry Responses adapter and host-managed
@@ -150,16 +153,32 @@ external effects remain unverified or blocked; see the
 Evaluation stays separate from #37; downstream evaluation uses native MAF
 `Evaluator`, `LocalEvaluator`, `@evaluator`, and `evaluate_agent()` APIs.
 
+The local #25 follow-on adds application-owned, versioned evaluation dataset
+and rubric contracts, explicit score thresholds, and trace mapping to existing
+readiness check IDs. Callers must supply the unique IDs from the selected
+readiness contract before mapping or unavailable-result reporting; the set
+establishes consistency, not trusted authorization. Unknown matching
+dataset/rubric IDs are rejected before native evaluator invocation.
+Applications invoke the standard MAF evaluation APIs directly; this extension
+owns no evaluator protocol or orchestration wrapper. Missing observations and
+unavailable native results remain unverified, while invalid, unknown,
+duplicate, malformed, or below-threshold observations cannot pass. Oversized
+integer thresholds are rejected and oversized scores fail closed. Evaluator,
+provider, and tool exceptions propagate without synthetic fallback. Trace
+references are not evidence bytes or authenticated provenance. Source and
+generated tests exercise MAF's native local evaluator with explicitly
+synthetic responses; they do not represent live model quality, a browser
+end-to-end run, independent evidence trust, or hosted validation.
+
 Local PostgreSQL container initialization can briefly accept Unix socket
 connections before the final TCP server starts. Issue [#38](https://github.com/ppenumatsa1/agent-blueprints/issues/38)
 records this on disposable PostgreSQL 16.15 and 17, including a failed initial
 `createdb` and a successful 72/72 source/generated retry at historical head
 `8b3c357`. CI startup loops and Compose health checks use bounded loopback TCP
 probes; these remain in current `main` at
-`9b6e0194c1b2b005792b68a95e46275e25817a8a`. Exact-head run
-[45040560075](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/45040560075)
-passed all six jobs on the reconciled #37 integration commit. This does not
-establish managed PostgreSQL readiness.
+`49932ee0cd61ee653a5f86be0f43873cec197ff9`, whose exact-main run
+[45041465032](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/45041465032)
+passed all six jobs. This does not establish managed PostgreSQL readiness.
 
 The local integration at `af3955a` combined the engineering layers. Source and
 independently generated backends each passed 68 tests on PostgreSQL 16.15 and

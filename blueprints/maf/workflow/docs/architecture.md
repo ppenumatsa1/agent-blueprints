@@ -79,6 +79,31 @@ they are not a second runtime or a guarantee that a provider is configured.
   under [#19](https://github.com/ppenumatsa1/agent-blueprints/issues/19),
   [#20](https://github.com/ppenumatsa1/agent-blueprints/issues/20), and
   [#22](https://github.com/ppenumatsa1/agent-blueprints/issues/22).
+- **Evaluation contracts (#25):** applications define versioned
+  `EvaluationDataset` cases and an `EvaluationRubric` with explicit finite
+  score thresholds. The application invokes MAF's native `Evaluator`,
+  `LocalEvaluator`, `@evaluator`, and `evaluate_agent()` APIs; this extension
+  owns no evaluator protocol or orchestration wrapper. Before mapping or
+  reporting unavailable results, the application passes the unique readiness
+  check IDs from its selected contract to `validate_for`,
+  `map_evaluation_results`, or `unavailable_assessment`. This list is a
+  consistency input, not trusted authorization or a substitute for the
+  independent validator. Unknown, malformed, or duplicate configured check
+  IDs reject before the application invokes the native evaluator.
+  `map_evaluation_results` normalizes native per-item scores to one
+  `CheckEvaluation` per readiness check ID. Scores for a criterion not mapped
+  to that case are rejected rather than ignored. Missing observations or
+  unavailable native results remain unverified; below-threshold, duplicate,
+  unknown, or malformed observations fail. Invalid thresholds, including oversized
+  integers, reject before evaluation; invalid observation scores fail closed.
+  Exceptions from the native evaluator/provider/tool propagate without
+  synthetic fallback. Trace references and scores are not evidence bytes,
+  digests, or authenticated provenance, and do not change the independent
+  readiness validator. The explicitly named synthetic fixture exercises
+  native local evaluation with synthetic responses and result mapping only;
+  no live model quality or browser end-to-end hint was verified. See
+  [evaluation.py](../backend/app/extensions/evaluation.py) and the
+  [evaluation tests](testing.md#evaluation-extension-tests).
 
 The generated synthetic application constructs a MAF `Agent` from an
 application-supplied MAF client, prompt asset, and authorization-bound tool,

@@ -267,9 +267,17 @@ canonical modules directly when implementing application extensions.
   composition, application authorization, and native executor/workflow
   patterns are in [architecture and extensions](docs/architecture.md#typed-maf-extension-patterns)
   and `backend/app/extensions/`. The synthetic fixture builds a native
-  `Agent` without invoking a model; provider calls, hosted identity and
-  recovery, trusted readiness evidence, and consequential external effects
-  remain unverified or blocked.
+  `Agent` without invoking a model; application-owned versioned datasets and
+  rubrics normalize standard MAF evaluation results to readiness checks.
+  Applications invoke native MAF evaluation APIs directly; this extension adds
+  no evaluator protocol or orchestration wrapper. Callers pass unique IDs from
+  the selected readiness contract to validation and mapping; those IDs provide
+  consistency, not trusted authorization. The tests exercise native local
+  evaluation with explicit synthetic responses, not live model quality. The
+  fixture does not generate or attest evidence. Live provider evaluation,
+  browser-hint end-to-end behavior, hosted identity and recovery, trusted
+  readiness evidence, and consequential external effects remain unverified
+  or blocked.
 
 The native local host expects a workflow producing one request with `case_id`
 and one matching outcome. A different graph must preserve that contract or
@@ -285,7 +293,7 @@ the same commands work in PowerShell, macOS and Linux shells:
 uv sync --locked
 uv run --locked ruff check .
 uv run --locked ruff format --check .
-uv run --locked python -m unittest -v tests.test_core tests.test_external_effect tests.test_security tests.test_evidence_runner tests.test_telemetry tests.test_migrations
+uv run --locked python -m unittest -v tests.test_core tests.test_external_effect tests.test_security tests.test_evidence_runner tests.test_telemetry tests.test_migrations tests.test_extensions tests.test_evaluation
 ```
 
 Set `MAF_TEST_DATABASE_URL` to an isolated PostgreSQL database first. Its test
