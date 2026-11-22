@@ -595,8 +595,13 @@ the independently generated Order Resolution application. Acceptance requires:
   serializer;
 - structured approval resume with application authorization and exact
   caller/session/conversation/channel binding;
+- an application-owned hosted business lifecycle that persists only opaque
+  request correlation, decision, and completion while Foundry retains native
+  checkpoint ownership;
 - at-most-once-biased Responses and publish creates that preserve `unknown`
-  after a lost acknowledgment and require authoritative reconciliation;
+  after a lost acknowledgment, never resend a preexisting pending claim, bind
+  the complete publication target/configuration identity, and require
+  authoritative reconciliation;
 - independent generator output plus focused hosted, local workflow and
   repository contract tests.
 

@@ -176,6 +176,37 @@ class OrderResolutionWorkflowTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(outputs, [{"case_id": str(case_id), "decision": "approved"}])
         self.assertEqual(store.decisions, [True])
 
+    async def test_native_workflow_uses_injected_hosted_request_identity(self):
+        normalized = OrderResolutionRules().validate(
+            payload(order_id="ORDER-HIGH", amount="185.00", delay_days=5)
+        )
+        case_id = uuid4()
+        case = Case(
+            id=case_id,
+            tenant_id="tenant",
+            owner_id="owner",
+            reviewer_id="reviewer",
+            payload=normalized,
+            status="created",
+            decision=None,
+            request_id=None,
+            checkpoint_id=None,
+            terminal_checkpoint_id=None,
+            execution_complete=False,
+            failure_code=None,
+        )
+        workflow = build_order_resolution_workflow(FakeStore(case), object())
+        events = []
+        async for event in workflow.run(
+            {"case_id": str(case_id), "request_id": "hosted-request-1"},
+            stream=True,
+        ):
+            if event.type == "request_info":
+                events.append(event)
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0].request_id, "hosted-request-1")
+        self.assertEqual(events[0].data, {"case_id": str(case_id)})
+
 
 if __name__ == "__main__":
     unittest.main()

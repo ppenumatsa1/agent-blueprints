@@ -55,9 +55,13 @@ class OrderResolutionExecutor(Executor):
         case_id = UUID(message["case_id"])
         case = self._store.get(case_id)
         if case.payload["proposal"]["approval_required"]:
+            request_id = message.get("request_id")
+            if request_id is not None and (not request_id.strip() or len(request_id) > 256):
+                raise ValueError("The hosted request identity is invalid.")
             await ctx.request_info(
-                request_data=message,
+                request_data={"case_id": str(case_id)},
                 response_type=OrderResolutionDecision,
+                request_id=request_id,
             )
             return
         self._store.apply_automatic(case_id, self._action)

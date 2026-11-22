@@ -56,7 +56,16 @@ point. It hosts a fresh native MAF workflow per request, uses the public
 Foundry hosting checkpoint provider, and never attaches the API's local
 `FileCheckpointStorage`. The authenticated API/integration layer must supply
 the documented caller and conversation binding adapter before the hosted
-entry point starts. The copied
+entry point starts. The application-owned PostgreSQL store supplies the narrow
+`HostedBusinessStore` lifecycle: stable opaque hosted request correlation,
+hosted decision claim, and business completion. Foundry still owns native
+checkpoint state; the database does not store or fabricate hosted checkpoint
+IDs. The copied
 `scripts/foundry/publish_order_resolution_hosted.py` packages the generated
 backend and hosted package for source-code deployment; it does not provision
-resources or assign RBAC.
+resources or assign RBAC. Publishing requires an explicit Foundry project
+endpoint and resource ID. Its journal identity binds that target, agent name,
+archive, runtime, protocol, entry point, model deployment, and hosted
+configuration; a different reuse fails before create. Responses journals must
+atomically distinguish a newly acquired claim from an existing pending record,
+which is never replayed after restart or concurrency.
