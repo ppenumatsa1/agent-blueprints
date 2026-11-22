@@ -5,16 +5,15 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 ARG PYTHON_PACKAGE_INDEX=https://pypi.org/simple
-COPY requirements.txt agent-framework-core.sha256 ./
+COPY pyproject.toml uv.lock .python-version agent-framework-core.sha256 ./
 COPY scripts/verify_framework_supply_chain.py scripts/
-RUN mkdir -p /tmp/agent-framework-core \
+RUN python -m pip install --no-cache-dir --index-url "$PYTHON_PACKAGE_INDEX" uv==0.9.26 \
     && python scripts/verify_framework_supply_chain.py \
-        --output-dir /tmp/agent-framework-core \
         --index-url "$PYTHON_PACKAGE_INDEX" \
-    && python -m pip install --no-cache-dir --no-deps \
-        /tmp/agent-framework-core/agent_framework_core-1.26.0-py3-none-any.whl \
-    && python -m pip install --no-cache-dir --index-url "$PYTHON_PACKAGE_INDEX" -r requirements.txt \
-    && rm -f /tmp/agent-framework-core/agent_framework_core-1.26.0-py3-none-any.whl \
+    && uv export --locked --no-dev --no-emit-project --no-header --no-annotate > /app/requirements-lock.txt \
+    && uv pip install --system --no-cache --require-hashes --default-index "$PYTHON_PACKAGE_INDEX" -r /app/requirements-lock.txt \
+    && python -m pip uninstall -y uv \
+    && rm -f /app/requirements-lock.txt \
     && groupadd --system --gid 10001 blueprint \
     && useradd --system --uid 10001 --gid blueprint --no-create-home blueprint \
     && mkdir -p /var/lib/blueprint/checkpoints \
@@ -23,6 +22,7 @@ RUN mkdir -p /tmp/agent-framework-core \
 
 COPY --chown=blueprint:blueprint app/ app/
 COPY --chown=blueprint:blueprint examples/ examples/
+COPY --chown=blueprint:blueprint migrations/ migrations/
 USER blueprint
 
 EXPOSE 8000

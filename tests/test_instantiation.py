@@ -13,6 +13,61 @@ GENERATOR = ROOT / "scripts" / "instantiate_maf.py"
 
 
 class InstantiationTests(unittest.TestCase):
+    def test_external_effect_guidance_does_not_treat_outbox_as_deduplication(self):
+        workflow = ROOT / "blueprints" / "maf" / "workflow"
+        passages = (
+            (workflow / "README.md", "The local host uses", "The Foundry Responses adapter"),
+            (workflow / "docs" / "architecture.md", "4. A database action", "The [testing guide]"),
+            (workflow / "docs" / "design" / "architecture.md", "The per-case PostgreSQL", "For an interrupted start"),
+            (workflow / "docs" / "design" / "specs.md", "| SPEC-05 |", "| SPEC-06 |"),
+            (workflow / "docs" / "design" / "specs.md", "| Consequential external effects |", "```mermaid"),
+            (workflow / "docs" / "design" / "issues-changes-fixes.md", "- **Priority/extension decisions:**", "- **Next verification:**"),
+            (ROOT / "docs" / "implementation-plan.md", "| P0: consequential external side effects |", "| P1-07"),
+            (ROOT / "docs" / "master-checklist.md", "| Consequential external side-effect authorization", "| Authenticated FastAPI"),
+        )
+        for document, start, end in passages:
+            with self.subTest(document=document.relative_to(ROOT), passage=start):
+                text = document.read_text(encoding="utf-8").split(start, 1)[1].split(end, 1)[0]
+                text = " ".join(text.lower().split())
+                for phrase in (
+                    "service-specific authorization",
+                    "downstream idempotency",
+                    "authoritative reconciliation",
+                    "fail closed",
+                    "manual resolution",
+                    "outbox only persists intent",
+                    "deduplicat",
+                    "lost acknowledgment",
+                ):
+                    self.assertIn(phrase, text)
+
+    def test_hosted_identity_guidance_rejects_unverified_oid_binding(self):
+        documents = (
+            ROOT / "docs" / "agent-blueprints-architecture.md",
+            ROOT / "docs" / "implementation-plan.md",
+            ROOT / "docs" / "master-checklist.md",
+            ROOT / "blueprints" / "maf" / "workflow" / "docs" / "design" / "architecture.md",
+        )
+        oid_claim = re.compile(
+            r"(?:x-ms-user-identity.{0,80}(?:trusted user OID|user OID)|"
+            r"(?:identity|OID) header is (?:a |the )?(?:user OID|identity|not a credential))",
+            re.IGNORECASE | re.DOTALL,
+        )
+        for document in documents:
+            with self.subTest(document=document.relative_to(ROOT)):
+                text = document.read_text(encoding="utf-8")
+                self.assertNotRegex(text, oid_claim)
+
+        journal = (
+            ROOT / "blueprints" / "maf" / "workflow" / "docs" / "design" / "issues-changes-fixes.md"
+        ).read_text(encoding="utf-8")
+        historical_claim = "trusted user OID. **Superseded/unverified:**"
+        self.assertIn(historical_claim, journal)
+        clarification = journal.split(historical_claim, 1)[1].split("Current azd", 1)[0]
+        for required in ("opaque", "x-agent-user-id", "not be persisted", "unverified"):
+            with self.subTest(clarification=required):
+                self.assertIn(required, clarification)
+
     def test_copied_project_owns_runtime_verifier_and_exact_contract(self):
         with tempfile.TemporaryDirectory() as temporary:
             target = Path(temporary) / "application"
@@ -28,7 +83,6 @@ class InstantiationTests(unittest.TestCase):
             self.assertTrue((target / "compose.yaml").is_file())
             self.assertTrue((target / "backend" / "tests" / "order_adjustment_adapter.py").is_file())
             self.assertTrue((target / "backend" / "Dockerfile").is_file())
-            self.assertTrue((target / "backend" / "requirements-dev.txt").is_file())
             for relative in (
                 Path("agent-framework-core.sha256"),
                 Path("scripts") / "verify_framework_supply_chain.py",
@@ -45,7 +99,11 @@ class InstantiationTests(unittest.TestCase):
                 copied = target / "docs" / source.relative_to(source_docs)
                 with self.subTest(document=source.relative_to(source_docs)):
                     self.assertEqual(source.read_bytes(), copied.read_bytes())
-            for markdown in (target / "README.md", *sorted((target / "docs").rglob("*.md"))):
+            for markdown in (
+                target / "README.md",
+                *sorted((target / "docs").rglob("*.md")),
+                *sorted((target / "infra").rglob("*.md")),
+            ):
                 links = re.findall(r"\[[^\]]+\]\(([^)]+)\)", markdown.read_text(encoding="utf-8"))
                 for destination in links:
                     link = urlsplit(destination)
@@ -55,6 +113,31 @@ class InstantiationTests(unittest.TestCase):
                     resolved = (markdown.parent / linked_path).resolve() if linked_path else markdown.resolve()
                     with self.subTest(document=markdown.relative_to(target), link=destination):
                         self.assertTrue(resolved.is_file(), f"Broken generated-project link: {destination}")
+            for path in ("backend/pyproject.toml", "backend/uv.lock", "backend/.python-version",
+                         ".vscode/launch.json", ".vscode/tasks.json"):
+                self.assertTrue((target / path).is_file(), path)
+            self.assertEqual(
+                (ROOT / "blueprints" / "maf" / "workflow" / "backend" / "uv.lock").read_bytes(),
+                (target / "backend" / "uv.lock").read_bytes(),
+            )
+            self.assertFalse((target / "backend" / ".venv").exists())
+            self.assertFalse((target / "backend" / ".uv-cache").exists())
+            self.assertFalse((target / "backend" / ".ruff_cache").exists())
+            for name in ("baseline.sql", "env.py", "versions/0001_baseline.py", "manifests/0001.json"):
+                source = ROOT / "blueprints" / "maf" / "workflow" / "backend" / "migrations" / name
+                self.assertEqual(source.read_bytes(), (target / "backend" / "migrations" / name).read_bytes())
+            for name in ("prd", "techstack", "specs", "architecture", "projectstructure", "userflow",
+                         "deployment-flow", "issues-changes-fixes"):
+                self.assertTrue((target / "docs" / "design" / f"{name}.md").is_file())
+            self.assertFalse((target / "docs" / "engineering-journal.md").exists())
+
+            self.assertTrue((target / "azure.yaml").is_file())
+            self.assertTrue((target / "infra" / "main.bicep").is_file())
+            self.assertTrue((target / "infra" / "validate.py").is_file())
+            self.assertTrue((target / "infra" / "modules" / "foundry.bicep").is_file())
+            self.assertTrue((target / "infra" / "tests" / "test_validation.py").is_file())
+            self.assertTrue((target / "infra" / "environments" / "dev.example.bicepparam").is_file())
+            self.assertTrue((target / "infra" / "environments" / "prod.example.bicepparam").is_file())
             self.assertFalse((target / "frontend" / "node_modules").exists())
             self.assertFalse((target / "frontend" / "dist").exists())
             self.assertFalse((target / ".env").exists())

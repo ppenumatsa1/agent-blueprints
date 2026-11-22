@@ -5,23 +5,34 @@ import msal
 from app.config import Settings
 from app.domain.errors import DelegationError
 from app.infrastructure.identity import AuthenticatedRequest
+from app.infrastructure.telemetry import instrumented
 
 
 class OnBehalfOf:
     """Optional server-side delegation during an authenticated request."""
 
-    def __init__(self, settings: Settings, client_factory: Callable = msal.ConfidentialClientApplication):
+    def __init__(
+        self,
+        settings: Settings,
+        client_factory: Callable = msal.ConfidentialClientApplication,
+        *,
+        telemetry=None,
+    ):
         self.settings = settings
         self._client_factory = client_factory
         self._client = None
+        self.telemetry = telemetry
 
+    @instrumented("identity.obo")
     def exchange(self, identity: AuthenticatedRequest, scopes: Sequence[str]) -> str:
         if not self.settings.obo_enabled:
             raise DelegationError("Delegated access is disabled.")
         if not isinstance(identity, AuthenticatedRequest) or not identity.access_token:
             raise DelegationError("A validated user request is required.")
         requested = tuple(scopes)
-        if not requested or any(scope not in self.settings.obo_allowed_scopes for scope in requested):
+        if not requested or any(
+            scope not in self.settings.obo_allowed_scopes for scope in requested
+        ):
             raise DelegationError("The requested downstream scopes are not allowed.")
         try:
             if self._client is None:

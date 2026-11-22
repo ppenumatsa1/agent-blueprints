@@ -38,32 +38,52 @@ class Settings:
     obo_enabled: bool = False
     obo_client_secret: str | None = field(default=None, repr=False)
     obo_allowed_scopes: tuple[str, ...] = ()
+    telemetry_mode: str = "local"
+    applicationinsights_connection_string: str | None = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
         try:
             object.__setattr__(self, "tenant_id", str(UUID(self.tenant_id)))
             object.__setattr__(self, "api_client_id", str(UUID(self.api_client_id)))
         except (ValueError, TypeError, AttributeError) as exc:
-            raise ValueError("Entra tenant and API client IDs must be configured as UUIDs.") from exc
-        if not self.database_url or urlsplit(self.database_url).scheme not in ("postgres", "postgresql"):
+            raise ValueError(
+                "Entra tenant and API client IDs must be configured as UUIDs."
+            ) from exc
+        if not self.database_url or urlsplit(self.database_url).scheme not in (
+            "postgres",
+            "postgresql",
+        ):
             raise ValueError("A PostgreSQL connection URL is required.")
         if not str(self.checkpoint_root):
             raise ValueError("A local checkpoint root is required.")
         if self.host_mode != "local":
             raise ValueError("Only the explicitly selected local host is implemented.")
+        if self.telemetry_mode not in ("local", "azure-monitor"):
+            raise ValueError("TELEMETRY_MODE must be local or azure-monitor.")
+        if self.telemetry_mode == "azure-monitor" and (
+            not isinstance(self.applicationinsights_connection_string, str)
+            or not self.applicationinsights_connection_string.strip()
+        ):
+            raise ValueError("APPLICATIONINSIGHTS_CONNECTION_STRING is required for azure-monitor.")
         for value in self.cors_origins:
             _origin(value)
         if self.obo_enabled and (not self.obo_client_secret or not self.obo_allowed_scopes):
             raise ValueError("Enabled OBO requires a client secret and allowed downstream scopes.")
         for scope in self.obo_allowed_scopes:
             parsed = urlsplit(scope)
-            if parsed.scheme not in ("https", "api") or not parsed.netloc or any(c.isspace() for c in scope):
+            if (
+                parsed.scheme not in ("https", "api")
+                or not parsed.netloc
+                or any(c.isspace() for c in scope)
+            ):
                 raise ValueError("OBO scopes must be explicit resource-qualified scopes.")
 
     @classmethod
     def from_environment(cls) -> "Settings":
         def values(name: str) -> tuple[str, ...]:
-            return tuple(value.strip() for value in os.environ.get(name, "").split(",") if value.strip())
+            return tuple(
+                value.strip() for value in os.environ.get(name, "").split(",") if value.strip()
+            )
 
         enabled = os.environ.get("OBO_ENABLED", "false").lower()
         if enabled not in ("true", "false"):
@@ -81,4 +101,9 @@ class Settings:
             obo_enabled=enabled == "true",
             obo_client_secret=os.environ.get("ENTRA_API_CLIENT_SECRET") or None,
             obo_allowed_scopes=values("OBO_ALLOWED_SCOPES"),
+            telemetry_mode=os.environ.get("TELEMETRY_MODE", "local"),
+            applicationinsights_connection_string=os.environ.get(
+                "APPLICATIONINSIGHTS_CONNECTION_STRING"
+            )
+            or None,
         )

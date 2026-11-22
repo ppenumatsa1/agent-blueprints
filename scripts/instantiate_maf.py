@@ -9,7 +9,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 BLUEPRINT = ROOT / "blueprints" / "maf" / "workflow"
 IGNORE = shutil.ignore_patterns(
-    ".git", ".env", ".env.*", ".venv", "__pycache__", "*.pyc", "node_modules", "dist", "coverage"
+    ".git", ".env", ".env.*", ".venv", ".uv-cache", ".ruff_cache", "__pycache__", "*.pyc",
+    "node_modules", "dist", "coverage"
 )
 
 

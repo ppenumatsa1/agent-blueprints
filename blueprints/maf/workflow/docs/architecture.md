@@ -33,11 +33,23 @@ checkpoint is a human approval.
    `renderCase` function; see [workspace.tsx](../frontend/src/workspace.tsx)
    and [api.ts](../frontend/src/api.ts). Do not put credentials in the
    browser or treat client-provided identity as authoritative.
-4. A database action and ledger entry can commit together; external effects
-   require their own idempotency contract or transactional outbox. Test
-   retries and both recovery windows; no general exactly-once guarantee is
-   implied. Model and tool input remain untrusted.
+4. A database action and ledger entry can commit together. Consequential
+   external effects require service-specific authorization, verified downstream
+   idempotency and authoritative reconciliation; otherwise fail closed and
+   use manual resolution instead of retrying an ambiguous effect. A transactional
+   outbox only persists intent; it cannot deduplicate an external effect after
+   a lost acknowledgment. Test retries and recovery windows; no general
+   exactly-once guarantee is implied. Model and tool input remain untrusted.
 
 The [testing guide](testing.md) describes the synthetic evidence and its
 limits. Foundry-managed checkpoints and hosting are planned and unverified;
 they must not be conflated with local file storage.
+
+The [staged infrastructure](../infra/README.md) defines a Foundry
+account/project with public data-plane access disabled, a private PostgreSQL
+server, and monitoring resources with public ingestion/query disabled, plus
+optional separate API/UI Container Apps and an authenticated registry. It
+does not provide working Foundry or monitoring private connectivity, API database
+token authentication, or the hosted-agent service. A project-wide agent-consumer
+grant is opt-in and disabled; its eventual scope and inherited grants require
+review. Offline compilation is not cloud integration evidence.

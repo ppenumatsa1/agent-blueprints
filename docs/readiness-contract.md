@@ -32,6 +32,10 @@ authenticate the human and protect that trust. The decision must include a
 rationale. Initial classifications also require human contract review. A new
 approval must bind the changed contract bytes;
 an extension or a changed flag alone cannot authorize a downgrade.
+Issue [#21](https://github.com/ppenumatsa1/agent-blueprints/issues/21)
+tracks authorized exact-contract review, independent trust administration,
+and provenance verification. Schemas and synthetic fixtures do not satisfy
+those controls.
 
 `production_controls` declares whether security, integration, operations, and
 evaluation are required. It may be omitted for a prototype-only contract, but
@@ -168,6 +172,9 @@ producer metadata. Extensions never replace required core fields or override
 gate semantics. The `specification_studio` metadata in the fixture is
 illustrative. No actual Specification Studio output or integration exists yet,
 so interoperability remains to be verified rather than assumed.
+Track that blocked handoff in
+[#33](https://github.com/ppenumatsa1/agent-blueprints/issues/33). This
+reference contract does not authorize implementation of the producer.
 
 The [examples](../contracts/examples/), `fixture://` references, and placeholder
 digests are entirely synthetic. They are not evidence that a blueprint,

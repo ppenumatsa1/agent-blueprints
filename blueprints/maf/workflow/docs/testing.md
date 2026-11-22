@@ -5,15 +5,28 @@ Install dependencies as described in [setup](setup.md). Set
 `backend`, run:
 
 ```text
-python -m unittest -v tests.test_core tests.test_security tests.test_evidence_runner
+uv run --locked ruff check .
+uv run --locked ruff format --check .
+uv run --locked python -m unittest -v tests.test_core tests.test_security tests.test_evidence_runner tests.test_telemetry tests.test_migrations
 ```
 
-Tests create and drop isolated schemas and fail if the database is
-unavailable; do not point them at production data. They use synthetic
-identities and no Azure credentials or model. They exercise authorization,
-native workflow and actual worker termination after decision persistence and
+Tests create and drop isolated schemas and roles; the test identity requires
+`CREATEROLE`. They fail if the database is unavailable; do not point them at
+production data. They use synthetic identities and no Azure credentials or
+model. Source and generated CI run the same suite: authorization, native
+checkpoint recovery, privacy-safe telemetry, migrations, evidence
+normalization, and actual worker termination after decision persistence and
 after a database action commits. They do not prove live Entra/OBO, external
 effect exactly-once delivery, or hosted recovery.
+
+The official PostgreSQL container's initialization server can accept Unix
+socket connections before its final TCP server starts. Source/generated CI
+waits and the Compose health check probe loopback TCP with bounded failure.
+Issue [#38](https://github.com/ppenumatsa1/agent-blueprints/issues/38)
+records the transient socket-ready/TCP-unready observation on disposable
+PostgreSQL 16.15 and 17 and an initial failed `createdb`; a TCP-gated retry
+passed 72 source and 72 generated backend tests on historical head `8b3c357`.
+These local checks do not establish managed PostgreSQL readiness.
 
 From `frontend`:
 
@@ -27,13 +40,26 @@ npm run check-csp
 The automated accessibility check does not assess color contrast. The CSP
 check compares the inline theme script against the reverse-proxy policy.
 
+From the blueprint or generated project root, run offline infrastructure
+checks with Python 3.12 and Bicep 0.49.2 or newer:
+
+```text
+python infra/validate.py
+python -m unittest discover -s infra/tests -v
+```
+
+These compile and lint local modules and inspect committed examples and
+security configuration without Azure credentials. They do not prove role
+propagation, endpoint behavior, connectivity, or a successful deployment.
+See the [infrastructure guide](../infra/README.md).
+
 In an independently generated project, the copied `verification` directory
 contains the verifier, contracts, synthetic fixture, and its own
 requirements. Set `SCENARIO_ADAPTER` to the absolute path of
 `backend/tests/order_adjustment_adapter.py`, then from `verification` run:
 
 ```text
-python -m unittest discover -s tests -v
+uv run --locked --project ../backend python -m unittest discover -s tests -v
 ```
 
 The readiness validator guide at `verification/docs/readiness-validator.md`

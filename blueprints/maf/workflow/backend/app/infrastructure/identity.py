@@ -47,7 +47,20 @@ class EntraIdentity:
                 algorithms=["RS256"],
                 audience=self.settings.api_client_id,
                 issuer=self.issuer,
-                options={"require": ["iss", "aud", "exp", "nbf", "iat", "tid", "oid", "sub", "scp", "ver"]},
+                options={
+                    "require": [
+                        "iss",
+                        "aud",
+                        "exp",
+                        "nbf",
+                        "iat",
+                        "tid",
+                        "oid",
+                        "sub",
+                        "scp",
+                        "ver",
+                    ]
+                },
             )
             tenant = str(UUID(claims["tid"]))
             subject = str(UUID(claims["oid"]))

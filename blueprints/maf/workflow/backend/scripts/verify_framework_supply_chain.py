@@ -6,27 +6,53 @@ import re
 import subprocess
 import sys
 import tempfile
+import tomllib
 from pathlib import Path
 
 
-CORE_PIN = re.compile(r"^agent-framework-core==(?P<version>[A-Za-z0-9.!+_-]+)$")
-UMBRELLA_PACKAGE = re.compile(r"^agent-framework(?:\[[^\]]+\])?(?:$|[<>=!~])", re.IGNORECASE)
+CORE_PIN = re.compile(r"^agent-framework-core==(?P<version>[A-Za-z0-9.!+_-]+)$", re.IGNORECASE)
+DEPENDENCY_NAME = re.compile(r"^\s*([A-Za-z0-9._-]+)")
+UMBRELLA_PACKAGE = "agent-framework"
 
 
 def verify_manifests(backend_root: Path) -> str:
-    pins: list[str] = []
-    for manifest in sorted(backend_root.glob("requirements*.txt")):
-        for raw_line in manifest.read_text(encoding="utf-8").splitlines():
-            line = raw_line.split("#", 1)[0].strip()
-            if not line or line.startswith("-"):
-                continue
-            if UMBRELLA_PACKAGE.match(line):
-                raise ValueError(f"Disallowed umbrella distribution in {manifest.name}: {line}")
-            match = CORE_PIN.fullmatch(line)
-            if match:
-                pins.append(match.group("version"))
+    project = tomllib.loads((backend_root / "pyproject.toml").read_text(encoding="utf-8"))
+    dependencies = project.get("project", {}).get("dependencies", [])
+    for dependency in dependencies:
+        match = DEPENDENCY_NAME.match(dependency)
+        if match and match.group(1).lower().replace("_", "-").replace(".", "-") == UMBRELLA_PACKAGE:
+            raise ValueError(f"Disallowed umbrella distribution in pyproject.toml: {dependency}")
+
+    pins = [
+        match.group("version")
+        for dependency in dependencies
+        if (match := CORE_PIN.fullmatch(dependency))
+    ]
     if pins != ["1.26.0"]:
-        raise ValueError("requirements.txt must contain exactly agent-framework-core==1.26.0")
+        raise ValueError("pyproject.toml must contain exactly agent-framework-core==1.26.0")
+
+    lock = tomllib.loads((backend_root / "uv.lock").read_text(encoding="utf-8"))
+    packages = lock.get("package", [])
+    if any(
+        package.get("name", "").lower().replace("_", "-").replace(".", "-") == UMBRELLA_PACKAGE
+        for package in packages
+    ):
+        raise ValueError("Disallowed agent-framework umbrella distribution in uv.lock")
+
+    core_packages = [
+        package
+        for package in packages
+        if package.get("name", "").lower().replace("_", "-") == "agent-framework-core"
+    ]
+    if len(core_packages) != 1 or core_packages[0].get("version") != pins[0]:
+        raise ValueError("uv.lock must contain exactly agent-framework-core==1.26.0")
+    _, approved_digest = read_approval(backend_root, pins[0])
+    wheel_hashes = {
+        wheel.get("hash", "").removeprefix("sha256:")
+        for wheel in core_packages[0].get("wheels", [])
+    }
+    if approved_digest not in wheel_hashes:
+        raise ValueError("The approved core wheel digest is missing from uv.lock")
     return pins[0]
 
 
@@ -100,7 +126,9 @@ def main() -> int:
     args = parser.parse_args()
     try:
         if args.output_dir:
-            download_and_verify(args.backend_root.resolve(), args.output_dir.resolve(), args.index_url)
+            download_and_verify(
+                args.backend_root.resolve(), args.output_dir.resolve(), args.index_url
+            )
         else:
             with tempfile.TemporaryDirectory() as temporary:
                 download_and_verify(

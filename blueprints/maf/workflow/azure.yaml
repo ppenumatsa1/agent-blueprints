@@ -1,0 +1,22 @@
+{
+  "name": "maf-workflow-blueprint",
+  "infra": {
+    "provider": "bicep",
+    "path": "./infra",
+    "module": "main"
+  },
+  "services": {
+    "api": {
+      "project": "./backend",
+      "language": "docker",
+      "host": "containerapp",
+      "docker": { "path": "./Dockerfile" }
+    },
+    "web": {
+      "project": "./frontend",
+      "language": "docker",
+      "host": "containerapp",
+      "docker": { "path": "./Dockerfile" }
+    }
+  }
+}

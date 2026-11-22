@@ -1,5 +1,4 @@
 from contextlib import contextmanager
-from pathlib import Path
 from typing import Iterator
 from uuid import UUID, uuid4
 
@@ -9,6 +8,7 @@ from psycopg.types.json import Jsonb
 
 from app.domain.errors import ActionError, Conflict, NotFound
 from app.domain.models import Case, Decision, Principal, TransactionalAction
+from app.infrastructure.telemetry import instrumented
 
 
 _CASE_QUERY = """
@@ -43,15 +43,18 @@ class PostgresStore:
         if not dsn:
             raise ValueError("A PostgreSQL connection string is required.")
         self._dsn = dsn
+        self.telemetry = None
 
+    @instrumented("database.connect")
     def connect(self):
         return psycopg.connect(self._dsn, row_factory=dict_row)
 
     def initialize(self) -> None:
-        schema = Path(__file__).with_name("schema.sql").read_text(encoding="utf-8")
-        with self.connect() as connection:
-            connection.execute(schema)
+        from app.infrastructure.migrations import validate
 
+        validate(self._dsn)
+
+    @instrumented("database.read")
     def get(self, case_id: UUID) -> Case:
         with self.connect() as connection:
             row = connection.execute(_CASE_QUERY, (case_id,)).fetchone()
@@ -59,6 +62,7 @@ class PostgresStore:
             raise NotFound("Record not found.")
         return _case(row)
 
+    @instrumented("database.create")
     def create(
         self,
         actor: Principal,
@@ -77,7 +81,15 @@ class PostgresStore:
                 ON CONFLICT (tenant_id, owner_id, idempotency_key) DO NOTHING
                 RETURNING id
                 """,
-                (case_id, actor.tenant_id, actor.subject, reviewer_id, Jsonb(payload), idempotency_key, input_digest),
+                (
+                    case_id,
+                    actor.tenant_id,
+                    actor.subject,
+                    reviewer_id,
+                    Jsonb(payload),
+                    idempotency_key,
+                    input_digest,
+                ),
             ).fetchone()
             if inserted:
                 connection.execute(
@@ -137,6 +149,7 @@ class PostgresStore:
                 "INSERT INTO wf_audit (case_id, event) VALUES (%s, 'checkpoint_saved')", (case_id,)
             )
 
+    @instrumented("database.decision")
     def record_decision(self, case_id: UUID, actor: Principal, decision: Decision) -> Case:
         if decision not in ("approved", "rejected"):
             raise ValueError("Decision must be approved or rejected.")
@@ -171,9 +184,7 @@ class PostgresStore:
 
     def apply_once(self, case_id: UUID, approved: bool, action: TransactionalAction) -> None:
         with self.connect() as connection:
-            row = connection.execute(
-                _CASE_QUERY + " FOR UPDATE OF c", (case_id,)
-            ).fetchone()
+            row = connection.execute(_CASE_QUERY + " FOR UPDATE OF c", (case_id,)).fetchone()
             if row is None:
                 raise NotFound("Record not found.")
             case = _case(row)
@@ -223,6 +234,7 @@ class PostgresStore:
                     "INSERT INTO wf_audit (case_id, event) VALUES (%s, 'action_failed')", (case_id,)
                 )
 
+    @instrumented("database.finish")
     def finish(self, case_id: UUID, terminal_checkpoint_id: str) -> None:
         with self.connect() as connection:
             result = connection.execute(

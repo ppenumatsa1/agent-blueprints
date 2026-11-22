@@ -9,9 +9,12 @@ from agent_framework import CheckpointStorage, FileCheckpointStorage, Workflow, 
 from app.domain.errors import ActionError, CheckpointError
 from app.domain.models import StateRepository, TransactionalAction
 from app.workflows.workflow import WORKFLOW_NAME, create_workflow
+from app.infrastructure.telemetry import instrumented
 
 
-WorkflowFactory = Callable[[StateRepository, TransactionalAction, CheckpointStorage | None], Workflow]
+WorkflowFactory = Callable[
+    [StateRepository, TransactionalAction, CheckpointStorage | None], Workflow
+]
 
 
 class LocalWorkflowHost:
@@ -23,11 +26,14 @@ class LocalWorkflowHost:
         action: TransactionalAction,
         checkpoint_root: Path,
         workflow_factory: WorkflowFactory = create_workflow,
+        *,
+        telemetry=None,
     ):
         self.store = store
         self.action = action
         self.root = Path(checkpoint_root).absolute()
         self.workflow_factory = workflow_factory
+        self.telemetry = telemetry
         self._private_directory(self.root)
 
     @staticmethod
@@ -38,7 +44,9 @@ class LocalWorkflowHost:
         if not path.is_dir():
             raise CheckpointError("The checkpoint path is not a directory.")
         if os.name != "nt" and stat.S_IMODE(path.stat().st_mode) & 0o077:
-            raise CheckpointError("The checkpoint directory must be private to the service account.")
+            raise CheckpointError(
+                "The checkpoint directory must be private to the service account."
+            )
 
     def _storage(self, case_id: UUID) -> FileCheckpointStorage:
         directory = self.root / str(case_id)
@@ -80,6 +88,7 @@ class LocalWorkflowHost:
             and not any(checkpoint.messages.values())
         )
 
+    @instrumented("workflow.start")
     async def start(self, case_id: UUID) -> None:
         with self.store.run_lock(case_id):
             case = self.store.get(case_id)
@@ -114,12 +123,14 @@ class LocalWorkflowHost:
             if pending is None or set(pending.pending_request_info_events) != set(requests):
                 raise CheckpointError("The pending workflow checkpoint was not saved.")
             restored = await self._requests(
-                self._workflow(storage).run(checkpoint_id=pending.checkpoint_id, stream=True), case_id
+                self._workflow(storage).run(checkpoint_id=pending.checkpoint_id, stream=True),
+                case_id,
             )
             if restored != requests:
                 raise CheckpointError("The pending request could not be restored.")
             self.store.save_pending(case_id, pending.checkpoint_id, requests[0])
 
+    @instrumented("workflow.resume")
     async def resume(self, case_id: UUID) -> None:
         with self.store.run_lock(case_id):
             case = self.store.get(case_id)
@@ -139,7 +150,9 @@ class LocalWorkflowHost:
                 workflow.run(checkpoint_id=case.checkpoint_id, stream=True), case_id
             )
             if requests != [case.request_id]:
-                raise CheckpointError("The checkpoint does not contain the recorded pending request.")
+                raise CheckpointError(
+                    "The checkpoint does not contain the recorded pending request."
+                )
             if case.decision is None:
                 return
             expected = {"case_id": str(case_id), "decision": case.decision}
