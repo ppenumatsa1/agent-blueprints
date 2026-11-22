@@ -11,17 +11,23 @@ The original [interactive architecture](software-factory.html) is a preserved
 historical source; this checklist records current status. The 2–3 hour
 prototype objective has not yet been measured.
 
-The latest verified PR #17 snapshot is head
-`b63353944372f2b6dcd91546cca3a350250be78b`, based on
+The last verified PR #17 snapshot is head
+`a02fcf2ddc2135a4e16b2bbcdd3720b15cc7e3cf`, based on
 `1e99e038dc31c0ae25e5ea7712030d204ee35bc0`; run
-[44955776238](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44955776238)
-passed all six jobs. Merge ref
-`0a54717118879bab6be56633dc29c313178d9081` had those exact base/head parents
-and tree `1e0a7994da25cbf63c9e3f6b7284f1a660260c55`, identical to the head.
-This documentation correction is newer than that tested snapshot and is not
-covered by its run; its resulting exact head needs CI. Any later tree or base
-change also requires revalidation. Green CI is not blueprint completion,
-release readiness, or Azure deployment approval.
+[44964201508](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44964201508)
+passed all six jobs. PR #11 has since merged to `main` as
+`587e6cc1abc23a67845c8193d486cc65c8b52854`. The #17 reconciliation and
+retarget are not covered by that older run; validate the resulting exact head,
+base, and merge tree before relying on integration evidence. Any later tree
+or base change also requires revalidation. Green CI is not blueprint
+completion, release readiness, or Azure deployment approval.
+
+The local #17 reconciliation now includes the current `main` merge
+`de1cbe4cc3a93f2473a6f8f5f9e063d1ae278fa3` as a parent and has resolved the
+conflicts, but is not yet committed or pushed; #17 still targets
+`modularity-foundation`. Local validation results and network/harness caveats
+are recorded in the [issue and fix journal](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-22---main-reconciliation-and-local-validation).
+No GitHub run currently verifies this reconciliation.
 
 ## Reconciled engineering backlog
 
@@ -29,6 +35,9 @@ The foundation and the integrated review do not establish blueprint
 completion or deployment readiness. The issues below retain their own
 acceptance criteria, dependencies and required independent evidence.
 Deferred work remains deferred; critical security checks are not waived.
+The [issue and fix journal](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-22---issue-and-fix-status)
+records the current review snapshot, scoped evidence, and next actions. Its
+open PR references do not imply those changes have merged into this branch.
 
 | Area | Open tracking issues | Next action |
 | --- | --- | --- |
@@ -43,6 +52,8 @@ The #17 row-level acceptance evidence below remains more detailed. In
 particular, #28's offline prerequisites are distinct from authorized live
 deployment; deployment is expected to produce evidence for hosted/cloud
 issues and need not wait for all live verification to close.
+| Local extensions and startup readiness | [MAF extension patterns #35](https://github.com/ppenumatsa1/agent-blueprints/issues/35), [PostgreSQL readiness race #38](https://github.com/ppenumatsa1/agent-blueprints/issues/38) | Review the draft extension and #17 TCP-probe fix; verify the final integrated revision. |
+| Order Resolution specification compatibility | [Draft proposal #40](https://github.com/ppenumatsa1/agent-blueprints/pull/40) | Align documentation terminology only; keep the proposal's business scenario separate and do not implement it in this blueprint. |
 
 | Requirement or capability | Phase | Status | Acceptance criteria | Evidence or PR | Next action |
 | --- | --- | --- | --- | --- | --- |
@@ -52,7 +63,7 @@ issues and need not wait for all live verification to close.
 | Supplied interactive architecture source | 0 | Completed | Include the original HTML without fabricating a replacement; retain its source bytes and identify it as a historical baseline. | [Original HTML](software-factory.html); [PR #2](https://github.com/ppenumatsa1/agent-blueprints/pull/2) | Preserve the supplied source. |
 | Prototype and production readiness contracts | 0 | Completed | Schemas and fixtures preserve per-requirement results, protect critical gates, disclose prototype limitations, and represent reviewed production risk acceptance. | [Policy](readiness-contract.md); [PR #2](https://github.com/ppenumatsa1/agent-blueprints/pull/2) | Independently review scenario contract and trust setup. |
 | Living tracker and Phase 1 plan | 0 | Completed | Track status, acceptance criteria, evidence, and next actions; keep work packages independently verifiable. | [Plan](implementation-plan.md); [PR #2](https://github.com/ppenumatsa1/agent-blueprints/pull/2) | Update with each meaningful PR. |
-| MAF modularity foundation | 1 | In Progress | Separate sibling backend/frontend contexts and API/lifecycle responsibilities, use canonical imports without compatibility shims, preserve security and native recovery, and ensure generated-verifier failures and skips fail CI. | [PR #11](https://github.com/ppenumatsa1/agent-blueprints/pull/11) foundation head `1e99e038dc31c0ae25e5ea7712030d204ee35bc0`; integration #17 includes its parent functionality and issue-linked docs. Exact #17 head `b63353944372f2b6dcd91546cca3a350250be78b` passed all six jobs in run [44955776238](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44955776238). | Review #11 independently; retain the stacked target and rerun checks for any later tree/base change. |
+| MAF modularity foundation and supply-chain guard | 1 | In Progress | Separate sibling backend/frontend contexts and API/lifecycle responsibilities, use canonical imports without compatibility shims, preserve native recovery, reject the compromised `agent-framework` umbrella distribution, verify the approved core wheel against the canonical `uv.lock`, and ensure generated-verifier failures and skips fail CI. | PR #11 merged to `main` as `587e6cc1abc23a67845c8193d486cc65c8b52854`. The #17 reconciliation retains the exact/hash-locked uv graph and adds the upstream approved-wheel guard to both source and independently generated paths; merged-head evidence is pending fresh CI. | Verify source/generated locked installs and rejection tests on the reconciled exact head. |
 | Versioned database migrations | 1 | In Progress | Preserve fresh-database creation and safely adopt only an exactly recognized legacy baseline; never stamp unrecognized or later-owned schemas. | Integrated `SPEC-12`, `backend/migrations/baseline.sql`, migration-aware startup and runtime least privilege passed in #17 `maf-core` and `maf-independent` jobs on `b633539` / run 44955776238. Historical PR #16 run and PostgreSQL 16 tests are separate; managed restore/version operations tracked in [#24](https://github.com/ppenumatsa1/agent-blueprints/issues/24). | Verify against the selected managed PostgreSQL target and backup/restore operations; do not infer Azure support from local tests. |
 | Generated-project documentation | 1 | In Progress | Copy adopter/operator guides and all eight design documents; map requirements to implementation/tests, maintain the evidence journal, distinguish current/planned capability, and verify links/copy inclusion. | `maf-independent` passed in exact-head run [44955776238](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44955776238) on `b633539`, including generated documentation and link checks. This correction postdates that snapshot and needs its own CI. | Keep copied documentation synchronized and preserve the no-readiness boundary. |
 | Cross-platform developer experience | 1 | In Progress | Maintain uv-based portable lock, Ruff/format, locked source/generated installs/builds, and usable editor tasks without shared runtime dependencies. | Run [44955776238](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44955776238) passed locked source/generated jobs on `b633539`. Headless generated debugpy/DAP was owner-reported; macOS, Restricted Mode and interactive UI remain unverified. Track [#23](https://github.com/ppenumatsa1/agent-blueprints/issues/23). | Verify remaining platform/debugger evidence against a named revision; any tree/base change requires exact-head CI. |
@@ -61,7 +72,7 @@ issues and need not wait for all live verification to close.
 | Locked developer tooling dependency integration | 1 | In Progress | Keep one canonical uv lock, install source/generated environments reproducibly, lint/format and build independent generated projects. | Integrated lock includes dependencies from #13 and #14; exact #17 `maf-core`/`maf-independent` jobs passed at `b633539` in run 44955776238. Workstream #13 remains independently reviewable; no PR is superseded by aggregate evidence. | Compare feature delta/tree when sequencing merges; see [#23](https://github.com/ppenumatsa1/agent-blueprints/issues/23); rerun exact-head CI for later changes. |
 | Cross-cutting implementation quality | 1 | In Progress | Before approval, remove shims/forwarders/obsolete paths, duplicate code, unused dependencies and stale config; preserve behavior and update dependent tests, Dockerfiles, CI, docs and generator. | [Acceptance gates](implementation-plan.md#cross-cutting-pr-acceptance-gates); [canonical structure](../blueprints/maf/workflow/docs/design/projectstructure.md); [engineering journal](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md). | Review remaining cleanup and rerun focused regressions plus exact-revision CI for any resulting tree change. |
 | Versioned business database baseline | 1 | In Progress | Explicit schema-owner migration, per-revision drift checks, restricted runtime startup, data preservation, future upgrades and recovery/rollback limits. | [PR #16](https://github.com/ppenumatsa1/agent-blueprints/pull/16), [run 44940559106](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44940559106) passed five jobs for `eb898f6`. Combined source/generated backends passed 68 tests each locally on PG 16.15 and 17.12 at `af3955a`; exact #17 `maf-core` and `maf-independent` checks also passed at `b633539` / run 44955776238. Earlier failures and unverified outcomes remain in the [journal](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md). | Live restore and hosted identities remain unverified. |
-| Combined engineering integration | 1 | In Progress | Run source/generated security, durability, migrations, telemetry, independent acceptance, Compose, UI, and offline IaC together; preserve exact contracts and failed/unverified outcomes. | Exact tested head `b63353944372f2b6dcd91546cca3a350250be78b`; [run 44955776238](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44955776238) passed all six jobs against base `1e99e038dc31c0ae25e5ea7712030d204ee35bc0`. Merge ref `0a54717118879bab6be56633dc29c313178d9081` had exact base/head parents and identical tree `1e0a7994da25cbf63c9e3f6b7284f1a660260c55`; generated verifier passed 44 tests, `OK`, no skips or expected failures. Synthetic producer observed approval/recovery passed and explanation/hint unverified; unsigned validator exited 1/unverified. This documentation correction postdates the tested head and needs fresh CI. | Preserve all workstream reviews; rerun exact-head CI after this documentation correction or any later tree/base change. Green CI is not readiness. |
+| Combined engineering integration | 1 | In Progress | Run source/generated security, durability, migrations, telemetry, independent acceptance, Compose, UI, and offline IaC together; preserve exact contracts and failed/unverified outcomes. | Last prior exact-head evidence was `a02fcf2ddc2135a4e16b2bbcdd3720b15cc7e3cf` on `modularity-foundation`, run [44964201508](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44964201508); it does not cover the main merge or supply-chain reconciliation. | Require all exact-head checks and merge-tree verification after this reconciliation. Green CI is not readiness. |
 | Synthetic business scenario and approved contract (P1-01) | 1 | In Progress | Approve a non-destructive scenario and exact contract digest, with explicit criticality and profile gates. | [Scenario and golden cases](../scenarios/order-adjustment/README.md); [test-only API adapter](../blueprints/maf/workflow/backend/tests/order_adjustment_adapter.py); independent authorized exact-contract review tracked in [#21](https://github.com/ppenumatsa1/agent-blueprints/issues/21). | Obtain and independently administer approval of the exact contract bytes. |
 | Normalized evidence and decision inputs (P1-02) | 1 | In Progress | Map test results, artifacts, baseline contracts, and human decisions to explicit IDs and scope. | [Synthetic runner](../blueprints/maf/workflow/backend/tests/evidence_runner.py); [input and trust schemas](../contracts/); [validator tests](../tests/test_readiness.py); independent result provenance in [#21](https://github.com/ppenumatsa1/agent-blueprints/issues/21). | Independently administer and protect result attestation and human decisions. |
 | Executable readiness validator (P1-03) | 1 | In Progress | Verify traceability, evidence bytes and freshness, criticality, decisions, and profile gates; reject invalid evidence as proof of passing. | [Validator](../readiness/validator.py); [acceptance tests](../tests/test_readiness.py) | Verify trusted provenance, human authority, and repository protection. |

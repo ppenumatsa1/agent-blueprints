@@ -1,0 +1,146 @@
+"""Verify the approved Microsoft Agent Framework core wheel before installation."""
+
+import argparse
+import hashlib
+import re
+import subprocess
+import sys
+import tempfile
+import tomllib
+from pathlib import Path
+
+
+CORE_PIN = re.compile(r"^agent-framework-core==(?P<version>[A-Za-z0-9.!+_-]+)$", re.IGNORECASE)
+DEPENDENCY_NAME = re.compile(r"^\s*([A-Za-z0-9._-]+)")
+UMBRELLA_PACKAGE = "agent-framework"
+
+
+def verify_manifests(backend_root: Path) -> str:
+    project = tomllib.loads((backend_root / "pyproject.toml").read_text(encoding="utf-8"))
+    dependencies = project.get("project", {}).get("dependencies", [])
+    for dependency in dependencies:
+        match = DEPENDENCY_NAME.match(dependency)
+        if match and match.group(1).lower().replace("_", "-").replace(".", "-") == UMBRELLA_PACKAGE:
+            raise ValueError(f"Disallowed umbrella distribution in pyproject.toml: {dependency}")
+
+    pins = [
+        match.group("version")
+        for dependency in dependencies
+        if (match := CORE_PIN.fullmatch(dependency))
+    ]
+    if pins != ["1.26.0"]:
+        raise ValueError("pyproject.toml must contain exactly agent-framework-core==1.26.0")
+
+    lock = tomllib.loads((backend_root / "uv.lock").read_text(encoding="utf-8"))
+    packages = lock.get("package", [])
+    if any(
+        package.get("name", "").lower().replace("_", "-").replace(".", "-") == UMBRELLA_PACKAGE
+        for package in packages
+    ):
+        raise ValueError("Disallowed agent-framework umbrella distribution in uv.lock")
+
+    core_packages = [
+        package
+        for package in packages
+        if package.get("name", "").lower().replace("_", "-") == "agent-framework-core"
+    ]
+    if len(core_packages) != 1 or core_packages[0].get("version") != pins[0]:
+        raise ValueError("uv.lock must contain exactly agent-framework-core==1.26.0")
+    _, approved_digest = read_approval(backend_root, pins[0])
+    wheel_hashes = {
+        wheel.get("hash", "").removeprefix("sha256:")
+        for wheel in core_packages[0].get("wheels", [])
+    }
+    if approved_digest not in wheel_hashes:
+        raise ValueError("The approved core wheel digest is missing from uv.lock")
+    return pins[0]
+
+
+def read_approval(backend_root: Path, version: str) -> tuple[str, str]:
+    approval = backend_root / "agent-framework-core.sha256"
+    fields = approval.read_text(encoding="ascii").strip().split()
+    expected_filename = f"agent_framework_core-{version}-py3-none-any.whl"
+    if len(fields) != 2 or fields[1] != expected_filename:
+        raise ValueError("The approved Agent Framework core hash entry is malformed.")
+    digest = fields[0].lower()
+    if not re.fullmatch(r"[0-9a-f]{64}", digest):
+        raise ValueError("The approved Agent Framework core SHA-256 is malformed.")
+    return expected_filename, digest
+
+
+def verify_wheel(wheel: Path, expected_digest: str) -> None:
+    actual_digest = hashlib.sha256(wheel.read_bytes()).hexdigest()
+    if actual_digest != expected_digest:
+        raise ValueError(
+            f"Agent Framework core wheel digest mismatch: expected {expected_digest}, "
+            f"received {actual_digest}"
+        )
+
+
+def download_and_verify(
+    backend_root: Path,
+    output_dir: Path,
+    index_url: str | None,
+) -> Path:
+    version = verify_manifests(backend_root)
+    filename, digest = read_approval(backend_root, version)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    if any(output_dir.iterdir()):
+        raise ValueError(f"Output directory must be empty: {output_dir}")
+    command = [
+        sys.executable,
+        "-m",
+        "pip",
+        "download",
+        "--only-binary=:all:",
+        "--no-deps",
+        "--dest",
+        str(output_dir),
+    ]
+    if index_url:
+        command.extend(["--index-url", index_url])
+    command.append(f"agent-framework-core=={version}")
+    subprocess.run(command, check=True)
+    wheel = output_dir / filename
+    if not wheel.is_file() or len(list(output_dir.iterdir())) != 1:
+        raise ValueError("The approved Agent Framework core wheel was not downloaded exactly once.")
+    verify_wheel(wheel, digest)
+    print(f"Verified agent-framework-core=={version} ({digest}).")
+    return wheel
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--backend-root",
+        type=Path,
+        default=Path(__file__).resolve().parents[1],
+        help="Backend directory containing requirements and the approved hash.",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        help="Empty directory in which to retain the verified wheel.",
+    )
+    parser.add_argument("--index-url", help="Optional package index URL.")
+    args = parser.parse_args()
+    try:
+        if args.output_dir:
+            download_and_verify(
+                args.backend_root.resolve(), args.output_dir.resolve(), args.index_url
+            )
+        else:
+            with tempfile.TemporaryDirectory() as temporary:
+                download_and_verify(
+                    args.backend_root.resolve(),
+                    Path(temporary),
+                    args.index_url,
+                )
+    except (OSError, subprocess.CalledProcessError, ValueError) as error:
+        print(f"Agent Framework supply-chain verification failed: {error}", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

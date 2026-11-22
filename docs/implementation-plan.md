@@ -57,9 +57,18 @@ remaining acceptance criteria, dependencies and evidence in these issues:
   and [#29](https://github.com/ppenumatsa1/agent-blueprints/issues/29).
 - P1 permanent standalone reference application: [#30](https://github.com/ppenumatsa1/agent-blueprints/issues/30)
   is required but requires separate repository authorization.
+- Reusable MAF extensions and PostgreSQL readiness: [#35](https://github.com/ppenumatsa1/agent-blueprints/issues/35)
+  and [#38](https://github.com/ppenumatsa1/agent-blueprints/issues/38).
 - Separately scoped/future work: [#31](https://github.com/ppenumatsa1/agent-blueprints/issues/31),
   [#33](https://github.com/ppenumatsa1/agent-blueprints/issues/33), and
   [#34](https://github.com/ppenumatsa1/agent-blueprints/issues/34).
+
+Draft PR [#40](https://github.com/ppenumatsa1/agent-blueprints/pull/40)
+proposes a standardized Order Resolution specification only. Review its
+terminology for documentation compatibility; do not treat its business
+scenario as an implementation request. The current order-adjustment scenario
+remains a synthetic test fixture, and no #40 runtime behavior or contract is
+included in this blueprint.
 
 Hosted recovery remains explicitly deferred, not waived. Azure deployment
 requires the implemented and independently verified offline prerequisites,
@@ -70,6 +79,9 @@ connectivity. Its live checks provide evidence to close the related hosted and
 operational issues.
 Do not merge overlapping workstream histories blindly or treat a green
 engineering check as release authorization.
+The dated [issue and fix journal](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-22---issue-and-fix-status)
+summarizes open PR evidence, unresolved issues and the review sequence. Its
+draft work is not represented as merged functionality on this branch.
 
 ### Execution sequence and work packages
 
@@ -80,8 +92,9 @@ requires source and generated security/recovery tests, both crash windows,
 independent golden verification and exact contract bytes, credential-free
 CI and Compose smoke checks. Local evidence is recorded in the
 [checklist](master-checklist.md). [PR #11](https://github.com/ppenumatsa1/agent-blueprints/pull/11)
-remains open; foundation commit `9efeef0` removes compatibility aliases and
-corrects checkpoint selection. Its
+merged into `main` as `de1cbe4`; its security-hardened head is
+`587e6cc1abc23a67845c8193d486cc65c8b52854`. Foundation commit `9efeef0`
+removes compatibility aliases and corrects checkpoint selection. Its
 [hosted run 44936094798](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44936094798)
 passed all five checks on that exact commit. An intermittent local restore
 failure occurred during migration testing; a deterministic equal-timestamp
@@ -98,8 +111,19 @@ failures and the [regression test](../tests/test_ci_workflow.py) exercises
 failure, skip and success behavior. Prior CI job status alone is not proof
 that the verifier passed; logs for the prior PR heads recorded 44 tests and
 `OK`. [Run 44939172266](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44939172266)
-passed all five jobs for foundation head `d0e1727`. The dependent PRs now
-target that foundation and have their own successful head-specific runs.
+passed all five jobs for foundation head `d0e1727`. The dependent PRs had
+separate successful head-specific runs, which are not evidence for the
+reconciled tree.
+The current #17 working tree has resolved a normal, non-rewriting merge from
+`main`, but the merge is not yet committed or pushed and the PR still targets
+`modularity-foundation`; no run applies to this tree. Its local validation and
+network/harness caveats are recorded in the
+[integration journal](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-22---main-reconciliation-and-local-validation).
+The [targeted MAF supply-chain audit](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-22---targeted-maf-supply-chain-audit)
+distinguishes the approved `agent-framework-core==1.26.0` dependency from the
+compromised `agent-framework` umbrella releases. Source and generated installs
+must reject the umbrella distribution and verify the approved core wheel hash
+against the canonical `uv.lock` before locked installation.
 The copied evidence producer observed approval and recovery passing while
 explanation and browser hint remained unverified; the independent unsigned
 readiness report remained unverified. The first local container build could
