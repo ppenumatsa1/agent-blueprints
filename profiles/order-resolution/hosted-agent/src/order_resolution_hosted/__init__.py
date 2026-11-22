@@ -1,23 +1,5 @@
-"""Foundry-hosted native MAF runtime for Order Resolution."""
+"""Foundry-hosted native MAF runtime for Order Resolution.
 
-from .application import (
-    CallerContext,
-    GeneratedOrderResolutionApplication,
-    HostedApplication,
-    HostedBusinessStore,
-    HostedIdentityBindings,
-)
-from .bridge import HostedAuthorityBindings, ResponsesWorkflowHost, build_workflow_host
-from .host import create_responses_server
-
-__all__ = [
-    "CallerContext",
-    "GeneratedOrderResolutionApplication",
-    "HostedApplication",
-    "HostedBusinessStore",
-    "HostedIdentityBindings",
-    "HostedAuthorityBindings",
-    "ResponsesWorkflowHost",
-    "build_workflow_host",
-    "create_responses_server",
-]
+Import concrete submodules explicitly so API-only bridge use never eagerly
+loads the hosting SDK or generated application.
+"""

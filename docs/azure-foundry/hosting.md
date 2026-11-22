@@ -115,6 +115,14 @@ bridge acquires Foundry tokens only through
 `ManagedIdentityCredential(client_id=settings.api_managed_identity_client_id)`;
 it does not fall back to a developer or ambient credential.
 
+Generation copies only `bridge.py` and `client.py` into the backend build
+context as a lightweight `order_resolution_hosted` package with a non-eager
+initializer. The backend image copies that package directly and does not import
+the sibling hosted-agent source, expand its Docker context to the repository
+root, or install the hosting SDK. The full hosted package initializer is also
+non-eager. Instantiation tests require byte-for-byte API/hosted client and wire
+contract parity plus an import resolved from the backend directory.
+
 The API implements the exported `HostedBusinessStore` seam against its
 application-owned PostgreSQL state:
 
@@ -283,7 +291,7 @@ ID for the hosted version, so callers must not invent one.
   conversation/prebind/dispatch ordering.
 - 16 publisher/generator tests passed, including restart/concurrent publish
   exclusion and complete publication identity conflicts.
-- Generated Ruff check and format check passed across 90 Python files.
+- Generated Ruff check and format check passed across 93 Python files.
 - 39 focused generated backend tests passed on PostgreSQL 17.
 - ORS-001 through ORS-009 passed without skips on PostgreSQL 17.
 - The repository contract suite passed 68 tests with the two documented
@@ -300,8 +308,16 @@ ID for the hosted version, so callers must not invent one.
   bindings pre-established by an authenticated application command, plus a
   repeated composed proof with absent/mismatched binding negatives.
 - Two independently built source archives matched SHA-256
-  `52d7766740b8d05d1bbe25aeda6e856bdd644476cab11b48a8def6ebcc5837c4`
+  `3ccb46568c228d4112ad6c2e4c6d482dab37be2804f657877ddf567a51b4b3d7`
   and contained 56 files.
+- A generated backend image built from its normal backend-only context using
+  the configured Python package proxy. An in-container import resolved
+  `order_resolution_hosted.bridge` and `order_resolution_hosted.client` from
+  `/app/order_resolution_hosted`, verifying that the API-side package is
+  present without a sibling source path or hosted SDK dependency.
+- Normal API startup with C's concrete backend-native `WorkflowHost`
+  composition remains unverified until C supplies the corrected immutable
+  composition revision.
 
 ## Pinned SDKs
 
