@@ -1,7 +1,6 @@
 import unittest
 from uuid import uuid4
 
-from app.domain.errors import InvalidInput
 from app.domain.models import Case
 from app.order_resolution.rules import OrderResolutionRules
 from app.order_resolution.workflow import build_order_resolution_workflow
@@ -22,7 +21,7 @@ def payload(
         "order": order,
         "policy_evidence": [
             {
-                "id": policy_id,
+                "policy": policy_id,
                 "current": True,
                 "applicable": True,
                 "digest_valid": True,
@@ -52,11 +51,13 @@ class OrderResolutionRulesTests(unittest.TestCase):
 
     def test_low_and_high_refunds_are_deterministic(self):
         low = self.rules.validate(payload())
-        high = self.rules.validate(
-            payload(order_id="ORDER-HIGH", amount="185.00", delay_days=5)
-        )
+        high = self.rules.validate(payload(order_id="ORDER-HIGH", amount="185.00", delay_days=5))
         self.assertEqual(
-            (low["proposal"]["action"], low["proposal"]["amount"], low["proposal"]["approval_required"]),
+            (
+                low["proposal"]["action"],
+                low["proposal"]["amount"],
+                low["proposal"]["approval_required"],
+            ),
             ("partial_refund_10", "7.90", False),
         )
         self.assertEqual(
@@ -94,8 +95,9 @@ class OrderResolutionRulesTests(unittest.TestCase):
         cases.append((invalid, "policy_evidence_invalid"))
         for value, code in cases:
             with self.subTest(code=code):
-                with self.assertRaisesRegex(InvalidInput, code):
-                    self.rules.validate(value)
+                result = self.rules.validate(value)
+                self.assertEqual(result["resolution_failure"], code)
+                self.assertIsNone(result["proposal"])
 
 
 class OrderResolutionWorkflowTests(unittest.IsolatedAsyncioTestCase):
@@ -122,9 +124,7 @@ class OrderResolutionWorkflowTests(unittest.IsolatedAsyncioTestCase):
         async for event in workflow.run({"case_id": str(case_id)}, stream=True):
             if event.type == "output":
                 outputs.append(event.data)
-        self.assertEqual(
-            outputs, [{"case_id": str(case_id), "decision": "automatic"}]
-        )
+        self.assertEqual(outputs, [{"case_id": str(case_id), "decision": "automatic"}])
         self.assertEqual(store.automatic, 1)
 
 

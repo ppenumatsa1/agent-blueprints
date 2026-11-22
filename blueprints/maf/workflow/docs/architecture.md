@@ -202,13 +202,26 @@ compatible with the base copy.
 
 The profile copies the authoritative
 `scenarios/order-resolution/acceptance-contract.json` and
-`scenarios/order-resolution/golden-cases.json` from draft
+`scenarios/order-resolution/golden-cases.json` from merged
 [#42](https://github.com/ppenumatsa1/agent-blueprints/pull/42) into the generated
 verification tree, together with `tests/test_order_resolution_contract.py`.
-The generated runtime does not read those assets or this repository. Until #42
-is integrated, callers must supply all three explicit file paths; this keeps
-the shared-contract dependency visible rather than embedding or silently
-replacing the nine-case authority.
+The generated runtime does not read those assets or this repository. Explicit
+asset overrides exist only for isolated generator tests; they do not replace
+the canonical generated assets.
+
+The profile keeps framework and application state distinct. Low-risk proposals
+run through a concrete MAF `Executor` and `WorkflowBuilder` to a terminal native
+checkpoint. Approval-required proposals persist a native pause before an
+authorized decision can resume the same workflow. Missing, conflicting, or
+invalid policy evidence persists a terminal application failure without
+creating a proposal or checkpoint. PostgreSQL records the synthetic
+database-only action and action claim; it is not the MAF checkpoint provider
+and does not establish remote exactly-once effects.
+
+Optional profile-root `backend/` and `verification/` trees merge after the
+explicit overlay. This is the deterministic integration seam for the reserved
+durability/effect/migration work in draft #41 and evaluation/readiness work in
+draft #43; the generator does not copy or emulate those implementations.
 
 The [staged infrastructure](../infra/README.md) defines a Foundry
 account/project with public data-plane access disabled, a private PostgreSQL

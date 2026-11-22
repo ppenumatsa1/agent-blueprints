@@ -10,9 +10,7 @@ from app.workflows.workflow import WORKFLOW_NAME
 class OrderResolutionWorkflowHost(LocalWorkflowHost):
     """Allow either automatic completion or the base host's native approval pause."""
 
-    async def _events(
-        self, stream, case_id: UUID
-    ) -> tuple[list[str], list[object]]:
+    async def _events(self, stream, case_id: UUID) -> tuple[list[str], list[object]]:
         requests: list[str] = []
         outputs: list[object] = []
         async for event in stream:
@@ -50,14 +48,13 @@ class OrderResolutionWorkflowHost(LocalWorkflowHost):
                 checkpoints = await self._checkpoints(storage)
                 pending_id = workflow.get_last_checkpoint_id()
                 pending = next(
-                    (item for item in checkpoints if item.checkpoint_id == pending_id), None
+                    (item for item in checkpoints if item.checkpoint_id == pending_id),
+                    None,
                 )
                 if pending is None or set(pending.pending_request_info_events) != set(requests):
                     raise CheckpointError("The pending workflow checkpoint was not saved.")
                 restored = await self._requests(
-                    self._workflow(storage).run(
-                        checkpoint_id=pending.checkpoint_id, stream=True
-                    ),
+                    self._workflow(storage).run(checkpoint_id=pending.checkpoint_id, stream=True),
                     case_id,
                 )
                 if restored != requests:
@@ -71,7 +68,8 @@ class OrderResolutionWorkflowHost(LocalWorkflowHost):
             checkpoints = await self._checkpoints(storage)
             terminal_id = workflow.get_last_checkpoint_id()
             terminal = next(
-                (item for item in checkpoints if item.checkpoint_id == terminal_id), None
+                (item for item in checkpoints if item.checkpoint_id == terminal_id),
+                None,
             )
             if terminal is None or not self._is_terminal(terminal, None):
                 raise CheckpointError("The automatic workflow checkpoint was not saved.")

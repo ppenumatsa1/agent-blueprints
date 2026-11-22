@@ -14,10 +14,16 @@ infrastructure.
 
 The canonical nine-case fixture is intentionally not duplicated here. The
 generator copies `scenarios/order-resolution/acceptance-contract.json` and
-`scenarios/order-resolution/golden-cases.json` from draft PR #42 when they are
-available, together with `tests/test_order_resolution_contract.py`. It accepts
-explicit `--order-resolution-contract`, `--order-resolution-cases`, and
-`--order-resolution-test` paths for isolated tests.
+`scenarios/order-resolution/golden-cases.json` from merged PR #42, together
+with `tests/test_order_resolution_contract.py`. Explicit
+`--order-resolution-contract`, `--order-resolution-cases`, and
+`--order-resolution-test` paths remain available for isolated generator tests.
+
+The generated integration tests exercise the real FastAPI boundary, native MAF
+workflow/checkpoint host, and PostgreSQL state. They verify the automatic
+`ORS-001` `USD 7.90` refund, the paused and authorized `ORS-002` `USD 18.50`
+refund, and the persisted fail-closed `ORS-006` outcome with no proposal,
+checkpoint, decision, action claim, or effect.
 
 Advanced crash-window durability, effects, and migrations are downstream
 integration dependencies from draft PR #41. Evaluation and verification assets

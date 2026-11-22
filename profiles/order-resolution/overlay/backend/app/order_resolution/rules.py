@@ -34,13 +34,6 @@ class OrderResolutionRules:
             raise InvalidInput("order must be a JSON object.")
         if not isinstance(evidence, list):
             raise InvalidInput("policy_evidence must be a JSON array.")
-        if not evidence:
-            raise InvalidInput("policy_evidence_missing")
-        if len(evidence) != 1:
-            raise InvalidInput("policy_evidence_conflict")
-        item = evidence[0]
-        if not isinstance(item, dict):
-            raise InvalidInput("policy_evidence_invalid")
 
         order_id = _required_string(order.get("id"), "order.id")
         issue = _required_string(order.get("issue"), "order.issue")
@@ -80,14 +73,6 @@ class OrderResolutionRules:
         else:
             raise InvalidInput("The issue is not supported by this Order Resolution profile.")
 
-        if (
-            item.get("id") != policy_id
-            or item.get("current") is not True
-            or item.get("applicable") is not True
-            or item.get("digest_valid") is not True
-        ):
-            raise InvalidInput("policy_evidence_invalid")
-
         normalized_order: dict[str, object] = {
             "id": order_id,
             "amount": f"{amount:.2f}",
@@ -96,8 +81,22 @@ class OrderResolutionRules:
         }
         if delay_days is not None:
             normalized_order["delay_days"] = delay_days
+        if not evidence:
+            return self._failure(normalized_order, [], "policy_evidence_missing")
+        if len(evidence) != 1:
+            return self._failure(normalized_order, evidence, "policy_evidence_conflict")
+        item = evidence[0]
+        if not isinstance(item, dict):
+            return self._failure(normalized_order, evidence, "policy_evidence_invalid")
+        if (
+            item.get("policy") != policy_id
+            or item.get("current") is not True
+            or item.get("applicable") is not True
+            or item.get("digest_valid") is not True
+        ):
+            return self._failure(normalized_order, evidence, "policy_evidence_invalid")
         normalized_evidence = {
-            "id": policy_id,
+            "policy": policy_id,
             "current": True,
             "applicable": True,
             "digest_valid": True,
@@ -120,6 +119,18 @@ class OrderResolutionRules:
             "order": normalized_order,
             "policy_evidence": [normalized_evidence],
             "proposal": proposal,
+        }
+        if len(_canonical(normalized)) > 16_384:
+            raise InvalidInput("The payload exceeds the 16 KiB limit.")
+        return normalized
+
+    @staticmethod
+    def _failure(order: dict[str, object], evidence: list[object], code: str) -> dict[str, Any]:
+        normalized = {
+            "order": order,
+            "policy_evidence": evidence,
+            "proposal": None,
+            "resolution_failure": code,
         }
         if len(_canonical(normalized)) > 16_384:
             raise InvalidInput("The payload exceeds the 16 KiB limit.")

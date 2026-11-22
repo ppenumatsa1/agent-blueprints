@@ -26,6 +26,11 @@ workflow without a human pause. High-value refunds and replacement shipments
 create a native approval request and use the existing authenticated,
 server-authorized decision endpoint.
 
+Missing, conflicting, or invalid policy evidence creates a persisted terminal
+failed case with its explicit failure code. It creates no proposal, native
+pause/checkpoint, decision, action claim, or effect. Other malformed or
+unsupported request data remains an HTTP validation failure.
+
 The action is deliberately database-only: it records the synthetic resolution
 in `order_resolution_actions` in the same PostgreSQL transaction as the action
 ledger. It does not call a fulfillment or payment service and is not evidence
@@ -38,12 +43,14 @@ for a consequential external effect.
 this project at generation time with
 `verification/tests/test_order_resolution_contract.py`; they are not read by
 the runtime. The canonical nine-case fixture and its acceptance test remain
-owned by draft PR #42 and are not duplicated in the profile.
+owned by merged PR #42 and are not duplicated in the profile.
 
-The baseline application initializes its profile table at startup. Versioned
-migrations, effect-ledger integration, and crash-window durability are
-downstream dependencies from draft PR #41. Evaluation adapters and full
-nine-case verification are downstream dependencies from draft PR #43. The
-source generator merges those profile-root backend and verification assets
-after this overlay. Their absence must remain visible; they are not replaced
-with synthetic success.
+The baseline application initializes its profile table at startup. Its current
+database-only action and action claim commit in one PostgreSQL transaction; it
+does not claim remote exactly-once behavior. Versioned migrations,
+effect-ledger integration, and crash-window durability are downstream
+dependencies from draft PR #41. Evaluation adapters and full nine-case
+verification are downstream dependencies from draft PR #43. The source
+generator merges those profile-root backend and verification assets after this
+overlay. Their absence must remain visible; they are not replaced with
+synthetic success.

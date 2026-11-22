@@ -25,6 +25,29 @@ def _action_key(case) -> str:
 class OrderResolutionStore(PostgresStore):
     """Baseline application persistence layered on the copied PostgreSQL store."""
 
+    def fail_resolution(self, case_id: UUID, code: str) -> None:
+        if code not in (
+            "policy_evidence_missing",
+            "policy_evidence_conflict",
+            "policy_evidence_invalid",
+        ):
+            raise ValueError("Unknown Order Resolution failure code.")
+        with self.connect() as connection:
+            result = connection.execute(
+                """
+                UPDATE wf_cases SET status = 'failed', execution_complete = TRUE,
+                    failure_code = %s, updated_at = now()
+                WHERE id = %s AND status = 'created'
+                """,
+                (code, case_id),
+            )
+            if result.rowcount != 1:
+                raise Conflict("The record is not ready for resolution failure.")
+            connection.execute(
+                "INSERT INTO wf_audit (case_id, event) VALUES (%s, 'resolution_failed')",
+                (case_id,),
+            )
+
     def apply_automatic(self, case_id: UUID, action: TransactionalAction) -> None:
         with self.connect() as connection:
             row = connection.execute(_CASE_FOR_UPDATE, (case_id,)).fetchone()
@@ -63,9 +86,7 @@ class OrderResolutionStore(PostgresStore):
                 (case_id,),
             )
 
-    def apply_once(
-        self, case_id: UUID, approved: bool, action: TransactionalAction
-    ) -> None:
+    def apply_once(self, case_id: UUID, approved: bool, action: TransactionalAction) -> None:
         with self.connect() as connection:
             row = connection.execute(_CASE_FOR_UPDATE, (case_id,)).fetchone()
             if row is None:
@@ -105,7 +126,8 @@ class OrderResolutionStore(PostgresStore):
                 (case_id,),
             )
             connection.execute(
-                "INSERT INTO wf_audit (case_id, event) VALUES (%s, 'action_applied')", (case_id,)
+                "INSERT INTO wf_audit (case_id, event) VALUES (%s, 'action_applied')",
+                (case_id,),
             )
 
     def finish_automatic(self, case_id: UUID, terminal_checkpoint_id: str) -> None:
@@ -120,7 +142,10 @@ class OrderResolutionStore(PostgresStore):
                 (terminal_checkpoint_id, case_id, case_id),
             )
             if result.rowcount != 1:
-                raise Conflict("The automatic workflow finished without a matching business outcome.")
+                raise Conflict(
+                    "The automatic workflow finished without a matching business outcome."
+                )
             connection.execute(
-                "INSERT INTO wf_audit (case_id, event) VALUES (%s, 'workflow_finished')", (case_id,)
+                "INSERT INTO wf_audit (case_id, event) VALUES (%s, 'workflow_finished')",
+                (case_id,),
             )

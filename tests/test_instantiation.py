@@ -271,8 +271,10 @@ class InstantiationTests(unittest.TestCase):
                 "backend/app/order_resolution/host.py",
                 "backend/app/order_resolution/persistence.py",
                 "backend/app/order_resolution/rules.py",
+                "backend/app/order_resolution/service.py",
                 "backend/app/order_resolution/workflow.py",
                 "backend/tests/test_order_resolution.py",
+                "backend/tests/test_order_resolution_api.py",
                 "frontend/src/order-resolution.tsx",
                 "frontend/src/test/order-resolution.test.tsx",
                 "docs/order-resolution.md",
@@ -322,7 +324,40 @@ class InstantiationTests(unittest.TestCase):
             (scenario_root / "acceptance-contract.json").is_file()
             and (scenario_root / "golden-cases.json").is_file()
         ):
-            self.skipTest("The canonical Order Resolution fixture is available.")
+            with tempfile.TemporaryDirectory() as temporary:
+                target = Path(temporary) / "order-resolution"
+                subprocess.run(
+                    [
+                        sys.executable,
+                        str(GENERATOR),
+                        str(target),
+                        "--profile",
+                        "order-resolution",
+                    ],
+                    check=True,
+                    capture_output=True,
+                )
+                self.assertEqual(
+                    (scenario_root / "acceptance-contract.json").read_bytes(),
+                    (
+                        target
+                        / "verification"
+                        / "scenarios"
+                        / "order-resolution"
+                        / "acceptance-contract.json"
+                    ).read_bytes(),
+                )
+                self.assertEqual(
+                    (scenario_root / "golden-cases.json").read_bytes(),
+                    (
+                        target
+                        / "verification"
+                        / "scenarios"
+                        / "order-resolution"
+                        / "golden-cases.json"
+                    ).read_bytes(),
+                )
+            return
         with tempfile.TemporaryDirectory() as temporary:
             target = Path(temporary) / "order-resolution"
             result = subprocess.run(
@@ -348,6 +383,30 @@ class InstantiationTests(unittest.TestCase):
             reserved_backend.mkdir(parents=True)
             (reserved_backend / "durability.py").write_text(
                 'SOURCE = "temporary-agent-c"\n', encoding="utf-8"
+            )
+            (reserved_backend / "effects.py").write_text(
+                'SOURCE = "temporary-agent-c"\n', encoding="utf-8"
+            )
+            migrations = profile / "backend" / "migrations"
+            migrations.mkdir(parents=True)
+            (migrations / "0001_order_resolution_durability.sql").write_text(
+                "-- temporary Agent C migration\n", encoding="utf-8"
+            )
+            reserved_tests = profile / "backend" / "tests"
+            reserved_tests.mkdir(parents=True)
+            (reserved_tests / "test_order_resolution_durability.py").write_text(
+                'SOURCE = "temporary-agent-c"\n', encoding="utf-8"
+            )
+            (reserved_backend / "evaluation.py").write_text(
+                'SOURCE = "temporary-agent-d"\n', encoding="utf-8"
+            )
+            evaluations = profile / "backend" / "evaluations"
+            evaluations.mkdir(parents=True)
+            (evaluations / "order-resolution-0.1.0.json").write_text(
+                '{"source":"temporary-agent-d"}\n', encoding="utf-8"
+            )
+            (reserved_tests / "test_order_resolution_evaluation.py").write_text(
+                'SOURCE = "temporary-agent-d"\n', encoding="utf-8"
             )
             reserved_verification = profile / "verification" / "evaluations"
             reserved_verification.mkdir(parents=True)
@@ -389,6 +448,15 @@ class InstantiationTests(unittest.TestCase):
                 ).read_text(encoding="utf-8"),
                 '{"source":"temporary-agent-d"}\n',
             )
+            for relative in (
+                "backend/app/order_resolution/effects.py",
+                "backend/migrations/0001_order_resolution_durability.sql",
+                "backend/tests/test_order_resolution_durability.py",
+                "backend/app/order_resolution/evaluation.py",
+                "backend/evaluations/order-resolution-0.1.0.json",
+                "backend/tests/test_order_resolution_evaluation.py",
+            ):
+                self.assertTrue((target / relative).is_file(), relative)
 
 
 if __name__ == "__main__":

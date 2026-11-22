@@ -11,7 +11,10 @@ from app.infrastructure.telemetry import Telemetry
 from app.lifecycle import create_lifespan
 from app.order_resolution.host import OrderResolutionWorkflowHost
 from app.order_resolution.persistence import OrderResolutionStore
+from app.order_resolution.rules import OrderResolutionRules
+from app.order_resolution.service import OrderResolutionService
 from app.usecases.service import WorkflowService
+from app.workflows.host import LocalWorkflowHost
 
 
 def create_app(
@@ -21,14 +24,24 @@ def create_app(
     store: StateRepository | None = None,
     identity: IdentityProvider | None = None,
 ) -> FastAPI:
-    repository = store if store is not None else OrderResolutionStore(settings.database_url)
+    order_resolution = isinstance(components.rules, OrderResolutionRules)
+    repository = (
+        store
+        if store is not None
+        else (
+            OrderResolutionStore(settings.database_url)
+            if order_resolution
+            else PostgresStore(settings.database_url)
+        )
+    )
     identity_provider = identity if identity is not None else EntraIdentity(settings)
     telemetry = Telemetry(
         settings.telemetry_mode,
         settings.applicationinsights_connection_string,
     )
     try:
-        workflow_host = OrderResolutionWorkflowHost(
+        host_type = OrderResolutionWorkflowHost if order_resolution else LocalWorkflowHost
+        workflow_host = host_type(
             repository,
             components.action,
             settings.checkpoint_root,
@@ -37,7 +50,16 @@ def create_app(
         )
         if isinstance(repository, PostgresStore):
             repository.telemetry = telemetry
-        service = WorkflowService(repository, workflow_host, components.rules, components.policy)
+        if order_resolution:
+            if not isinstance(repository, OrderResolutionStore):
+                raise TypeError("The Order Resolution persistence adapter is required.")
+            service = OrderResolutionService(
+                repository, workflow_host, components.rules, components.policy
+            )
+        else:
+            service = WorkflowService(
+                repository, workflow_host, components.rules, components.policy
+            )
         lifespan = create_lifespan(repository, components, workflow_host, telemetry)
         return create_api_app(
             settings,

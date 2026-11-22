@@ -46,7 +46,10 @@ class OrderResolutionExecutor(Executor):
         case_id = UUID(original_request["case_id"])
         self._store.apply_once(case_id, approved, self._action)
         await ctx.yield_output(
-            {"case_id": str(case_id), "decision": "approved" if approved else "rejected"}
+            {
+                "case_id": str(case_id),
+                "decision": "approved" if approved else "rejected",
+            }
         )
 
 
