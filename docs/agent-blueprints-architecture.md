@@ -165,6 +165,21 @@ Do not treat conversation history, workflow checkpoints, and business records
 as interchangeable. A model recommendation or remembered conversation is not
 human authorization.
 
+## Cross-framework business specification
+
+The [Order Resolution specification proposal](order-resolution-specification-proposal.md)
+defines a framework-neutral triage, policy retrieval, deterministic resolution,
+human decision, idempotency, recovery, and evaluation contract. It standardizes
+business invariants and evidence expectations, not runtime APIs or checkpoint
+bytes.
+
+Every future implementation must use its selected framework's native workflow
+and checkpoint provider. PostgreSQL is application-owned persistence for
+business records, decisions, action ledgers, and audit projections; it is not a
+universal/custom checkpointer. A framework may select a supported PostgreSQL
+checkpoint provider, but that framework-owned state remains logically separate
+from the application schema and lifecycle.
+
 ## First golden path: Foundry-first MAF workflow
 
 This is a **design**, not a verified deployment:
@@ -316,7 +331,7 @@ replaced without importing the source repository.
 | Auth, telemetry, tests, documentation and deployment conventions | Share guidance and, later, small composable templates when justified |
 | Workflow graph, interrupts, checkpointing and recovery | Keep framework- and host-specific |
 | Model/tool loop, skills and session lifecycle | Use the selected framework or SDK natively |
-| Business policy, approvals and side effects | Keep in the generated application, not prompts or a shared agent runtime |
+| Business policy, approvals and side effects | Share the [Order Resolution invariants](order-resolution-specification-proposal.md) where applicable; keep concrete policy and enforcement in the generated application, not prompts or a shared agent runtime |
 
 The reference projects contain reusable patterns but also scenario-specific
 logic and settings. See the [evidence inventory](reference-repository-analysis.md)

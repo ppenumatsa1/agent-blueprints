@@ -8,6 +8,17 @@ standards, initial contracts, and GitHub-hosted validation under the MIT
 License. The [follow-up](https://github.com/ppenumatsa1/agent-blueprints/pull/2)
 added profile-aware contracts, the supplied architecture source, and the
 [living checklist](master-checklist.md).
+
+The [cross-framework Order Resolution specification
+proposal](order-resolution-specification-proposal.md) adds a documentation-only
+business contract for triage, policy retrieval, deterministic resolution,
+authorized approval/rejection, idempotency, crash/restart recovery, and
+evaluations. Its versioned synthetic set covers automatic completion, approval,
+rejection, duplicate commands, worker recovery, policy-evidence failures, and
+authorization denial. It requires framework-native workflow/checkpoint
+providers and keeps PostgreSQL application persistence separate; it does not
+add a runtime, custom checkpointer, compatibility shim, or Azure resource.
+
 Specification Studio has not yet produced an artifact, so the proposed
 handoff is not an end-to-end compatibility claim. Phase 0 does not implement
 the validator or an agent template, integrate Specification Studio, deploy

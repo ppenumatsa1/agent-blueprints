@@ -32,6 +32,26 @@ unverified` means the claim has not been independently established here.
 | Tests, evaluations, CI | [Public CI](https://github.com/ppenumatsa1/maf-monorepo/blob/45430753c5f3e75716ea3822d2b2b52fbb4f1c34/.github/workflows/order-resolution-public-ci.yml) uses GitHub-hosted runners for backend, frontend and E2E; [evaluation runner](https://github.com/ppenumatsa1/maf-monorepo/blob/45430753c5f3e75716ea3822d2b2b52fbb4f1c34/agents/order-resolution/foundry-public/backend/evals/eval_runner.py) defines deterministic expectations. A [public CI run](https://github.com/ppenumatsa1/maf-monorepo/actions/runs/39868712107) passed at `bbb90011981169e8dec9b03171f11fbb9fdd7378`, **not** the inspected commit. | Start with simple hosted-runner checks; retain exact run and commit evidence. Do not copy the full routing machinery into Phase 0. |
 | Telemetry and identity | [Telemetry setup](https://github.com/ppenumatsa1/maf-monorepo/blob/45430753c5f3e75716ea3822d2b2b52fbb4f1c34/agents/underwriting/foundry-public/backend/app/core/telemetry.py#L29-L55) disables model-content capture and warns if export is unavailable. The [API entrypoint](https://github.com/ppenumatsa1/maf-monorepo/blob/45430753c5f3e75716ea3822d2b2b52fbb4f1c34/agents/underwriting/foundry-public/backend/app/server.py#L46-L64) does not by itself establish end-to-end Entra protection. **Telemetry implemented; complete API authorization unverified.** | Adopt correlation and redaction; explicitly implement and test the generated project's identity boundary. |
 
+### MAF Order Resolution reference details
+
+The cross-framework [Order Resolution specification
+proposal](order-resolution-specification-proposal.md) was informed by the
+pinned reference's [architecture](https://github.com/ppenumatsa1/maf-monorepo/blob/45430753c5f3e75716ea3822d2b2b52fbb4f1c34/agents/order-resolution/foundry-public/docs/design/architecture.md),
+[approval conditions](https://github.com/ppenumatsa1/maf-monorepo/blob/45430753c5f3e75716ea3822d2b2b52fbb4f1c34/agents/order-resolution/foundry-public/docs/design/hitl-approval-conditions.md),
+[workflow tests](https://github.com/ppenumatsa1/maf-monorepo/blob/45430753c5f3e75716ea3822d2b2b52fbb4f1c34/agents/order-resolution/foundry-public/backend/tests/test_workflow.py),
+the [synthetic hosted cases](https://github.com/ppenumatsa1/maf-monorepo/blob/45430753c5f3e75716ea3822d2b2b52fbb4f1c34/agents/order-resolution/foundry-public/backend/.foundry/datasets/order-resolution-hosted-cases.jsonl),
+and [deterministic evaluation runner](https://github.com/ppenumatsa1/maf-monorepo/blob/45430753c5f3e75716ea3822d2b2b52fbb4f1c34/agents/order-resolution/foundry-public/backend/evals/eval_runner.py).
+These sources demonstrate useful synthetic behavior for ordered triage,
+retrieval, deterministic approval triggers, approve/reject paths, duplicate
+decision handling, and evaluation assertions. Source inspection is not proof
+of a current deployment or cross-framework compatibility.
+
+The reference's application-level PostgreSQL checkpoint adapter is not adopted
+as a universal architecture. The proposal instead preserves the business
+recovery invariants while requiring every blueprint and host to use its native
+checkpoint provider, with application-owned PostgreSQL records kept logically
+separate.
+
 ## LangGraph workflow monorepo
 
 | Capability | Evidence and assessment | Reuse decision |
