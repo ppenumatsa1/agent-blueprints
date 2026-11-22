@@ -16,6 +16,7 @@ includes [hosted caller binding #22](https://github.com/ppenumatsa1/agent-bluepr
 [hosted recovery #20](https://github.com/ppenumatsa1/agent-blueprints/issues/20),
 [external effects #32](https://github.com/ppenumatsa1/agent-blueprints/issues/32),
 [independent trust #21](https://github.com/ppenumatsa1/agent-blueprints/issues/21),
+[agent evaluation and browser evidence #25](https://github.com/ppenumatsa1/agent-blueprints/issues/25),
 and [deployment integration #18](https://github.com/ppenumatsa1/agent-blueprints/issues/18).
 Reusable MAF extension contracts for model, agent, prompt, tool, and executor
 patterns are tracked in [#35](https://github.com/ppenumatsa1/agent-blueprints/issues/35).
@@ -122,6 +123,20 @@ fixture exercises these construction and denial boundaries without a model
 call or fake response. Provider credentials and behavior, live hosted identity
 and recovery, trusted readiness evidence, and consequential external effects
 remain unverified or blocked; see the [MAF extension guidance](../blueprints/maf/workflow/docs/architecture.md#typed-maf-extension-patterns).
+
+The local #25 follow-on adds application-owned, versioned evaluation dataset
+and rubric contracts, explicit score thresholds, and trace mapping to the
+existing readiness check IDs. The application supplies the evaluator that
+invokes its configured MAF agent/provider; evaluation errors propagate and no
+synthetic fallback is used. Missing observations and unavailable evaluators
+remain unverified, while invalid, unknown, duplicate, or below-threshold
+observations cannot pass. Trace references are not evidence bytes or
+authenticated provenance. At branch test head `d22ee2b`, source and fresh
+generated-copy Ruff checks passed and each ran 19 extension tests; the root
+verifier suite passed 50 tests with one expected adapter-not-selected skip.
+The branch includes updated #37 base `7171aa8`; its CI was pending at
+documentation time. No actual model call, browser end-to-end run, independent
+evidence trust, or hosted validation is claimed.
 
 Local PostgreSQL container initialization can briefly accept Unix socket
 connections before the final TCP server starts. Issue [#38](https://github.com/ppenumatsa1/agent-blueprints/issues/38)

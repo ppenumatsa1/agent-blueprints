@@ -7,7 +7,7 @@ Install dependencies as described in [setup](setup.md). Set
 ```text
 uv run --locked ruff check .
 uv run --locked ruff format --check .
-uv run --locked python -m unittest -v tests.test_core tests.test_security tests.test_evidence_runner tests.test_telemetry tests.test_migrations
+uv run --locked python -m unittest -v tests.test_core tests.test_security tests.test_evidence_runner tests.test_telemetry tests.test_migrations tests.test_extensions tests.test_evaluation
 ```
 
 Tests create and drop isolated schemas and roles; the test identity requires
@@ -70,3 +70,13 @@ approval is not human approval; fixture explanation and hint comparisons do
 not prove agent-generated explanations or browser end-to-end behavior.
 Schema validity alone is not a release gate. Retain failed and unverified
 results as such.
+
+## Evaluation extension tests
+
+`tests.test_evaluation` exercises explicit versioned synthetic dataset and
+rubric configuration, inclusive threshold edges, multiple criteria per
+readiness check, trace mapping, missing and unavailable evaluations,
+malformed thresholds and scores, unknown and duplicate observations, and
+provider/tool failures. These are contract tests, not actual agent or browser
+evaluations. Source and generated CI run the same tests; the synthetic
+observations do not produce or attest readiness evidence.

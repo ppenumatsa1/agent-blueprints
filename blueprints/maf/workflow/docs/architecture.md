@@ -70,6 +70,21 @@ they are not a second runtime or a guarantee that a provider is configured.
   under [#19](https://github.com/ppenumatsa1/agent-blueprints/issues/19),
   [#20](https://github.com/ppenumatsa1/agent-blueprints/issues/20), and
   [#22](https://github.com/ppenumatsa1/agent-blueprints/issues/22).
+- **Evaluation contracts (#25):** applications define versioned
+  `EvaluationDataset` cases and an `EvaluationRubric` with explicit finite
+  score thresholds. An application supplies `AgentEvaluator` to invoke its
+  configured MAF agent/provider; `evaluate_agent` has no default evaluator
+  and propagates provider or tool errors without a synthetic fallback.
+  `map_observations` maps configured case and criterion traces to one
+  `CheckEvaluation` per readiness check ID. Missing observations or an
+  unavailable evaluator remain unverified; below-threshold, duplicate,
+  unknown, or malformed observations fail. Invalid thresholds are rejected
+  before evaluation. Trace references and scores are not evidence bytes,
+  digests, or authenticated provenance, and do not change the independent
+  readiness validator. The synthetic fixture tests mapping only; no model
+  call or browser end-to-end hint was run. See
+  [evaluation.py](../backend/app/extensions/evaluation.py) and the
+  [evaluation tests](testing.md#evaluation-extension-tests).
 
 The generated synthetic application constructs a MAF `Agent` from an
 application-supplied MAF client, prompt asset, and authorization-bound tool,
