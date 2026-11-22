@@ -3,7 +3,10 @@ from uuid import uuid4
 
 from app.domain.models import Case
 from app.order_resolution.rules import OrderResolutionRules
-from app.order_resolution.workflow import build_order_resolution_workflow
+from app.order_resolution.workflow import (
+    OrderResolutionDecision,
+    build_order_resolution_workflow,
+)
 
 
 def payload(
@@ -34,6 +37,7 @@ class FakeStore:
     def __init__(self, case):
         self.case = case
         self.automatic = 0
+        self.decisions = []
 
     def get(self, _case_id):
         return self.case
@@ -42,7 +46,7 @@ class FakeStore:
         self.automatic += 1
 
     def apply_once(self, _case_id, _approved, _action):
-        raise AssertionError("A decision should not be applied in this test.")
+        self.decisions.append(_approved)
 
 
 class OrderResolutionRulesTests(unittest.TestCase):
@@ -126,6 +130,82 @@ class OrderResolutionWorkflowTests(unittest.IsolatedAsyncioTestCase):
                 outputs.append(event.data)
         self.assertEqual(outputs, [{"case_id": str(case_id), "decision": "automatic"}])
         self.assertEqual(store.automatic, 1)
+
+    async def test_native_workflow_resumes_with_structured_decision(self):
+        normalized = OrderResolutionRules().validate(
+            payload(order_id="ORDER-HIGH", amount="185.00", delay_days=5)
+        )
+        case_id = uuid4()
+        case = Case(
+            id=case_id,
+            tenant_id="tenant",
+            owner_id="owner",
+            reviewer_id="reviewer",
+            payload=normalized,
+            status="created",
+            decision=None,
+            request_id=None,
+            checkpoint_id=None,
+            terminal_checkpoint_id=None,
+            execution_complete=False,
+            failure_code=None,
+        )
+        store = FakeStore(case)
+        workflow = build_order_resolution_workflow(store, object())
+        request_id = None
+        async for event in workflow.run({"case_id": str(case_id)}, stream=True):
+            if event.type == "request_info":
+                request_id = event.request_id
+        self.assertIsNotNone(request_id)
+        response = OrderResolutionDecision(
+            case_id=case_id,
+            proposal_version=1,
+            action="partial_refund_10",
+            destination_id="synthetic-refund",
+            handle=request_id,
+            channel="api",
+            decision="approved",
+        )
+        outputs = []
+        async for event in workflow.run(
+            responses={request_id: response},
+            stream=True,
+        ):
+            if event.type == "output":
+                outputs.append(event.data)
+        self.assertEqual(outputs, [{"case_id": str(case_id), "decision": "approved"}])
+        self.assertEqual(store.decisions, [True])
+
+    async def test_native_workflow_uses_injected_hosted_request_identity(self):
+        normalized = OrderResolutionRules().validate(
+            payload(order_id="ORDER-HIGH", amount="185.00", delay_days=5)
+        )
+        case_id = uuid4()
+        case = Case(
+            id=case_id,
+            tenant_id="tenant",
+            owner_id="owner",
+            reviewer_id="reviewer",
+            payload=normalized,
+            status="created",
+            decision=None,
+            request_id=None,
+            checkpoint_id=None,
+            terminal_checkpoint_id=None,
+            execution_complete=False,
+            failure_code=None,
+        )
+        workflow = build_order_resolution_workflow(FakeStore(case), object())
+        events = []
+        async for event in workflow.run(
+            {"case_id": str(case_id), "request_id": "hosted-request-1"},
+            stream=True,
+        ):
+            if event.type == "request_info":
+                events.append(event)
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0].request_id, "hosted-request-1")
+        self.assertEqual(events[0].data, {"case_id": str(case_id)})
 
 
 if __name__ == "__main__":

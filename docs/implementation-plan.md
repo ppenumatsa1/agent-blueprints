@@ -522,6 +522,57 @@ makes the blueprint, readiness report, or deployment complete. See the
 | P1 permanent standalone reference application | [#30](https://github.com/ppenumatsa1/agent-blueprints/issues/30); required as an independent deliverable, but repository creation still requires separate explicit authorization. |
 | Later separate App/API blueprint roadmap | [#34](https://github.com/ppenumatsa1/agent-blueprints/issues/34); remains out of phase and requires separate authorization. |
 
+### Azure/Foundry Workstream A
+
+Agent A adds only the native hosted-runtime and lifecycle source boundary for
+the independently generated Order Resolution application. Acceptance requires:
+
+- exact public SDK pins and drift tests for the Responses host and
+  `create_version_from_code`;
+- a request-aware native workflow factory using Foundry-managed hosted
+  checkpoints, never the API's local file store or a PostgreSQL workflow
+  serializer;
+- structured approval resume with application authorization, exact
+  conversation/channel binding, and platform-managed session scope that never
+  treats the API workload user as the human actor;
+- an application-owned hosted business lifecycle that persists only opaque
+  request correlation, decision, and completion while Foundry retains native
+  checkpoint ownership;
+- at-most-once-biased Responses and publish creates that preserve `unknown`
+  after a lost acknowledgment, never resend a preexisting pending claim, bind
+  the complete publication target/configuration identity, and require
+  authoritative reconciliation;
+- independent generator output plus focused hosted, local workflow and
+  repository contract tests.
+
+Implementation and current local evidence are recorded in the
+  [hosting report](azure-foundry/hosting.md). On 2026-11-22, 40 generated hosted
+  tests, 16 publisher/generator tests, Ruff, 39 focused generated PostgreSQL
+  tests, ORS-001..009, and the 68-test repository contract suite (2 documented
+  adapter skips) passed. The generated hosted total is now 41 after adding an
+  acknowledged terminal-resume no-redispatch regression. Exact Workstream C
+  revision `2a04d5be3013e782a7c1222b2a16a7047cbb15cd` passed a freshly generated
+  real-PostgreSQL 17 protected-API business lifecycle and native
+  `/conversations` plus `/responses` wire proof in 6.204 seconds, including
+  normal API factory composition, restart duplicate acknowledgment with zero
+  replay, terminal exact-intent replay with no new Responses dispatch,
+  conflicting-intent and unauthorized-actor refusal, one decision/action,
+  exact `OperationClaim(record, acquired)`, and null business checkpoint
+  fields. C's six PR checks also passed in run `45084615221`. A binds human
+  authority only to the authenticated case/conversation/channel command,
+  treats platform user/session as separate opaque workload correlation, and
+  omits caller-supplied `agent_session_id` so Foundry owns the stable
+  conversation session. A exports the explicit
+  `order_resolution_hosted.bridge:build_workflow_host` API-to-Responses
+  factory; no generic `/runs` host is permitted. Agents B and D consume the
+  explicit API-only runtime
+  allowlist, atomic operation claim contract, and two-phase
+  identity-then-active publication fields documented in the hosting report.
+  Public hosted runtime never receives PostgreSQL connectivity; the protected
+  API owns business persistence and database networking.
+  This workstream does not provision Azure, assign roles, publish an agent, merge
+  a pull request, or convert an unverified hosted capability to passing readiness.
+
 ### Validator acceptance contract
 
 The validator consumes the approved, versioned verification contract; actual
