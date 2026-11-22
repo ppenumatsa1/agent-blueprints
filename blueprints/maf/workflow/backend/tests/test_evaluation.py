@@ -10,6 +10,7 @@ from app.extensions.evaluation import (
     RubricCriterion,
     evaluate_agent,
     map_observations,
+    unavailable_assessment,
 )
 from examples.evaluation_fixture import SYNTHETIC_DATASET, SYNTHETIC_RUBRIC
 
@@ -92,6 +93,21 @@ class EvaluationExtensionTests(unittest.TestCase):
             "failed",
         )
 
+    def test_unknown_criterion_and_malformed_evaluator_output_fail(self):
+        unknown = map_observations(
+            SYNTHETIC_DATASET,
+            SYNTHETIC_RUBRIC,
+            (
+                EvaluationObservation("synthetic-explanation", "unknown-criterion", 1.0, "trace"),
+                self.observations()[1],
+            ),
+        )
+        malformed = map_observations(SYNTHETIC_DATASET, SYNTHETIC_RUBRIC, (None,))
+        invalid_collection = map_observations(SYNTHETIC_DATASET, SYNTHETIC_RUBRIC, None)
+        self.assertEqual(unknown.outcome, "failed")
+        self.assertEqual(malformed.outcome, "failed")
+        self.assertEqual(invalid_collection.outcome, "failed")
+
     def test_malformed_scores_and_trace_references_fail_closed(self):
         invalid_score = self.observations(float("nan"), 0.9)
         invalid_trace = (
@@ -141,6 +157,8 @@ class EvaluationExtensionTests(unittest.TestCase):
         self.assertEqual(
             {item.criterion_id for item in explanation[0].observations}, {"grounded", "safe"}
         )
+        unavailable = unavailable_assessment(SYNTHETIC_DATASET, rubric)
+        self.assertEqual(len(unavailable.check_results), 2)
 
 
 if __name__ == "__main__":

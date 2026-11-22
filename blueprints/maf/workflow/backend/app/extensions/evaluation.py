@@ -102,18 +102,18 @@ class AgentEvaluator(Protocol):
 
 
 @dataclass(frozen=True)
-class CheckEvaluation:
-    check_id: str
-    outcome: Outcome
-    reason: str
-    observations: tuple["EvaluationTraceReference", ...]
-
-
-@dataclass(frozen=True)
 class EvaluationTraceReference:
     case_id: str
     criterion_id: str
     reference: str
+
+
+@dataclass(frozen=True)
+class CheckEvaluation:
+    check_id: str
+    outcome: Outcome
+    reason: str
+    observations: tuple[EvaluationTraceReference, ...]
 
 
 @dataclass(frozen=True)
@@ -193,10 +193,35 @@ def map_observations(
     invalid_checks: set[str] = set()
     diagnostics: list[str] = []
     all_check_ids = {criterion.check_id for criterion in rubric.criteria}
+    if not isinstance(observations, Sequence) or isinstance(observations, (str, bytes)):
+        diagnostics.append("Evaluator did not return an observation sequence.")
+        return _assessment(
+            dataset,
+            rubric,
+            tuple(
+                CheckEvaluation(
+                    check_id=check_id,
+                    outcome="failed",
+                    reason="Evaluator returned a malformed observation collection.",
+                    observations=(),
+                )
+                for check_id in sorted(all_check_ids)
+            ),
+            diagnostics,
+        )
 
     for observation in observations:
         if not isinstance(observation, EvaluationObservation):
             diagnostics.append("Evaluator returned a malformed observation.")
+            invalid_checks.update(all_check_ids)
+            continue
+        if (
+            not isinstance(observation.case_id, str)
+            or not observation.case_id
+            or not isinstance(observation.criterion_id, str)
+            or not observation.criterion_id
+        ):
+            diagnostics.append("Evaluator returned an observation with malformed IDs.")
             invalid_checks.update(all_check_ids)
             continue
         case = cases.get(observation.case_id)
