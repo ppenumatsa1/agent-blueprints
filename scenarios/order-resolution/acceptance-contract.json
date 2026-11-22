@@ -1,0 +1,97 @@
+{
+  "contract_id": "order-resolution-spec",
+  "contract_version": "0.1.0",
+  "scenario_set": "order-resolution-spec/0.1.0",
+  "source_specification": "docs/order-resolution-specification-proposal.md",
+  "status": "executable_acceptance_fixture",
+  "amounts": {
+    "currency": "USD",
+    "representation": "decimal_string",
+    "partial_refund_10": {
+      "rate": "0.10",
+      "rounding": "ROUND_HALF_UP",
+      "round_once_to_decimal_places": 2
+    }
+  },
+  "orders": {
+    "ORDER-LOW": {
+      "amount": "79.00",
+      "issue": "late_delivery",
+      "delay_days": 4,
+      "owner": "USER-A"
+    },
+    "ORDER-HIGH": {
+      "amount": "185.00",
+      "issue": "late_delivery",
+      "delay_days": 5,
+      "owner": "USER-A"
+    },
+    "ORDER-DAMAGED": {
+      "amount": "79.00",
+      "issue": "damaged_item",
+      "owner": "USER-A"
+    }
+  },
+  "policies": {
+    "POLICY-LATE@1": {
+      "applicability": {
+        "issue": "late_delivery",
+        "delay_days_greater_than": 3
+      },
+      "proposed_action": {
+        "type": "partial_refund_10"
+      },
+      "approval_required_when": {
+        "order_amount_usd_greater_than_or_equal": "100.00"
+      }
+    },
+    "POLICY-DAMAGED@1": {
+      "applicability": {
+        "issue": "damaged_item"
+      },
+      "proposed_action": {
+        "type": "replacement_shipment",
+        "quantity": 1
+      },
+      "approval_required": true
+    }
+  },
+  "reviewer_authorization": {
+    "REVIEWER-A": {
+      "may_decide_owner_cases": [
+        "USER-A"
+      ]
+    },
+    "USER-B": {
+      "may_decide_owner_cases": []
+    },
+    "REVIEWER-B": {
+      "may_decide_owner_cases": []
+    }
+  },
+  "idempotency": {
+    "action_claim_key": [
+      "case_id",
+      "proposal_version",
+      "action"
+    ],
+    "maximum_claims_per_key": 1
+  },
+  "policy_evidence": {
+    "authoritative_requirement": {
+      "cardinality": 1,
+      "current": true,
+      "applicable": true,
+      "digest_valid": true
+    },
+    "failure_outcomes": {
+      "missing": "policy_evidence_missing",
+      "conflicting": "policy_evidence_conflict",
+      "invalid": "policy_evidence_invalid"
+    }
+  },
+  "assertion_layers": {
+    "business_outcome": "Normalized framework-neutral proposal, approval, action, and terminal outcome.",
+    "technical_execution": "Framework/runtime pause, continuation, decision, idempotency, recovery, and event assertions."
+  }
+}
