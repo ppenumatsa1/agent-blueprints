@@ -39,3 +39,13 @@ readiness mapper. The generated evidence runner executes all nine scenarios,
 writes revision-bound local artifacts, and invokes the independent readiness
 validator. Deterministic results may pass locally while model quality, browser
 evidence, and trusted producer provenance remain unverified.
+
+The generated `hosted-agent` package is a separate Foundry Responses entry
+point. It hosts a fresh native MAF workflow per request, uses the public
+Foundry hosting checkpoint provider, and never attaches the API's local
+`FileCheckpointStorage`. The authenticated API/integration layer must supply
+the documented caller and conversation binding adapter before the hosted
+entry point starts. The copied
+`scripts/foundry/publish_order_resolution_hosted.py` packages the generated
+backend and hosted package for source-code deployment; it does not provision
+resources or assign RBAC.

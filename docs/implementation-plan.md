@@ -522,6 +522,34 @@ makes the blueprint, readiness report, or deployment complete. See the
 | P1 permanent standalone reference application | [#30](https://github.com/ppenumatsa1/agent-blueprints/issues/30); required as an independent deliverable, but repository creation still requires separate explicit authorization. |
 | Later separate App/API blueprint roadmap | [#34](https://github.com/ppenumatsa1/agent-blueprints/issues/34); remains out of phase and requires separate authorization. |
 
+### Azure/Foundry Workstream A
+
+Agent A adds only the native hosted-runtime and lifecycle source boundary for
+the independently generated Order Resolution application. Acceptance requires:
+
+- exact public SDK pins and drift tests for the Responses host and
+  `create_version_from_code`;
+- a request-aware native workflow factory using Foundry-managed hosted
+  checkpoints, never the API's local file store or a PostgreSQL workflow
+  serializer;
+- structured approval resume with application authorization and exact
+  caller/session/conversation/channel binding;
+- at-most-once-biased Responses and publish creates that preserve `unknown`
+  after a lost acknowledgment and require authoritative reconciliation;
+- independent generator output plus focused hosted, local workflow and
+  repository contract tests.
+
+Implementation and current local evidence are recorded in the
+  [hosting report](azure-foundry/hosting.md). On 2026-11-22, 17 generated hosted
+  tests, 5 generated local workflow tests, 10 publisher/generator tests, Ruff,
+  the 68-test repository contract suite (2 documented adapter skips), and the
+  PostgreSQL 17 ORS-001..009 evidence run passed. The next integration action for
+  Agents B-D is to provide a durable `HostedIdentityBindings` implementation, an
+  atomic operation journal and operator reconciliation path, injected Foundry
+  project/model configuration, and deployed identity/RBAC/telemetry evidence.
+  This workstream does not provision Azure, assign roles, publish an agent, merge
+  a pull request, or convert an unverified hosted capability to passing readiness.
+
 ### Validator acceptance contract
 
 The validator consumes the approved, versioned verification contract; actual

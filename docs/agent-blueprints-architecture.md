@@ -313,6 +313,26 @@ documented. Local business idempotency does not solve hosted response identity
 recovery; do not silently retry. See the [hosted blocker
 journal](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-21---hosted-caller-binding-and-lost-responses).
 
+### Azure/Foundry Workstream A
+
+The Order Resolution profile now generates a separate native MAF Responses
+host and deterministic source bundle. The host uses a request-aware workflow
+factory and the standard Foundry checkpoint provider; it never attaches local
+filesystem checkpoints or writes whole workflow state to PostgreSQL. Strict
+structured resume binds the framework request ID to the case, proposal,
+action, destination, fixed hosted channel, caller, session and conversation.
+The application still owns authorization, decision and effect state.
+
+The narrow integration boundary is `HostedIdentityBindings`: resolve opaque
+Foundry request identity to an application principal, bind a start to the
+authorized case/session/conversation, and refuse a resume with any different
+binding. Responses and hosted-version creates use an application operation
+journal. Lost acknowledgments become `unknown` and are not replayed; only an
+authoritative unique remote match may reconcile them. Local compatibility is
+documented in [the hosting report](azure-foundry/hosting.md). Live hosted
+identity, checkpoint recovery, model calls, telemetry and networking remain
+unverified and cannot support production readiness.
+
 The fallback hosts the framework runtime in Azure Container Apps and selects a
 tested framework-compatible checkpoint strategy. Do not assume that its
 checkpoint mechanism is identical to Foundry's. React, FastAPI, and PostgreSQL
