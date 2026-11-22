@@ -155,8 +155,9 @@ records this on disposable PostgreSQL 16.15 and 17, including a failed initial
 `8b3c357`. CI startup loops and Compose health checks use bounded loopback TCP
 probes; these are in merged `main` at `0c1297c` and passed exact-main run
 [45027884271](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/45027884271).
-Local source/generated Compose checks also passed on the current #37 tree.
-This does not establish managed PostgreSQL readiness.
+Local source/generated Compose checks also passed on #37 implementation head
+`8795c46`; final-head CI is tracked on the PR. This does not establish managed
+PostgreSQL readiness.
 
 The local integration at `af3955a` combined the engineering layers. Source and
 independently generated backends each passed 68 tests on PostgreSQL 16.15 and

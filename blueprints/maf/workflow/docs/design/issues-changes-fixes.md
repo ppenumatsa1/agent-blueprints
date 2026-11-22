@@ -38,9 +38,12 @@ invalid configuration, affirmative-`True` tool authorization, native workflow
 approval/rejection, restart and crash recovery. Local source and generated
 Compose smoke checks passed UI 200, health 204, protected API 401, CSP,
 configured frontend values, non-root API, and private checkpoint permissions.
-These are local synthetic results; exact-head CI for the reconciled PR remains
-pending. No live model response is claimed. Arbitrary trusted Python callbacks
-are not sandboxed, so absolute extension non-bypass remains unverified.
+These are local synthetic results; exact-head run
+[45030949544](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/45030949544)
+passed all six jobs on implementation commit `8795c46`. This evidence predates
+the current documentation-only update; final-head CI is tracked on PR #37. No
+live model response is claimed. Arbitrary trusted Python callbacks are not
+sandboxed, so absolute extension non-bypass remains unverified.
 Consequential external effects remain blocked by #32; hosted identity,
 checkpoints and recovery (#19/#20/#22) and trusted readiness (#21) remain
 unverified. Do not mark #35 or hosted capabilities complete beyond verified
