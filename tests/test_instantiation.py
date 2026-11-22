@@ -5,7 +5,10 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 from urllib.parse import unquote, urlsplit
+
+import scripts.instantiate_maf as instantiator
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -13,6 +16,49 @@ GENERATOR = ROOT / "scripts" / "instantiate_maf.py"
 
 
 class InstantiationTests(unittest.TestCase):
+    def generate_order_resolution(
+        self, parent: Path
+    ) -> tuple[Path, Path, Path, Path]:
+        contract = parent / "acceptance-contract.json"
+        contract.write_text(
+            '{"id":"order-resolution-spec","version":"0.1.0"}\n',
+            encoding="utf-8",
+        )
+        cases = parent / "golden-cases.json"
+        cases.write_text(
+            '{"scenario_set":"order-resolution-spec/0.1.0","cases":[{"id":"TEST-001"}]}\n',
+            encoding="utf-8",
+        )
+        contract_test = parent / "test_order_resolution_contract.py"
+        contract_test.write_text(
+            (
+                "import unittest\n\n"
+                "class OrderResolutionContractTests(unittest.TestCase):\n"
+                "    def test_isolated_fixture(self):\n"
+                "        self.assertTrue(True)\n"
+            ),
+            encoding="utf-8",
+        )
+        target = parent / "order-resolution"
+        subprocess.run(
+            [
+                sys.executable,
+                str(GENERATOR),
+                str(target),
+                "--profile",
+                "order-resolution",
+                "--order-resolution-contract",
+                str(contract),
+                "--order-resolution-cases",
+                str(cases),
+                "--order-resolution-test",
+                str(contract_test),
+            ],
+            check=True,
+            capture_output=True,
+        )
+        return target, contract, cases, contract_test
+
     def test_external_effect_guidance_does_not_treat_outbox_as_deduplication(self):
         workflow = ROOT / "blueprints" / "maf" / "workflow"
         passages = (
@@ -184,6 +230,165 @@ class InstantiationTests(unittest.TestCase):
                     self.assertIn("Instantiation failed:", result.stderr)
             self.assertEqual(marker.read_text(encoding="utf-8"), "unchanged")
             self.assertFalse((ROOT / "should-not-be-created").exists())
+
+    def test_order_resolution_profile_is_explicit_and_independent(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            target, contract, cases, contract_test = self.generate_order_resolution(
+                Path(temporary)
+            )
+            self.assertEqual(
+                contract.read_bytes(),
+                (
+                    target
+                    / "verification"
+                    / "scenarios"
+                    / "order-resolution"
+                    / "acceptance-contract.json"
+                ).read_bytes(),
+            )
+            self.assertEqual(
+                cases.read_bytes(),
+                (
+                    target
+                    / "verification"
+                    / "scenarios"
+                    / "order-resolution"
+                    / "golden-cases.json"
+                ).read_bytes(),
+            )
+            self.assertEqual(
+                contract_test.read_bytes(),
+                (
+                    target
+                    / "verification"
+                    / "tests"
+                    / "test_order_resolution_contract.py"
+                ).read_bytes(),
+            )
+            for relative in (
+                "backend/app/order_resolution/action.py",
+                "backend/app/order_resolution/application.py",
+                "backend/app/order_resolution/host.py",
+                "backend/app/order_resolution/persistence.py",
+                "backend/app/order_resolution/rules.py",
+                "backend/app/order_resolution/workflow.py",
+                "backend/tests/test_order_resolution.py",
+                "frontend/src/order-resolution.tsx",
+                "frontend/src/test/order-resolution.test.tsx",
+                "docs/order-resolution.md",
+            ):
+                self.assertTrue((target / relative).is_file(), relative)
+            self.assertNotIn(
+                "order_resolution",
+                (target / "backend" / "app" / "workflows" / "workflow.py").read_text(
+                    encoding="utf-8"
+                ),
+            )
+            self.assertFalse(any(path.is_symlink() for path in target.rglob("*")))
+            repository_path = str(ROOT.resolve())
+            for path in target.rglob("*"):
+                if path.is_file():
+                    with self.subTest(path=path.relative_to(target)):
+                        self.assertNotIn(repository_path, path.read_text(encoding="utf-8", errors="ignore"))
+            compose = (target / "compose.yaml").read_text(encoding="utf-8")
+            self.assertIn(
+                "BLUEPRINT_APPLICATION: ${BLUEPRINT_APPLICATION:-app.order_resolution.application:build_application}",
+                compose,
+            )
+            self.assertNotIn(str(ROOT), compose)
+
+            environment = os.environ.copy()
+            environment.pop("PYTHONPATH", None)
+            backend = subprocess.run(
+                [
+                    sys.executable,
+                    "-c",
+                    (
+                        "from app.order_resolution.rules import OrderResolutionRules; "
+                        "print(OrderResolutionRules.__module__)"
+                    ),
+                ],
+                cwd=target / "backend",
+                env=environment,
+                text=True,
+                capture_output=True,
+                check=True,
+            )
+            self.assertEqual(backend.stdout.strip(), "app.order_resolution.rules")
+
+    def test_order_resolution_profile_requires_explicit_cases_until_canonical_fixture_exists(self):
+        scenario_root = ROOT / "scenarios" / "order-resolution"
+        if (
+            (scenario_root / "acceptance-contract.json").is_file()
+            and (scenario_root / "golden-cases.json").is_file()
+        ):
+            self.skipTest("The canonical Order Resolution fixture is available.")
+        with tempfile.TemporaryDirectory() as temporary:
+            target = Path(temporary) / "order-resolution"
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(GENERATOR),
+                    str(target),
+                    "--profile",
+                    "order-resolution",
+                ],
+                text=True,
+                capture_output=True,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("--order-resolution-contract", result.stderr)
+            self.assertFalse(target.exists())
+
+    def test_order_resolution_profile_merges_reserved_backend_and_verification_paths(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            profile = root / "profile"
+            reserved_backend = profile / "backend" / "app" / "order_resolution"
+            reserved_backend.mkdir(parents=True)
+            (reserved_backend / "durability.py").write_text(
+                'SOURCE = "temporary-agent-c"\n', encoding="utf-8"
+            )
+            reserved_verification = profile / "verification" / "evaluations"
+            reserved_verification.mkdir(parents=True)
+            (reserved_verification / "marker.json").write_text(
+                '{"source":"temporary-agent-d"}\n', encoding="utf-8"
+            )
+            contract = root / "acceptance-contract.json"
+            contract.write_text('{"version":"0.1.0"}\n', encoding="utf-8")
+            cases = root / "golden-cases.json"
+            cases.write_text('{"cases":[]}\n', encoding="utf-8")
+            contract_test = root / "test_order_resolution_contract.py"
+            contract_test.write_text(
+                "import unittest\n", encoding="utf-8"
+            )
+            target = root / "generated"
+
+            with patch.object(instantiator, "ORDER_RESOLUTION_PROFILE", profile):
+                instantiator.instantiate(
+                    target,
+                    profile="order-resolution",
+                    order_resolution_contract=contract,
+                    order_resolution_cases=cases,
+                    order_resolution_test=contract_test,
+                )
+
+            self.assertEqual(
+                (
+                    target
+                    / "backend"
+                    / "app"
+                    / "order_resolution"
+                    / "durability.py"
+                ).read_text(encoding="utf-8"),
+                'SOURCE = "temporary-agent-c"\n',
+            )
+            self.assertEqual(
+                (
+                    target / "verification" / "evaluations" / "marker.json"
+                ).read_text(encoding="utf-8"),
+                '{"source":"temporary-agent-d"}\n',
+            )
 
 
 if __name__ == "__main__":
