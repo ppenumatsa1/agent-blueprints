@@ -156,9 +156,10 @@ records this on disposable PostgreSQL 16.15 and 17, including a failed initial
 `createdb` and a successful 72/72 source/generated retry at historical head
 `8b3c357`. CI startup loops and Compose health checks use bounded loopback TCP
 probes; these remain in current `main` at
-`9b6e0194c1b2b005792b68a95e46275e25817a8a`. Earlier exact-main and #37
-implementation checks are historical; the reconciled #37 exact-head run is
-tracked on the PR. This does not establish managed PostgreSQL readiness.
+`9b6e0194c1b2b005792b68a95e46275e25817a8a`. Exact-head run
+[45040560075](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/45040560075)
+passed all six jobs on the reconciled #37 integration commit. This does not
+establish managed PostgreSQL readiness.
 
 The local integration at `af3955a` combined the engineering layers. Source and
 independently generated backends each passed 68 tests on PostgreSQL 16.15 and
