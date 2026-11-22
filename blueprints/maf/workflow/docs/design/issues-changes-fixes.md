@@ -8,6 +8,95 @@ deployment claim. Keep **implemented**, **verified**, **planned**, and
 **unverified** separate. Add entries as work lands; do not rewrite earlier
 entries to hide failed attempts or gaps.
 
+## 2026-11-22 - Issue and fix status
+
+This is a point-in-time review summary, not a claim that the open PRs have
+merged into `main`. The local blueprint and generated copy provide synthetic
+evidence; they do not establish authorized readiness or a cloud deployment.
+All issues in the table remain open. Check the linked PRs and issues for
+subsequent updates and rerun checks after any head or base changes.
+
+### Completed engineering work and evidence
+
+- The local MAF blueprint separates native file checkpoints from PostgreSQL
+  business state and decisions. FastAPI, React, Compose, independent project
+  generation and the copied readiness validator have local synthetic tests,
+  including approval, rejection, restart and two worker-kill recovery windows.
+  Order adjustment is a test fixture, not a customer application.
+- [PR #11](https://github.com/ppenumatsa1/agent-blueprints/pull/11) is the
+  open modularity foundation; its exact-head
+  [run 44954168348](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44954168348)
+  passed five jobs. The open integrated work in
+  [PR #17](https://github.com/ppenumatsa1/agent-blueprints/pull/17) combines
+  reviewed portions of the tooling, telemetry, infrastructure, migration
+  and design workstreams; its exact-head
+  [run 44964201508](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44964201508)
+  passed six jobs. This is not a complete semantic audit of every workstream
+  difference; PRs #12-#16 remain open for review.
+- The PostgreSQL socket-ready/TCP-not-ready race is addressed in #17 by TCP
+  probes in CI and Compose, with regression tests ([#38](https://github.com/ppenumatsa1/agent-blueprints/issues/38)).
+  Earlier fixes also preserve verifier pipeline failures and select native
+  checkpoints by lineage rather than relying on timestamp ties.
+- Draft [PR #36](https://github.com/ppenumatsa1/agent-blueprints/pull/36)
+  demonstrates an opt-in synthetic external-effect boundary; its
+  [run 44967323320](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44967323320)
+  passed six jobs. It does not prove a real downstream service's guarantees.
+  Draft [PR #37](https://github.com/ppenumatsa1/agent-blueprints/pull/37)
+  adds application-owned typed MAF extensions; its
+  [run 44964330392](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44964330392)
+  passed six jobs. Arbitrary Python callbacks are not sandboxed.
+  Draft [PR #39](https://github.com/ppenumatsa1/agent-blueprints/pull/39),
+  stacked on #37, adds synthetic evaluation contracts and rejects unknown
+  configured checks and oversized thresholds, while oversized scores fail
+  closed; its
+  [run 44966632801](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44966632801)
+  passed six jobs. These are separate PR runs, not combined-tree CI.
+- An uncommitted #36 + #39 candidate tree `20ba59d01fff7429550c5034d2d6ec055f5d640f`
+  passed 110 source and 110 generated backend tests and 44 generated
+  verification tests on local PostgreSQL 16.15. Its generated Compose stack
+  also passed local health, unauthenticated API, CSP and checkpoint-permission
+  smoke checks. These are local results for a tree, not a commit, merged PR,
+  fresh-install proof, managed database validation or combined GitHub CI.
+  See [#24 evidence](https://github.com/ppenumatsa1/agent-blueprints/issues/24#issuecomment-7071728692)
+  and [#35 evidence](https://github.com/ppenumatsa1/agent-blueprints/issues/35#issuecomment-7071755307).
+
+### Open issues, fixes and next actions
+
+| Issue | Status, fix or decision | Remaining action |
+| --- | --- | --- |
+| [#18](https://github.com/ppenumatsa1/agent-blueprints/issues/18) | Staged Foundry-first infrastructure and offline checks exist in #17; they are not an end-to-end deployment. | Complete and verify identity, network, service and browser connectivity. |
+| [#19](https://github.com/ppenumatsa1/agent-blueprints/issues/19) | Foundry Responses adapter and managed checkpoints are explicitly deferred to P1-12. | Implement and verify the host-owned storage boundary after caller binding is established. |
+| [#20](https://github.com/ppenumatsa1/agent-blueprints/issues/20) | Local crash recovery is tested; hosted lost-response and continuation semantics remain unknown. | Verify hosted reconciliation, recovery and side-effect ordering; do not blindly retry ambiguous effects. |
+| [#21](https://github.com/ppenumatsa1/agent-blueprints/issues/21) | The independent validator retains failed and unverified outcomes, but synthetic data is not authorized evidence. A read-only check on 2026-11-22 found `main` unprotected with no effective rules. | Independently administer and verify contract approval, evidence provenance, trust, branch protection and bypass controls. |
+| [#22](https://github.com/ppenumatsa1/agent-blueprints/issues/22) | Hosted identity guidance was corrected: opaque application scoping and platform identity headers are not verified authorization or a principal mapping. | Establish authenticated caller-to-session binding and enforce ownership; do not persist bearer credentials. |
+| [#23](https://github.com/ppenumatsa1/agent-blueprints/issues/23) | Locked tooling and mirror-based restores are represented in #17; public-registry TLS failures and a canceled editor trust prompt were recorded. | Verify clean supported-platform installation, macOS and interactive debugging without bypassing user trust decisions. |
+| [#24](https://github.com/ppenumatsa1/agent-blueprints/issues/24) | Versioned migrations and local PostgreSQL 16/17 tests exist; local candidate evidence is linked above. | Test the final integrated revision and managed service, least-privilege principals, backup and restore. |
+| [#25](https://github.com/ppenumatsa1/agent-blueprints/issues/25) | Draft #39 adds application-owned evaluation mapping and failure handling, not actual model or browser evidence. | Run provider-backed and browser-hint evaluations and retain independently trusted evidence. |
+| [#26](https://github.com/ppenumatsa1/agent-blueprints/issues/26) | Manual privacy-conscious telemetry is in #17; native global auto-instrumentation remains disabled after a query-canary leak and duplicate spans. | Verify redaction, propagation and ingestion in the actual hosted environment. |
+| [#27](https://github.com/ppenumatsa1/agent-blueprints/issues/27) | Synthetic API security and UI checks exist. | Verify live Entra/OBO, interactive browser flows and accessibility. |
+| [#28](https://github.com/ppenumatsa1/agent-blueprints/issues/28) | No Azure resources were provisioned; staged infrastructure is not a deployment. | Complete prerequisites and obtain approval of the concrete inventory, cost and deployment plan before provisioning. |
+| [#29](https://github.com/ppenumatsa1/agent-blueprints/issues/29) | A partial synthetic generated-project run recorded approval/recovery observations and an unverified independent report; it excluded a clean install, UI and real evaluation. | Measure a representative complete run on a named revision; do not claim the setup objective from the partial timing. |
+| [#30](https://github.com/ppenumatsa1/agent-blueprints/issues/30) | Temporary generated projects demonstrate isolation; no permanent application repository was created. | Obtain separate authorization before creating a permanent reference repository. |
+| [#31](https://github.com/ppenumatsa1/agent-blueprints/issues/31) | ACA workflow hosting is a deferred alternative, not a verified fallback. | Assess it only after separate authorization. |
+| [#32](https://github.com/ppenumatsa1/agent-blueprints/issues/32) | Draft #36 tests a synthetic downstream; an outbox alone cannot deduplicate an effect after a lost acknowledgment. | Block consequential effects until effect-specific authorization, downstream idempotency and authoritative reconciliation are independently verified; otherwise fail closed and use manual resolution. |
+| [#33](https://github.com/ppenumatsa1/agent-blueprints/issues/33) | Specification Studio implementation and an actual producer are outside this phase. | Validate interoperability when that separate work is authorized and available. |
+| [#34](https://github.com/ppenumatsa1/agent-blueprints/issues/34) | Other framework blueprints and a separate App/API repository are deferred. | Scope and authorize those later efforts separately. |
+| [#35](https://github.com/ppenumatsa1/agent-blueprints/issues/35) | Draft #37 supplies native MAF extension patterns and generated synthetic tests; arbitrary trusted callbacks can bypass conventions. | Review integrations and verify security, approval and recovery boundaries; absolute non-bypass remains unproven. |
+| [#38](https://github.com/ppenumatsa1/agent-blueprints/issues/38) | #17 contains the TCP-readiness correction and regression tests; its CI passed at the cited head. | Review and integrate the fix, then rerun checks against the actual resulting revision. |
+
+### Review sequence
+
+1. Review #11 separately; merge only after explicit approval.
+2. Audit the feature-only incorporation of #12-#16 into #17, retarget #17
+   after #11 is merged, and rerun checks on its actual base and head. Keep
+   #12-#16 open until incorporation and their closure are separately approved.
+3. Review #36, #37 and #39 separately. Their overlapping CI and documentation
+   require reconciliation and fresh checks on the actual resulting tree;
+   green sibling PRs and the uncommitted candidate do not establish combined CI.
+4. Keep hosted identity/recovery, independent trust, real evaluation and
+   consequential external effects blocked or unverified until their stated
+   evidence exists. No merge or Azure provisioning is authorized by this journal.
+
 ## 2026-11-21 - Generated-project design baseline
 
 - **Issue / cause:** Blueprint implementation and operator guides existed,
@@ -195,10 +284,10 @@ entries to hide failed attempts or gaps.
 
 | Item | Status | Evidence needed / next action |
 | --- | --- | --- |
-| Eight design documents and generated inclusion | In progress | Run the focused instantiation tests and verify copied Markdown links. |
-| Canonical imports and legacy-shim removal | Open in foundation workstream | Inspect final diff across imports, tests, Docker, CI, docs, and generator; do not approve while forwarding paths remain. |
-| Locked developer tooling | Open in parallel PR #13 | Reconcile only after review/merge; verify any resulting revision and platform matrix independently. |
-| Current dependent PR CI | Pending on updated revision | Confirm all required checks correspond to the pushed PR head. |
+| Design documentation and generated inclusion | Local evidence exists | Review the updated journal and verify copied documentation and links at the resulting revision. |
+| Foundation and workstream integration | Open in #11 and #17 | Review diffs and feature-only retention; rerun CI whenever head or base changes. |
+| Locked developer tooling | In #17 and open PR #13 | Review reconciliation and verify the final revision and platform matrix independently. |
+| Dependent PR CI | Separate exact-head runs passed | Reconcile #36/#37/#39 and verify the actual combined tree and CI before integration. |
 | Foundry host caller binding and lost-response recovery | Blocked | Establish supported identity and reconciliation guarantees before implementing a hosted bridge. |
 | Live Entra/OBO, cloud telemetry, Azure deployment | Unverified | Separate scoped implementation, authorization where required, and live evidence. |
 

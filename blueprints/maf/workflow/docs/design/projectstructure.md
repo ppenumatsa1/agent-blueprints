@@ -18,9 +18,20 @@ maf-workflow/
 │   ├── examples/
 │   │   └── synthetic_application.py
 │   ├── app/
-│   │   ├── api.py
+│   │   ├── api/
+│   │   │   ├── app.py
+│   │   │   ├── dependencies.py
+│   │   │   ├── errors.py
+│   │   │   ├── middleware.py
+│   │   │   ├── schemas.py
+│   │   │   └── routes/
+│   │   │       ├── cases.py
+│   │   │       └── health.py
 │   │   ├── application.py
+│   │   ├── composition.py
 │   │   ├── config.py
+│   │   ├── lifecycle.py
+│   │   ├── main.py
 │   │   ├── domain/
 │   │   ├── usecases/
 │   │   ├── workflows/
@@ -64,8 +75,16 @@ occurs in the generated directory.
 
 | Path | Responsibility | Extension rule |
 | --- | --- | --- |
-| `backend/app/api.py` | HTTP routes, request models, auth dependency, safe API errors. | Add routes only with explicit authentication, authorization, validation, and failure tests. |
+| `backend/app/main.py` | Minimal process entrypoint that loads settings and the selected application before calling the composition root. | Keep runtime selection explicit; never silently replace a failed integration with synthetic behavior. |
+| `backend/app/api/app.py` | Construct the FastAPI application, configure bounded CORS, install middleware and exception handlers, and include routers. | Keep transport assembly separate from business rules and workflow construction. |
+| `backend/app/api/routes/` | Health and protected case endpoints. | Add routes only with explicit authentication, authorization, validation, and failure tests. |
+| `backend/app/api/schemas.py` | Typed HTTP request and response models. | Keep transport models bounded and validate untrusted input before use. |
+| `backend/app/api/dependencies.py` | Resolve authenticated request identity and the composed workflow service. | Do not treat caller-supplied identity or data as authorization. |
+| `backend/app/api/middleware.py` | Add request correlation and privacy-safe unexpected-error handling. | Log error type and correlation only; do not disclose tokens or payloads. |
+| `backend/app/api/errors.py` | Map domain and validation failures to stable, safe HTTP responses. | Preserve explicit failure classes; do not return success-shaped fallbacks. |
 | `backend/app/application.py` | Load `module:function` factory and compose application components. | Supply app-owned rules, policy, action, setup and optional native workflow factory. |
+| `backend/app/composition.py` | Compose the repository, identity provider, native local workflow host, use-case service, lifespan and API. | Keep this as the application composition root; do not add a general-purpose orchestration layer. |
+| `backend/app/lifecycle.py` | Initialize storage and application state, then reconcile recoverable cases through the native workflow host at startup. | Preserve explicit recovery failures and idempotent restart semantics. |
 | `backend/app/domain/` | Generic principals, cases, errors, state/action/workflow protocols and policy. | Keep domain-agnostic; do not move scenario business rules into the generic layer. |
 | `backend/app/usecases/` | Coordinate authorization-approved request, decision, and workflow operations. | Preserve decision-before-resume and idempotent semantics. |
 | `backend/app/workflows/` | Native MAF executor/workflow and local host/checkpoint recovery. | Preserve pending request identity and matching terminal outcome; host adapters own their provider. |

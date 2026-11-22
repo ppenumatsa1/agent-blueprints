@@ -86,8 +86,11 @@ The browser journey is implemented by
 [`authenticated-app.tsx`](../../frontend/src/authenticated-app.tsx),
 [`api.ts`](../../frontend/src/api.ts), and
 [`workspace.tsx`](../../frontend/src/workspace.tsx). API policy and transitions
-are in `backend/app/api.py`, `backend/app/domain/policy.py`,
-`backend/app/usecases/service.py`, and `backend/app/infrastructure/store.py`.
+are in `backend/app/api/routes/cases.py`,
+`backend/app/api/dependencies.py`, `backend/app/domain/policy.py`,
+`backend/app/usecases/service.py`, and `backend/app/infrastructure/store.py`;
+`backend/app/composition.py` and `backend/app/lifecycle.py` assemble the
+service and startup recovery without changing workflow semantics.
 Tests under `backend/tests/test_security.py` and `backend/tests/test_core.py`
 cover automated authorization and recovery. Live Entra login and role
 assignment remain unverified.

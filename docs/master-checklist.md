@@ -17,6 +17,9 @@ The foundation and the integrated review do not establish blueprint
 completion or deployment readiness. The issues below retain their own
 acceptance criteria, dependencies and required independent evidence.
 Deferred work remains deferred; critical security checks are not waived.
+The [issue and fix journal](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-22---issue-and-fix-status)
+records the current review snapshot, scoped evidence, and next actions. Its
+open PR references do not imply those changes have merged into this branch.
 
 | Area | Open tracking issues | Next action |
 | --- | --- | --- |
@@ -24,6 +27,7 @@ Deferred work remains deferred; critical security checks are not waived.
 | Independent readiness | [Trust and contract approval #21](https://github.com/ppenumatsa1/agent-blueprints/issues/21), [evaluations and browser hints #25](https://github.com/ppenumatsa1/agent-blueprints/issues/25) | Obtain authorized trust and produce actual evidence; retain unverified outcomes. |
 | Azure and operations | [Infrastructure #18](https://github.com/ppenumatsa1/agent-blueprints/issues/18), [managed PostgreSQL #24](https://github.com/ppenumatsa1/agent-blueprints/issues/24), [telemetry #26](https://github.com/ppenumatsa1/agent-blueprints/issues/26), [live identity and accessibility #27](https://github.com/ppenumatsa1/agent-blueprints/issues/27), [deployment #28](https://github.com/ppenumatsa1/agent-blueprints/issues/28) | Close offline prerequisites, validate access and obtain approval of the concrete deployment plan before live validation. |
 | Developer experience and demonstration | [Cross-platform tooling #23](https://github.com/ppenumatsa1/agent-blueprints/issues/23), [measured local demo #29](https://github.com/ppenumatsa1/agent-blueprints/issues/29) | Verify supported environments and record a representative end-to-end run. |
+| Local extensions and startup readiness | [MAF extension patterns #35](https://github.com/ppenumatsa1/agent-blueprints/issues/35), [PostgreSQL readiness race #38](https://github.com/ppenumatsa1/agent-blueprints/issues/38) | Review the draft extension and #17 TCP-probe fix; verify the final integrated revision. |
 | Separately authorized or later work | [Reference repository #30](https://github.com/ppenumatsa1/agent-blueprints/issues/30), [ACA runtime #31](https://github.com/ppenumatsa1/agent-blueprints/issues/31), [Specification Studio #33](https://github.com/ppenumatsa1/agent-blueprints/issues/33), [later blueprints #34](https://github.com/ppenumatsa1/agent-blueprints/issues/34) | Preserve the scope boundaries and obtain separate authorization where required. |
 
 | Requirement or capability | Phase | Status | Acceptance criteria | Evidence or PR | Next action |

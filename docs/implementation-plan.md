@@ -52,6 +52,8 @@ remaining acceptance criteria, dependencies and evidence in these issues:
   [#28](https://github.com/ppenumatsa1/agent-blueprints/issues/28).
 - Developer experience and demonstration: [#23](https://github.com/ppenumatsa1/agent-blueprints/issues/23)
   and [#29](https://github.com/ppenumatsa1/agent-blueprints/issues/29).
+- Reusable MAF extensions and PostgreSQL readiness: [#35](https://github.com/ppenumatsa1/agent-blueprints/issues/35)
+  and [#38](https://github.com/ppenumatsa1/agent-blueprints/issues/38).
 - Separately authorized or future work: [#30](https://github.com/ppenumatsa1/agent-blueprints/issues/30),
   [#31](https://github.com/ppenumatsa1/agent-blueprints/issues/31),
   [#33](https://github.com/ppenumatsa1/agent-blueprints/issues/33), and
@@ -63,6 +65,9 @@ subscription access, and approval of the concrete deployment plan; its live
 checks provide evidence to close the related hosted and operational issues.
 Do not merge overlapping workstream histories blindly or treat a green
 engineering check as release authorization.
+The dated [issue and fix journal](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-22---issue-and-fix-status)
+summarizes open PR evidence, unresolved issues and the review sequence. Its
+draft work is not represented as merged functionality on this branch.
 
 ### Execution sequence and work packages
 

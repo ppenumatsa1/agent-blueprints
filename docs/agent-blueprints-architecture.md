@@ -20,6 +20,8 @@ and [deployment integration #18](https://github.com/ppenumatsa1/agent-blueprints
 See the [master checklist](master-checklist.md#reconciled-engineering-backlog)
 for the complete issue-linked backlog, including live identity, telemetry,
 database operations, evaluations, and separately authorized alternatives.
+The dated [issue and fix journal](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-22---issue-and-fix-status)
+distinguishes local and draft-PR evidence from merged or hosted capabilities.
 Do not conflate an approved engineering merge with verified hosted execution,
 human approval, or production readiness.
 
