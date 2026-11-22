@@ -104,7 +104,11 @@ source/generated tests exercise these boundaries. No actual model or browser
 evidence, independent trust/provenance, or hosted validation is claimed.
 The stacked #37 base `7171aa801a8ec73788103c802704f6f48d249f16` passed all six
 exact-head CI jobs in run [44964330392](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44964330392);
-the feature head must still pass its own exact-head CI.
+the evaluation code/test head `094d7df330874b0407defe8742b0e0a7cc6438af`
+passed all six feature-head CI jobs in run
+[44966357797](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44966357797).
+This only verifies the local extension contract and does not establish real
+evaluation, browser evidence, trust, or hosted readiness.
 
 ### Execution sequence and work packages
 
