@@ -6,6 +6,7 @@ param(
     [string]$ValuesFile,
     [string]$AdditionalPrincipalName,
     [string]$AdditionalPrincipalObjectId,
+    [string[]]$HostedRuntimeOutboundIp = @(),
     [string]$OperatorIp
 )
 
@@ -38,6 +39,9 @@ if (($AdditionalPrincipalName -and -not $AdditionalPrincipalObjectId) -or
     ($AdditionalPrincipalObjectId -and -not $AdditionalPrincipalName)) {
     throw 'AdditionalPrincipalName and AdditionalPrincipalObjectId must be supplied together.'
 }
+if ($AdditionalPrincipalName -and $HostedRuntimeOutboundIp.Count -eq 0) {
+    throw 'Hosted runtime outbound IPs are required for its PostgreSQL principal.'
+}
 $additionalPrincipalGuid = [guid]::Empty
 if (
     $AdditionalPrincipalName -and
@@ -59,15 +63,23 @@ if ($LASTEXITCODE -ne 0 -or -not $outbound) {
     throw 'Container Apps outbound IP addresses were not returned.'
 }
 
-$addresses = @($outbound -split '[,\s]+' | Where-Object { $_ } | Sort-Object -Unique)
-$desiredRuleNames = @()
-for ($index = 0; $index -lt $addresses.Count; $index++) {
-    $address = $addresses[$index]
-    if ($address -notmatch '^\d{1,3}(\.\d{1,3}){3}$') {
-        throw "Unexpected Container Apps outbound address: $address"
-    }
-    $ruleName = "container-apps-{0:D2}" -f ($index + 1)
-    $desiredRuleNames += $ruleName
+$containerAppAddresses = @(
+    $outbound -split '[,\s]+' | Where-Object { $_ } | Sort-Object -Unique
+)
+$hostedAddresses = @($HostedRuntimeOutboundIp | Sort-Object -Unique)
+$desiredRules = [ordered]@{}
+for ($index = 0; $index -lt $containerAppAddresses.Count; $index++) {
+    $address = $containerAppAddresses[$index]
+    Assert-PublicIpv4 -Address $address
+    $desiredRules["container-apps-{0:D2}" -f ($index + 1)] = $address
+}
+for ($index = 0; $index -lt $hostedAddresses.Count; $index++) {
+    $address = $hostedAddresses[$index]
+    Assert-PublicIpv4 -Address $address
+    $desiredRules["hosted-agent-{0:D2}" -f ($index + 1)] = $address
+}
+foreach ($ruleName in $desiredRules.Keys) {
+    $address = $desiredRules[$ruleName]
     az postgres flexible-server firewall-rule create `
         --subscription $subscriptionId `
         --resource-group $resourceGroup `
@@ -84,14 +96,21 @@ $managedRules = @(
         --subscription $subscriptionId `
         --resource-group $resourceGroup `
         --name $postgresName `
-        --query "[?starts_with(name, 'container-apps-')].name" `
+        --query "[].name" `
         --output tsv
 )
 if ($LASTEXITCODE -ne 0) {
     throw 'Unable to list managed PostgreSQL firewall rules.'
 }
 foreach ($ruleName in $managedRules) {
-    if ($ruleName -and $ruleName -notin $desiredRuleNames) {
+    if (
+        $ruleName -and
+        (
+            $ruleName.StartsWith('container-apps-') -or
+            $ruleName.StartsWith('hosted-agent-')
+        ) -and
+        -not $desiredRules.Contains($ruleName)
+    ) {
         az postgres flexible-server firewall-rule delete `
             --subscription $subscriptionId `
             --resource-group $resourceGroup `
@@ -109,9 +128,7 @@ if (-not $OperatorIp) {
     throw 'OperatorIp is required to create the PostgreSQL managed-identity principal.'
 }
 
-if (-not (Get-Command psql -ErrorAction SilentlyContinue)) {
-    throw 'psql is required to create the managed-identity database principal.'
-}
+Assert-PostgresClientSupportsSystemRoot
 
 $token = az account get-access-token `
     --subscription $subscriptionId `
@@ -162,7 +179,7 @@ $additionalPrincipalSql
 END
 `$body`$;
 "@
-    psql "host=$postgresHost dbname=postgres user=$adminName sslmode=verify-full" `
+    psql "host=$postgresHost dbname=postgres user=$adminName sslmode=verify-full sslrootcert=system" `
         --set ON_ERROR_STOP=1 `
         --command $sql
     if ($LASTEXITCODE -ne 0) { throw 'Managed-identity PostgreSQL principal creation failed.' }

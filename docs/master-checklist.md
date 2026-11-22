@@ -82,7 +82,7 @@ model quota/capacity and dependent-service quota. Azure CLI mode validates the
 authorized active context and reports the unrelated azd mismatch without
 blocking; explicit azd mode still fails closed.
 
-Acceptance evidence: Bicep build/lint and 11 infrastructure contracts pass; the
+Acceptance evidence: Bicep build/lint and 12 infrastructure contracts pass; the
 root suite passes 68 tests with two expected adapter-selection skips; all new
 PowerShell/Python files parse. No Azure resource, RBAC assignment, database
 principal, migration, deployment, rollback, or teardown was executed.
@@ -90,11 +90,15 @@ Deployment generates an independent Order Resolution project, requires the
 Agent A/C hosted and managed-identity interfaces, patches only the generated
 nginx upstream to the exact API FQDN, and prohibits the source blueprint,
 synthetic application selector, local workflow host, and file checkpoints.
+The hosted version identity is granted/migrated while pending before the same
+journaled version is required active. Deployment also requires a reviewed
+bounded hosted-runtime PostgreSQL egress set and never opens the broad
+Azure-services firewall exception.
 
 **Next action:** independently validate the exact PR revision, supply the
 deployment-specific hosted endpoint/agent scope/administrator/journal values,
-review Azure CLI provider what-if, and approve resource inventory, cost,
-identity, and public-network controls before deployment.
+bounded hosted egress, review Azure CLI provider what-if, and approve resource
+inventory, cost, identity, and public-network controls before deployment.
 
 ## Reconciled engineering backlog
 

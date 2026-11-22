@@ -65,7 +65,7 @@ must plan a supported replacement before production use approaches that date.
 | Resource boundary | One tagged resource group | Deterministic names; environment and owner tags |
 | Foundry | AI Services account and project | Managed identity, local auth disabled, public access enabled |
 | Model | One explicit account deployment | Reviewed version/SKU/capacity; no embedding deployment |
-| Hosted runtime | Generated source published through Agent A's public SDK fallback | No hosted-agent ACR/container mode; ambiguous creates are never replayed |
+| Hosted runtime | Generated source published through Agent A's public SDK fallback | One journaled create; identity grants occur while pending; active polling never replays create |
 | API/frontend | Container Apps environment and two apps | TLS-only ingress, API Entra auth, single revision, bounded scale |
 | Registry | Basic ACR for API/frontend images only | Admin and anonymous access disabled; managed-identity pull |
 | Database | PostgreSQL Flexible Server and application database | Entra-only auth, TLS, no password parameter, bounded storage/backup |
@@ -89,8 +89,8 @@ behavior where no suitable stable AVM contract exists.
   account scope.
 - PostgreSQL database-role creation is a separate, explicit configuration step;
   Azure RBAC does not create database principals.
-- Hosted-agent principal assignments are applied only after an immutable hosted
-  version exposes its principal ID.
+- Hosted-agent principal assignments are applied after the journaled version
+  exposes its authoritative principal ID and before active readiness polling.
 
 ## Operations
 
@@ -102,10 +102,12 @@ Scripts under `scripts/azure/` provide:
 3. independent Order Resolution generation plus guarded Azure CLI what-if and
    deployment orchestration;
 4. PostgreSQL firewall and managed-identity database-principal configuration;
-5. schema migration;
-6. exact revision and health verification;
-7. scoped Container Apps rollback; and
-8. destructive teardown requiring explicit confirmation.
+5. staged hosted publication: capture pending identity, grant/migrate, then
+   poll the same journaled version active without another create;
+6. schema migration;
+7. exact revision and health verification;
+8. scoped Container Apps rollback; and
+9. destructive teardown requiring explicit confirmation.
 
 Azure CLI mode validates the active Azure CLI subscription, tenant, and user
 without changing them. An azd mismatch is reported but does not block this
@@ -151,7 +153,7 @@ backend/frontend, and `WORKFLOW_HOST=local` are prohibited.
 
 | Command or check | Result |
 | --- | --- |
-| `pwsh ./scripts/azure/validate.ps1` | Bicep build/lint succeeded; 11 infrastructure contracts passed |
+| `pwsh ./scripts/azure/validate.ps1` | Bicep build/lint succeeded; 12 infrastructure contracts passed |
 | Isolated `python -m unittest discover -s tests -v` with `requirements-dev.txt` | 68 passed; 2 expected adapter-selection skips |
 | PowerShell parser over `scripts/azure/*.ps1` | Passed |
 | `python -m compileall -q ./scripts/azure ./infra/tests` | Passed |
@@ -182,8 +184,18 @@ administrator, and output path are mandatory explicit inputs.
 
 The publisher contract requires `agent_version`, `agent_version_id`,
 `agent_guid`, `identity_principal_id`, `identity_client_id`, and an `active`
-`provisioning_status`; the data-plane version ID is not represented as an ARM
-resource ID.
+`provisioning_status` in the second phase. The first phase may return
+`creating` after the same fields are authoritative. PostgreSQL access and
+migrations are applied between those calls; `--require-active` must reuse the
+same operation/journal and perform no create. The data-plane version ID is not
+represented as an ARM resource ID.
+
+Deployment also requires a reviewed bounded public egress IPv4 set for the
+hosted runtime. If the platform cannot expose one without unsupported private
+networking/NAT, deployment remains blocked; no `0.0.0.0` Azure-services rule or
+invented address is allowed. All PostgreSQL clients use `verify-full` with
+`sslrootcert=system`, and generated API image builds fail if the system CA
+bundle is absent.
 
 The generated application interface was reviewed against Agent C draft PR #48
 head `b4c7ed825833c20fa6549aa5a8e206cfbe85a77d` (implementation

@@ -101,7 +101,7 @@ function Assert-PublicIpv4 {
         -not [System.Net.IPAddress]::TryParse($Address, [ref]$parsed) -or
         $parsed.AddressFamily -ne [System.Net.Sockets.AddressFamily]::InterNetwork
     ) {
-        throw 'OperatorIp must be one public IPv4 address.'
+        throw 'Address must be one public IPv4 address.'
     }
     $bytes = $parsed.GetAddressBytes()
     $isPrivateOrReserved = (
@@ -115,7 +115,21 @@ function Assert-PublicIpv4 {
         $bytes[0] -ge 224
     )
     if ($isPrivateOrReserved) {
-        throw 'OperatorIp must be one public IPv4 address.'
+        throw 'Address must be one public IPv4 address.'
+    }
+}
+
+function Assert-PostgresClientSupportsSystemRoot {
+    if (-not (Get-Command psql -ErrorAction SilentlyContinue)) {
+        throw 'PostgreSQL client 17 or later is required.'
+    }
+    $version = psql --version
+    if (
+        $LASTEXITCODE -ne 0 -or
+        $version -notmatch 'PostgreSQL\)\s+(\d+)' -or
+        [int]$Matches[1] -lt 17
+    ) {
+        throw 'PostgreSQL client 17 or later is required for sslrootcert=system.'
     }
 }
 
