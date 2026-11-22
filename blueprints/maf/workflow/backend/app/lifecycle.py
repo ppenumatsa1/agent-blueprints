@@ -19,13 +19,15 @@ def create_lifespan(
     telemetry: Telemetry | None = None,
     *,
     close_store: bool = True,
+    recover_workflows: bool = True,
 ) -> Callable[[FastAPI], AbstractAsyncContextManager[None]]:
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         try:
             store.initialize()
             components.initialize(store)
-            for case_id, status in store.recoverable():
+            recoverable = store.recoverable() if recover_workflows else ()
+            for case_id, status in recoverable:
                 try:
                     if status == "created":
                         await host.start(case_id)

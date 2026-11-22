@@ -9,7 +9,7 @@ grant roles, deploy a hosted agent, or establish live readiness.
 | Identity | Credential boundary | Authorized purpose | Validation and binding |
 | --- | --- | --- | --- |
 | Authenticated end user | Delegated Entra v2 bearer token presented only to FastAPI | Submit, read, or decide a case | Validate RS256 signature, tenant, v2 issuer, API audience, lifetime, `tid`, UUID `oid`, non-empty `sub`, delegated scopes, and string roles. Then enforce case tenant, owner/reviewer assignment, `workflow.read`/`write`/`approve`, and `Workflow.Approver`. |
-| API managed identity | `DefaultAzureCredential` constrained to the configured API UAMI client ID | Call the hosted workflow and acquire the Azure PostgreSQL token | It is the only runtime PostgreSQL principal. It requests only the Foundry caller or PostgreSQL scope, never substitutes for end-user authorization, and never forwards the user bearer token. |
+| API managed identity | Explicit `ManagedIdentityCredential` for Foundry calls and the configured API UAMI for PostgreSQL token acquisition | Call the hosted workflow and acquire the Azure PostgreSQL token | It is the only runtime PostgreSQL principal. It requests only the Foundry caller or PostgreSQL scope, never substitutes for end-user authorization, and never forwards the user bearer token. |
 | Hosted execution identity | Agent A-owned hosted runtime identity | Execute the native workflow and call the protected FastAPI hosted-state API | FastAPI validates an app-only token for the API audience, exact hosted service-principal object ID, and the fixed `Hosted.Workflow.Invoke` app role. The token must not contain delegated `scp`. The hosted runtime receives no PostgreSQL URL, TLS setting, password, or database role. |
 | Synthetic downstream tool identity | `order-resolution-synthetic-tool-v1`, with proposal destination identity | Apply and reconcile PostgreSQL-only synthetic effects | Bind case, proposal version, action, destination, effect key, request digest, and body. It receives no user token, API managed-identity token, or hosted execution credential. |
 
@@ -22,12 +22,13 @@ decisions fail without applying an effect.
 
 ## Agent A compatibility ports
 
-The FastAPI composition root accepts an integrated `WorkflowHost` adapter and
-has no default hosted HTTP transport. Missing Agent A integration fails
-closed. The aligned Agent A adapter uses the Foundry Responses contract
+The generated FastAPI backend imports the API-only Agent A
+`order_resolution_hosted.bridge` and `client` modules copied into that backend.
+It does not import the sibling hosted-agent runtime or hosting SDK. Missing
+bridge packaging fails closed. The aligned adapter uses the Foundry Responses contract
 directly: create a conversation as a separate durable operation,
 submit the exact `{"case_id": "<uuid>"}` start input with explicit
-conversation and agent session IDs, and submit resume input as structured
+conversation and no caller-selected agent session ID, and submit resume input as structured
 `function_call_output`. Both start and resume set `store=true` and
 `background=true`; resume uses the fixed `foundry-responses` channel. The API
 UAMI requests `https://ai.azure.com/.default` and requires `Foundry Agent
@@ -35,6 +36,12 @@ Consumer` on the specific hosted agent. No user bearer token is forwarded.
 
 Workstream C supplies two narrow integration adapters:
 
+- `PostgresHostedAuthorityBindings` accepts only an already authenticated
+  application `Principal`. Start persists the server-selected
+  case/conversation/channel binding before Responses dispatch. Resume loads
+  that exact conversation binding, revalidates the reviewer, proposal, hashed expiring
+  handle, channel, and command, then atomically persists decision intent before
+  `function_call_output` dispatch. It does not record the business decision.
 - `PostgresOperationJournal` is instantiated inside the API process beside
   Agent A's `ResponsesClient`. It converts PostgreSQL rows to Agent A's exact
   `OperationRecord`, `OperationStatus`, and
@@ -47,8 +54,9 @@ Workstream C supplies two narrow integration adapters:
 - `OrderResolutionStore.prepare_hosted_approval` persists a deterministic,
   opaque hosted request ID and hashed expiring decision binding while leaving
   `checkpoint_id` null.
-- `OrderResolutionStore.claim_hosted_decision` atomically records one
-  structured decision without requiring a local checkpoint.
+- `OrderResolutionStore.claim_hosted_decision` accepts only a callback that
+  exactly matches the pre-established decision intent and atomically records
+  one structured decision without requiring a local checkpoint.
 - `OrderResolutionStore.finish_hosted` marks only a matching automatic,
   approved, or rejected business outcome complete while leaving
   `terminal_checkpoint_id` null.
@@ -80,29 +88,42 @@ All request bodies reject unknown fields. The common binding is:
 
 ```json
 {
-  "caller_id": "opaque Foundry caller",
-  "session_id": "opaque Foundry session",
+  "platform_user_id": "opaque Foundry workload user",
+  "platform_session_id": "opaque Foundry session",
+  "platform_call_id": "opaque per-invocation call",
   "conversation_id": "opaque Foundry conversation",
   "channel": "foundry-responses"
 }
 ```
 
-The caller/session/conversation values are correlation, not authorization
-claims. Start binds them to the authoritative case owner. Resume may replace
-the opaque caller with the authoritative reviewer only when the session,
-conversation, channel, pending approval, reviewer assignment, scopes, and role
-match. Cross-session, cross-conversation, stale, and conflicting requests fail.
+The platform user/session/call values are correlation, not authorization
+claims. They may change between invocations and never map to the human
+principal. These service-MI routes are verification-only and cannot create an
+owner/reviewer `Principal`, grant scopes or roles, or infer authority from case
+fields. An authenticated human API start command creates the Foundry
+conversation and prebinds the case, server-selected conversation, and channel
+to the validated owner
+before Responses dispatch. An authenticated human API resume command resolves
+that exact binding, validates reviewer authority and decision identity, and
+persists intent before `function_call_output`. Missing bindings return `404`;
+mismatched conversation, channel, or principal kind returns `403`. Every
+binding lookup reauthorizes current PostgreSQL state; verification results are
+not cached by an idempotency record, so revoked or changed authority fails
+closed.
 
-State-changing requests require a bounded `Idempotency-Key` beginning with
+State-changing requests other than the verification-only binding lookups
+require a bounded `Idempotency-Key` beginning with
 `case:<case-uuid>:`. FastAPI hashes the operation label and canonical JSON
 body, persists that digest in PostgreSQL, rejects key reuse with different
 content, and safely replays matching business mutations through the existing
-idempotent stores and effect ledger.
+idempotent stores and effect ledger. The per-invocation `platform_call_id` is
+excluded from this logical digest; authoritative business fields,
+conversation/channel, and platform user/session correlation remain bound.
 
 | Route | Request additions | Response |
 | --- | --- | --- |
-| `POST /cases/{case_id}/bindings/start` | common binding | authoritative owner `PrincipalOutput` |
-| `POST /cases/{case_id}/bindings/resume` | common binding | authoritative reviewer `PrincipalOutput` |
+| `POST /cases/{case_id}/bindings/start` | common binding | previously bound owner `PrincipalOutput`; never creates authority |
+| `POST /cases/{case_id}/bindings/resume` | common binding | previously bound reviewer `PrincipalOutput`; never creates authority |
 | `POST /cases/{case_id}/read` | common binding plus `principal_kind: "owner" \| "reviewer"` | case fields excluding local checkpoint data |
 | `POST /cases/{case_id}/proposal/read` | common binding plus `principal_kind` | current `Proposal` |
 | `POST /cases/{case_id}/approvals/prepare` | common binding plus `request_id` | prepared `Proposal` |
@@ -148,7 +169,7 @@ schema checks during composition. Credential and token acquisition occurs only
 when the API opens its first connection. The hosted runtime has no database
 factory or database configuration.
 
-Migrations remain explicit. API startup validates the exact migration head
+Migrations remain explicit, including the hosted decision-intent table. API startup validates the exact migration head
 without DDL, then application initialization validates profile tables.
 Recovery uses PostgreSQL advisory locks and compare-and-set state transitions.
 RequestStore, proposal, decision, EffectLedger, action projection, and
@@ -156,6 +177,10 @@ destination binding remain atomic. Unknown synthetic acknowledgments require
 authoritative observation; they are never silently retried. Verified effects
 and action-ledger claims prevent duplicates across concurrent requests,
 approval races, worker failure, and restart.
+Hosted startup does not redispatch recoverable work without an authenticated
+human command. Durable operation claims and decision intent remain available
+for an authorized retry and callback reconciliation; there is no local or
+synthetic fallback.
 
 ## OBO decision
 
@@ -178,8 +203,8 @@ for:
 - `WORKFLOW_HOST=hosted`, `HOSTED_WORKFLOW_ENDPOINT`,
   `HOSTED_CONVERSATION_ENDPOINT`,
   `HOSTED_WORKFLOW_SCOPE=https://ai.azure.com/.default`,
-  `API_MANAGED_IDENTITY_CLIENT_ID`, the API UAMI object/caller identity exposed
-  by Foundry, the specific hosted-agent resource ID, Responses/conversation
+  `API_MANAGED_IDENTITY_CLIENT_ID`, the API UAMI object identity, the specific
+  hosted-agent resource ID, Responses/conversation
   endpoints, Foundry project endpoint, model deployment, and
   `Foundry Agent Consumer` assignment.
 - `HOSTED_SERVICE_PRINCIPAL_ID` set to the hosted runtime managed-identity
@@ -211,7 +236,11 @@ C's `PostgresOperationJournal`: service-token validation, start/resume
 binding, native `/conversations?api-version=v1`, native
 `/responses?api-version=v1`, structured `function_call_output`, exact Agent A
 journal types, and duplicate/restarted acknowledged operations without a
-second POST all pass with one decision and one effect. It also covers all ORS-001..009 scenarios,
+second POST all pass with one decision and one effect. Repeated verification
+with changed platform call IDs reauthorizes current binding state; revoked
+owner authority and changed decision intent fail. Business replay with a
+changed platform call ID returns the authoritative existing outcome after
+restart, while a changed decision command conflicts. It also covers all ORS-001..009 scenarios,
 frontend tests/build, and generated-project independence.
 
 Live-only checks remain unverified: API UAMI token issuance, `Foundry Agent

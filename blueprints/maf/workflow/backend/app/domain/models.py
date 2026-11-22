@@ -84,6 +84,11 @@ class StateRepository(Protocol):
 
 
 class WorkflowHost(Protocol):
-    async def start(self, case_id: UUID) -> None: ...
+    async def start(self, case_id: UUID, actor: Principal | None = None) -> None: ...
 
-    async def resume(self, case_id: UUID) -> None: ...
+    async def resume(
+        self,
+        case_id: UUID,
+        actor: Principal | None = None,
+        decision_command: object | None = None,
+    ) -> None: ...

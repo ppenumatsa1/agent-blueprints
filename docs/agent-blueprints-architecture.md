@@ -43,14 +43,15 @@ order-adjustment remains an independent legacy fixture.
 The cloud application architecture keeps framework and identity concerns at
 narrow composition boundaries. `WorkflowHost` remains the use-case port.
 Local mode selects the existing MAF/FileCheckpointStorage host. Hosted mode
-requires an integrated Agent A native Responses adapter implementing that
-port; without it the API fails closed. No generic `/runs` transport or
+loads Agent A's API-only bridge/client copied into the generated backend; the
+API does not import the sibling hosted runtime or hosting SDK. Without that
+backend-native adapter the API fails closed. No generic `/runs` transport or
 second hosted orchestration path is supplied. Foundry SDK types do not enter
 API, policy, service, or persistence modules.
 
 FastAPI validates and authorizes the end user before hosted dispatch.
-`DefaultAzureCredential` is created on demand only in infrastructure and is
-constrained to the configured API UAMI. That identity calls Agent A and is the
+Foundry calls use an explicit `ManagedIdentityCredential` for the configured
+API UAMI; PostgreSQL token acquisition remains constrained to that UAMI. That identity calls Agent A and is the
 sole runtime principal allowed to acquire an Azure PostgreSQL token, but it
 cannot authorize a user action. Agent A's hosted execution identity remains
 separate, owns hosted checkpoint/session state, and calls only the protected
@@ -67,9 +68,18 @@ projects the idempotent business outcome, preserving the action ledger and
 proposal/action/destination binding. See the
 [security and configuration contract](azure-foundry/application-security.md).
 Hosted approvals use a separate business projection: an opaque request ID,
-caller/session/conversation binding, and decision channel are durable, but
+case/conversation binding and decision channel are durable, but
 local `checkpoint_id` and `terminal_checkpoint_id` remain null because Foundry
 owns native checkpoint/session state.
+The binding is established only by an authenticated human API command after
+the server selects the conversation. Service-MI binding routes verify that
+existing owner/reviewer authority and cannot manufacture it. Resume persists
+a hashed, expiring, proposal-bound human decision intent before dispatch; only
+an exactly matching hosted callback records the business decision.
+Hosted platform user, session, and call values remain opaque workload
+correlation. They never identify the human principal; changing a platform call
+ID does not change or conflict with an otherwise identical durable business
+operation.
 The internal base `/api/internal/hosted/v1` exposes only case-bound
 start/resume, read/proposal, approval/decision, effect-projection, and
 completion operations. App-only tenant/issuer/audience/principal/role checks,

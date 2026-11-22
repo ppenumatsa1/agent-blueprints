@@ -6,7 +6,7 @@ from typing import Any
 from uuid import UUID
 
 from app.domain.errors import AccessDenied, Conflict, InvalidInput
-from app.domain.models import Case, Principal
+from app.domain.models import AccessPolicy, BusinessRules, Case, Principal, WorkflowHost
 from app.order_resolution.durability import (
     Actor,
     AuthorizationDenied,
@@ -23,6 +23,18 @@ class OrderResolutionService(WorkflowService):
     """Bind decisions and effects to the current durable proposal."""
 
     store: OrderResolutionStore
+
+    def __init__(
+        self,
+        store: OrderResolutionStore,
+        host: WorkflowHost,
+        rules: BusinessRules,
+        policy: AccessPolicy,
+        *,
+        hosted_mode: bool = False,
+    ) -> None:
+        super().__init__(store, host, rules, policy)
+        self.hosted_mode = hosted_mode
 
     async def submit(
         self,
@@ -56,7 +68,7 @@ class OrderResolutionService(WorkflowService):
             return self.store.get(case.id)
         self.store.persist_proposal(case.id)
         try:
-            await self.host.start(case.id)
+            await self.host.start(case.id, actor)
         except Conflict:
             pass
         return self.store.get(case.id)
@@ -73,6 +85,7 @@ class OrderResolutionService(WorkflowService):
         handle: str,
         channel: str,
         now: datetime | None = None,
+        hosted_callback: bool = False,
     ):
         case = self.store.get(case_id)
         try:
@@ -84,8 +97,17 @@ class OrderResolutionService(WorkflowService):
             if not idempotent_repeat:
                 self.policy.authorize_decision(actor, case)
             proposal = self.store.get_current_proposal(str(case_id))
+            decision_store = self.store
+            if hosted_callback:
+                store = self.store
+
+                class HostedDecisionStore:
+                    get_current_proposal = store.get_current_proposal
+                    claim_decision = store.claim_hosted_decision
+
+                decision_store = HostedDecisionStore()
             return record_decision(
-                self.store,
+                decision_store,
                 proposal,
                 Actor(actor.tenant_id, actor.subject, actor.scopes, actor.roles),
                 DecisionCommand(
@@ -129,15 +151,28 @@ class OrderResolutionService(WorkflowService):
         ):
             self.store.audit_authorization_denial(case_id, actor.subject)
             raise AccessDenied("Decision is not authorized.")
-        self.record_bound_decision(
-            actor,
-            case_id,
-            decision,
+        decision_command = DecisionCommand(
+            case_id=str(case_id),
             proposal_version=proposal_version,
             action=action,
             destination_id=destination_id,
             handle=handle,
+            decision=DurableDecision(decision),
+            scope="workflow.approve",
             channel=channel,
         )
-        await self.host.resume(case_id)
+        if self.hosted_mode:
+            await self.host.resume(case_id, actor, decision_command)
+        else:
+            self.record_bound_decision(
+                actor,
+                case_id,
+                decision,
+                proposal_version=proposal_version,
+                action=action,
+                destination_id=destination_id,
+                handle=handle,
+                channel=channel,
+            )
+            await self.host.resume(case_id, actor, decision_command)
         return self.store.get(case_id)

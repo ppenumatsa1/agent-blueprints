@@ -3,6 +3,7 @@ from uuid import UUID
 from agent_framework import FileCheckpointStorage
 
 from app.domain.errors import ActionError, CheckpointError
+from app.domain.models import Principal
 from app.infrastructure.telemetry import instrumented
 from app.order_resolution.persistence import OrderResolutionStore
 from app.order_resolution.workflow import OrderResolutionDecision
@@ -36,7 +37,7 @@ class OrderResolutionWorkflowHost(LocalWorkflowHost):
         return requests, outputs
 
     @instrumented("workflow.start")
-    async def start(self, case_id: UUID) -> None:
+    async def start(self, case_id: UUID, actor: Principal | None = None) -> None:
         with self.store.run_lock(case_id):
             case = self.store.get(case_id)
             if case.status != "created":
@@ -92,7 +93,12 @@ class OrderResolutionWorkflowHost(LocalWorkflowHost):
             self.store.finish_automatic(case_id, terminal.checkpoint_id)
 
     @instrumented("workflow.resume")
-    async def resume(self, case_id: UUID) -> None:
+    async def resume(
+        self,
+        case_id: UUID,
+        actor: Principal | None = None,
+        decision_command: object | None = None,
+    ) -> None:
         with self.store.run_lock(case_id):
             case = self.store.get(case_id)
             storage = self._storage(case_id)
