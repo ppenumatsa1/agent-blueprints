@@ -22,6 +22,9 @@
     },
     "postgresAdministratorPrincipalName": {
       "value": "${AZURE_POSTGRES_ADMIN_PRINCIPAL_NAME}"
+    },
+    "hostedWorkflowEndpoint": {
+      "value": "${HOSTED_WORKFLOW_ENDPOINT}"
     }
   }
 }

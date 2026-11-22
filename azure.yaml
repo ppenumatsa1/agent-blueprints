@@ -7,29 +7,7 @@ infra:
   path: ./infra
   module: main
 
-services:
-  api:
-    project: ./blueprints/maf/workflow/backend
-    host: containerapp
-    language: python
-    docker:
-      path: ./Dockerfile
-      remoteBuild: true
-  web:
-    project: ./blueprints/maf/workflow/frontend
-    host: containerapp
-    language: js
-    docker:
-      path: ./Dockerfile
-      remoteBuild: true
-      buildArgs:
-        - VITE_ENTRA_TENANT_ID
-        - VITE_ENTRA_SPA_CLIENT_ID
-        - VITE_ENTRA_API_APP_ID_URI
-    uses:
-      - api
-
 hooks:
   preprovision:
     shell: pwsh
-    run: ./scripts/azure/preflight.ps1 -FromAzdEnvironment
+    run: ./scripts/azure/preflight.ps1 -DeploymentMode Azd -FromAzdEnvironment

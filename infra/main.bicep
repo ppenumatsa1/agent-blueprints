@@ -95,14 +95,16 @@ param runtimeDatabaseUrl string = ''
 
 param runtimeConnectionName string = 'runtime-postgres'
 
-param blueprintApplication string = 'examples.synthetic_application:build_application'
+@description('Explicit HTTPS adapter endpoint for the published Foundry hosted workflow.')
+@minLength(9)
+param hostedWorkflowEndpoint string
 
 var cleanEnvironmentName = take(toLower(replace(environmentName, '-', '')), 8)
 var suffix = take(uniqueString(subscription().id, resourceGroupName), 6)
 var prefix = 'ab${cleanEnvironmentName}${suffix}'
 var resourceTags = union(tags, {
   'azd-env-name': environmentName
-  'managed-by': 'azd'
+  'managed-by': 'azure-cli-bicep'
   workload: 'agent-blueprints'
 })
 
@@ -165,7 +167,6 @@ module foundry './modules/foundry.bicep' = {
     projectName: '${prefix}-project'
     location: location
     tags: resourceTags
-    apiPrincipalId: identities.outputs.apiPrincipalId
     applicationInsightsResourceId: observability.outputs.applicationInsightsResourceId
     applicationInsightsConnectionString: observability.outputs.applicationInsightsConnectionString
     modelDeploymentName: modelDeploymentName
@@ -220,7 +221,7 @@ module containerApps './modules/container-apps.bicep' = {
     modelDeploymentName: modelDeploymentName
     postgresHost: postgres.outputs.fqdn
     postgresDatabaseName: postgres.outputs.databaseName
-    blueprintApplication: blueprintApplication
+    hostedWorkflowEndpoint: hostedWorkflowEndpoint
     minReplicas: appMinReplicas
     maxReplicas: appMaxReplicas
   }
@@ -253,7 +254,9 @@ output AZURE_API_ENTRA_APP_ID_URI string = apiEntraAppIdUri
 output AZURE_SPA_ENTRA_CLIENT_ID string = spaEntraClientId
 output AZURE_API_IDENTITY_CLIENT_ID string = identities.outputs.apiClientId
 output AZURE_API_IDENTITY_NAME string = identities.outputs.apiName
+output AZURE_API_IDENTITY_PRINCIPAL_ID string = identities.outputs.apiPrincipalId
 output AZURE_WEB_IDENTITY_CLIENT_ID string = identities.outputs.webClientId
+output AZURE_WEB_IDENTITY_PRINCIPAL_ID string = identities.outputs.webPrincipalId
 output AZURE_POSTGRESQL_HOST string = postgres.outputs.fqdn
 output AZURE_POSTGRESQL_DATABASE string = postgres.outputs.databaseName
 output AZURE_POSTGRES_SERVER_NAME string = postgres.outputs.name

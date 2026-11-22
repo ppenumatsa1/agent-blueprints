@@ -4,7 +4,6 @@ param accountName string
 param projectName string
 param location string
 param tags object
-param apiPrincipalId string
 param applicationInsightsResourceId string
 
 @secure()
@@ -22,10 +21,6 @@ param runtimeConnectionName string
 @secure()
 param runtimeDatabaseUrl string
 
-var foundryAgentConsumerRole = subscriptionResourceId(
-  'Microsoft.Authorization/roleDefinitions',
-  'eed3b665-ab3a-47b6-8f48-c9382fb1dad6'
-)
 var cognitiveServicesOpenAIUserRole = subscriptionResourceId(
   'Microsoft.Authorization/roleDefinitions',
   '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd'
@@ -90,16 +85,6 @@ resource projectOpenAIUser 'Microsoft.Authorization/roleAssignments@2022-04-01' 
   properties: {
     roleDefinitionId: cognitiveServicesOpenAIUserRole
     principalId: project.identity.principalId
-    principalType: 'ServicePrincipal'
-  }
-}
-
-resource apiFoundryAgentConsumer 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(project.id, apiPrincipalId, foundryAgentConsumerRole)
-  scope: project
-  properties: {
-    roleDefinitionId: foundryAgentConsumerRole
-    principalId: apiPrincipalId
     principalType: 'ServicePrincipal'
   }
 }

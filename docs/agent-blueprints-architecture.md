@@ -117,19 +117,23 @@ configuration. No VNet, private endpoint, private DNS, or private runner is
 included. A failure of deployment-specific capacity in East US 2 stops the
 deployment; it does not authorize an implicit cross-region topology.
 
-The infrastructure exposes typed azd outputs to the independent runtime,
-application, and evidence workstreams; it does not add a shared runtime.
-Hosted agent code/version ownership remains with Agent A. API/frontend and
-business persistence integration remains with Agent C. Exact deployment,
-trace, evaluation, and browser evidence remains with Agent D. Conversation
-state, framework checkpoints, PostgreSQL business state, and human approval
-remain separate.
+The infrastructure exposes typed deployment outputs to the independent
+runtime, application, and evidence workstreams; it does not add a shared
+runtime. The supported Azure CLI route generates a new independent Order
+Resolution project, publishes its Agent A hosted source, and builds its Agent C
+API/frontend contexts. It never deploys the source blueprint. The generated
+frontend's Compose upstream is replaced only in the temporary generated copy
+with the exact API HTTPS FQDN. Exact deployment, trace, evaluation, and browser
+evidence remains with Agent D. Conversation state, hosted framework
+checkpoints, PostgreSQL business state, and human approval remain separate.
 
 The deployment plan is `Ready for Validation`, not deployed or production
-ready. The current azd account and tenant differ from Azure CLI, and every
-mutation path fails closed on that mismatch. Application deployment also
-remains blocked until the current static database DSN, local-only host, and
-Compose-only frontend proxy are replaced by the corresponding A/C integration.
+ready. The current azd account and tenant differ from Azure CLI. Azure CLI mode
+reports that mismatch while validating the active authorized Azure context;
+explicit azd mode still fails closed. Cloud configuration requires hosted
+workflow mode, managed-identity PostgreSQL with TLS verification, an explicit
+adapter endpoint, and agent-scoped API access. `BLUEPRINT_APPLICATION`,
+`CHECKPOINT_ROOT`, and local workflow hosting are excluded.
 See the
 [infrastructure evidence and operator contract](azure-foundry/infrastructure.md).
 

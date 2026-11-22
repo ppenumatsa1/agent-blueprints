@@ -65,7 +65,7 @@ must plan a supported replacement before production use approaches that date.
 | Resource boundary | One tagged resource group | Deterministic names; environment and owner tags |
 | Foundry | AI Services account and project | Managed identity, local auth disabled, public access enabled |
 | Model | One explicit account deployment | Reviewed version/SKU/capacity; no embedding deployment |
-| Hosted runtime | Code deploy through `azd ai agent` | No hosted-agent ACR/container mode unless separately justified |
+| Hosted runtime | Generated source published through Agent A's public SDK fallback | No hosted-agent ACR/container mode; ambiguous creates are never replayed |
 | API/frontend | Container Apps environment and two apps | TLS-only ingress, API Entra auth, single revision, bounded scale |
 | Registry | Basic ACR for API/frontend images only | Admin and anonymous access disabled; managed-identity pull |
 | Database | PostgreSQL Flexible Server and application database | Entra-only auth, TLS, no password parameter, bounded storage/backup |
@@ -80,10 +80,9 @@ behavior where no suitable stable AVM contract exists.
 ## Identity and RBAC
 
 - API and frontend use separate user-assigned managed identities.
-- API receives Foundry Agent Consumer at project scope during initial
-  provisioning because an immutable agent scope does not exist yet. Agent A
-  must replace it with an agent-scoped assignment after deployment. API also
-  receives Monitoring Metrics Publisher at Application Insights scope.
+- API receives Foundry Agent Consumer only at the explicit hosted-agent scope
+  after one acknowledged immutable version exists. It receives Monitoring
+  Metrics Publisher at Application Insights scope.
 - API and frontend receive AcrPull at registry scope.
 - API receives Key Vault Secrets User at vault scope.
 - The Foundry project identity receives Cognitive Services OpenAI User at
@@ -100,21 +99,24 @@ Scripts under `scripts/azure/` provide:
 1. read-only identity, provider, region, model quota/capacity, Container Apps,
    and PostgreSQL preflight;
 2. local Bicep build/lint and infrastructure contract checks;
-3. guarded what-if and deployment orchestration;
+3. independent Order Resolution generation plus guarded Azure CLI what-if and
+   deployment orchestration;
 4. PostgreSQL firewall and managed-identity database-principal configuration;
 5. schema migration;
 6. exact revision and health verification;
 7. scoped Container Apps rollback; and
 8. destructive teardown requiring explicit confirmation.
 
-Deployment and teardown scripts fail closed when Azure CLI and azd identities
-do not match.
+Azure CLI mode validates the active Azure CLI subscription, tenant, and user
+without changing them. An azd mismatch is reported but does not block this
+mode. Explicit azd mode still requires matching identities and refuses
+application deployment because root `azure.yaml` is infrastructure-only.
 
-The API/frontend deploy step also fails before mutation unless
-`AZURE_APPLICATION_RUNTIME_READY=true`. That value may be set only after
-Agents A/C verify managed-identity PostgreSQL token acquisition, hosted-runtime
-selection, the exact frontend-to-API proxy target, build-time SPA settings,
-and the existing application health/auth contract.
+Before any mutation, deployment generates a new independent Order Resolution
+project and requires its backend, frontend, hosted source, and publisher. The
+cloud API is configured only for hosted workflow execution and managed-identity
+PostgreSQL. `BLUEPRINT_APPLICATION`, `CHECKPOINT_ROOT`, the source blueprint
+backend/frontend, and `WORKFLOW_HOST=local` are prohibited.
 
 ## Cost controls
 
@@ -136,9 +138,10 @@ and the existing application health/auth contract.
 - [x] Region order, Agent Service support, selected model catalog entry,
   platform capacity, subscription quota, Container Apps quota, and PostgreSQL
   SKU checked read-only.
-- [x] Modular Bicep and azd configuration generated.
+- [x] Modular Bicep, Azure CLI orchestration, and optional infrastructure-only
+  azd configuration generated.
 - [x] Operations automation and documentation generated.
-- [x] Bicep build/lint and eight non-deploying contract tests pass.
+- [x] Bicep build/lint and eleven non-deploying contract tests pass.
 - [x] Root unit suite passes: 68 tests with two expected adapter-selection
   skips.
 - [x] PowerShell and Python syntax validation passes.
@@ -148,27 +151,45 @@ and the existing application health/auth contract.
 
 | Command or check | Result |
 | --- | --- |
-| `pwsh ./scripts/azure/validate.ps1` | Bicep build/lint succeeded; 8 infrastructure contracts passed |
+| `pwsh ./scripts/azure/validate.ps1` | Bicep build/lint succeeded; 11 infrastructure contracts passed |
 | Isolated `python -m unittest discover -s tests -v` with `requirements-dev.txt` | 68 passed; 2 expected adapter-selection skips |
 | PowerShell parser over `scripts/azure/*.ps1` | Passed |
 | `python -m compileall -q ./scripts/azure ./infra/tests` | Passed |
 | `git diff --check` | Passed |
-| Azure/azd identity preflight | Correctly blocked: Azure CLI and azd account/tenant differ |
-| Subscription what-if | Not run: required environment parameters are unset and the identity gate is unresolved |
+| Azure CLI identity preflight with mismatched azd | Passed Azure CLI context and reported the unrelated azd mismatch |
+| Azure CLI negative identity contracts | Wrong subscription fails before azd inspection; explicit azd mode blocks mismatch |
+| Generated hosted-composition deployment gate | Current unintegrated source generation stopped before preflight/mutation on missing `hosted-agent/main.py` and cleaned temporary artifacts |
+| Subscription what-if | Not run: deployment-specific Entra/admin/hosted endpoint and agent-scope values are intentionally unset |
 
 The Azure validation workflow is intentionally incomplete and the plan remains
-`Ready for Validation`, not `Validated`. The failed identity gate, unset
-deployment parameters, and unresolved application integration gates must not
-be bypassed.
+`Ready for Validation`, not `Validated`. Deployment-specific inputs, provider
+what-if, live generated-source publication, and application verification remain
+unexecuted.
 
 ## Deployment gate
 
-The current Azure CLI identity matches the authorized context, but the current
-azd identity is a different tenant/account. Any provision, deploy, migration,
-configuration, rollback, or teardown operation must stop until the identities
-match. The preflight compares both account identity and azd token tenant and
-fails closed. This workstream does not repair authentication or perform
-deployment.
+The current Azure CLI identity matches the authorized context. Azure CLI mode
+uses that verified context for preflight, what-if, Bicep deployment, outputs,
+generated image deployment, and scoped operations; it never calls
+`az account set`. The current azd identity is a different tenant/account, is
+reported in evidence, and blocks only explicitly selected azd mode.
+
+Deployment also fails before mutation unless it can instantiate an independent
+Order Resolution project and find the generated backend, frontend,
+`hosted-agent`, and Agent A publisher. The hosted adapter endpoint, documented
+agent RBAC scope, hosted database role, stable publish operation, durable journal, PostgreSQL
+administrator, and output path are mandatory explicit inputs.
+
+The publisher contract requires `agent_version`, `agent_version_id`,
+`agent_guid`, `identity_principal_id`, `identity_client_id`, and an `active`
+`provisioning_status`; the data-plane version ID is not represented as an ARM
+resource ID.
+
+The generated application interface was reviewed against Agent C draft PR #48
+head `b4c7ed825833c20fa6549aa5a8e206cfbe85a77d` (implementation
+`395dbeb`). Agent A froze the publisher field contract above while its final
+post-composition revision remains pending; live A/C composition is therefore
+still unverified and deployment remains outside this plan.
 
 ## Directory application contract
 
@@ -176,8 +197,10 @@ deployment.
 validation and an explicit `-Apply` mode for two uniquely named single-tenant
 registrations. It exposes the three delegated workflow scopes, defines
 `Workflow.User` and `Workflow.Approver`, configures localhost and exact
-deployed SPA origins, preauthorizes only the SPA client, and writes only
-tenant/client/app-ID-URI values to azd. It creates no credentials or users.
+deployed SPA origins, and preauthorizes only the SPA client. Azure CLI mode
+returns tenant/client/app-ID-URI values directly to the deployment orchestrator;
+optional azd mode may persist the same nonsecret identifiers. It creates no
+credentials or users.
 
 Directory permissions are independent of subscription `Owner`. The operator
 must be allowed to create and own app registrations or hold a reviewed

@@ -155,29 +155,35 @@ requires a complete fallback-region recheck rather than silent resource
 splitting.
 
 The implementation provides modular Foundry/model, identity/RBAC,
-observability, ACR, Container Apps, Key Vault, and PostgreSQL Bicep; root azd
-orchestration; guarded preflight, what-if, deploy, database configuration,
+observability, ACR, Container Apps, Key Vault, and PostgreSQL Bicep;
+infrastructure-only root azd metadata; guarded Azure CLI preflight, what-if,
+generated-application deploy, database configuration,
 migration, health, rollback, and teardown scripts; and non-deploying contract
-tests. Hosted agent code deployment remains owned by Agent A and intentionally
-has no ACR dependency. The API/frontend ACR is retained for Container Apps
-remote builds.
+tests. Deployment instantiates a new independent Order Resolution project,
+publishes its Agent A hosted source without ACR, and builds only its generated
+Agent C API/frontend contexts in ACR.
 
 Deployment-time Entra automation idempotently creates or reuses the authorized
 single-tenant API/SPA registrations, exposes only the three workflow scopes,
 defines user/approver roles, and creates no secret or test user. Live app
-deployment remains fail-closed until Agents A/C implement renewable
-managed-identity PostgreSQL authentication, hosted workflow selection, and the
-deployed frontend proxy target.
+deployment fails closed when any generated Agent A/C interface is absent. The
+cloud route requires hosted mode, managed-identity PostgreSQL with TLS
+verification, an explicit hosted adapter endpoint and agent scope, and an
+exact temporary-copy nginx upstream replacement. It prohibits source-blueprint
+runtime paths, local workflow hosting, synthetic application selection, and
+file checkpoints.
 
 **Acceptance evidence:** exact base verified; read-only Azure discovery
-completed; Bicep build/lint and 8 infrastructure contracts pass; 68 root tests
+completed; Bicep build/lint and 11 infrastructure contracts pass; 68 root tests
 pass with two expected adapter-selection skips; script syntax checks pass.
 The current Azure CLI identity matches the authorized target, but azd is a
-different account and tenant. All mutation paths fail closed until both
-identities match. No Azure mutation or deployment has occurred.
+different account and tenant. Azure CLI mode reports that mismatch without
+blocking; explicit azd mode still fails closed. No Azure mutation or deployment
+has occurred.
 
 **Next action:** independent validation on the draft PR, then an approved
-what-if after azd reauthentication. Deployment remains outside this PR.
+Azure CLI provider what-if with exact deployment inputs. Deployment remains
+outside this PR.
 
 Specification Studio has not yet produced an artifact, so the proposed
 handoff is not an end-to-end compatibility claim. Phase 0 does not implement

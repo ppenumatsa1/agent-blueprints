@@ -18,6 +18,69 @@ function Get-AzdEnvironmentValues {
     return $values
 }
 
+function Get-DeploymentValues {
+    param(
+        [ValidateSet('AzureCli', 'Azd')]
+        [string]$DeploymentMode,
+        [string]$ValuesFile
+    )
+    if ($DeploymentMode -ceq 'Azd') {
+        return Get-AzdEnvironmentValues
+    }
+    if (-not $ValuesFile) {
+        throw 'ValuesFile is required in AzureCli mode.'
+    }
+    $resolved = Resolve-Path -LiteralPath $ValuesFile
+    $values = Get-Content -LiteralPath $resolved -Raw | ConvertFrom-Json -AsHashtable
+    if (-not ($values -is [hashtable])) {
+        throw 'ValuesFile must contain one JSON object.'
+    }
+    return $values
+}
+
+function Invoke-DeploymentPreflight {
+    param(
+        [ValidateSet('AzureCli', 'Azd')]
+        [string]$DeploymentMode,
+        [hashtable]$Values
+    )
+    if ($DeploymentMode -ceq 'Azd') {
+        & "$PSScriptRoot\preflight.ps1" `
+            -DeploymentMode Azd `
+            -FromAzdEnvironment | Out-Null
+        return
+    }
+    & "$PSScriptRoot\preflight.ps1" `
+        -DeploymentMode AzureCli `
+        -SubscriptionId (Get-RequiredValue $Values 'AZURE_SUBSCRIPTION_ID') `
+        -TenantId (Get-RequiredValue $Values 'AZURE_TENANT_ID') `
+        -ExpectedUser (Get-RequiredValue $Values 'AZURE_EXPECTED_USER') `
+        -Location (Get-RequiredValue $Values 'AZURE_LOCATION') | Out-Null
+}
+
+function Assert-GeneratedOrderResolutionProject {
+    param(
+        [Parameter(Mandatory)]
+        [string]$ProjectRoot
+    )
+    $resolved = (Resolve-Path -LiteralPath $ProjectRoot).Path
+    foreach ($relative in @(
+        'backend\Dockerfile',
+        'backend\app',
+        'frontend\Dockerfile',
+        'frontend\nginx.conf',
+        'hosted-agent\main.py',
+        'hosted-agent\requirements.txt',
+        'hosted-agent\src\order_resolution_hosted',
+        'scripts\foundry\publish_order_resolution_hosted.py'
+    )) {
+        if (-not (Test-Path -LiteralPath (Join-Path $resolved $relative))) {
+            throw "Generated Order Resolution source is missing: $relative"
+        }
+    }
+    return $resolved
+}
+
 function Get-RequiredValue {
     param(
         [hashtable]$Values,

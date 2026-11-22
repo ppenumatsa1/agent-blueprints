@@ -8,6 +8,7 @@ param apiEntraAppIdUri = 'api://00000000-0000-0000-0000-000000000000'
 param spaEntraClientId = '00000000-0000-0000-0000-000000000000'
 param postgresAdministratorObjectId = '00000000-0000-0000-0000-000000000000'
 param postgresAdministratorPrincipalName = 'deployment-operators'
+param hostedWorkflowEndpoint = 'https://replace.invalid/responses'
 param tags = {
   environment: 'dev'
   owner: 'replace-me'

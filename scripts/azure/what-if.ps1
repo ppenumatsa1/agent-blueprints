@@ -5,6 +5,8 @@ param(
     [Parameter(Mandatory)]
     [string]$ParameterFile,
     [string]$SubscriptionId = $env:AZURE_SUBSCRIPTION_ID,
+    [string]$TenantId = $env:AZURE_TENANT_ID,
+    [string]$ExpectedUser = $env:AZURE_EXPECTED_USER,
     [string]$DeploymentName = 'agent-blueprints-foundry-preview'
 )
 
@@ -12,13 +14,12 @@ $ErrorActionPreference = 'Stop'
 $root = Resolve-Path "$PSScriptRoot\..\.."
 $resolvedParameters = Resolve-Path $ParameterFile
 
-if (-not $SubscriptionId) {
-    throw 'SubscriptionId or AZURE_SUBSCRIPTION_ID is required.'
-}
-$activeSubscription = az account show --query id --output tsv --only-show-errors
-if ($LASTEXITCODE -ne 0 -or $activeSubscription -cne $SubscriptionId) {
-    throw 'Azure CLI active subscription does not match the requested what-if subscription.'
-}
+& "$PSScriptRoot\preflight.ps1" `
+    -DeploymentMode AzureCli `
+    -SubscriptionId $SubscriptionId `
+    -TenantId $TenantId `
+    -ExpectedUser $ExpectedUser `
+    -Location $Location
 
 Push-Location $root
 try {

@@ -140,19 +140,34 @@ class InfrastructureContractTests(unittest.TestCase):
         for name in (
             "APPLICATIONINSIGHTS_AUTHENTICATION_STRING",
             "APPLICATIONINSIGHTS_CONNECTION_STRING",
+            "API_MANAGED_IDENTITY_CLIENT_ID",
             "AZURE_AI_MODEL_DEPLOYMENT_NAME",
             "AZURE_AI_PROJECT_ENDPOINT",
             "AZURE_CLIENT_ID",
-            "BLUEPRINT_APPLICATION",
-            "CHECKPOINT_ROOT",
             "CORS_ORIGINS",
+            "DATABASE_AUTH_MODE",
+            "DATABASE_CONNECTION_MAX_LIFETIME_SECONDS",
+            "DATABASE_MANAGED_IDENTITY_CLIENT_ID",
+            "DATABASE_POOL_MAX_SIZE",
+            "DATABASE_POOL_MIN_SIZE",
+            "DATABASE_POOL_TIMEOUT_SECONDS",
+            "DATABASE_TLS_MODE",
             "DATABASE_URL",
             "ENTRA_API_CLIENT_ID",
             "ENTRA_TENANT_ID",
+            "HOSTED_WORKFLOW_ENDPOINT",
+            "HOSTED_WORKFLOW_SCOPE",
             "TELEMETRY_MODE",
             "WORKFLOW_HOST",
         ):
             self.assertIn(name, api_environment)
+        self.assertNotIn("BLUEPRINT_APPLICATION", api_environment)
+        self.assertNotIn("CHECKPOINT_ROOT", api_environment)
+        api_environment_expression = api_app["properties"]["template"]["containers"][0][
+            "env"
+        ]
+        self.assertIn("'WORKFLOW_HOST', 'value', 'hosted'", api_environment_expression)
+        self.assertNotIn("'WORKFLOW_HOST', 'value', 'local'", api_environment_expression)
 
         auth = self.of_type("Microsoft.App/containerApps/authConfigs")
         self.assertEqual(len(auth), 1)
@@ -203,19 +218,17 @@ class InfrastructureContractTests(unittest.TestCase):
         self.assertNotIn("listkeys", outputs)
         self.assertNotIn("connectionstring", outputs)
         self.assertNotIn("password", outputs)
-        self.assertIn("eed3b665-ab3a-47b6-8f48-c9382fb1dad6", self.serialized)
+        self.assertNotIn("eed3b665-ab3a-47b6-8f48-c9382fb1dad6", self.serialized)
         self.assertNotIn("53ca6127-db72-4b80-b1b0-d745d6d5456d", self.serialized)
 
-    def test_azd_configuration_targets_only_application_container_apps(self):
+    def test_azd_configuration_is_infrastructure_only(self):
         text = (ROOT / "azure.yaml").read_text(encoding="utf-8")
-        self.assertRegex(text, r"(?m)^  api:\n")
-        self.assertRegex(text, r"(?m)^  web:\n")
-        self.assertEqual(len(re.findall(r"(?m)^    host: containerapp$", text)), 2)
-        self.assertNotIn("host: azure.ai.agent", text)
-        self.assertIn("scripts/azure/preflight.ps1", text)
-        self.assertIn("VITE_ENTRA_TENANT_ID", text)
-        self.assertIn("VITE_ENTRA_SPA_CLIENT_ID", text)
-        self.assertIn("VITE_ENTRA_API_APP_ID_URI", text)
+        self.assertNotRegex(text, r"(?m)^services:")
+        self.assertNotIn("blueprints/maf/workflow", text)
+        self.assertIn(
+            "scripts/azure/preflight.ps1 -DeploymentMode Azd -FromAzdEnvironment",
+            text,
+        )
 
     def test_operations_fail_closed_and_teardown_is_explicit(self):
         scripts = {
@@ -230,17 +243,54 @@ class InfrastructureContractTests(unittest.TestCase):
         )
         self.assertIn('"auth", "token", "--no-prompt"', scripts["preflight.py"])
         self.assertIn('azd_claims.get("tid"', scripts["preflight.py"])
+        self.assertIn('"azure-cli"', scripts["preflight.py"])
+        self.assertIn("azd mode must stop", scripts["preflight.py"])
         self.assertIn('("agentsV2", "responses")', scripts["preflight.py"])
         self.assertIn("firewall-rule delete", scripts["configure-postgres.ps1"])
         self.assertIn("az containerapp show", scripts["configure-postgres.ps1"])
+        self.assertIn(
+            "pgaadauth_create_principal_with_oid",
+            scripts["configure-postgres.ps1"],
+        )
         self.assertIn("deployment-operator", scripts["common.ps1"])
-        self.assertIn("AZURE_APPLICATION_RUNTIME_READY", scripts["deploy.ps1"])
         self.assertIn("configure-entra.ps1", scripts["deploy.ps1"])
+        self.assertIn(
+            "scripts\\instantiate_maf.py --profile order-resolution",
+            scripts["deploy.ps1"],
+        )
+        self.assertIn("Assert-GeneratedOrderResolutionProject", scripts["deploy.ps1"])
+        self.assertIn("publish_order_resolution_hosted.py", combined)
+        self.assertIn("az deployment sub create", scripts["deploy.ps1"])
+        self.assertIn("az acr build", scripts["deploy.ps1"])
+        self.assertIn("'WORKFLOW_HOST=hosted'", scripts["deploy.ps1"])
+        self.assertIn(
+            "eed3b665-ab3a-47b6-8f48-c9382fb1dad6",
+            scripts["deploy.ps1"],
+        )
+        self.assertIn("HostedDatabaseRoleName", scripts["deploy.ps1"])
+        self.assertIn("publishRecord.identity_principal_id", scripts["deploy.ps1"])
+        self.assertIn("publishRecord.identity_client_id", scripts["deploy.ps1"])
+        self.assertIn("publishRecord.provisioning_status", scripts["deploy.ps1"])
+        self.assertNotIn("publishRecord.principal_id", scripts["deploy.ps1"])
+        self.assertIn(
+            '"AZURE_HOSTED_AGENT_PROVISIONING_STATUS"',
+            scripts["health-check.py"],
+        )
+        self.assertIn(
+            'environment.get("DATABASE_AUTH_MODE") != "managed-identity"',
+            scripts["health-check.py"],
+        )
+        self.assertIn("proxy_pass http://api:8000;", scripts["deploy.ps1"])
+        self.assertNotIn("blueprints\\maf\\workflow", scripts["deploy.ps1"])
+        self.assertNotIn("CHECKPOINT_ROOT", scripts["deploy.ps1"])
+        self.assertNotIn("BLUEPRINT_APPLICATION", scripts["deploy.ps1"])
         self.assertIn("Remove-PostgresOperatorFirewallRule", scripts["migrate.ps1"])
         self.assertIn(
             "Remove-PostgresOperatorFirewallRule", scripts["configure-postgres.ps1"]
         )
         self.assertNotIn("0.0.0.0", combined)
+        self.assertNotIn("sslmode=require", combined)
+        self.assertIn("sslmode=verify-full", combined)
         self.assertIn("DESTRUCTIVE", scripts["teardown.ps1"])
         self.assertIn("DESTRUCTIVE", scripts["teardown-entra.ps1"])
         self.assertIn("workflow.approve", scripts["configure-entra.ps1"])
@@ -248,8 +298,7 @@ class InfrastructureContractTests(unittest.TestCase):
         self.assertNotIn("password", scripts["configure-entra.ps1"].casefold())
         self.assertIn("ConfirmEnvironmentName", scripts["teardown.ps1"])
         self.assertIn("azd down", scripts["teardown.ps1"])
-        self.assertIn("azd provision --no-prompt", scripts["deploy.ps1"])
-        self.assertIn("azd deploy --no-prompt", scripts["deploy.ps1"])
+        self.assertIn("az group delete", scripts["teardown.ps1"])
 
     def test_parameter_binding_contains_only_nonsecret_required_inputs(self):
         binding = json.loads((INFRA / "main.parameters.json").read_text(encoding="utf-8"))
@@ -260,6 +309,7 @@ class InfrastructureContractTests(unittest.TestCase):
                 "apiEntraClientId",
                 "apiEntraAppIdUri",
                 "environmentName",
+                "hostedWorkflowEndpoint",
                 "location",
                 "postgresAdministratorObjectId",
                 "postgresAdministratorPrincipalName",
@@ -275,6 +325,8 @@ class InfrastructureContractTests(unittest.TestCase):
             source,
         )
         self.assertIn("uniqueString(subscription().id, resourceGroupName)", source)
+        self.assertIn("param hostedWorkflowEndpoint string", source)
+        self.assertNotIn("param blueprintApplication", source)
 
 
 if __name__ == "__main__":
