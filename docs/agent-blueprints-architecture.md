@@ -31,10 +31,12 @@ The dated [issue and fix journal](../blueprints/maf/workflow/docs/design/issues-
 distinguishes local and draft-PR evidence from merged or hosted capabilities.
 Do not conflate an approved engineering merge with verified hosted execution,
 human approval, or production readiness.
-Draft [PR #40](https://github.com/ppenumatsa1/agent-blueprints/pull/40)
-proposes documentation-only Order Resolution terminology and requirements.
-It is not this blueprint's business implementation; order-adjustment remains
-a synthetic fixture.
+Merged [PR #40](https://github.com/ppenumatsa1/agent-blueprints/pull/40)
+defines Order Resolution terminology and requirements. The separate
+[versioned executable fixture](../scenarios/order-resolution/README.md)
+encodes its normalized business outcomes and keeps framework/runtime execution
+assertions distinct. It is not this blueprint's business implementation;
+order-adjustment remains an independent legacy fixture.
 
 ## MAF modularity foundation and target
 
@@ -208,6 +210,13 @@ defines a framework-neutral triage, policy retrieval, deterministic resolution,
 human decision, idempotency, recovery, and evaluation contract. It standardizes
 business invariants and evidence expectations, not runtime APIs or checkpoint
 bytes.
+
+The executable `order-resolution-spec/0.1.0` acceptance fixture carries exactly
+`ORS-001` through `ORS-009`. It fixes the synthetic policy arithmetic and
+business outcomes while leaving native checkpoint identity and implementation
+evidence to each framework mapping. Passing the root fixture tests validates
+the contract encoding only; it does not prove a blueprint implementation,
+authorization, side effects, or readiness.
 
 Every future implementation must use its selected framework's native workflow
 and checkpoint provider. PostgreSQL is application-owned persistence for
