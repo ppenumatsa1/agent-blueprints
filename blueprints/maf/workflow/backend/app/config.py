@@ -4,6 +4,8 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 from uuid import UUID
 
+HOSTED_SERVICE_APP_ROLE = "Hosted.Workflow.Invoke"
+
 
 def _origin(value: str) -> str:
     parsed = urlsplit(value)
@@ -27,21 +29,44 @@ def _origin(value: str) -> str:
     return value
 
 
+def _foundry_endpoint(value: str | None, suffix: str, label: str) -> str:
+    parsed = urlsplit(value or "")
+    query = parse_qs(parsed.query, strict_parsing=True)
+    if (
+        parsed.scheme != "https"
+        or not parsed.hostname
+        or parsed.username
+        or parsed.password
+        or parsed.fragment
+        or not parsed.path.rstrip("/").endswith(suffix)
+        or set(query) != {"api-version"}
+        or len(query["api-version"]) != 1
+        or not query["api-version"][0]
+    ):
+        raise ValueError(f"{label} must be an explicit Foundry HTTPS endpoint.")
+    return value or ""
+
+
 @dataclass(frozen=True)
 class Settings:
     tenant_id: str
     api_client_id: str
     database_url: str = field(repr=False)
     checkpoint_root: Path | None
+    api_app_id_uri: str | None = None
     cors_origins: tuple[str, ...] = ()
     host_mode: str = "local"
     hosted_workflow_endpoint: str | None = None
+    hosted_conversation_endpoint: str | None = None
     hosted_workflow_scope: str | None = None
     api_managed_identity_client_id: str | None = None
+    hosted_service_principal_id: str | None = None
+    hosted_service_app_role: str | None = None
     database_auth_mode: str = "password"
     database_password: str | None = field(default=None, repr=False)
     database_managed_identity_client_id: str | None = None
     database_tls_mode: str = "disable"
+    database_tls_root_cert: str | None = None
     database_pool_min_size: int = 1
     database_pool_max_size: int = 8
     database_pool_timeout_seconds: float = 5.0
@@ -60,6 +85,17 @@ class Settings:
             raise ValueError(
                 "Entra tenant and API client IDs must be configured as UUIDs."
             ) from exc
+        if self.api_app_id_uri is not None:
+            audience = urlsplit(self.api_app_id_uri)
+            if (
+                audience.scheme not in ("api", "https")
+                or not audience.netloc
+                or audience.username
+                or audience.password
+                or audience.query
+                or audience.fragment
+            ):
+                raise ValueError("ENTRA_API_APP_ID_URI must be an explicit API audience.")
         database = urlsplit(self.database_url)
         if not self.database_url or database.scheme not in (
             "postgres",
@@ -73,11 +109,28 @@ class Settings:
         configured_sslmode = parse_qs(database.query).get("sslmode", [])
         if configured_sslmode and configured_sslmode != [self.database_tls_mode]:
             raise ValueError("DATABASE_TLS_MODE conflicts with DATABASE_URL sslmode.")
+        configured_sslrootcert = parse_qs(database.query).get("sslrootcert", [])
+        if configured_sslrootcert and configured_sslrootcert != [self.database_tls_root_cert]:
+            raise ValueError("DATABASE_TLS_ROOT_CERT conflicts with DATABASE_URL sslrootcert.")
+        if self.database_tls_mode == "verify-full":
+            if self.database_tls_root_cert not in (
+                "system",
+                "/etc/ssl/certs/ca-certificates.crt",
+            ):
+                raise ValueError(
+                    "Verify-full requires the system trust store or the container CA bundle."
+                )
+        elif self.database_tls_root_cert is not None:
+            raise ValueError("DATABASE_TLS_ROOT_CERT requires DATABASE_TLS_MODE=verify-full.")
         if self.database_auth_mode == "managed-identity":
             if database.password or self.database_password:
-                raise ValueError("Managed identity database authentication cannot include a password.")
+                raise ValueError(
+                    "Managed identity database authentication cannot include a password."
+                )
             if not database.username:
-                raise ValueError("Managed identity database authentication requires a database user.")
+                raise ValueError(
+                    "Managed identity database authentication requires a database user."
+                )
         if self.database_password and database.password:
             raise ValueError("Configure the database password once, not in two settings.")
         if (
@@ -95,24 +148,18 @@ class Settings:
             if self.checkpoint_root is None or not str(self.checkpoint_root):
                 raise ValueError("A local checkpoint root is required.")
         else:
-            endpoint = urlsplit(self.hosted_workflow_endpoint or "")
-            scope = urlsplit(self.hosted_workflow_scope or "")
-            if (
-                endpoint.scheme != "https"
-                or not endpoint.hostname
-                or endpoint.username
-                or endpoint.password
-                or endpoint.query
-                or endpoint.fragment
-            ):
-                raise ValueError("HOSTED_WORKFLOW_ENDPOINT must be an explicit HTTPS URL.")
-            if (
-                scope.scheme not in ("https", "api")
-                or not scope.netloc
-                or not scope.path.endswith("/.default")
-                or any(c.isspace() for c in (self.hosted_workflow_scope or ""))
-            ):
-                raise ValueError("HOSTED_WORKFLOW_SCOPE must be a resource .default scope.")
+            _foundry_endpoint(
+                self.hosted_workflow_endpoint,
+                "/responses",
+                "HOSTED_WORKFLOW_ENDPOINT",
+            )
+            _foundry_endpoint(
+                self.hosted_conversation_endpoint,
+                "/conversations",
+                "HOSTED_CONVERSATION_ENDPOINT",
+            )
+            if self.hosted_workflow_scope != "https://ai.azure.com/.default":
+                raise ValueError("HOSTED_WORKFLOW_SCOPE must be https://ai.azure.com/.default.")
             try:
                 object.__setattr__(
                     self,
@@ -123,6 +170,16 @@ class Settings:
                 raise ValueError(
                     "Hosted mode requires the API managed identity client UUID."
                 ) from exc
+            try:
+                object.__setattr__(
+                    self,
+                    "hosted_service_principal_id",
+                    str(UUID(self.hosted_service_principal_id or "")),
+                )
+            except (ValueError, TypeError, AttributeError) as exc:
+                raise ValueError("Hosted mode requires the hosted service principal UUID.") from exc
+            if self.hosted_service_app_role != HOSTED_SERVICE_APP_ROLE:
+                raise ValueError(f"HOSTED_SERVICE_APP_ROLE must be {HOSTED_SERVICE_APP_ROLE}.")
             if self.database_tls_mode != "verify-full":
                 raise ValueError("Hosted mode requires PostgreSQL TLS verification.")
         if self.database_managed_identity_client_id:
@@ -133,9 +190,7 @@ class Settings:
                     str(UUID(self.database_managed_identity_client_id)),
                 )
             except (ValueError, TypeError, AttributeError) as exc:
-                raise ValueError(
-                    "The database managed identity client ID must be a UUID."
-                ) from exc
+                raise ValueError("The database managed identity client ID must be a UUID.") from exc
         if self.telemetry_mode not in ("local", "azure-monitor"):
             raise ValueError("TELEMETRY_MODE must be local or azure-monitor.")
         if self.telemetry_mode == "azure-monitor" and (
@@ -184,26 +239,42 @@ class Settings:
         checkpoint_root = os.environ.get("CHECKPOINT_ROOT")
         if host_mode == "local" and not checkpoint_root:
             raise ValueError("CHECKPOINT_ROOT is required.")
+        database_url = os.environ.get("DATABASE_URL", "")
+        database_query = parse_qs(urlsplit(database_url).query)
+        database_tls_mode = (
+            os.environ.get("DATABASE_TLS_MODE") or database_query.get("sslmode", ["disable"])[0]
+        )
+        configured_root_cert = os.environ.get("DATABASE_TLS_ROOT_CERT")
+        libpq_root_cert = os.environ.get("PGSSLROOTCERT")
+        if configured_root_cert and libpq_root_cert and configured_root_cert != libpq_root_cert:
+            raise ValueError("DATABASE_TLS_ROOT_CERT conflicts with PGSSLROOTCERT.")
         return cls(
             tenant_id=os.environ.get("ENTRA_TENANT_ID", ""),
             api_client_id=os.environ.get("ENTRA_API_CLIENT_ID", ""),
-            database_url=os.environ.get("DATABASE_URL", ""),
+            database_url=database_url,
             checkpoint_root=Path(checkpoint_root) if checkpoint_root else None,
+            api_app_id_uri=os.environ.get("ENTRA_API_APP_ID_URI") or None,
             cors_origins=values("CORS_ORIGINS"),
             host_mode=host_mode,
             hosted_workflow_endpoint=os.environ.get("HOSTED_WORKFLOW_ENDPOINT") or None,
+            hosted_conversation_endpoint=os.environ.get("HOSTED_CONVERSATION_ENDPOINT") or None,
             hosted_workflow_scope=os.environ.get("HOSTED_WORKFLOW_SCOPE") or None,
-            api_managed_identity_client_id=os.environ.get(
-                "API_MANAGED_IDENTITY_CLIENT_ID"
-            )
-            or None,
+            api_managed_identity_client_id=os.environ.get("API_MANAGED_IDENTITY_CLIENT_ID") or None,
+            hosted_service_principal_id=os.environ.get("HOSTED_SERVICE_PRINCIPAL_ID") or None,
+            hosted_service_app_role=os.environ.get("HOSTED_SERVICE_APP_ROLE") or None,
             database_auth_mode=os.environ.get("DATABASE_AUTH_MODE", "password"),
             database_password=os.environ.get("DATABASE_PASSWORD") or None,
             database_managed_identity_client_id=os.environ.get(
                 "DATABASE_MANAGED_IDENTITY_CLIENT_ID"
             )
             or None,
-            database_tls_mode=os.environ.get("DATABASE_TLS_MODE", "disable"),
+            database_tls_mode=database_tls_mode,
+            database_tls_root_cert=(
+                configured_root_cert
+                or libpq_root_cert
+                or database_query.get("sslrootcert", [None])[0]
+                or ("system" if database_tls_mode == "verify-full" else None)
+            ),
             database_pool_min_size=integer("DATABASE_POOL_MIN_SIZE", "1"),
             database_pool_max_size=integer("DATABASE_POOL_MAX_SIZE", "8"),
             database_pool_timeout_seconds=number("DATABASE_POOL_TIMEOUT_SECONDS", "5"),

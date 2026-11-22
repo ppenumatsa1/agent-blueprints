@@ -7,20 +7,21 @@ and `/healthz` is unauthenticated and contains no business data. Protected
 API operations require authentication and case authorization. See
 [setup](setup.md) for existing identity prerequisites and volume handling.
 
-**Implemented, locally verified application boundary:** hosted mode calls an
-Agent A-compatible HTTPS port with the API managed identity. The application
-claims dispatch before sending, uses deterministic operation idempotency keys,
-and reconciles ambiguous outcomes with `GET /operations/{operation_id}`
-instead of replaying. `POST /runs` starts execution and
-`POST /runs/{execution_id}/responses` resumes an opaque pending request.
-Responses return operation/execution IDs, `pending`, `automatic`, `approved`,
-or `rejected`, and a request ID when pending. Foundry owns checkpoint/session
-bytes; PostgreSQL stores only business state and opaque correlation.
+**Implemented, locally verified application boundary:** hosted mode requires
+an integrated Agent A Responses `WorkflowHost` adapter. There is deliberately
+no default HTTP transport: the API does not expose or call invented `/runs`
+or `/operations` routes. Missing integration fails startup. Agent A's native
+client creates Foundry conversations and Responses operations with
+`store=true`, `background=true`, and structured `function_call_output`.
+Foundry owns execution and checkpoint/session bytes; PostgreSQL stores only
+business state, caller/session/conversation binding, and opaque operation
+correlation.
 
-The hosted implementation has local/mock evidence only. Agent A must
-authenticate the API UAMI and configured caller scope, enforce idempotent
-operations, and use its separate hosted execution identity. No Azure-hosted
-agent, API, UI, database, or RBAC path is proven by this repository change.
+The hosted implementation has local PostgreSQL contract evidence only. Agent
+A must authenticate the API UAMI, use the Foundry scope, inject its durable
+Responses adapter, and use its separate hosted execution identity. No
+Azure-hosted agent, API, UI, database, or RBAC path is proven by this
+repository change.
 
 **Implemented, offline only:** [staged Foundry-first Bicep and azd
 descriptors](../infra/README.md), managed identity resources, and

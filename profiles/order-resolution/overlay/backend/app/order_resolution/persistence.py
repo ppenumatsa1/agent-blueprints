@@ -47,6 +47,12 @@ class HostedOperation:
     remote_id: str | None
 
 
+@dataclass(frozen=True)
+class HostedOperationClaim:
+    record: HostedOperation
+    acquired: bool
+
+
 def _proposal(row) -> Proposal:
     return Proposal(
         case_id=str(row["case_id"]),
@@ -414,7 +420,7 @@ class OrderResolutionStore(PostgresStore):
         operation_id: str,
         operation_kind: str,
         request_digest: str,
-    ) -> HostedOperation:
+    ) -> HostedOperationClaim:
         if (
             not operation_id
             or len(operation_id) > 256
@@ -423,15 +429,16 @@ class OrderResolutionStore(PostgresStore):
         ):
             raise ValueError("The hosted operation claim is invalid.")
         with self.connect() as connection:
-            connection.execute(
+            inserted = connection.execute(
                 """
                 INSERT INTO order_resolution_hosted_operations
                     (operation_id, case_id, operation_kind, request_digest, status)
                 VALUES (%s, %s, %s, %s, 'pending')
                 ON CONFLICT (operation_id) DO NOTHING
+                RETURNING operation_id
                 """,
                 (operation_id, case_id, operation_kind, request_digest),
-            )
+            ).fetchone()
             row = connection.execute(
                 """
                 SELECT operation_id, case_id, operation_kind, request_digest,
@@ -450,7 +457,7 @@ class OrderResolutionStore(PostgresStore):
             or operation.request_digest != request_digest
         ):
             raise Conflict("The hosted operation ID is bound to different content.")
-        return operation
+        return HostedOperationClaim(operation, acquired=inserted is not None)
 
     def get_hosted_operation(self, operation_id: str) -> HostedOperation | None:
         with self.connect() as connection:
@@ -530,9 +537,7 @@ class OrderResolutionStore(PostgresStore):
     ) -> None:
         caller_id = self._hosted_value(caller_id, "Hosted caller identity")
         session_id = self._hosted_value(session_id, "Hosted session identity")
-        conversation_id = self._hosted_value(
-            conversation_id, "Hosted conversation identity"
-        )
+        conversation_id = self._hosted_value(conversation_id, "Hosted conversation identity")
         case = self.get(case_id)
         if principal_kind == "owner":
             authorized = (
@@ -599,8 +604,6 @@ class OrderResolutionStore(PostgresStore):
                 conversation_id,
                 HOSTED_CHANNEL,
             )
-            if binding != requested_binding:
-                raise Conflict("The case is bound to a different hosted caller or session.")
             current = (
                 row["tenant_id"],
                 row["subject_id"],
@@ -615,18 +618,22 @@ class OrderResolutionStore(PostgresStore):
                 roles,
                 principal_kind,
             )
-            if current == requested:
+            if binding == requested_binding and current == requested:
                 return
             if row["principal_kind"] != "owner" or principal_kind != "reviewer":
                 raise Conflict("The hosted principal binding cannot change identity.")
+            if binding[1:] != requested_binding[1:]:
+                raise Conflict("The case is bound to a different hosted session.")
             connection.execute(
                 """
                 UPDATE order_resolution_hosted_bindings
-                SET tenant_id = %s, subject_id = %s, scopes = %s, roles = %s,
-                    principal_kind = 'reviewer', updated_at = now()
+                SET caller_id = %s, tenant_id = %s, subject_id = %s,
+                    scopes = %s, roles = %s, principal_kind = 'reviewer',
+                    updated_at = now()
                 WHERE case_id = %s
                 """,
                 (
+                    caller_id,
                     principal.tenant_id,
                     principal.subject,
                     Jsonb(scopes),
@@ -690,9 +697,7 @@ class OrderResolutionStore(PostgresStore):
         *,
         channel: str,
     ) -> Proposal:
-        request_id = self._hosted_value(
-            candidate_request_id, "Hosted request identity"
-        )
+        request_id = self._hosted_value(candidate_request_id, "Hosted request identity")
         if channel != HOSTED_CHANNEL:
             raise Conflict("The hosted request channel is not authorized.")
         with self.connect() as connection:
@@ -786,10 +791,7 @@ class OrderResolutionStore(PostgresStore):
             or not row["request_id"]
             or row["request_id"] != row["pending_request_id"]
             or row["channel"] != decision.channel
-            or (
-                row["status"] == "pending"
-                and row["hosted_status"] != "pending"
-            )
+            or (row["status"] == "pending" and row["hosted_status"] != "pending")
             or (
                 row["status"] in ("approved", "rejected")
                 and row["hosted_status"] != "decision-recorded"
@@ -830,9 +832,7 @@ class OrderResolutionStore(PostgresStore):
                 if row["hosted_status"] != "completed":
                     raise Conflict("The hosted completion state is inconsistent.")
                 return
-            expected_hosted_status = (
-                "bound" if outcome == "automatic" else "decision-recorded"
-            )
+            expected_hosted_status = "bound" if outcome == "automatic" else "decision-recorded"
             if row["hosted_status"] != expected_hosted_status:
                 raise Conflict("The hosted workflow is not ready to complete.")
             connection.execute(
@@ -1002,7 +1002,10 @@ class OrderResolutionStore(PostgresStore):
                     or case.decision is not None
                 ):
                     raise Conflict("The record is not ready for automatic resolution.")
-            elif case.decision != "approved" or case.status not in ("approved", "failed"):
+            elif case.decision != "approved" or case.status not in (
+                "approved",
+                "failed",
+            ):
                 raise Conflict("The record is not ready for its approved action.")
             try:
                 action.apply(connection, case)
@@ -1022,7 +1025,10 @@ class OrderResolutionStore(PostgresStore):
             )
             connection.execute(
                 "INSERT INTO wf_audit (case_id, event) VALUES (%s, %s)",
-                (case_id, "automatic_action_applied" if automatic else "action_applied"),
+                (
+                    case_id,
+                    "automatic_action_applied" if automatic else "action_applied",
+                ),
             )
 
     def apply_automatic(self, case_id: UUID, action: TransactionalAction) -> None:

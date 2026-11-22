@@ -31,17 +31,24 @@ hosted-workflow port, explicit `local` versus `hosted` composition, API-UAMI
 caller tokens, Azure PostgreSQL managed-identity/password configuration,
 verified TLS requirements, bounded connections, explicit runtime/migration
 identity separation, and restart reconciliation for ambiguous hosted outcomes.
-It preserves the generated local application and Order Resolution's durable
-proposal, decision, effect, and no-duplicate-action boundaries.
-The profile now also exposes durable hosted caller/session/conversation
-bindings, an atomic operation journal, and business-only hosted
-pending/decision/completion methods that leave local checkpoint columns null.
+The API UAMI is the sole PostgreSQL runtime principal. The hosted identity
+calls the protected `/api/internal/hosted/v1` boundary with the fixed
+`Hosted.Workflow.Invoke` app role and receives no database configuration.
+Durable caller/session/conversation binding, case-bound idempotency, exact
+Agent A operation-journal conversion, and business-only hosted
+pending/decision/effect/completion state leave local checkpoint columns null.
 
-Acceptance evidence is local only: 118 source-backend tests, 157 tests in a
-fresh generated Order Resolution backend (including real-PostgreSQL hosted
-approval/restart/idempotency coverage), the ORS-001..009 adapter contract, 68
-root tests with two expected unselected-adapter skips, and source/generated
-frontend suites with 9/10 tests plus build/CSP passed. The
+Acceptance evidence is local only: 117 source-backend tests, 117 tests in a
+fresh generated generic backend, 158 tests in a fresh generated Order
+Resolution backend, the ORS-001..009 adapter contract (9/9), 68 root tests
+with two expected unselected-adapter skips, and source/generated frontend
+suites with 9/9 or 10/10 tests plus build/CSP passed. A PostgreSQL 17 and
+loopback HTTP test composes Agent A's live `HttpHostedBusinessStore` and
+`ResponsesClient` with C's exact journal types, covers restart/duplicate
+no-replay, and records one decision/effect with null checkpoint fields.
+Fresh generated Compose built through approved package proxies, ran explicit
+migrations, became healthy, and returned root `200`, health `204`, and
+protected API `401`. The
 [application security contract](azure-foundry/application-security.md)
 records the identity matrix, Agent A interface, Agent B outputs, OBO decision,
 and recovery behavior. Draft PR [#48](https://github.com/ppenumatsa1/agent-blueprints/pull/48)

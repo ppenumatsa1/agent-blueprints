@@ -186,19 +186,33 @@ and deployment identity in a real environment.
 
 ## Hosted application configuration
 
-Hosted mode requires `HOSTED_WORKFLOW_ENDPOINT`,
-`HOSTED_WORKFLOW_SCOPE=<resource>/.default`, and the API UAMI client UUID in
-`API_MANAGED_IDENTITY_CLIENT_ID`. The HTTP contract is described in
-[deployment](docs/deployment.md). The API obtains this caller token on demand
-and never forwards the end-user bearer token. End-user authorization remains
-in FastAPI; the hosted execution identity is independently owned by the
-hosted runtime.
+Hosted mode requires Foundry `HOSTED_WORKFLOW_ENDPOINT` and
+`HOSTED_CONVERSATION_ENDPOINT` values with explicit `api-version` queries,
+`HOSTED_WORKFLOW_SCOPE=https://ai.azure.com/.default`, and the API UAMI client
+UUID in `API_MANAGED_IDENTITY_CLIENT_ID`. These values are consumed by the
+integrated Agent A Responses adapter; this standalone project deliberately
+provides no generic `/runs` transport and fails closed when that adapter is
+absent. The adapter obtains its caller token on demand and never forwards the
+end-user bearer token. End-user authorization remains in FastAPI; the hosted
+execution identity is independently owned by the hosted runtime.
 
-Azure PostgreSQL supports `DATABASE_AUTH_MODE=managed-identity` with an
+Order Resolution also requires `ENTRA_API_APP_ID_URI`,
+`HOSTED_SERVICE_PRINCIPAL_ID`, and the fixed
+`HOSTED_SERVICE_APP_ROLE=Hosted.Workflow.Invoke`. Its hosted runtime receives
+only the internal FastAPI base URL and
+`ORDER_RESOLUTION_API_SCOPE=api://<API-client-id>/.default`; it does not
+receive database configuration. FastAPI binds opaque hosted
+caller/session/conversation values to authoritative owner/reviewer state and
+requires case-bound `Idempotency-Key` values for every hosted-state mutation.
+
+Azure PostgreSQL is owned by the API runtime and supports
+`DATABASE_AUTH_MODE=managed-identity` with an
 optional `DATABASE_MANAGED_IDENTITY_CLIENT_ID`, or `password` with
 `DATABASE_PASSWORD` supplied by a secret manager. Hosted mode requires
-`DATABASE_TLS_MODE=verify-full`. Pool min/max, wait timeout, and maximum
-connection lifetime are explicit environment settings. Use
+`DATABASE_TLS_MODE=verify-full` and `DATABASE_TLS_ROOT_CERT=system` (or the
+generated container CA bundle). Managed-identity credentials and database
+tokens are created only when a connection is opened. Pool min/max, wait
+timeout, and maximum connection lifetime are explicit environment settings. Use
 `MIGRATION_DATABASE_URL` for the schema-owner migration command and
 `DATABASE_URL` for the restricted runtime. Local Compose intentionally uses
 one password identity and `DATABASE_TLS_MODE=disable` only for the isolated

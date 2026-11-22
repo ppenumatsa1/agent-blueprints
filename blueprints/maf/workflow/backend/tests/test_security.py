@@ -38,6 +38,8 @@ API = "20000000-0000-4000-8000-000000000002"
 OWNER = "30000000-0000-4000-8000-000000000003"
 REVIEWER = "40000000-0000-4000-8000-000000000004"
 STRANGER = "50000000-0000-4000-8000-000000000005"
+HOSTED_SERVICE = "60000000-0000-4000-8000-000000000006"
+HOSTED_SERVICE_ROLE = "Hosted.Workflow.Invoke"
 
 
 def scoped_url(dsn: str, schema: str) -> str:
@@ -68,13 +70,14 @@ class TokenFixture:
             "tid": TENANT,
             "oid": subject,
             "sub": "synthetic-subject",
-            "scp": scopes,
             "roles": roles or [],
             "ver": "2.0",
             "iat": now - 5,
             "nbf": now - 5,
             "exp": now + 300,
         }
+        if scopes is not None:
+            claims["scp"] = scopes
         claims.update(changes)
         return jwt.encode(claims, key or self.first, algorithm="RS256", headers={"kid": kid})
 
@@ -105,7 +108,13 @@ class IdentityTests(unittest.TestCase):
 
     def setUp(self):
         self.settings = Settings(
-            TENANT, API, "postgresql://localhost/test", Path("test-checkpoints")
+            TENANT,
+            API,
+            "postgresql://localhost/test",
+            Path("test-checkpoints"),
+            api_app_id_uri=f"api://{API}",
+            hosted_service_principal_id=HOSTED_SERVICE,
+            hosted_service_app_role=HOSTED_SERVICE_ROLE,
         )
         self.identity = EntraIdentity(self.settings, self.tokens.client())
 
@@ -151,6 +160,38 @@ class IdentityTests(unittest.TestCase):
             self.assertEqual(
                 request.full_url, f"https://login.microsoftonline.com/{TENANT}/discovery/v2.0/keys"
             )
+
+    def test_service_identity_requires_app_role_authorized_principal_and_no_user_scope(self):
+        valid = self.identity.authenticate_service(
+            self.tokens.token(
+                subject=HOSTED_SERVICE,
+                scopes=None,
+                roles=[HOSTED_SERVICE_ROLE],
+                aud=f"api://{API}",
+            )
+        )
+        self.assertEqual(valid.principal.subject, HOSTED_SERVICE)
+        invalid = [
+            self.tokens.token(
+                subject=HOSTED_SERVICE,
+                scopes=None,
+                roles=[],
+            ),
+            self.tokens.token(
+                subject=STRANGER,
+                scopes=None,
+                roles=[HOSTED_SERVICE_ROLE],
+            ),
+            self.tokens.token(
+                subject=HOSTED_SERVICE,
+                scopes="workflow.read",
+                roles=[HOSTED_SERVICE_ROLE],
+            ),
+        ]
+        for token in invalid:
+            with self.subTest(token=invalid.index(token)):
+                with self.assertRaises(AuthenticationFailed):
+                    self.identity.authenticate_service(token)
 
     def test_jwks_network_failure_is_not_accepted(self):
         client = Mock()

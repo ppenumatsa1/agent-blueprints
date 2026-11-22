@@ -76,7 +76,13 @@ class OrderResolutionService(WorkflowService):
     ):
         case = self.store.get(case_id)
         try:
-            self.policy.authorize_decision(actor, case)
+            idempotent_repeat = case.decision == decision and case.status in (
+                "approved",
+                "rejected",
+                "completed",
+            )
+            if not idempotent_repeat:
+                self.policy.authorize_decision(actor, case)
             proposal = self.store.get_current_proposal(str(case_id))
             return record_decision(
                 self.store,

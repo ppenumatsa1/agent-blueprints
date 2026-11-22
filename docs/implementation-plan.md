@@ -80,13 +80,16 @@ NOT READY for production, release, or deployment.
 ## Azure/Foundry Workstream C
 
 Workstream C composes the generated FastAPI application with either the
-existing native local host or an Agent A-compatible hosted client. The
+existing native local host or an injected Agent A native Responses adapter.
+The standalone app has no generic hosted HTTP fallback and fails closed when
+that adapter is absent. The
 application owns end-user authentication/authorization and PostgreSQL
 business state; Agent A owns hosted execution identity and checkpoint/session
-state. The API UAMI authenticates the service-to-service call and is never
-treated as the user. PostgreSQL-only synthetic effects use a distinct
-application tool identity and retain proposal/action/destination/digest
-binding.
+state. The API UAMI is the sole PostgreSQL runtime principal and is never
+treated as the user. The hosted identity calls only the protected internal API
+with the fixed `Hosted.Workflow.Invoke` app role and receives no database
+configuration. PostgreSQL-only synthetic effects use a distinct application
+tool identity and retain proposal/action/destination/digest binding.
 
 Implementation acceptance criteria:
 
@@ -95,17 +98,23 @@ Implementation acceptance criteria:
   ownership, reviewer authorization, and stale/conflicting decisions;
 - claim-before-send and authoritative status reconciliation for ambiguous
   hosted acknowledgments, without replay;
+- app-only tenant/issuer/audience/principal/role validation on
+  `/api/internal/hosted/v1`, case-bound caller/session/conversation checks,
+  and durable idempotency-key conflict detection;
 - explicit migrations, startup schema validation, runtime/admin identity
   separation, TLS verification, bounded pools, and managed-identity or secret
   authentication;
 - unchanged frontend/API and ORS-001..009 contracts, atomic stores and effect
   ledger, and no duplicate synthetic effects; and
-- local/mock tests plus generated-project and frontend checks.
+- local PostgreSQL/native Responses-wire tests plus generated-project and
+  frontend checks.
 
-The Agent A integration additionally requires its native host to call
-`prepare_hosted_approval`, `claim_hosted_decision`, and `finish_hosted`.
-These methods persist business approval state and opaque correlation only;
-they never fabricate local checkpoint IDs or store Foundry checkpoint bytes.
+The Agent A integration additionally uses `HttpHostedBusinessStore` for
+case-bound prepare/claim/effect/finish calls and C's
+`PostgresOperationJournal` beside `ResponsesClient`. These seams persist
+business approval state and opaque correlation only; they never fabricate
+local checkpoint IDs, expose PostgreSQL to the hosted runtime, or store
+Foundry checkpoint bytes.
 
 Current local evidence satisfies those implementation criteria and is detailed
 in [application security](azure-foundry/application-security.md) and draft PR
