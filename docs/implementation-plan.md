@@ -8,6 +8,17 @@ standards, initial contracts, and GitHub-hosted validation under the MIT
 License. The [follow-up](https://github.com/ppenumatsa1/agent-blueprints/pull/2)
 added profile-aware contracts, the supplied architecture source, and the
 [living checklist](master-checklist.md).
+
+The [cross-framework Order Resolution specification
+proposal](order-resolution-specification-proposal.md) adds a documentation-only
+business contract for triage, policy retrieval, deterministic resolution,
+authorized approval/rejection, idempotency, crash/restart recovery, and
+evaluations. Its versioned synthetic set covers automatic completion, approval,
+rejection, duplicate commands, worker recovery, policy-evidence failures, and
+authorization denial. It requires framework-native workflow/checkpoint
+providers and keeps PostgreSQL application persistence separate; it does not
+add a runtime, custom checkpointer, compatibility shim, or Azure resource.
+
 Specification Studio has not yet produced an artifact, so the proposed
 handoff is not an end-to-end compatibility claim. Phase 0 does not implement
 the validator or an agent template, integrate Specification Studio, deploy
@@ -150,8 +161,11 @@ reconciled tree.
 PR #17 is merged into `main` at
 `0c1297cc8e93c62f69d61d0eb3bdabf3c27c683d`; exact-main
 [run 45027884271](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/45027884271)
-passed all six jobs. Earlier PR #17 commit and merge-ref results below are
-historical snapshots and do not replace this current baseline. Local
+passed all six jobs for that baseline. Later merged work advances current
+`main` to `9b6e0194c1b2b005792b68a95e46275e25817a8a`; #37 is being
+reconciled against this exact base, and its fresh exact-head results are
+tracked on the PR. Earlier PR #17 commit and merge-ref results below are
+historical snapshots and do not replace current-base validation. Local
 validation and network/harness caveats are recorded in the
 [integration journal](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-22---main-reconciliation-and-local-validation).
 The [targeted MAF supply-chain audit](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-22---targeted-maf-supply-chain-audit)
@@ -402,10 +416,10 @@ makes the blueprint, readiness report, or deployment complete. See the
 | Work package | Open issue(s) and acceptance boundary |
 | --- | --- |
 | P1-01–03: authorized exact contract and independent trust/provenance | [#21](https://github.com/ppenumatsa1/agent-blueprints/issues/21); synthetic schemas and validator tests do not establish authorized approval or trust administration. |
-| P0: consequential external side effects | [#32](https://github.com/ppenumatsa1/agent-blueprints/issues/32); the action ledger covers only effects in the same PostgreSQL transaction. Block consequential remote actions until service-specific authorization, downstream idempotency and authoritative reconciliation are independently verified; otherwise fail closed and use manual resolution. An outbox only persists intent; it cannot deduplicate an external effect after a lost acknowledgment. |
+| P0: consequential external side effects | [#32](https://github.com/ppenumatsa1/agent-blueprints/issues/32); the action ledger covers only effects in the same PostgreSQL transaction. Block consequential remote actions until service-specific authorization, downstream idempotency and authoritative reconciliation are independently verified; otherwise fail closed and use manual resolution. An outbox only persists intent; it cannot deduplicate an external effect after a lost acknowledgment. The opt-in [pattern](../blueprints/maf/workflow/backend/examples/external_effect_boundary.py) and [synthetic tests](../blueprints/maf/workflow/backend/tests/test_external_effect.py) cover exact-request authorization, a five-second downstream budget, conflicts, concurrency, timeouts, reconciliation and process death, not real services or hosted guarantees. Its case-level key represents one immutable action only; future proposal-version/action/target identity must follow merged #40. Independently verify generated revision and each integration's authorization, retention, timeout and reconciliation; keep #32 open. |
 | P1-07–08: real identity and browser experience | [#27](https://github.com/ppenumatsa1/agent-blueprints/issues/27); interactive Entra/OBO, generated UI and accessibility remain unverified. |
 | P1-09/P1-12: hosted MAF packaging and checkpoint integration | [#19](https://github.com/ppenumatsa1/agent-blueprints/issues/19); caller/session binding [#22](https://github.com/ppenumatsa1/agent-blueprints/issues/22); lost-response/effect recovery [#20](https://github.com/ppenumatsa1/agent-blueprints/issues/20). Hosted recovery was explicitly deferred; this is not a security waiver. |
-| Typed MAF extensions | [#35](https://github.com/ppenumatsa1/agent-blueprints/issues/35), [draft PR #37](https://github.com/ppenumatsa1/agent-blueprints/pull/37); use validated model-selection configuration, explicitly versioned prompt assets, direct native MAF `Agent`, `@tool`, `Executor` and `WorkflowBuilder` composition, and request-scoped application authorization. Source/generated suites each passed 81 tests, including approval, rejection, restart and crash recovery; local source/generated Compose smoke checks passed UI 200, health 204, protected API 401, CSP and private checkpoint permissions. Exact-head run [45030949544](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/45030949544) passed all six jobs on implementation commit `8795c46`; final-head CI is tracked on PR #37 after the documentation-only update. The example requires affirmative `True` authorization. Arbitrary trusted Python callbacks remain unsandboxed, so absolute non-bypass is unverified. External effects remain blocked by [#32](https://github.com/ppenumatsa1/agent-blueprints/issues/32); hosted identity/recovery, trusted readiness and a live model response are not claimed. |
+| Typed MAF extensions | [#35](https://github.com/ppenumatsa1/agent-blueprints/issues/35), [draft PR #37](https://github.com/ppenumatsa1/agent-blueprints/pull/37); use validated model-selection configuration, explicitly versioned prompt assets, direct native MAF `Agent`, `@tool`, `Executor` and `WorkflowBuilder` composition, and request-scoped application authorization. Source/generated suites each passed 81 tests, including approval, rejection, restart and crash recovery; local source/generated Compose smoke checks passed UI 200, health 204, protected API 401, CSP and private checkpoint permissions. Those results and run [45031304964](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/45031304964) apply to the prior head only. The merge-tree reconciliation against current `main` `9b6e0194c1b2b005792b68a95e46275e25817a8a` requires fresh exact-head CI; see PR #37 for that result. The example requires affirmative `True` authorization. Arbitrary trusted Python callbacks remain unsandboxed, so absolute non-bypass is unverified. External effects remain blocked by [#32](https://github.com/ppenumatsa1/agent-blueprints/issues/32); hosted identity/recovery, trusted readiness and a live model response are not claimed. |
 | P1-10: agent evaluation and browser-hint evidence | [#25](https://github.com/ppenumatsa1/agent-blueprints/issues/25); current synthetic producer leaves explanation and hint unverified. Use native MAF `Evaluator`, `LocalEvaluator`, `@evaluator`, and `evaluate_agent()` rather than adding a generic evaluator extension seam. |
 | P1-11: privacy-safe cloud telemetry | [#26](https://github.com/ppenumatsa1/agent-blueprints/issues/26); native auto-instrumentation remains disabled after the query-canary leak and duplicate spans. |
 | Developer experience | [#23](https://github.com/ppenumatsa1/agent-blueprints/issues/23); macOS, interactive debugging and Restricted Mode remain unverified. |

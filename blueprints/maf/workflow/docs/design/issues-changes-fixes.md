@@ -11,12 +11,11 @@ entries to hide failed attempts or gaps.
 ## 2026-11-22 - Issue and fix status
 
 This current snapshot reflects `main` at
-`0c1297cc8e93c62f69d61d0eb3bdabf3c27c683d`, where PR #17 is merged. Its merge
-parents are `de1cbe4cc3a93f2473a6f8f5f9e063d1ae278fa3` and final #17 head
-`1a3e7c75f2ff5ffa8ef055e474a7ea5fb6d2a397`; merge tree
-`f4623d919f75ec4f6d5bf2d9f4e365a1bdcaa124` matches that head's tree. Exact-main
-[run 45027884271](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/45027884271)
-passed all six jobs. The merged baseline retains the hash-verified
+`9b6e0194c1b2b005792b68a95e46275e25817a8a`. PR #17 merged earlier at
+`0c1297cc8e93c62f69d61d0eb3bdabf3c27c683d`; its exact-main run
+[45027884271](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/45027884271)
+passed all six jobs for that baseline. Later merged work includes #40 and #36.
+The current merged baseline retains the hash-verified
 `agent-framework-core==1.26.0` supply-chain guard, native MAF checkpoint
 ownership, and bounded PostgreSQL TCP-readiness probes. Historical entries
 below preserve prior evidence snapshots; they are not current PR status.
@@ -24,8 +23,9 @@ below preserve prior evidence snapshots; they are not current PR status.
 ### Current #35 workstream
 
 Draft [PR #37](https://github.com/ppenumatsa1/agent-blueprints/pull/37) is
-being reconciled with merged `main` and reviewed against MAF 1.26.0 and the
-pinned `foundry-public` source. The simplification removes redundant
+being reconciled with current `main` at
+`9b6e0194c1b2b005792b68a95e46275e25817a8a` and reviewed against MAF 1.26.0
+and the pinned `foundry-public` source. The simplification removes redundant
 `ModelClientFactory`, `AgentDefinition`, `build_chat_agent`, and `ToolRegistry`
 wrappers. The generated synthetic example retains only validated
 `ModelSelection`, versioned `PromptAsset`, and application-owned
@@ -33,16 +33,17 @@ wrappers. The generated synthetic example retains only validated
 `WorkflowBuilder` use; the host retains workflow identity, response contract,
 and `FileCheckpointStorage`.
 
-The current source and generated backend suites each passed 81 tests, including
+The prior source and generated backend suites each passed 81 tests, including
 invalid configuration, affirmative-`True` tool authorization, native workflow
 approval/rejection, restart and crash recovery. Local source and generated
 Compose smoke checks passed UI 200, health 204, protected API 401, CSP,
 configured frontend values, non-root API, and private checkpoint permissions.
 These are local synthetic results; exact-head run
-[45030949544](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/45030949544)
-passed all six jobs on implementation commit `8795c46`. This evidence predates
-the current documentation-only update; final-head CI is tracked on PR #37. No
-live model response is claimed. Arbitrary trusted Python callbacks are not
+[45031304964](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/45031304964)
+passed all six jobs on prior head `0772af8`. The merge-tree reconciliation
+changes CI test selectors and shared documentation; fresh exact-head
+validation is tracked on PR #37. No live model response is claimed. Arbitrary
+trusted Python callbacks are not
 sandboxed, so absolute extension non-bypass remains unverified.
 Consequential external effects remain blocked by #32; hosted identity,
 checkpoints and recovery (#19/#20/#22) and trusted readiness (#21) remain
@@ -76,7 +77,7 @@ than add a generic evaluator extension seam.
 | [#33](https://github.com/ppenumatsa1/agent-blueprints/issues/33) | Specification Studio implementation and an actual producer are outside this phase. | Validate interoperability when that separate work is authorized and available. |
 | [#34](https://github.com/ppenumatsa1/agent-blueprints/issues/34) | Other framework blueprints and a separate App/API repository are deferred. | Scope and authorize those later efforts separately. |
 | [#35](https://github.com/ppenumatsa1/agent-blueprints/issues/35) | Draft #37 supplies simplified native MAF patterns and generated synthetic tests; arbitrary trusted callbacks are not sandboxed, so absolute non-bypass is unverified. | Review the exact-head PR evidence; keep hosted identity/recovery, external effects and #35 in progress until independently verified. |
-| [#38](https://github.com/ppenumatsa1/agent-blueprints/issues/38) | TCP readiness probes and regression tests are in merged `main` at `0c1297c`; exact-main CI passed all six jobs. | Preserve the upstream probes; managed PostgreSQL behavior remains unverified. |
+| [#38](https://github.com/ppenumatsa1/agent-blueprints/issues/38) | TCP readiness probes and regression tests remain in current `main` at `9b6e019`; prior exact-main CI passed all six jobs. | Preserve the upstream probes; managed PostgreSQL behavior remains unverified. |
 
 ### Review sequence
 

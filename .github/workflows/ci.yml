@@ -74,7 +74,7 @@ jobs:
           exit 1
       - name: Run workflow, worker recovery, API security, and evidence tests
         working-directory: blueprints/maf/workflow/backend
-        run: uv run --locked python -m unittest -v tests.test_core tests.test_security tests.test_evidence_runner tests.test_telemetry tests.test_migrations tests.test_extensions
+        run: uv run --locked python -m unittest -v tests.test_core tests.test_external_effect tests.test_security tests.test_evidence_runner tests.test_telemetry tests.test_migrations tests.test_extensions
       - name: Stop isolated PostgreSQL
         if: always()
         run: docker stop maf-core-test || true
@@ -202,7 +202,7 @@ jobs:
           uv run --locked ruff check .
           uv run --locked ruff format --check .
           uv run --locked python -c "import app, pathlib; assert pathlib.Path(app.__file__).resolve().is_relative_to(pathlib.Path.cwd())"
-          uv run --locked python -m unittest -v tests.test_core tests.test_security tests.test_evidence_runner tests.test_telemetry tests.test_migrations tests.test_extensions
+          uv run --locked python -m unittest -v tests.test_core tests.test_external_effect tests.test_security tests.test_evidence_runner tests.test_telemetry tests.test_migrations tests.test_extensions
           cd ../frontend
           npm test
           npm run build
