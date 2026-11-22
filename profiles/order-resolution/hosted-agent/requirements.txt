@@ -1,0 +1,13 @@
+agent-framework-core==1.26.0
+agent-framework-foundry==1.16.2
+agent-framework-foundry-hosting==1.0.0b261112
+azure-ai-agentserver-core==2.3.1b1
+azure-ai-agentserver-responses==2.4.0
+azure-ai-projects==2.11.0
+azure-identity==1.27.0
+azure-monitor-opentelemetry-exporter==1.0.0b59
+httpx==0.28.1
+opentelemetry-api==1.45.2
+opentelemetry-sdk==1.45.2
+psycopg[binary]==3.3.9
+pydantic==2.14.3

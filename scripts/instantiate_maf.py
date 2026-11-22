@@ -10,6 +10,10 @@ ROOT = Path(__file__).resolve().parents[1]
 BLUEPRINT = ROOT / "blueprints" / "maf" / "workflow"
 ORDER_RESOLUTION_PROFILE = ROOT / "profiles" / "order-resolution"
 ORDER_RESOLUTION_OVERLAY = ORDER_RESOLUTION_PROFILE / "overlay"
+ORDER_RESOLUTION_HOSTED_AGENT = ORDER_RESOLUTION_PROFILE / "hosted-agent"
+ORDER_RESOLUTION_FOUNDRY_SCRIPT = (
+    ROOT / "scripts" / "foundry" / "publish_order_resolution_hosted.py"
+)
 ORDER_RESOLUTION_CONTRACT = (
     ROOT / "scenarios" / "order-resolution" / "acceptance-contract.json"
 )
@@ -54,6 +58,25 @@ def _merge_order_resolution_verification(verification: Path) -> None:
     source = ORDER_RESOLUTION_PROFILE / "verification"
     if source.is_dir():
         shutil.copytree(source, verification, dirs_exist_ok=True, ignore=IGNORE)
+
+
+def _merge_order_resolution_hosted_agent(destination: Path) -> None:
+    if not ORDER_RESOLUTION_HOSTED_AGENT.is_dir():
+        raise ValueError("The Order Resolution hosted-agent package is missing.")
+    shutil.copytree(
+        ORDER_RESOLUTION_HOSTED_AGENT,
+        destination / "hosted-agent",
+        dirs_exist_ok=True,
+        ignore=IGNORE,
+    )
+    if not ORDER_RESOLUTION_FOUNDRY_SCRIPT.is_file():
+        raise ValueError("The Order Resolution Foundry publisher is missing.")
+    scripts = destination / "scripts" / "foundry"
+    scripts.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(
+        ORDER_RESOLUTION_FOUNDRY_SCRIPT,
+        scripts / ORDER_RESOLUTION_FOUNDRY_SCRIPT.name,
+    )
 
 
 def instantiate(
@@ -113,6 +136,7 @@ def instantiate(
     if profile == "order-resolution":
         shutil.copytree(ORDER_RESOLUTION_OVERLAY, destination, dirs_exist_ok=True, ignore=IGNORE)
         _merge_order_resolution_backend(destination)
+        _merge_order_resolution_hosted_agent(destination)
         _configure_order_resolution(destination)
     verification = destination / "verification"
     verification.mkdir()

@@ -1,4 +1,4 @@
-from typing import Protocol
+from typing import Literal, Protocol
 from uuid import UUID
 
 from agent_framework import (
@@ -10,9 +10,30 @@ from agent_framework import (
     handler,
     response_handler,
 )
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.domain.models import StateRepository, TransactionalAction
 from app.workflows.workflow import WORKFLOW_NAME
+
+
+class OrderResolutionDecision(BaseModel):
+    """Structured native-workflow reply shared by local and hosted transports."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    case_id: UUID
+    proposal_version: int = Field(ge=1)
+    action: str = Field(min_length=1, max_length=256)
+    destination_id: str = Field(min_length=1, max_length=256)
+    handle: str = Field(min_length=1, max_length=256)
+    channel: str = Field(min_length=1, max_length=64)
+    decision: Literal["approved", "rejected"]
+    conversation_id: str | None = Field(default=None, min_length=1, max_length=256)
+    session_id: str | None = Field(default=None, min_length=1, max_length=256)
+
+    @property
+    def approved(self) -> bool:
+        return self.decision == "approved"
 
 
 class AutomaticResolutionStore(Protocol):
@@ -34,21 +55,29 @@ class OrderResolutionExecutor(Executor):
         case_id = UUID(message["case_id"])
         case = self._store.get(case_id)
         if case.payload["proposal"]["approval_required"]:
-            await ctx.request_info(request_data=message, response_type=bool)
+            await ctx.request_info(
+                request_data=message,
+                response_type=OrderResolutionDecision,
+            )
             return
         self._store.apply_automatic(case_id, self._action)
         await ctx.yield_output({"case_id": str(case_id), "decision": "automatic"})
 
     @response_handler
     async def handle_decision(
-        self, original_request: dict[str, str], approved: bool, ctx: WorkflowContext
+        self,
+        original_request: dict[str, str],
+        response: OrderResolutionDecision,
+        ctx: WorkflowContext,
     ) -> None:
         case_id = UUID(original_request["case_id"])
-        self._store.apply_once(case_id, approved, self._action)
+        if response.case_id != case_id:
+            raise ValueError("The workflow response belongs to a different case.")
+        self._store.apply_once(case_id, response.approved, self._action)
         await ctx.yield_output(
             {
                 "case_id": str(case_id),
-                "decision": "approved" if approved else "rejected",
+                "decision": response.decision,
             }
         )
 

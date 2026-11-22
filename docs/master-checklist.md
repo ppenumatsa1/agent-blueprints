@@ -99,6 +99,15 @@ issues and need not wait for all live verification to close.
 | Permanent standalone reference application (P1) | 1 | Blocked pending authorization | Deliver a synthetic, independently owned application with no source-repository runtime dependency and documented extension/operational boundaries. | Required P1 deliverable tracked in [#30](https://github.com/ppenumatsa1/agent-blueprints/issues/30); no permanent repository has been authorized or created. | Obtain separate explicit repository authorization, then verify clean clone/build/run/test and independent contracts. |
 | App/API Blueprints roadmap | Later | Planned | Establish separately authorized API/web-app paths and repositories. | Roadmap [#34](https://github.com/ppenumatsa1/agent-blueprints/issues/34); [Repository boundaries](software-factory-overview.md#repository-boundaries). | Keep out of phase and obtain separate authorization before implementation. |
 
+### Azure/Foundry Workstream A
+
+| Acceptance criterion | Status | Evidence | Next action |
+| --- | --- | --- | --- |
+| Generate an independently owned native MAF Responses host without a custom orchestrator/checkpointer | Implemented; locally verified 2026-11-22 | [Hosting report](azure-foundry/hosting.md); 17 generated hosted tests, 10 publisher/generator tests, and Ruff passed | Attach the focused draft PR; keep live hosting unverified. |
+| Preserve application-owned PostgreSQL business state and local filesystem checkpoint behavior | Implemented; locally verified 2026-11-22 | Structured decision is shared by the existing local host; 5 generated workflow tests and PostgreSQL 17 execution of ORS-001..009 passed | Keep hosted state/recovery claims unverified until deployed. |
+| Reject unauthorized/cross-channel resume and avoid ambiguous POST replay | Implemented; live behavior unverified | Generated mocked tests cover caller/session/conversation/channel refusal, duplicate acknowledgment, unknown state and reconciliation | Agents B-D must implement the durable identity binding and operation journal, then verify with deployed identities. |
+| Pin current public SDK/source-publish compatibility without private patches | Implemented; locally verified 2026-11-22 | [Compatibility matrix](azure-foundry/hosting.md), SDK-drift tests, deterministic source archive test, and 68-test repository contract run (2 documented adapter skips) | Recheck pins at deployment time; do not publish on failed drift tests. |
+
 ## Issue-linked open backlog
 
 The following links attach concrete acceptance work to the matching rows
