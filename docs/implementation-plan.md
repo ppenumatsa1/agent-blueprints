@@ -108,7 +108,8 @@ These methods persist business approval state and opaque correlation only;
 they never fabricate local checkpoint IDs or store Foundry checkpoint bytes.
 
 Current local evidence satisfies those implementation criteria and is detailed
-in [application security](azure-foundry/application-security.md). OBO is not
+in [application security](azure-foundry/application-security.md) and draft PR
+[#48](https://github.com/ppenumatsa1/agent-blueprints/pull/48). OBO is not
 required because no verified user-delegated downstream operation exists.
 Remaining work is integration review, exact-head CI, Agent A contract
 confirmation, Agent B output binding, and live Azure/Foundry/PostgreSQL

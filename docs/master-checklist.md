@@ -44,7 +44,9 @@ root tests with two expected unselected-adapter skips, and source/generated
 frontend suites with 9/10 tests plus build/CSP passed. The
 [application security contract](azure-foundry/application-security.md)
 records the identity matrix, Agent A interface, Agent B outputs, OBO decision,
-and recovery behavior. Next action: obtain draft-PR review and exact-head CI,
+and recovery behavior. Draft PR [#48](https://github.com/ppenumatsa1/agent-blueprints/pull/48)
+contains the Workstream C implementation. Next action: obtain draft-PR review
+and exact-head CI,
 then run the listed live-only checks after integration and authorized
 deployment. No Azure resource or live RBAC/configuration was changed here.
 
