@@ -280,10 +280,10 @@ ID for the hosted version, so callers must not invent one.
 | Standard hosted checkpoint provider | Verified locally | Public `CheckpointStoreProvider(allowed_checkpoint_types=...)`; no custom provider or local file storage in hosted composition |
 | Responses protocol `2.0.0` manifest | Verified locally | Deterministic publisher contract and SDK model construction test |
 | Structured native approval resume | Verified locally | Generated package tests validate platform-managed session scope, decision recording, business completion without a local checkpoint ID, and exact conversation/channel binding |
-| Authenticated API-to-Responses bridge | Interface and ordering verified locally; C composition pending | Explicit factory creates/reconciles the conversation, prebinds authenticated owner/reviewer authority before dispatch, omits caller-supplied `agent_session_id`, and uses only `/conversations` plus `/responses`; no generic `/runs` fallback |
+| Authenticated API-to-Responses bridge | Verified in exact A/C local composition | Explicit factory creates/reconciles the conversation, prebinds authenticated owner/reviewer authority before dispatch, omits caller-supplied `agent_session_id`, and uses only `/conversations` plus `/responses`; C `2a04d5be3013e782a7c1222b2a16a7047cbb15cd` proves normal API startup, terminal exact-intent replay with no new Responses dispatch, and conflict/unauthorized refusal |
 | Conversation-to-session routing | Official contract and public SDK guard verified locally | Microsoft Learn documents that a Responses conversation automatically reuses one stable `agent_session_id`; the pinned public `FoundryRequestScope` test rejects a conflicting request session |
-| Application-owned hosted business seam | Functional composition verified; authorization integration blocked | Agent A's adapter and Workstream C `60fd83fc05acc290aab3ed96f8f8c255e493d28d` passed the real-PostgreSQL lifecycle, but that C revision created owner/reviewer bindings from opaque hosted input and is rejected as authorization evidence |
-| Protected API business port | Wire/idempotency verified; binding correction required | Exact C revision `60fd83fc05acc290aab3ed96f8f8c255e493d28d` passed bind/read/prepare/decision/effect/finish over loopback HTTP, but integration must be rerun against verification-only binding endpoints backed by an authenticated application command |
+| Application-owned hosted business seam | Verified locally against corrected C integration | Exact C revision `2a04d5be3013e782a7c1222b2a16a7047cbb15cd` keeps PostgreSQL state application-owned, prebinds human authority from authenticated API commands, and treats hosted platform identity only as workload correlation |
+| Protected API business port | Verified locally | Exact C revision `2a04d5be3013e782a7c1222b2a16a7047cbb15cd` passed verification-only binding plus read/prepare/decision/effect/finish over loopback HTTP and PostgreSQL 17, including identical terminal replay, conflicting intent, and unauthorized actor negatives |
 | Managed-identity token acquisition | Verified locally | Mock credentials verify `https://ai.azure.com/.default`, the dedicated internal API `api://.../.default` scope, and Authorization headers |
 | Source-code publishing API | Verified locally | Public signature/model test and no-retry mocked publish test |
 | Hosted version identity query | SDK surface verified; live identity unverified | Public `get_version` returns `AgentVersionDetails.instance_identity.principal_id/client_id`, `id`, `agent_guid`, and provisioning status |
@@ -300,10 +300,12 @@ ID for the hosted version, so callers must not invent one.
 
 ## Local validation evidence
 
-- 40 generated hosted-runtime tests passed, including absent and mismatched
+- 41 generated hosted-runtime tests passed, including absent and mismatched
   pre-established owner/reviewer binding refusal, platform-session conflict
   rejection, API-workload/human identity separation, and API bridge
-  conversation/prebind/dispatch ordering.
+  conversation/prebind/dispatch ordering. The added bridge regression proves an
+  acknowledged identical terminal resume performs one Responses POST while a
+  conflicting payload is refused without redispatch.
 - 16 publisher/generator tests passed, including restart/concurrent publish
   exclusion and complete publication identity conflicts.
 - Generated Ruff check and format check passed across 93 Python files.
@@ -312,16 +314,17 @@ ID for the hosted version, so callers must not invent one.
 - The repository contract suite passed 68 tests with the two documented
   adapter-selection skips.
 - Exact Workstream C revision
-  `60fd83fc05acc290aab3ed96f8f8c255e493d28d` passed the composed PostgreSQL 17
+  `2a04d5be3013e782a7c1222b2a16a7047cbb15cd` passed the composed PostgreSQL 17
   protected-API and native `/conversations` plus `/responses` wire proof in
-  6.273 seconds. The proof used A's exact `OperationClaim(record, acquired)`
-  types, repeated acknowledged creates with zero replay, one decision/action,
-  and null business checkpoint fields. This is functional wire/idempotency
-  evidence only: security review rejected that C revision because its bind
-  endpoints manufactured owner/reviewer authority from opaque hosted caller
-  input. Final A/C compatibility requires a new C revision that only verifies
-  bindings pre-established by an authenticated application command, plus a
-  repeated composed proof with absent/mismatched binding negatives.
+  6.204 seconds against freshly generated Agent A output. Normal `create_app`
+  constructed the backend-native `ResponsesWorkflowHost`; the proof used A's
+  exact `OperationClaim(record, acquired)` types, omitted `agent_session_id`,
+  repeated acknowledged creates with zero replay, returned an identical
+  terminal command through the bridge with no additional Responses dispatch,
+  refused conflicting intent and an unauthorized actor, recorded one
+  decision/action, and left both business checkpoint fields null.
+- Draft PR #48 at that C revision passed all six CI jobs in run
+  `45084615221`; its generated backend suite reports 159 passing tests.
 - Two independently built source archives matched SHA-256
   `3becbb28da4eae014a47d20fe5d8f93d7b56c2f93d9558f0afdf2218868d44ca`
   and contained 56 files.
@@ -331,8 +334,9 @@ ID for the hosted version, so callers must not invent one.
   `/app/order_resolution_hosted`, verifying that the API-side package is
   present without a sibling source path or hosted SDK dependency.
 - Normal API startup with C's concrete backend-native `WorkflowHost`
-  composition remains unverified until C supplies the corrected immutable
-  composition revision.
+  composition is locally verified at the exact C revision above. This does not
+  verify a deployed Foundry host, managed identity, RBAC, network, or live
+  checkpoint behavior.
 
 ## Pinned SDKs
 
