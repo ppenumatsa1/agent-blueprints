@@ -77,6 +77,44 @@ and release/deployment remains blocked.
 **Milestone decision:** READY for the local MAF software-factory milestone;
 NOT READY for production, release, or deployment.
 
+## Azure/Foundry Workstream C
+
+Workstream C composes the generated FastAPI application with either the
+existing native local host or an Agent A-compatible hosted client. The
+application owns end-user authentication/authorization and PostgreSQL
+business state; Agent A owns hosted execution identity and checkpoint/session
+state. The API UAMI authenticates the service-to-service call and is never
+treated as the user. PostgreSQL-only synthetic effects use a distinct
+application tool identity and retain proposal/action/destination/digest
+binding.
+
+Implementation acceptance criteria:
+
+- explicit host selection with no local fallback from hosted errors;
+- validated end-user tenant, issuer, audience, subject, scopes/roles,
+  ownership, reviewer authorization, and stale/conflicting decisions;
+- claim-before-send and authoritative status reconciliation for ambiguous
+  hosted acknowledgments, without replay;
+- explicit migrations, startup schema validation, runtime/admin identity
+  separation, TLS verification, bounded pools, and managed-identity or secret
+  authentication;
+- unchanged frontend/API and ORS-001..009 contracts, atomic stores and effect
+  ledger, and no duplicate synthetic effects; and
+- local/mock tests plus generated-project and frontend checks.
+
+The Agent A integration additionally requires its native host to call
+`prepare_hosted_approval`, `claim_hosted_decision`, and `finish_hosted`.
+These methods persist business approval state and opaque correlation only;
+they never fabricate local checkpoint IDs or store Foundry checkpoint bytes.
+
+Current local evidence satisfies those implementation criteria and is detailed
+in [application security](azure-foundry/application-security.md). OBO is not
+required because no verified user-delegated downstream operation exists.
+Remaining work is integration review, exact-head CI, Agent A contract
+confirmation, Agent B output binding, and live Azure/Foundry/PostgreSQL
+verification. This workstream does not provision, deploy, merge, or close
+production-readiness issues.
+
 Specification Studio has not yet produced an artifact, so the proposed
 handoff is not an end-to-end compatibility claim. Phase 0 does not implement
 the validator or an agent template, integrate Specification Studio, deploy

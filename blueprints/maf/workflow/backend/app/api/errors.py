@@ -9,6 +9,7 @@ from app.domain.errors import (
     AuthenticationUnavailable,
     CheckpointError,
     Conflict,
+    HostedWorkflowError,
     InvalidInput,
     NotFound,
 )
@@ -34,6 +35,7 @@ def install_exception_handlers(app: FastAPI) -> None:
     register(NotFound, 404, "Record not found.")
     register(Conflict, 409, "The request conflicts with the current record.")
     register(CheckpointError, 503, "Workflow recovery is unavailable.")
+    register(HostedWorkflowError, 503, "Hosted workflow execution is unavailable.")
     register(ActionError, 503, "The configured action failed.")
     register(InvalidInput, 422, "Invalid request.")
     register(RequestValidationError, 422, "Invalid request.")

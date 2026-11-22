@@ -34,5 +34,9 @@ class DelegationError(BlueprintError):
     pass
 
 
+class HostedWorkflowError(BlueprintError):
+    pass
+
+
 class InvalidInput(BlueprintError):
     pass

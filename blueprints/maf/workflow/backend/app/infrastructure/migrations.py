@@ -107,10 +107,12 @@ def _check_baseline(root):
         raise SchemaDriftError("The immutable baseline migration has changed.")
 
 
-def _run(dsn, root, migrate):
+def _run(dsn, root, migrate, connect=None):
     _check_baseline(root)
     engine = create_engine(
-        "postgresql+psycopg://", creator=lambda: psycopg.connect(dsn), poolclass=NullPool
+        "postgresql+psycopg://",
+        creator=connect or (lambda: psycopg.connect(dsn)),
+        poolclass=NullPool,
     )
     try:
         with engine.begin() as connection:
@@ -188,14 +190,14 @@ def _run(dsn, root, migrate):
         engine.dispose()
 
 
-def upgrade(dsn, *, root=ROOT):
+def upgrade(dsn, *, root=ROOT, connect=None):
     """Run migrations explicitly using a schema-owner identity."""
-    _run(dsn, root, True)
+    _run(dsn, root, True, connect)
 
 
-def validate(dsn, *, root=ROOT):
+def validate(dsn, *, root=ROOT, connect=None):
     """Validate the current head without schema or version-table writes."""
-    _run(dsn, root, False)
+    _run(dsn, root, False, connect)
 
 
 def main():
@@ -204,10 +206,13 @@ def main():
     )
     parser.add_argument("action", choices=("upgrade",))
     parser.parse_args()
-    dsn = os.environ.get("DATABASE_URL")
+    dsn = os.environ.get("MIGRATION_DATABASE_URL") or os.environ.get("DATABASE_URL")
     if not dsn:
-        parser.error("DATABASE_URL is required.")
-    upgrade(dsn)
+        parser.error("MIGRATION_DATABASE_URL or DATABASE_URL is required.")
+    from app.infrastructure.database import connector_from_environment
+
+    connector = connector_from_environment(dsn)
+    upgrade(dsn, connect=lambda: connector.connect(dict_rows=False))
 
 
 if __name__ == "__main__":

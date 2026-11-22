@@ -1,13 +1,19 @@
 from contextlib import contextmanager
+import os
 from typing import Iterator
 from uuid import UUID, uuid4
 
-import psycopg
-from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
+from app.config import Settings
 from app.domain.errors import ActionError, Conflict, NotFound
 from app.domain.models import Case, Decision, Principal, TransactionalAction
+from app.infrastructure.database import (
+    BoundedConnectionPool,
+    DatabaseConnectionOptions,
+    DatabaseConnector,
+    TokenProvider,
+)
 from app.infrastructure.telemetry import instrumented
 
 
@@ -39,20 +45,125 @@ def _case(row: dict) -> Case:
 class PostgresStore:
     """Application records and transactional effects, not MAF checkpoints."""
 
-    def __init__(self, dsn: str):
+    def __init__(
+        self,
+        dsn: str,
+        *,
+        auth_mode: str = "password",
+        password: str | None = None,
+        managed_identity_client_id: str | None = None,
+        tls_mode: str | None = None,
+        pool_min_size: int = 1,
+        pool_max_size: int = 8,
+        pool_timeout_seconds: float = 5.0,
+        connection_max_lifetime_seconds: float = 2700.0,
+        token_provider: TokenProvider | None = None,
+    ):
         if not dsn:
             raise ValueError("A PostgreSQL connection string is required.")
         self._dsn = dsn
+        self._connector = DatabaseConnector(
+            DatabaseConnectionOptions(
+                dsn,
+                auth_mode,
+                password,
+                managed_identity_client_id,
+                tls_mode,
+            ),
+            token_provider,
+        )
+        self._custom_connection = bool(
+            auth_mode != "password"
+            or password
+            or managed_identity_client_id
+            or tls_mode
+        )
+        self._pool = BoundedConnectionPool(
+            self._connector.connect,
+            min_size=pool_min_size,
+            max_size=pool_max_size,
+            timeout_seconds=pool_timeout_seconds,
+            max_lifetime_seconds=connection_max_lifetime_seconds,
+        )
         self.telemetry = None
+
+    @classmethod
+    def from_settings(
+        cls,
+        settings: Settings,
+        *,
+        token_provider: TokenProvider | None = None,
+    ):
+        return cls(
+            settings.database_url,
+            auth_mode=settings.database_auth_mode,
+            password=settings.database_password,
+            managed_identity_client_id=(
+                settings.database_managed_identity_client_id
+                or settings.api_managed_identity_client_id
+            ),
+            tls_mode=settings.database_tls_mode,
+            pool_min_size=settings.database_pool_min_size,
+            pool_max_size=settings.database_pool_max_size,
+            pool_timeout_seconds=settings.database_pool_timeout_seconds,
+            connection_max_lifetime_seconds=(
+                settings.database_connection_max_lifetime_seconds
+            ),
+            token_provider=token_provider,
+        )
+
+    @classmethod
+    def from_database_environment(cls):
+        def integer(name: str, default: str) -> int:
+            try:
+                return int(os.environ.get(name, default))
+            except ValueError as exc:
+                raise ValueError(f"{name} must be an integer.") from exc
+
+        def number(name: str, default: str) -> float:
+            try:
+                return float(os.environ.get(name, default))
+            except ValueError as exc:
+                raise ValueError(f"{name} must be a number.") from exc
+
+        dsn = os.environ.get("DATABASE_URL", "")
+        if not dsn:
+            raise ValueError("DATABASE_URL is required.")
+        return cls(
+            dsn,
+            auth_mode=os.environ.get("DATABASE_AUTH_MODE", "password"),
+            password=os.environ.get("DATABASE_PASSWORD") or None,
+            managed_identity_client_id=(
+                os.environ.get("DATABASE_MANAGED_IDENTITY_CLIENT_ID")
+                or os.environ.get("API_MANAGED_IDENTITY_CLIENT_ID")
+                or None
+            ),
+            tls_mode=os.environ.get("DATABASE_TLS_MODE") or None,
+            pool_min_size=integer("DATABASE_POOL_MIN_SIZE", "1"),
+            pool_max_size=integer("DATABASE_POOL_MAX_SIZE", "8"),
+            pool_timeout_seconds=number("DATABASE_POOL_TIMEOUT_SECONDS", "5"),
+            connection_max_lifetime_seconds=number(
+                "DATABASE_CONNECTION_MAX_LIFETIME_SECONDS", "2700"
+            ),
+        )
 
     @instrumented("database.connect")
     def connect(self):
-        return psycopg.connect(self._dsn, row_factory=dict_row)
+        return self._pool.connection()
 
     def initialize(self) -> None:
         from app.infrastructure.migrations import validate
 
-        validate(self._dsn)
+        if self._custom_connection:
+            validate(
+                self._dsn,
+                connect=lambda: self._connector.connect(dict_rows=False),
+            )
+        else:
+            validate(self._dsn)
+
+    def close(self) -> None:
+        self._pool.close()
 
     @instrumented("database.read")
     def get(self, case_id: UUID) -> Case:
@@ -115,16 +226,101 @@ class PostgresStore:
         # database transactions, and PostgreSQL releases it if the worker dies.
         first = int.from_bytes(case_id.bytes[:4], "big", signed=True)
         second = int.from_bytes(case_id.bytes[4:8], "big", signed=True)
-        with psycopg.connect(self._dsn, autocommit=True) as connection:
+        with self.connect() as connection:
             acquired = connection.execute(
-                "SELECT pg_try_advisory_lock(%s, %s)", (first, second)
-            ).fetchone()[0]
+                "SELECT pg_try_advisory_lock(%s, %s) AS acquired", (first, second)
+            ).fetchone()["acquired"]
             if not acquired:
                 raise Conflict("The workflow is already being processed.")
             try:
                 yield
             finally:
                 connection.execute("SELECT pg_advisory_unlock(%s, %s)", (first, second))
+
+    def claim_hosted_start(self, case_id: UUID, operation_id: str) -> None:
+        with self.connect() as connection:
+            row = connection.execute(
+                "SELECT status, checkpoint_id, request_id FROM wf_cases WHERE id = %s FOR UPDATE",
+                (case_id,),
+            ).fetchone()
+            if row is None:
+                raise NotFound("Record not found.")
+            if row["status"] == "created":
+                connection.execute(
+                    """
+                    UPDATE wf_cases SET status = 'pending', checkpoint_id = %s,
+                        request_id = %s, failure_code = 'hosted_outcome_unknown',
+                        updated_at = now() WHERE id = %s
+                    """,
+                    (operation_id, operation_id, case_id),
+                )
+                return
+            if (
+                row["status"] == "pending"
+                and row["checkpoint_id"] == operation_id
+                and row["request_id"] == operation_id
+            ):
+                return
+            raise Conflict("The hosted workflow start is already claimed.")
+
+    def confirm_hosted_pending(
+        self,
+        case_id: UUID,
+        operation_id: str,
+        execution_id: str,
+        request_id: str,
+    ) -> None:
+        with self.connect() as connection:
+            row = connection.execute(
+                """
+                SELECT status, checkpoint_id, request_id
+                FROM wf_cases WHERE id = %s FOR UPDATE
+                """,
+                (case_id,),
+            ).fetchone()
+            if row is None:
+                raise NotFound("Record not found.")
+            if (
+                row["status"] == "pending"
+                and row["checkpoint_id"] == execution_id
+                and row["request_id"] == request_id
+            ):
+                return
+            if (
+                row["status"] != "pending"
+                or row["checkpoint_id"] != operation_id
+                or row["request_id"] != operation_id
+            ):
+                raise Conflict("The hosted workflow response conflicts with the dispatch claim.")
+            connection.execute(
+                """
+                UPDATE wf_cases SET checkpoint_id = %s, request_id = %s,
+                    failure_code = NULL, updated_at = now() WHERE id = %s
+                """,
+                (execution_id, request_id, case_id),
+            )
+
+    def claim_hosted_resume(self, case_id: UUID) -> None:
+        with self.connect() as connection:
+            result = connection.execute(
+                """
+                UPDATE wf_cases SET failure_code = 'hosted_outcome_unknown', updated_at = now()
+                WHERE id = %s AND status IN ('approved', 'rejected')
+                    AND NOT execution_complete
+                """,
+                (case_id,),
+            )
+            if result.rowcount != 1:
+                raise Conflict("The hosted workflow is not ready to resume.")
+
+    def decision_actor(self, case_id: UUID) -> str:
+        with self.connect() as connection:
+            row = connection.execute(
+                "SELECT actor_id FROM wf_decisions WHERE case_id = %s", (case_id,)
+            ).fetchone()
+        if row is None:
+            raise Conflict("The hosted decision actor is missing.")
+        return row["actor_id"]
 
     def save_pending(self, case_id: UUID, checkpoint_id: str, request_id: str) -> None:
         with self.connect() as connection:
@@ -256,7 +452,10 @@ class PostgresStore:
             rows = connection.execute(
                 """
                 SELECT id, status FROM wf_cases
-                WHERE NOT execution_complete AND status IN ('created', 'approved', 'rejected', 'completed')
+                WHERE NOT execution_complete AND (
+                    status IN ('created', 'approved', 'rejected', 'completed')
+                    OR (status = 'pending' AND failure_code = 'hosted_outcome_unknown')
+                )
                 ORDER BY created_at, id
                 """
             ).fetchall()

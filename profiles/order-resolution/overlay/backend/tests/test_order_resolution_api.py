@@ -1,11 +1,14 @@
 import asyncio
+import hashlib
 import os
 import subprocess
 import sys
 import tempfile
 import unittest
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 import psycopg
@@ -15,16 +18,26 @@ from psycopg import sql
 from app.composition import create_app
 from app.config import Settings
 from app.infrastructure.identity import EntraIdentity
-from app.domain.errors import ActionError
+from app.domain.errors import ActionError, Conflict
+from app.domain.models import Principal
 from app.order_resolution.action import RecordOrderResolutionAction
 from app.order_resolution.application import build_application
+from app.order_resolution.durability import (
+    Actor,
+    Decision,
+    DecisionCommand,
+    record_decision,
+)
 from app.order_resolution.effects import EffectIdentity
 from app.order_resolution.host import OrderResolutionWorkflowHost
+from app.order_resolution.hosted_bindings import PostgresHostedIdentityBindings
 from app.order_resolution.migrations import upgrade
 from app.order_resolution.persistence import (
+    HOSTED_CHANNEL,
     OrderResolutionStore,
     PostgresSyntheticDestination,
 )
+from app.order_resolution.rules import OrderResolutionRules
 from app.order_resolution.workflow import build_order_resolution_workflow
 from tests.test_security import API, OWNER, REVIEWER, TENANT, TokenFixture, scoped_url
 
@@ -115,6 +128,25 @@ class OrderResolutionApiTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 200, response.text)
         return response.json()
+
+    def hosted_case(self, order_id: str, amount: str):
+        owner = Principal(
+            TENANT,
+            OWNER,
+            frozenset({"workflow.read"}),
+            frozenset(),
+        )
+        validated = OrderResolutionRules().validate(
+            payload(order_id, amount, 5, [late_policy()])
+        )
+        case = self.store.create(
+            owner,
+            REVIEWER,
+            validated,
+            order_id.lower(),
+            hashlib.sha256(order_id.encode("ascii")).hexdigest(),
+        )
+        return owner, case, self.store.persist_proposal(case.id)
 
     @staticmethod
     def decision_body(record: dict, decision: str) -> dict:
@@ -274,6 +306,230 @@ class OrderResolutionApiTests(unittest.TestCase):
                 (case_id,),
             ).fetchone()["count"]
         self.assertEqual(count, 1)
+
+    def test_hosted_identity_binding_and_operation_journal_are_durable(self):
+        owner, case, proposal = self.hosted_case(
+            "ORDER-HOSTED-BINDING", "185.00"
+        )
+        reviewer = Principal(
+            TENANT,
+            REVIEWER,
+            frozenset({"workflow.read", "workflow.approve"}),
+            frozenset({"Workflow.Approver"}),
+        )
+        case_id = case.id
+        caller_id = "00000000-0000-0000-0000-000000000123"
+        session_id = f"case:{case_id}"
+        conversation_id = "conversation-hosted-binding"
+        self.store.bind_hosted_principal(
+            case_id,
+            owner,
+            caller_id=caller_id,
+            session_id=session_id,
+            conversation_id=conversation_id,
+            principal_kind="owner",
+        )
+        bindings = PostgresHostedIdentityBindings(self.store)
+        caller = SimpleNamespace(user_id=caller_id, session_id=session_id)
+        self.assertEqual(bindings.resolve_principal(caller), owner)
+        bindings.bind_start(
+            case_id=case_id,
+            caller=caller,
+            conversation_id=conversation_id,
+        )
+        with self.assertRaises(Conflict):
+            bindings.bind_start(
+                case_id=case_id,
+                caller=SimpleNamespace(user_id=caller_id, session_id="other"),
+                conversation_id=conversation_id,
+            )
+
+        request_id = f"case:{case_id}:approval:v1"
+        prepared = self.store.prepare_hosted_approval(
+            case_id,
+            request_id,
+            channel=HOSTED_CHANNEL,
+        )
+        self.assertEqual(prepared.case_id, str(case_id))
+        self.assertIsNone(self.store.get(case_id).checkpoint_id)
+        self.store.bind_hosted_principal(
+            case_id,
+            reviewer,
+            caller_id=caller_id,
+            session_id=session_id,
+            conversation_id=conversation_id,
+            principal_kind="reviewer",
+        )
+        self.assertEqual(bindings.resolve_principal(caller), reviewer)
+        bindings.authorize_resume(
+            case_id=case_id,
+            caller=caller,
+            conversation_id=conversation_id,
+            channel=HOSTED_CHANNEL,
+        )
+
+        class HostedDecisionStore:
+            get_current_proposal = self.store.get_current_proposal
+            claim_decision = self.store.claim_hosted_decision
+
+        decision = record_decision(
+            HostedDecisionStore(),
+            proposal=self.store.get_current_proposal(str(case_id)),
+            actor=Actor(
+                reviewer.tenant_id,
+                reviewer.subject,
+                reviewer.scopes,
+                reviewer.roles,
+            ),
+            command=DecisionCommand(
+                case_id=str(case_id),
+                proposal_version=proposal.proposal_version,
+                action=proposal.action,
+                destination_id=proposal.destination_id,
+                handle=request_id,
+                decision=Decision.APPROVED,
+                scope="workflow.approve",
+                channel=HOSTED_CHANNEL,
+            ),
+            now=datetime.now(timezone.utc),
+        )
+        self.assertEqual(
+            self.store.claim_hosted_decision(decision),
+            decision,
+        )
+        decided_case = self.store.get(case_id)
+        self.assertEqual(
+            (decided_case.status, decided_case.decision),
+            ("approved", "approved"),
+        )
+        action = RecordOrderResolutionAction().bind(self.store)
+        self.store.apply_once(case_id, True, action)
+        self.store.apply_once(case_id, True, action)
+        self.store.finish_hosted(case_id)
+        self.store.finish_hosted(case_id)
+        completed = self.store.get(case_id)
+        self.assertEqual((completed.status, completed.execution_complete), ("completed", True))
+        self.assertIsNone(completed.terminal_checkpoint_id)
+
+        operation_id = f"case:{case_id}:start"
+        digest = hashlib.sha256(b"hosted-start").hexdigest()
+        claimed = self.store.claim_hosted_operation(
+            case_id, operation_id, "start", digest
+        )
+        self.assertEqual(
+            self.store.claim_hosted_operation(
+                case_id, operation_id, "start", digest
+            ),
+            claimed,
+        )
+        self.store.update_hosted_operation(operation_id, digest, "unknown", None)
+        acknowledged = self.store.update_hosted_operation(
+            operation_id,
+            digest,
+            "acknowledged",
+            "response-123",
+        )
+        self.assertEqual(acknowledged.remote_id, "response-123")
+        with self.assertRaises(Conflict):
+            self.store.claim_hosted_operation(
+                case_id,
+                operation_id,
+                "start",
+                hashlib.sha256(b"different").hexdigest(),
+            )
+
+    def test_hosted_rejection_and_automatic_completion_keep_checkpoints_external(self):
+        reviewer = Principal(
+            TENANT,
+            REVIEWER,
+            frozenset({"workflow.read", "workflow.approve"}),
+            frozenset({"Workflow.Approver"}),
+        )
+        owner, rejected_case, rejected_proposal = self.hosted_case(
+            "ORDER-HOSTED-REJECT", "185.00"
+        )
+        caller_id = "00000000-0000-0000-0000-000000000123"
+        rejected_session = f"case:{rejected_case.id}"
+        rejected_conversation = "conversation-hosted-rejection"
+        self.store.bind_hosted_principal(
+            rejected_case.id,
+            owner,
+            caller_id=caller_id,
+            session_id=rejected_session,
+            conversation_id=rejected_conversation,
+            principal_kind="owner",
+        )
+        request_id = f"case:{rejected_case.id}:approval:v1"
+        self.store.prepare_hosted_approval(
+            rejected_case.id,
+            request_id,
+            channel=HOSTED_CHANNEL,
+        )
+
+        restarted = OrderResolutionStore(self.settings.database_url)
+        self.addCleanup(restarted.close)
+        action = RecordOrderResolutionAction().bind(restarted)
+        restarted.bind_hosted_principal(
+            rejected_case.id,
+            reviewer,
+            caller_id=caller_id,
+            session_id=rejected_session,
+            conversation_id=rejected_conversation,
+            principal_kind="reviewer",
+        )
+
+        class HostedDecisionStore:
+            get_current_proposal = restarted.get_current_proposal
+            claim_decision = restarted.claim_hosted_decision
+
+        decision = record_decision(
+            HostedDecisionStore(),
+            proposal=restarted.get_current_proposal(str(rejected_case.id)),
+            actor=Actor(
+                reviewer.tenant_id,
+                reviewer.subject,
+                reviewer.scopes,
+                reviewer.roles,
+            ),
+            command=DecisionCommand(
+                case_id=str(rejected_case.id),
+                proposal_version=rejected_proposal.proposal_version,
+                action=rejected_proposal.action,
+                destination_id=rejected_proposal.destination_id,
+                handle=request_id,
+                decision=Decision.REJECTED,
+                scope="workflow.approve",
+                channel=HOSTED_CHANNEL,
+            ),
+            now=datetime.now(timezone.utc),
+        )
+        self.assertEqual(restarted.claim_hosted_decision(decision), decision)
+        restarted.apply_once(rejected_case.id, False, action)
+        restarted.finish_hosted(rejected_case.id)
+        restarted.finish_hosted(rejected_case.id)
+        rejected = restarted.get(rejected_case.id)
+        self.assertEqual((rejected.status, rejected.execution_complete), ("rejected", True))
+        self.assertIsNone(rejected.checkpoint_id)
+        self.assertIsNone(rejected.terminal_checkpoint_id)
+
+        owner, automatic_case, _ = self.hosted_case(
+            "ORDER-HOSTED-AUTOMATIC", "8.00"
+        )
+        restarted.bind_hosted_principal(
+            automatic_case.id,
+            owner,
+            caller_id=caller_id,
+            session_id=f"case:{automatic_case.id}",
+            conversation_id="conversation-hosted-automatic",
+            principal_kind="owner",
+        )
+        restarted.apply_automatic(automatic_case.id, action)
+        restarted.apply_automatic(automatic_case.id, action)
+        restarted.finish_hosted(automatic_case.id)
+        automatic = restarted.get(automatic_case.id)
+        self.assertEqual((automatic.status, automatic.execution_complete), ("completed", True))
+        self.assertIsNone(automatic.checkpoint_id)
+        self.assertIsNone(automatic.terminal_checkpoint_id)
 
     def test_ors_002_approval_pauses_before_usd_18_50_refund(self):
         with self.client() as client:
