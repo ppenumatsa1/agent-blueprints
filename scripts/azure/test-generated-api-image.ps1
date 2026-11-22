@@ -14,7 +14,7 @@ $root = (Resolve-Path "$PSScriptRoot\..\..").Path
 
 $generatedRoot = Assert-GeneratedOrderResolutionProject `
     -ProjectRoot $GeneratedProjectRoot
-$dockerfile = Join-Path $root 'infra\docker\order-resolution-api.Dockerfile'
+$smokeScript = Join-Path $root 'scripts\azure\smoke-generated-api-image.py'
 
 if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
     throw 'Docker is required for the generated API image import regression.'
@@ -30,28 +30,13 @@ if (
     throw 'PythonPackageIndex must be a credentialless HTTPS package index URL.'
 }
 
-$dockerfileSource = Get-Content -LiteralPath $dockerfile -Raw
-if (
-    $dockerfileSource -notmatch [regex]::Escape(
-        'COPY --chown=blueprint:blueprint order_resolution_hosted/'
-    ) -or
-    $dockerfileSource -notmatch [regex]::Escape(
-        'from order_resolution_hosted.bridge import build_workflow_host'
-    ) -or
-    $dockerfileSource -match '\bPYTHONPATH\b' -or
-    $dockerfileSource -match '\bhosted-agent\b'
-) {
-    throw 'The generated API Dockerfile no longer contains the bounded bridge import contract.'
-}
-
-$buildContext = Initialize-GeneratedApiImageContext `
-    -ProjectRoot $generatedRoot `
-    -DockerfileSource $dockerfile
+$buildContext = Assert-GeneratedApiImageContext `
+    -ProjectRoot $generatedRoot
 
 try {
     Push-Location $buildContext
     docker build `
-        --file .azure-api.Dockerfile `
+        --file Dockerfile `
         --tag $ImageTag `
         --build-arg "PYTHON_PACKAGE_INDEX=$PythonPackageIndex" `
         .
@@ -69,6 +54,16 @@ try {
         )
     if ($LASTEXITCODE -ne 0) {
         throw 'Generated API image cannot import the hosted bridge factory.'
+    }
+
+    docker run `
+        --rm `
+        --volume "${smokeScript}:/tmp/smoke-generated-api-image.py:ro" `
+        --entrypoint python `
+        $ImageTag `
+        /tmp/smoke-generated-api-image.py
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Generated API image failed hosted startup composition and wire parity.'
     }
 }
 finally {

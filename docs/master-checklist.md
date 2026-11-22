@@ -99,10 +99,10 @@ and the fixed publisher agent name; wider or another-agent scopes fail closed.
 The hosted app role authenticates service identity only; API-owned exact
 case/principal/caller/session/conversation/channel binding must exist before
 Responses dispatch and cannot be inferred from the hosted token.
-Exact-head composition of A `228aa772` and C `60fd83fc` also builds the
-backend-only API image and imports `order_resolution_hosted.bridge` without a
-sibling path or full hosted runtime; broader live composition remains
-unverified.
+Exploratory composition of A `228aa772` and C `60fd83fc` built and imported the
+backend bridge, but used B-side file staging and C's dev dependency group.
+Final proof remains blocked on A-owned generator output, C-owned runtime
+`httpx==0.28.1`, and a no-dev image import/startup/wire-parity pass.
 
 **Next action:** independently validate the exact PR revision, supply the
 deployment-specific hosted endpoint/agent-name/administrator/journal values,

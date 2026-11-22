@@ -184,9 +184,10 @@ precede Responses dispatch.
 **Acceptance evidence:** exact base verified; read-only Azure discovery
 completed; Bicep build/lint and 17 infrastructure contracts pass; 68 root tests
 pass with two expected adapter-selection skips; script syntax checks pass.
-The exact A `228aa772` hosted source and C `60fd83fc` generated backend also
-produce a backend-only API image that imports the API bridge without sibling
-`PYTHONPATH` or the full hosted runtime. Live Azure composition is not proven.
+Exploratory A `228aa772` and C `60fd83fc` composition imported the backend
+bridge, but final proof remains blocked on generator-owned byte-identical
+backend modules, runtime `httpx==0.28.1`, and a no-dev image
+import/startup/wire-parity pass. Live Azure composition is not proven.
 The current Azure CLI identity matches the authorized target, but azd is a
 different account and tenant. Azure CLI mode reports that mismatch without
 blocking; explicit azd mode still fails closed. No Azure mutation or deployment

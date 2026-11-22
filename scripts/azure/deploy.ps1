@@ -147,28 +147,8 @@ try {
     ) {
         throw 'Generated backend image does not install and verify the system CA bundle.'
     }
-    $apiDockerfileSourcePath = Join-Path `
-        $root `
-        'infra\docker\order-resolution-api.Dockerfile'
-    $generatedApiBuildContext = Initialize-GeneratedApiImageContext `
-        -ProjectRoot $generatedRoot `
-        -DockerfileSource $apiDockerfileSourcePath
-    $apiDockerfilePath = Join-Path `
-        $generatedApiBuildContext `
-        '.azure-api.Dockerfile'
-    $apiDockerfile = Get-Content -LiteralPath $apiDockerfilePath -Raw
-    if (
-        $apiDockerfile -notmatch [regex]::Escape(
-            'COPY --chown=blueprint:blueprint order_resolution_hosted/'
-        ) -or
-        $apiDockerfile -notmatch [regex]::Escape(
-            'from order_resolution_hosted.bridge import build_workflow_host'
-        ) -or
-        $apiDockerfile -match '\bPYTHONPATH\b' -or
-        $apiDockerfile -match '\bhosted-agent\b'
-    ) {
-        throw 'Generated API image does not contain the bounded bridge import contract.'
-    }
+    $generatedApiBuildContext = Assert-GeneratedApiImageContext `
+        -ProjectRoot $generatedRoot
 
     & "$PSScriptRoot\preflight.ps1" `
         -DeploymentMode AzureCli `
@@ -304,7 +284,7 @@ try {
             --subscription $SubscriptionId `
             --registry $acrName `
             --image "order-resolution-api:$imageTag" `
-            --file .azure-api.Dockerfile `
+            --file Dockerfile `
             . `
             --only-show-errors
         if ($LASTEXITCODE -ne 0) { throw 'Generated API image build failed.' }
