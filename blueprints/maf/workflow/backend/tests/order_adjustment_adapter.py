@@ -60,6 +60,9 @@ def run_case(data):
 
 
 def _run_case(data, dsn, checkpoint_root):
+    from app.infrastructure.migrations import upgrade
+
+    upgrade(dsn)
     tokens = TokenFixture()
     settings = Settings(TENANT, API, dsn, checkpoint_root)
     store = PostgresStore(dsn)

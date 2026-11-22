@@ -37,6 +37,7 @@ are synthetic fixtures, not a business application.
 | FR-07 | Recover local work across the tested decision-persistence and action-commit crash windows using private local checkpoints and database reconciliation. |
 | FR-08 | Provide a React/MSAL UI for sign-in, request submission, record reads, decisions, and visible failure states. |
 | FR-09 | Include independently generated documentation, tests, exact contract bytes, and readiness verification without repository imports or bind mounts. |
+| FR-10 | Upgrade known business schemas explicitly, reject drift, and validate the installed revision at startup without DDL. |
 
 ## Non-functional requirements
 
@@ -59,13 +60,14 @@ are synthetic fixtures, not a business application.
 ## Scope and exclusions
 
 **Current scope:** local single-host prototype, selected application factory,
-Entra integration points, PostgreSQL records and action ledger, MAF native
+Entra integration points, PostgreSQL records, action ledger and versioned
+business migrations, MAF native
 workflow with `FileCheckpointStorage`, React/MSAL client, Compose packaging,
 generated project, and local/hosted regression tests.
 
 **Not implemented or verified:** live Entra sign-in and OBO, production
-secrets management, external side-effect exactly-once behavior, versioned
-database migrations, cloud telemetry export, Foundry-hosted execution and
+secrets management, external side-effect exactly-once behavior,
+cloud telemetry export, Foundry-hosted execution and
 managed checkpoint recovery, ACA recovery, Bicep/azd provisioning, and a
 production deployment. Azure resource creation and permanent repository
 creation require separate approval.

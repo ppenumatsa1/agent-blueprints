@@ -41,6 +41,21 @@ and decisions. Workflow checkpoints preserve framework continuation state;
 PostgreSQL owns business records, decision/audit history, and the action
 ledger. These stores are separate and do not share an atomic transaction.
 
+## Schema ownership
+
+```mermaid
+flowchart LR
+    Operator[Schema owner] -->|explicit Alembic upgrade| DB[(Business database)]
+    API[Restricted runtime identity] -->|validate revision and manifest| DB
+    MAF[Native workflow host] --> CP[(Private checkpoints)]
+```
+
+Migration uses transaction-scoped exclusive locking and checks both the
+incoming revision and resulting head; runtime validation uses a shared lock
+and does not create schema objects. The locks do not quiesce application
+writers or manual DDL. Local PostgreSQL 17 tests exercise a second revision;
+live restore and other database versions are unverified.
+
 ## Decision and persistence sequence
 
 ```mermaid

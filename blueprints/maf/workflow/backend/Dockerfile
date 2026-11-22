@@ -15,6 +15,7 @@ RUN python -m pip install --no-cache-dir --index-url "$PYTHON_PACKAGE_INDEX" -r 
 
 COPY --chown=blueprint:blueprint app/ app/
 COPY --chown=blueprint:blueprint examples/ examples/
+COPY --chown=blueprint:blueprint migrations/ migrations/
 USER blueprint
 
 EXPOSE 8000

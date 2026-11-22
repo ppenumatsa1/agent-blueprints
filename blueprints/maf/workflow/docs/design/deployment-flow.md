@@ -21,16 +21,31 @@ deployment command.
    the targeted source suite from `backend`:
 
    ```text
-   python -m unittest -v tests.test_core tests.test_security tests.test_evidence_runner
+   python -m unittest -v tests.test_core tests.test_security tests.test_evidence_runner tests.test_migrations
    ```
 
 3. From `frontend`, run `npm ci`, `npm test`, `npm run build`, and
    `npm run check-csp`.
-4. From the project root, supply required environment variables and run
-   `docker compose up --build --wait`. Only the UI binds to loopback. Review
+4. From the project root, supply required environment variables, build the
+   API, explicitly run the migration and synthetic preparation commands in
+   [setup](../setup.md), then run `docker compose up --build --wait`.
+   Only the UI binds to loopback. Review
    [setup](../setup.md) for secret handling and persistent-volume behavior.
 5. Stop with `docker compose down`; volumes persist. Back up or delete data
    only under the operator's policy.
+
+```mermaid
+flowchart LR
+    Backup[Quiesce and back up] --> Migrate[Schema-owner migration]
+    Migrate --> Start[Restricted runtime starts]
+    Start --> Check{Revision and schema match?}
+    Check -->|yes| Serve[Serve API]
+    Check -->|no| Fail[Stop and investigate]
+```
+
+Compose uses one local database account for convenience, not as a production
+least-privilege model. Production migration and runtime identities require
+separate review; no live deployment or backup recovery is claimed.
 
 ## CI and independent generation
 

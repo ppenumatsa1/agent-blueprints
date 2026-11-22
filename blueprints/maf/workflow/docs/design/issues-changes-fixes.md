@@ -191,6 +191,94 @@ subsequent updates and rerun checks after any head or base changes.
   bridge, and validate the actual service only with separate authorization.
   Do not persist bearer credentials or silently retry ambiguous side effects.
 
+### 2026-11-21 - Intermittent synthetic evidence failures
+
+- **Observed:** Two generated evidence runs at `f9b83ae` failed: the
+  `unauthorized` case in the first and `approved` in the second each exited
+  1 as a `CalledProcessError`. The recorder retained neither subprocess stdout
+  nor stderr, so the exact original underlying exceptions cannot be recovered.
+  Their approval and explanation checks were failed, not unverified or passed.
+- **Investigation:** On a new isolated PostgreSQL 17 database, a bounded
+  subprocess run reproduced exit 1 with empty stdout and `AssertionError:
+  Submission returned HTTP 503` for `optional-hint`. A separate subprocess
+  run instrumenting the HTTP handler then reproduced exit 1 for `pending`
+  after 27 cases passed: `CheckpointError: The pending request could not be
+  restored` from `LocalWorkflowHost.start`, translated to HTTP 503. Migration
+  and startup had completed before the submit call. `host.py` and `workflow.py`
+  are unchanged from foundation `61d44ed`; this observation alone does not
+  establish why restoration mismatched or whether either original failure
+  had that same cause.
+- **Bounds and decision:** A separate instrumented in-process run completed
+  108 cases, and 80 isolated subprocesses with checkpoint/request tracing
+  completed without reproducing the mismatch. These do not erase the failures
+  or establish a cause. No migration-related defect was identified and no
+  checkpoint logic was changed. The evidence-run failure is an unresolved
+  pre-PR blocker; capture checkpoint identity, request IDs and ordering on a
+  further reproduction and fix the established cause without weakening
+  restore checks. A successful rerun alone is not resolution.
+- **Lesson:** Record privacy-safe subprocess failure diagnostics and preserve
+  failed results; an HTTP 503 or later passing run cannot establish root cause.
+- **Later foundation fix:** The independently reproduced equal-timestamp
+  selection defect described above was fixed in foundation `9efeef0`, with
+  deterministic regression tests. GitHub Actions
+  [run 44936094798](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44936094798)
+  passed all five jobs on that exact foundation SHA. The original two failures'
+  exact causes remain unproven; those failures are not reclassified.
+
+### PostgreSQL 16 compatibility observation
+
+- **Evidence:** On migration branch `031fdb4`, an independent local run on
+  PostgreSQL 16.15 passed all 12 migration tests without skips, including
+  adoption, later revision, drift and rollback. Its first auxiliary readiness
+  probe failed before tests; a corrected probe was used for the successful
+  run. This is local evidence only, not Azure, Entra, hosted identity or
+  live restore verification.
+- **Next:** Recheck the reconciled branch on PostgreSQL 16 and 17 and verify
+  actual PR CI on its exact head before approval.
+- **Reconciled source evidence:** On rebased code `9f1f802`, `python -B -m
+  unittest discover -s tests -v` in `backend` passed 48 tests without skips
+  against each of isolated PostgreSQL 16.15 and 17.12. This covers migration,
+  security and recovery tests but does not replace generated-app or hosted CI.
+- **Reconciled generated evidence:** At `7cd99ac`, the same backend command
+  passed 48 tests without skips in both source and independently generated
+  copies on each PostgreSQL version. Generated verifier tests passed 44;
+  generator/copy checks passed two. The generated real evidence producer
+  returned approval and recovery passed, explanation and hint unverified;
+  the independent validator returned an unverified gate (exit 1) because
+  the synthetic trust store is unsigned. This does not erase the earlier
+  failed runs or verify Azure, hosted identities or live restoration.
+
+### Migration review - versioned schema and least privilege
+
+- **Issue:** Comparing every live database to the original baseline rejected
+  later legitimate revisions, and creating a reference schema on every API
+  startup required unnecessary database CREATE privilege.
+- **Fix:** Reviewed manifests validate the current revision and migration
+  head; an explicit owner job performs upgrades, while runtime startup
+  validates without DDL. Unversioned drift and unknown revisions fail.
+- **Pre-rebase evidence:** Source and generated backend suites passed 44
+  tests each on isolated PostgreSQL 17, including a modularity test removed by
+  the clean foundation. The 12 migration tests exercised a test-only second
+  revision, fresh and existing upgrades, preserved business/decision/audit/ledger
+  rows, rollback, concurrent startup and a role without database/schema CREATE
+  privileges. Two generator tests passed. Local Compose migration, preparation,
+  startup and generated image build passed using a locally selected package proxy.
+- **Failed attempts and fixes:** The first Compose preparation failed because
+  its executable module imported `os` too late. The import was corrected and
+  a subprocess regression added before the successful rerun. The first rebased
+  generated verifier run failed for missing `jsonschema`; after installing its
+  declared requirements, the 44-test rerun passed without skips.
+- **Rebased evidence:** On foundation `61d44ed`, source and generated backend
+  suites passed 43 tests each and the generator passed two tests. Source and
+  generated Compose smokes returned UI 200, health 204 and protected API 401
+  after explicit migration and example preparation. Results are local and
+  synthetic, not release approval.
+- **Lesson and limits:** Test upgrades against a later head, not just
+  baseline adoption. Coordinate backup and checkpoint recovery; no automatic
+  downgrade, live restore or hosted identity is established. Catalog formatting
+  on PostgreSQL versions other than 17 is unverified. Reconcile parallel
+  dependencies and run actual credential-free PR CI against the integrated head.
+
 ### PR #6 - Native MAF workflow and local recovery core
 
 - **Change:** Added a native MAF approval workflow, local checkpoint host,

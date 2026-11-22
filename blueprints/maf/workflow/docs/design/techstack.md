@@ -13,6 +13,7 @@ deployed environment.
 | Agent workflow | `agent-framework-core==1.26.0` | Uses MAF `WorkflowBuilder`, `Executor`, `WorkflowContext`, and `CheckpointStorage` natively. LangGraph or an SDK harness would be a separate blueprint, not a hidden runtime switch. |
 | API | FastAPI `0.162.7`, Uvicorn `0.54.0` | Typed HTTP boundary, dependency-based bearer auth, and an ASGI server. |
 | Persistence | PostgreSQL `17-alpine`, Psycopg binary `3.3.9` | Relational transactions and uniqueness constraints support the decision/action ledger; MAF file checkpoints remain separate. |
+| Schema evolution | Alembic `1.16.5`, revision manifests | Explicit schema-owner migration; runtime validates without schema creation. Other PostgreSQL versions are unverified. |
 | Identity | MSAL `1.39.0`, PyJWT crypto `2.15.1` | MSAL is used in the browser; the API verifies Entra v2 access tokens, scopes, roles, and record access. Test identities are isolated to tests. |
 | API models | Pydantic provided by the pinned FastAPI graph | Request/response parsing rejects extra fields. A separate direct version pin is not currently declared. |
 | Frontend | React/React DOM `19.3.1`, TypeScript `7.0.2`, Vite `8.3.8` | Component UI, static typing, and a production build; a different UI framework would need its own client contract and tests. |
@@ -48,7 +49,7 @@ project.
 ## Dependency and alternative status
 
 Direct Python pins are not a fully locked or hash-verified graph. uv lockfiles,
-Ruff, migrations, Foundry host integration, managed identity deployment,
+Ruff, Foundry host integration, managed identity deployment,
 OpenTelemetry export, Bicep, and azd are planned work; no version or command
 should be inferred for them. The current local image uses tags rather than
 immutable image digests, so supply-chain hardening is still an acceptance
