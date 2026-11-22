@@ -60,4 +60,38 @@ before and after decision persistence and synthetic send, then recover with a
 new application lifecycle. Real downstream idempotency, authoritative
 reconciliation, and transport deadline enforcement remain unverified and
 blocked by [#32](https://github.com/ppenumatsa1/agent-blueprints/issues/32).
-Evaluation/readiness work remains separate in draft PR #43.
+
+The generated project also owns
+`backend/evaluations/order-resolution-0.1.0.json`, native MAF deterministic
+evaluators, and `tests/order_resolution_evidence_runner.py`. The dataset groups
+the nine canonical scenario IDs without copying their expected outcomes. The
+runner reads the copied golden cases, executes the real generated adapter,
+evaluates separate `business_outcome` and `technical_execution` payloads
+through `LocalEvaluator` and `evaluate_agent()`, and normalizes results with
+the application-owned #39 readiness mapper.
+
+Run the local evidence path after starting an isolated PostgreSQL database:
+
+```text
+python -m tests.order_resolution_evidence_runner \
+  --verification-root ../verification \
+  --output ../verification/evidence/order-resolution \
+  --revision <git-sha> \
+  --environment <environment>
+
+python -m readiness \
+  --contract scenarios/order-resolution/verification-contract.json \
+  --baseline scenarios/order-resolution/verification-contract.json \
+  --input evidence/order-resolution/readiness-input.json \
+  --trust scenarios/order-resolution/example-trust.json \
+  --evidence-root evidence/order-resolution \
+  --output evidence/order-resolution/readiness-report.json
+```
+
+Use a new empty output directory for each run so evidence from different
+revisions or environments cannot be combined.
+
+The empty example trust root intentionally leaves the independent report
+`unverified`: local digests are not producer attestation. Real provider/model
+quality, actual browser evidence, trusted provenance, hosted execution, and
+real consequential downstream effects are not established by this path.

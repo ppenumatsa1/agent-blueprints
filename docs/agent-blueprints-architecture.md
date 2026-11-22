@@ -229,7 +229,7 @@ host-owned file checkpoints, and React rendering. Local generated-project
 tests execute the canonical fixture through the real API, workflow, and
 database.
 
-Draft [PR #41](https://github.com/ppenumatsa1/agent-blueprints/pull/41) adds
+Merged [PR #41](https://github.com/ppenumatsa1/agent-blueprints/pull/41) adds
 the application-owned durability layer without changing MAF checkpoint
 ownership. PostgreSQL stores request claims, versioned proposals, bound
 decisions, effect status, authorization audit records, action projections, and
@@ -238,7 +238,15 @@ proposal version, action, and destination. One bounded deadline covers
 observation and send; timeout or termination after send is `UNKNOWN` until an
 authoritative observation proves `APPLIED` or `ABSENT`. This is a verified
 synthetic pattern, not a claim about a real payment or fulfillment service.
-Evaluation/readiness remains the separate draft #43 dependency.
+
+Draft [PR #43](https://github.com/ppenumatsa1/agent-blueprints/pull/43)
+integrates evaluation and readiness into the independently generated project.
+It uses the native MAF `Evaluator`, `LocalEvaluator`, `@evaluator`, and
+`evaluate_agent()` path plus the merged #39 result mapper. A versioned dataset
+references all nine canonical scenario IDs and derives expected outcomes from
+the generated golden cases. The evidence producer records exact deterministic
+business and technical results, while real model quality, browser execution,
+and independently trusted provenance remain separate and unverified.
 
 Every future implementation must use its selected framework's native workflow
 and checkpoint provider. PostgreSQL is application-owned persistence for

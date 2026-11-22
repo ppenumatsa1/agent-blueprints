@@ -29,5 +29,13 @@ The profile-root backend adds an explicit PostgreSQL migration, request and
 proposal stores, atomic decision persistence, an effect ledger, authorization
 audit records, and a synthetic downstream destination. Consequential effect
 identity binds case, proposal version, action, and destination. Native MAF
-continues to own workflow checkpoints. Draft PR #43 remains the separate
-evaluation/readiness dependency and is not integrated here.
+continues to own workflow checkpoints.
+
+The profile-root evaluation layer consumes the copied canonical golden cases;
+it does not duplicate them. It runs deterministic business and technical
+comparisons through MAF's native `Evaluator`, `LocalEvaluator`, `@evaluator`,
+and `evaluate_agent()` APIs, then passes native results to the merged #39
+readiness mapper. The generated evidence runner executes all nine scenarios,
+writes revision-bound local artifacts, and invokes the independent readiness
+validator. Deterministic results may pass locally while model quality, browser
+evidence, and trusted producer provenance remain unverified.

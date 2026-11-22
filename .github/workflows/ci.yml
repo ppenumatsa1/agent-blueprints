@@ -217,6 +217,7 @@ jobs:
           npm run check-csp
       - name: Run generated Order Resolution API, workflow, database, and UI tests
         run: |
+          set -o pipefail
           cd "$ORDER_RESOLUTION_DIR/backend"
           uv run --locked ruff check .
           uv run --locked ruff format --check .
@@ -225,7 +226,9 @@ jobs:
             tests.test_core tests.test_external_effect tests.test_security \
             tests.test_evidence_runner tests.test_telemetry tests.test_migrations \
             tests.test_extensions tests.test_evaluation \
-            tests.test_order_resolution tests.test_order_resolution_api
+            tests.test_order_resolution tests.test_order_resolution_api \
+            tests.test_order_resolution_durability \
+            tests.test_order_resolution_evaluation
           cd ../frontend
           npm test
           npm run build
@@ -233,7 +236,52 @@ jobs:
           cd ../verification
           export ORDER_RESOLUTION_ADAPTER="$ORDER_RESOLUTION_DIR/backend/tests/order_resolution_adapter.py"
           uv run --locked --project ../backend python -m unittest -v \
-            tests.test_order_resolution_contract
+            tests.test_order_resolution_contract 2>&1 | tee "$RUNNER_TEMP/order-resolution-contract.log"
+          if grep -Eq 'skipped=|expected failures=' "$RUNNER_TEMP/order-resolution-contract.log"; then
+            echo "Order Resolution verification must not skip canonical scenarios." >&2
+            exit 1
+          fi
+      - name: Produce Order Resolution evaluation evidence and run independent validator
+        run: |
+          cd "$ORDER_RESOLUTION_DIR/backend"
+          uv run --locked python -m tests.order_resolution_evidence_runner \
+            --verification-root ../verification \
+            --output ../verification/evidence/order-resolution \
+            --revision "$SOURCE_REVISION" \
+            --environment github-actions-generated-order-resolution
+          cd ../verification
+          set +e
+          uv run --locked --project ../backend python -m readiness \
+            --contract scenarios/order-resolution/verification-contract.json \
+            --baseline scenarios/order-resolution/verification-contract.json \
+            --input evidence/order-resolution/readiness-input.json \
+            --trust scenarios/order-resolution/example-trust.json \
+            --evidence-root evidence/order-resolution \
+            --output evidence/order-resolution/readiness-report.json
+          validator_status=$?
+          set -e
+          test "$validator_status" -eq 1
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          root = Path("evidence/order-resolution")
+          matrix = json.loads((root / "readiness-matrix.json").read_text())
+          report = json.loads((root / "readiness-report.json").read_text())
+          inputs = json.loads((root / "readiness-input.json").read_text())
+          assert matrix["local_factory_status"] == "passed"
+          assert matrix["release_status"] == "blocked"
+          assert set(matrix["scenario_results"].values()) == {"passed"}
+          expected = {
+              "ORDER-RESOLUTION-TECHNICAL-EXECUTION": "passed",
+              "ORDER-RESOLUTION-BUSINESS-OUTCOME": "passed",
+              "ORDER-RESOLUTION-MODEL-QUALITY": "unverified",
+              "ORDER-RESOLUTION-BROWSER-EVIDENCE": "unverified",
+              "ORDER-RESOLUTION-PROVENANCE": "unverified",
+          }
+          assert {item["check_id"]: item["outcome"] for item in inputs["results"]} == expected
+          assert report["gate_status"] == "unverified"
+          PY
       - name: Run generated contracts and golden acceptance without skips
         run: |
           set -o pipefail
@@ -295,7 +343,9 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: maf-generated-evidence
-          path: ${{ runner.temp }}/maf-generated/verification/evidence/run
+          path: |
+            ${{ runner.temp }}/maf-generated/verification/evidence/run
+            ${{ runner.temp }}/maf-order-resolution-generated/verification/evidence/order-resolution
           if-no-files-found: warn
           retention-days: 7
       - name: Remove isolated services
