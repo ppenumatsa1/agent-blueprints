@@ -78,9 +78,11 @@ rubric configuration, inclusive threshold edges, multiple criteria per
 readiness check, trace mapping, missing and unavailable evaluations,
 malformed and oversized thresholds/scores, unknown and duplicate configured
 check IDs, unknown and duplicate observations, and provider/tool failures.
-The evaluation tests provide the explicit known-check tuple from the
-synthetic selected contract and verify invalid configuration is rejected
-before evaluator invocation. This tuple is not trusted authorization. These
-are contract tests, not actual agent or browser evaluations. Source and
-generated CI run the same tests; the clearly synthetic observations do not
-produce or attest readiness evidence.
+The source test derives the complete known-check tuple from the repository's
+selected verification contract; the generated-copy test derives it from that
+copy's `verification/scenarios/order-adjustment/verification-contract.json`.
+The clearly synthetic fixture's check IDs must be in that derived tuple, and a
+matching but unknown dataset/rubric ID is rejected before evaluator invocation.
+This tuple is not trusted authorization. These are contract tests, not actual
+agent or browser evaluations. Source and generated CI run the same tests; the
+synthetic observations do not produce or attest readiness evidence.

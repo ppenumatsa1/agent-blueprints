@@ -7,8 +7,6 @@ from app.extensions.evaluation import (
     RubricCriterion,
 )
 
-SYNTHETIC_KNOWN_CHECK_IDS = ("CHECK-EXPLANATION", "CHECK-HINT")
-
 SYNTHETIC_DATASET = EvaluationDataset(
     dataset_id="synthetic-review",
     version="v1",
