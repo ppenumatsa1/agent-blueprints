@@ -24,6 +24,30 @@ merged into current `main` at
 base for the #39 evaluation follow-on. Green CI is not blueprint completion,
 release readiness, or Azure deployment approval.
 
+## Azure/Foundry Workstream C
+
+**Status: In Progress.** The cloud application increment adds an SDK-free
+hosted-workflow port, explicit `local` versus `hosted` composition, API-UAMI
+caller tokens, Azure PostgreSQL managed-identity/password configuration,
+verified TLS requirements, bounded connections, explicit runtime/migration
+identity separation, and restart reconciliation for ambiguous hosted outcomes.
+It preserves the generated local application and Order Resolution's durable
+proposal, decision, effect, and no-duplicate-action boundaries.
+The profile now also exposes durable hosted caller/session/conversation
+bindings, an atomic operation journal, and business-only hosted
+pending/decision/completion methods that leave local checkpoint columns null.
+
+Acceptance evidence is local only: 118 source-backend tests, 157 tests in a
+fresh generated Order Resolution backend (including real-PostgreSQL hosted
+approval/restart/idempotency coverage), the ORS-001..009 adapter contract, 68
+root tests with two expected unselected-adapter skips, and source/generated
+frontend suites with 9/10 tests plus build/CSP passed. The
+[application security contract](azure-foundry/application-security.md)
+records the identity matrix, Agent A interface, Agent B outputs, OBO decision,
+and recovery behavior. Next action: obtain draft-PR review and exact-head CI,
+then run the listed live-only checks after integration and authorized
+deployment. No Azure resource or live RBAC/configuration was changed here.
+
 The TCP-readiness correction from [#38](https://github.com/ppenumatsa1/agent-blueprints/issues/38)
 and current MAF-native patterns are in merged #37. PR #39 is being reconciled
 directly onto current `main` without replaying #37. Its new exact-head

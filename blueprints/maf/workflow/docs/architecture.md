@@ -17,6 +17,15 @@ checkpoint is a human approval.
 
 ## Typed MAF extension patterns
 
+Hosted composition is a separate infrastructure adapter, not a second
+application framework. `HostedWorkflowClient` carries validated business
+context and opaque correlation to Agent A over authenticated HTTPS. It never
+carries the user's bearer token. `HostedWorkflowHost` preserves the same
+application `WorkflowHost` port, claims dispatch before network send, and
+reconciles an unknown acknowledgment by operation ID. Agent A owns hosted
+checkpoint/session bytes; PostgreSQL owns business state and effect
+idempotency.
+
 The contracts in `backend/app/extensions/` compose MAF-native components;
 they are not a second runtime or a guarantee that a provider is configured.
 

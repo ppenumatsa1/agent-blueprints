@@ -62,6 +62,22 @@ not rotate an existing database password.
 
 ## Direct backend and frontend inputs
 
+For hosted backend execution, set `WORKFLOW_HOST=hosted` and omit
+`CHECKPOINT_ROOT`. Supply `HOSTED_WORKFLOW_ENDPOINT`,
+`HOSTED_WORKFLOW_SCOPE`, and `API_MANAGED_IDENTITY_CLIENT_ID`; all are
+required and startup fails closed when any is missing or invalid. Local mode
+requires `WORKFLOW_HOST=local` and `CHECKPOINT_ROOT`.
+
+For Azure PostgreSQL, set `DATABASE_TLS_MODE=verify-full` and choose exactly
+one authentication mode. `DATABASE_AUTH_MODE=managed-identity` forbids a
+password and obtains the PostgreSQL scope on demand, using
+`DATABASE_MANAGED_IDENTITY_CLIENT_ID` or the API UAMI. Password mode accepts
+`DATABASE_PASSWORD` from a secret manager. Keep `DATABASE_URL` restricted to
+runtime privileges and use `MIGRATION_DATABASE_URL` for explicit schema-owner
+migrations. Configure bounded use with `DATABASE_POOL_MIN_SIZE`,
+`DATABASE_POOL_MAX_SIZE`, `DATABASE_POOL_TIMEOUT_SECONDS`, and
+`DATABASE_CONNECTION_MAX_LIFETIME_SECONDS`.
+
 The backend reads `ENTRA_TENANT_ID`, `ENTRA_API_CLIENT_ID`, `DATABASE_URL`
 (a PostgreSQL URL containing credentials), `CHECKPOINT_ROOT` (private
 directory), and `BLUEPRINT_APPLICATION`. `WORKFLOW_HOST` defaults to
