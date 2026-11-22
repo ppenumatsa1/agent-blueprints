@@ -234,7 +234,7 @@ route fails closed until the final revision binds the authoritative principal.
 | Command | Behavior |
 | --- | --- |
 | `pwsh ./scripts/azure/validate.ps1` | Builds and lints Bicep, then runs non-deploying infrastructure contract tests |
-| `pwsh ./scripts/azure/test-generated-api-image.ps1 -GeneratedProjectRoot <composed-generated-root>` | Verifies the generator-owned API bridge is byte-identical to hosted source, builds the canonical backend Dockerfile with production dependencies only, and proves import plus hosted composition/wire parity without Azure or PostgreSQL connections; normal entrypoint/lifespan/health remains a composed PostgreSQL gate |
+| `pwsh ./scripts/azure/test-generated-api-image.ps1 -GeneratedProjectRoot <composed-generated-root>` | Verifies the generator-owned API bridge is byte-identical to hosted source, builds the canonical backend Dockerfile with production dependencies only, and proves import plus hosted composition/wire parity without Azure or PostgreSQL connections; separate composed PostgreSQL authority/wire evidence is still required |
 | `pwsh ./scripts/azure/preflight.ps1 -DeploymentMode AzureCli ...` | Validates the active Azure CLI context, permissions, providers, exact region, model, quota, Container Apps, and PostgreSQL; reports azd mismatch without blocking |
 | `pwsh ./scripts/azure/preflight.ps1 -DeploymentMode Azd -FromAzdEnvironment` | Optional azd validation; fails closed unless Azure CLI and azd account/tenant match |
 | `pwsh ./scripts/azure/configure-entra.ps1 -DeploymentMode AzureCli ...` | Read-only validation of deterministic API/SPA registrations |
@@ -355,16 +355,19 @@ Local non-deploying evidence:
   `backend/app/api/routes/hosted_service.py` was absent, and removed its
   temporary directory without output artifacts.
 - Agent C's generated application interface is frozen at draft PR #48 head
-  `9e17dda4f28012b683d583d820db61dcf3e45c17`. Agent A's immutable replacement is
+  `2a04d5be3013e782a7c1222b2a16a7047cbb15cd`; all six C CI jobs passed in run
+  `45084615221`. Agent A's immutable replacement is
   `c3e733a8c7d2e03e41e9045ee9277f504e028f6b`, archive SHA-256
   `3becbb28da4eae014a47d20fe5d8f93d7b56c2f93d9558f0afdf2218868d44ca`.
 - Exact immutable A+C generation produced byte-identical bridge/client and C
   composition files. The canonical backend built with `--no-dev`, verified the
   Agent Framework wheel digest, imported the bridge, and selected
   `ResponsesWorkflowHost`; local manifest-list digest was
-  `sha256:b8f2330b755e66b4b8a47cc73d19fbdf482a63e81a015734089feee57d1cb61a`.
-  Final evidence still requires C's explicit authority/correlation proof and
-  normal entrypoint/lifespan/health against composed PostgreSQL.
+  `sha256:92d03b7dd970726c266b6d6cdda5abe7bee8fe65627f94392e033fdd4de2fefe`.
+  The integration coordinator independently reports 13/13 exact A+C
+  PostgreSQL 17 authority/wire tests passed; B did not rerun that suite.
+  Canonical packaging evidence is complete and integration awaits the A/C
+  final handoff.
   Direct PyPI failed locally with a TLS handshake error; the credentialless
   Microsoft package mirror retained hash/digest verification. Live Azure
   remains unverified.
