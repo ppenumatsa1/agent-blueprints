@@ -271,7 +271,7 @@ ID for the hosted version, so callers must not invent one.
   bindings pre-established by an authenticated application command, plus a
   repeated composed proof with absent/mismatched binding negatives.
 - Two independently built source archives matched SHA-256
-  `1d38a09d7b198debe0818b2cd7e1c2b113582fe9e6449ef5d18f876c4be470af`
+  `42eedba1290a01213cb4b1229ace9e991b669ebc99303154126b0a76e1e3c19b`
   and contained 55 files.
 
 ## Pinned SDKs
