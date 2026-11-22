@@ -236,9 +236,12 @@ class TelemetryTests(unittest.TestCase):
                 for span in spans
             )
         )
-        schema_path = (
-            Path(__file__).resolve().parents[5] / "contracts" / "telemetry-event.schema.json"
-        )
+        project_root = Path(__file__).resolve().parents[2]
+        schema_path = project_root / "verification" / "contracts" / "telemetry-event.schema.json"
+        if not schema_path.is_file():
+            schema_path = (
+                Path(__file__).resolve().parents[5] / "contracts" / "telemetry-event.schema.json"
+            )
         schema = json.loads(schema_path.read_text(encoding="utf-8"))
         validator = Draft202012Validator(schema)
         for record in correlated:

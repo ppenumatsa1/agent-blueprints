@@ -54,6 +54,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
         local = self.artifact("local.json")
         return {
             "schema_version": "1.0.0",
+            "authority": "diagnostic_non_authorizing",
             "source_revision": REVISION,
             "environment": ENVIRONMENT,
             "agent_version": "0.1.0",
@@ -91,20 +92,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
             },
         }
 
-    def validate(self, manifest):
-        path = self.root / "release-evidence.json"
-        write_json(path, manifest)
-        return validate_release_evidence(path, self.root)
-
-    def test_local_pass_does_not_promote_cloud_or_production(self):
-        report = self.validate(self.manifest())
-        self.assertEqual(report["dimensions"]["implementation"]["status"], "passed")
-        self.assertEqual(report["dimensions"]["azure_runtime"]["status"], "unverified")
-        self.assertEqual(report["dimensions"]["production"]["status"], "blocked")
-        self.assertEqual(report["overall_status"], "blocked")
-
-    def test_azure_pass_requires_exact_revision_and_every_runtime_evidence_kind(self):
-        manifest = self.manifest(deployment_revision=DEPLOYMENT)
+    def pass_runtime(self, manifest):
         runtime = manifest["dimensions"]["azure_runtime"]
         runtime["status"] = "passed"
         runtime["reason"] = "Every hosted check passed."
@@ -142,6 +130,22 @@ class ReleaseEvidenceTests(unittest.TestCase):
                     deployment_revision=DEPLOYMENT,
                 )
             )
+
+    def validate(self, manifest):
+        path = self.root / "release-evidence.json"
+        write_json(path, manifest)
+        return validate_release_evidence(path, self.root)
+
+    def test_local_pass_does_not_promote_cloud_or_production(self):
+        report = self.validate(self.manifest())
+        self.assertEqual(report["dimensions"]["implementation"]["status"], "passed")
+        self.assertEqual(report["dimensions"]["azure_runtime"]["status"], "unverified")
+        self.assertEqual(report["dimensions"]["production"]["status"], "blocked")
+        self.assertEqual(report["overall_status"], "blocked")
+
+    def test_azure_pass_requires_exact_revision_and_every_runtime_evidence_kind(self):
+        manifest = self.manifest(deployment_revision=DEPLOYMENT)
+        self.pass_runtime(manifest)
         report = self.validate(manifest)
         self.assertEqual(report["dimensions"]["azure_runtime"]["status"], "passed")
 
@@ -174,6 +178,53 @@ class ReleaseEvidenceTests(unittest.TestCase):
         report = self.validate(manifest)
         self.assertEqual(report["dimensions"]["production"]["status"], "blocked")
         self.assertTrue(report["dimensions"]["production"]["issues"])
+
+    def test_self_authored_production_evidence_is_never_authorizing(self):
+        manifest = self.manifest(deployment_revision=DEPLOYMENT)
+        self.pass_runtime(manifest)
+        production = manifest["dimensions"]["production"]
+        production.update(
+            status="passed",
+            reason="Self-authored production claim.",
+            blockers=[],
+            required_checks=["SECURITY", "COST", "REVIEW"],
+        )
+        for check_id, kind in (
+            ("SECURITY", "security_report"),
+            ("COST", "cost_report"),
+            ("REVIEW", "human_review"),
+        ):
+            artifact = self.artifact(
+                f"self-authored-{kind}.json",
+                deployment_revision=DEPLOYMENT,
+            )
+            production["evidence"].append(
+                self.evidence(
+                    check_id,
+                    kind,
+                    artifact,
+                    deployment_revision=DEPLOYMENT,
+                )
+            )
+        report = self.validate(manifest)
+        self.assertEqual(report["dimensions"]["implementation"]["status"], "passed")
+        self.assertEqual(report["dimensions"]["azure_runtime"]["status"], "passed")
+        self.assertEqual(report["dimensions"]["production"]["status"], "blocked")
+        self.assertIn(
+            "diagnostic and non-authorizing",
+            " ".join(report["dimensions"]["production"]["issues"]),
+        )
+        self.assertEqual(report["overall_status"], "blocked")
+
+    def test_explicit_failed_dimension_is_not_downgraded(self):
+        manifest = self.manifest(deployment_revision=DEPLOYMENT)
+        manifest["dimensions"]["azure_runtime"].update(
+            status="failed",
+            reason="A hosted gate explicitly failed.",
+        )
+        report = self.validate(manifest)
+        self.assertEqual(report["dimensions"]["azure_runtime"]["status"], "failed")
+        self.assertEqual(report["overall_status"], "failed")
 
     def test_schema_rejects_passed_dimension_without_evidence(self):
         manifest = self.manifest()

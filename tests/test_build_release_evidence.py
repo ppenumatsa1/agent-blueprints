@@ -38,6 +38,58 @@ class BuildReleaseEvidenceTests(unittest.TestCase):
             )
         return implementation
 
+    def cloud_artifacts(self, root, *, active="passed", scenario="passed"):
+        metadata = {
+            "schema_version": "1.0.0",
+            "source_revision": "source-123",
+            "deployment_revision": "deployment-456",
+            "environment": "synthetic-azure",
+            "recorded_at": "2026-11-22T20:05:00Z",
+        }
+        artifacts = {}
+        for name, outcome in (
+            ("active", active),
+            ("provider", "passed"),
+            ("browser", "passed"),
+            ("telemetry", "passed"),
+        ):
+            path = root / f"{name}.json"
+            path.write_text(
+                json.dumps({**metadata, "outcome": outcome}),
+                encoding="utf-8",
+            )
+            artifacts[name] = path
+        failure = root / "failure.json"
+        scenarios = (
+            {}
+            if scenario == "empty"
+            else {f"scenario-{number}": {"status": scenario} for number in range(1, 10)}
+        )
+        failure.write_text(
+            json.dumps({**metadata, "scenarios": scenarios}),
+            encoding="utf-8",
+        )
+        artifacts["failure"] = failure
+        return artifacts
+
+    def build_cloud(self, root, implementation, artifacts):
+        output = root / "release-evidence.json"
+        manifest = build(
+            root,
+            implementation,
+            output,
+            source_revision="source-123",
+            deployment_revision="deployment-456",
+            environment="synthetic-azure",
+            agent_version="0.1.0",
+            active_revision=artifacts["active"],
+            provider_evaluation=artifacts["provider"],
+            browser=artifacts["browser"],
+            failure_injection=artifacts["failure"],
+            telemetry=artifacts["telemetry"],
+        )
+        return output, manifest
+
     def test_local_evidence_passes_implementation_but_not_cloud_or_production(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -65,53 +117,49 @@ class BuildReleaseEvidenceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             implementation = self.implementation(root)
-            metadata = {
-                "schema_version": "1.0.0",
-                "source_revision": "source-123",
-                "deployment_revision": "deployment-456",
-                "environment": "synthetic-azure",
-                "recorded_at": "2026-11-22T20:05:00Z",
-            }
-            artifacts = {}
-            for name in ("active", "provider", "browser", "telemetry"):
-                path = root / f"{name}.json"
-                path.write_text(
-                    json.dumps({**metadata, "outcome": "passed"}),
-                    encoding="utf-8",
-                )
-                artifacts[name] = path
-            failure = root / "failure.json"
-            failure.write_text(
-                json.dumps(
-                    {
-                        **metadata,
-                        "scenarios": {
-                            f"scenario-{number}": {"status": "passed"}
-                            for number in range(1, 10)
-                        },
-                    }
-                ),
-                encoding="utf-8",
-            )
-            output = root / "release-evidence.json"
-            manifest = build(
+            output, manifest = self.build_cloud(
                 root,
                 implementation,
-                output,
-                source_revision="source-123",
-                deployment_revision="deployment-456",
-                environment="synthetic-azure",
-                agent_version="0.1.0",
-                active_revision=artifacts["active"],
-                provider_evaluation=artifacts["provider"],
-                browser=artifacts["browser"],
-                failure_injection=failure,
-                telemetry=artifacts["telemetry"],
+                self.cloud_artifacts(root),
             )
             report = validate_release_evidence(output, root)
         self.assertEqual(manifest["dimensions"]["azure_runtime"]["status"], "passed")
         self.assertEqual(report["dimensions"]["azure_runtime"]["status"], "passed")
         self.assertEqual(report["dimensions"]["production"]["status"], "blocked")
+
+    def test_explicit_cloud_failure_remains_failed(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            output, manifest = self.build_cloud(
+                root,
+                self.implementation(root),
+                self.cloud_artifacts(root, active="failed"),
+            )
+            report = validate_release_evidence(output, root)
+        self.assertEqual(manifest["dimensions"]["azure_runtime"]["status"], "failed")
+        self.assertEqual(report["dimensions"]["azure_runtime"]["status"], "failed")
+
+    def test_blocked_and_empty_hosted_scenarios_do_not_pass(self):
+        for scenario, expected in (("blocked", "blocked"), ("empty", "unverified")):
+            with (
+                self.subTest(scenario=scenario),
+                tempfile.TemporaryDirectory() as temporary,
+            ):
+                root = Path(temporary)
+                output, manifest = self.build_cloud(
+                    root,
+                    self.implementation(root),
+                    self.cloud_artifacts(root, scenario=scenario),
+                )
+                report = validate_release_evidence(output, root)
+            self.assertEqual(
+                manifest["dimensions"]["azure_runtime"]["status"],
+                expected,
+            )
+            self.assertEqual(
+                report["dimensions"]["azure_runtime"]["status"],
+                expected,
+            )
 
 
 if __name__ == "__main__":

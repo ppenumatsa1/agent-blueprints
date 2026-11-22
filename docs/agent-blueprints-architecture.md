@@ -594,13 +594,15 @@ status are allowlisted; prompts, completions, tokens, SQL, exception messages,
 arbitrary baggage, and business payloads are excluded. Application Insights
 verification joins only exact correlation tuples from hosted synthetic tests.
 
-Release evidence is a separate architecture layer, not runtime state. It
-validates immutable files and divides readiness into implementation, Azure
-runtime, and production dimensions. Cloud evidence must match one exact source
-revision, environment, and immutable deployment revision. Implementation
-evidence cannot establish Azure runtime readiness. Runtime evidence cannot
-establish production readiness without independent security, cost, and scoped
-human risk acceptance.
+Release evidence is a separate architecture layer, not runtime state. Its
+manifest is diagnostic and non-authorizing: it validates immutable files and
+divides readiness into implementation, Azure runtime, and production
+dimensions while permanently blocking production authorization. Cloud evidence
+must match one exact source revision, environment, and immutable deployment
+revision. Implementation evidence cannot establish Azure runtime readiness.
+Production authorization remains solely with the baseline-pinned trust
+validator, signed result attestations, and scoped, unexpired risk decisions;
+self-authored review files cannot waive critical or security-critical gates.
 
 The manual cloud workflow observes existing resources but never provisions,
 deploys, changes traffic, retries an ambiguous business operation, or rolls

@@ -43,6 +43,14 @@ class VerificationWorkflowTests(unittest.TestCase):
         self.assertIn("tests.test_order_resolution_real_provider", workflow)
         self.assertIn("npm run e2e:live", workflow)
         self.assertIn("python -m readiness.release", workflow)
+        self.assertIn(
+            "python -m pip install -r requirements-dev.txt",
+            workflow,
+        )
+        self.assertIn(
+            'assert report["dimensions"]["azure_runtime"]["status"] == "passed"',
+            workflow,
+        )
         self.assertEqual(workflow.count("id-token: write"), 1)
         self.assertIn("E2E_SESSION_STORAGE_JSON", workflow)
         self.assertIn("E2E_EXPECTED_TENANT_ID", workflow)
