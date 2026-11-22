@@ -75,6 +75,8 @@ function Assert-GeneratedOrderResolutionProject {
         'hosted-agent\main.py',
         'hosted-agent\requirements.txt',
         'hosted-agent\src\order_resolution_hosted',
+        'hosted-agent\src\order_resolution_hosted\client.py',
+        'hosted-agent\src\order_resolution_hosted\bridge.py',
         'scripts\foundry\publish_order_resolution_hosted.py'
     )) {
         if (-not (Test-Path -LiteralPath (Join-Path $resolved $relative))) {
@@ -82,6 +84,57 @@ function Assert-GeneratedOrderResolutionProject {
         }
     }
     return $resolved
+}
+
+function Initialize-GeneratedApiImageContext {
+    param(
+        [Parameter(Mandatory)]
+        [string]$ProjectRoot,
+        [Parameter(Mandatory)]
+        [string]$DockerfileSource
+    )
+    $resolved = Assert-GeneratedOrderResolutionProject -ProjectRoot $ProjectRoot
+    $sourcePackage = Join-Path `
+        $resolved `
+        'hosted-agent\src\order_resolution_hosted'
+    $backend = Join-Path $resolved 'backend'
+    $targetPackage = Join-Path $backend 'order_resolution_hosted'
+    $resolvedDockerfile = (Resolve-Path -LiteralPath $DockerfileSource).Path
+
+    $client = Get-Content `
+        -LiteralPath (Join-Path $sourcePackage 'client.py') `
+        -Raw
+    $bridge = Get-Content `
+        -LiteralPath (Join-Path $sourcePackage 'bridge.py') `
+        -Raw
+    if (
+        $client -match '\bagent_framework\b' -or
+        $client -match '\bazure\.ai\.agentserver\b' -or
+        $bridge -match '\bfrom\s+\.(application|host|model|business)\b' -or
+        $bridge -match '\bagent_framework\b' -or
+        $bridge -match '\bazure\.ai\.agentserver\b'
+    ) {
+        throw 'The API bridge depends on the full hosted runtime; refusing to package it.'
+    }
+
+    New-Item -ItemType Directory -Path $targetPackage -Force | Out-Null
+    Copy-Item `
+        -LiteralPath (Join-Path $sourcePackage 'client.py') `
+        -Destination (Join-Path $targetPackage 'client.py') `
+        -Force
+    Copy-Item `
+        -LiteralPath (Join-Path $sourcePackage 'bridge.py') `
+        -Destination (Join-Path $targetPackage 'bridge.py') `
+        -Force
+    Set-Content `
+        -LiteralPath (Join-Path $targetPackage '__init__.py') `
+        -Value '"""API-only Foundry Responses bridge."""' `
+        -NoNewline
+    Copy-Item `
+        -LiteralPath $resolvedDockerfile `
+        -Destination (Join-Path $backend '.azure-api.Dockerfile') `
+        -Force
+    return $backend
 }
 
 function Get-RequiredValue {

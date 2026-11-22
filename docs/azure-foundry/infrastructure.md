@@ -196,7 +196,7 @@ route fails closed until the final revision binds the authoritative principal.
 
 ## Configuration and secret handling
 
-- Subscription, tenant, user, hosted endpoint/agent scope, API registration,
+- Subscription, tenant, user, hosted endpoint/agent name, API registration,
   PostgreSQL administrator, publish journal, and output path are explicit
   deployment inputs, not committed defaults.
 - `configure-entra.ps1` creates or reuses the uniquely named single-tenant API
@@ -231,6 +231,7 @@ route fails closed until the final revision binds the authoritative principal.
 | Command | Behavior |
 | --- | --- |
 | `pwsh ./scripts/azure/validate.ps1` | Builds and lints Bicep, then runs non-deploying infrastructure contract tests |
+| `pwsh ./scripts/azure/test-generated-api-image.ps1 -GeneratedProjectRoot <composed-generated-root>` | Stages the API-only bridge into the generated backend, builds from the backend context, and proves it imports without a sibling `PYTHONPATH` or full hosted-runtime package |
 | `pwsh ./scripts/azure/preflight.ps1 -DeploymentMode AzureCli ...` | Validates the active Azure CLI context, permissions, providers, exact region, model, quota, Container Apps, and PostgreSQL; reports azd mismatch without blocking |
 | `pwsh ./scripts/azure/preflight.ps1 -DeploymentMode Azd -FromAzdEnvironment` | Optional azd validation; fails closed unless Azure CLI and azd account/tenant match |
 | `pwsh ./scripts/azure/configure-entra.ps1 -DeploymentMode AzureCli ...` | Read-only validation of deterministic API/SPA registrations |
@@ -289,6 +290,9 @@ Before any live operation:
 3. Ensure the integrated generator copies Agent A's hosted source/publisher and
    Agent C's managed-identity/hosted adapters into a new independent Order
    Resolution project. Missing generated paths fail before Azure mutation.
+   Run the generated API image regression; the image copies only A's
+   `client.py` and `bridge.py` beside the generated backend and proves the
+   factory imports without loading hosted server/application modules.
 4. Rerun the complete preflight. East US 2 remains selected only if every
    model/dependency check passes at deployment time, including `agentsV2`,
    Responses API, lifecycle, version, quota, and platform capacity.
@@ -313,8 +317,10 @@ It also records the hosted-to-API endpoint/scope and exact API application-role
 assignment.
 
 The public SDK does not expose a documented hosted-agent ARM resource ID, so
-the deployment never invents one. The reviewed RBAC scope is a separate
-operator input; the returned version ID remains a data-plane identifier.
+the deployment never invents one. The RBAC scope is derived exclusively from
+the validated Foundry project resource ID and the fixed configured agent name;
+it is not an operator input. The returned version ID remains a data-plane
+identifier.
 
 | Consumer | Outputs |
 | --- | --- |
@@ -330,7 +336,7 @@ person, prove a deployment, or establish production readiness.
 
 Local non-deploying evidence:
 
-- `pwsh ./scripts/azure/validate.ps1`: Bicep build and lint succeeded; 12
+- `pwsh ./scripts/azure/validate.ps1`: Bicep build and lint succeeded; 17
   infrastructure contract tests passed.
 - PowerShell parser validation passed for every `scripts/azure/*.ps1` file.
 - `python -m compileall -q ./scripts/azure ./infra/tests` passed.
@@ -344,9 +350,16 @@ Local non-deploying evidence:
   `backend/app/api/routes/hosted_service.py` was absent, and removed its
   temporary directory without output artifacts.
 - Agent C's generated application interface is frozen at draft PR #48 head
-  `60fd83fc05acc290aab3ed96f8f8c255e493d28d`; Agent A froze the required
-  two-phase publisher identity contract, but its final composed revision is not
-  yet pushed.
+  `60fd83fc05acc290aab3ed96f8f8c255e493d28d`. Agent A's current pushed draft
+  head is `228aa7721be5f0c418f01a16ad505f42ad47cba8`, with explicit generated
+  bridge factory `order_resolution_hosted.bridge:build_workflow_host`.
+- Exact-head API image composition passed: the generated backend-only context
+  staged only A's `client.py` and `bridge.py`, built successfully, and imported
+  the factory in a standalone container without sibling `PYTHONPATH`, hosted
+  server/application modules, or hosting SDKs. Direct PyPI failed locally with
+  a TLS handshake error; the credentialless Microsoft package mirror succeeded
+  while retaining hash-locked dependencies and the approved Agent Framework
+  wheel digest check. Broader live A/C/Azure composition remains unverified.
 - Azure validation did not advance to provider what-if because deployment
   inputs are intentionally unset.
 

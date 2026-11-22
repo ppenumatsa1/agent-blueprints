@@ -265,6 +265,20 @@ class InfrastructureContractTests(unittest.TestCase):
         self.assertIn("publish_order_resolution_hosted.py", combined)
         self.assertIn("az deployment sub create", scripts["deploy.ps1"])
         self.assertIn("az acr build", scripts["deploy.ps1"])
+        self.assertIn(
+            "infra\\docker\\order-resolution-api.Dockerfile",
+            scripts["deploy.ps1"],
+        )
+        self.assertIn("--file .azure-api.Dockerfile", scripts["deploy.ps1"])
+        self.assertIn(
+            "Initialize-GeneratedApiImageContext",
+            scripts["deploy.ps1"],
+        )
+        self.assertIn(
+            "PythonPackageIndex must be a credentialless HTTPS package index URL.",
+            scripts["test-generated-api-image.ps1"],
+        )
+        self.assertIn("docker run", scripts["test-generated-api-image.ps1"])
         self.assertIn("'WORKFLOW_HOST=hosted'", scripts["deploy.ps1"])
         self.assertIn(
             "eed3b665-ab3a-47b6-8f48-c9382fb1dad6",
@@ -366,6 +380,53 @@ class InfrastructureContractTests(unittest.TestCase):
             (ROOT / "scripts" / "azure" / "common.ps1").read_text(
                 encoding="utf-8"
             ),
+        )
+        self.assertIn(
+            "hosted-agent\\src\\order_resolution_hosted\\bridge.py",
+            (ROOT / "scripts" / "azure" / "common.ps1").read_text(
+                encoding="utf-8"
+            ),
+        )
+        self.assertIn("build_workflow_host", deploy)
+        api_dockerfile = (
+            INFRA / "docker" / "order-resolution-api.Dockerfile"
+        ).read_text(encoding="utf-8")
+        self.assertIn(
+            "COPY --chown=blueprint:blueprint order_resolution_hosted/",
+            api_dockerfile,
+        )
+        self.assertIn(
+            "from order_resolution_hosted.bridge import build_workflow_host",
+            api_dockerfile,
+        )
+        self.assertNotIn("PYTHONPATH", api_dockerfile)
+        self.assertNotIn("hosted-agent", api_dockerfile)
+        self.assertNotIn(
+            "agent-framework-foundry-hosting",
+            api_dockerfile,
+        )
+        self.assertNotIn(
+            "azure-ai-agentserver",
+            api_dockerfile,
+        )
+        common = (ROOT / "scripts" / "azure" / "common.ps1").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            "'hosted-agent\\src\\order_resolution_hosted'",
+            common,
+        )
+        self.assertIn(
+            "'hosted-agent\\src\\order_resolution_hosted\\client.py'",
+            common,
+        )
+        self.assertIn(
+            "$targetPackage = Join-Path $backend 'order_resolution_hosted'",
+            common,
+        )
+        self.assertIn(
+            "The API bridge depends on the full hosted runtime",
+            common,
         )
         self.assertIn("/api/internal/hosted/v1", deploy)
         self.assertIn("HOSTED_SERVICE_PRINCIPAL_ID", deploy)

@@ -64,8 +64,12 @@ runtime, application, and evidence workstreams; it does not add a shared
 runtime. The supported Azure CLI route generates a new independent Order
 Resolution project, publishes its Agent A hosted source, and builds its Agent C
 API/frontend contexts. It never deploys the source blueprint. The generated
-frontend's Compose upstream is replaced only in the temporary generated copy
-with the exact API HTTPS FQDN. Exact deployment, trace, evaluation, and browser
+API build stages only the API-side Responses client and bridge into the
+backend context; hosted source remains separately publishable, and the API
+does not import the full hosted runtime or rely on a sibling `PYTHONPATH`.
+The generated frontend's Compose upstream is replaced only in the temporary
+generated copy with the exact API HTTPS FQDN. Exact deployment, trace,
+evaluation, and browser
 evidence remains with Agent D. Conversation state, hosted framework
 checkpoints, PostgreSQL business state, and human approval remain separate.
 
