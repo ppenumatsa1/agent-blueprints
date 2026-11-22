@@ -60,11 +60,14 @@ reject the compromised `agent-framework` umbrella distribution and verify the
 approved core wheel digest against the lock and downloaded artifact before
 installation. The lock remains the sole dependency graph. The local #17 tree
 contains the normal merge of `main` at
-`de1cbe4cc3a93f2473a6f8f5f9e063d1ae278fa3`, but is not yet committed or
-pushed; the PR still targets `modularity-foundation`. Local validation is
+`de1cbe4cc3a93f2473a6f8f5f9e063d1ae278fa3` in implementation commit
+`91eaa6392082c1084c05bc9b07cb9052857d5b2f`, and PR #17 targets `main`.
+Exact-head
+[run 45027035643](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/45027035643)
+passed all six jobs. This result is scoped to that implementation commit;
+later tree or base changes require fresh validation. Local evidence is
 recorded in the
 [integration journal](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-22---main-reconciliation-and-local-validation);
-final merged-head CI is required before claiming the reconciliation verified.
 
 The longer-term target adds a Foundry Responses adapter and host-managed
 checkpoints, neither of which is implemented. Staged Foundry-first Bicep/azd describes

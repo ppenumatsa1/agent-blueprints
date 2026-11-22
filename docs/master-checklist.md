@@ -11,23 +11,26 @@ The original [interactive architecture](software-factory.html) is a preserved
 historical source; this checklist records current status. The 2–3 hour
 prototype objective has not yet been measured.
 
-The last verified PR #17 snapshot is head
+The previously verified PR #17 snapshot was head
 `a02fcf2ddc2135a4e16b2bbcdd3720b15cc7e3cf`, based on
 `1e99e038dc31c0ae25e5ea7712030d204ee35bc0`; run
 [44964201508](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44964201508)
-passed all six jobs. PR #11 has since merged to `main` as
-`587e6cc1abc23a67845c8193d486cc65c8b52854`. The #17 reconciliation and
-retarget are not covered by that older run; validate the resulting exact head,
-base, and merge tree before relying on integration evidence. Any later tree
-or base change also requires revalidation. Green CI is not blueprint
-completion, release readiness, or Azure deployment approval.
+passed all six jobs. PR #11 later merged to `main` as
+`de1cbe4cc3a93f2473a6f8f5f9e063d1ae278fa3`, including security-hardened
+commit `587e6cc1abc23a67845c8193d486cc65c8b52854`.
 
-The local #17 reconciliation now includes the current `main` merge
-`de1cbe4cc3a93f2473a6f8f5f9e063d1ae278fa3` as a parent and has resolved the
-conflicts, but is not yet committed or pushed; #17 still targets
-`modularity-foundation`. Local validation results and network/harness caveats
-are recorded in the [issue and fix journal](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-22---main-reconciliation-and-local-validation).
-No GitHub run currently verifies this reconciliation.
+The reconciled implementation commit
+`91eaa6392082c1084c05bc9b07cb9052857d5b2f` is pushed and PR #17 targets
+`main`. Exact-head
+[run 45027035643](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/45027035643)
+passed all six jobs. Merge ref
+`d421eeb98024810465c1ac9ce77cfa1ac4ac7a70` has the exact base/head parents
+and a tree matching the head. This evidence is scoped to the implementation
+commit; subsequent tree or base changes require fresh exact-head CI. Local
+results and network/harness caveats are recorded in the
+[issue and fix journal](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-22---main-reconciliation-and-local-validation).
+Green CI is not blueprint completion, release readiness, or Azure deployment
+approval.
 
 ## Reconciled engineering backlog
 

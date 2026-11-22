@@ -1191,7 +1191,7 @@ subsequent updates and rerun checks after any head or base changes.
 | Reusable MAF extension contracts | P1, not yet specified or independently demonstrated | Track typed model, agent, prompt, tool/authorization and executor/workflow patterns in [#35](https://github.com/ppenumatsa1/agent-blueprints/issues/35); preserve MAF-native semantics and no shared runtime. |
 | P1 permanent standalone reference application | Required deliverable, blocked on separate repository authorization | Track [#30](https://github.com/ppenumatsa1/agent-blueprints/issues/30); no repository has been authorized or created. |
 | Specification handoff and later runtime/App/API roadmap | Deferred/out of this phase | Track [#33](https://github.com/ppenumatsa1/agent-blueprints/issues/33), [#31](https://github.com/ppenumatsa1/agent-blueprints/issues/31), and [#34](https://github.com/ppenumatsa1/agent-blueprints/issues/34); no implementation authorization is implied. |
-| MAF supply-chain guard | Integrated for source and generated installation paths; final CI pending | Reject the compromised `agent-framework` umbrella distribution, verify the approved core wheel SHA-256 against its canonical `uv.lock` entry, and install only through locked uv workflows. |
+| MAF supply-chain guard | Integrated; source and generated paths passed exact-head run 45027035643 | Reject the compromised `agent-framework` umbrella distribution, verify the approved core wheel SHA-256 against its canonical `uv.lock` entry and downloaded artifact, and install only through locked uv workflows. |
 | Draft Order Resolution specification #40 | Documentation compatibility only | Keep the #40 proposal and business scenario separate; do not implement or import its scenario into this blueprint. |
 | Downstream workstreams | Separate PRs; no reconciliation claimed | Coordinate #36/#37/#39 owners independently; their individual evidence does not establish this combined head. |
 
@@ -1247,9 +1247,11 @@ available PR or test record does not establish one.
   `origin/main` is `de1cbe4cc3a93f2473a6f8f5f9e063d1ae278fa3` and includes
   security-hardened head `587e6cc1abc23a67845c8193d486cc65c8b52854`. A normal
   non-rewriting merge of that exact commit into the published #17 branch is
-  resolved and staged, with ten conflicted paths integrated semantically.
-  At this entry, the merge commit is not yet created or pushed and the PR still
-  targets `modularity-foundation`; no CI run covers this tree.
+  recorded in implementation commit
+  `91eaa6392082c1084c05bc9b07cb9052857d5b2f`; ten conflicted paths were
+  integrated semantically. The commit was pushed without rewriting and PR #17
+  was retargeted to `main`. The PR remains open, non-draft, clean and mergeable;
+  no PR was merged or closed.
 - **Dependency/security resolution:** Keep `uv.lock` as the sole Python
   dependency graph and preserve hash-verified installation. Integrate #11's
   approved core wheel digest and guard into source, generated, container, and
@@ -1270,6 +1272,21 @@ available PR or test record does not establish one.
   migrations, synthetic application initialization, and smoke checks passed:
   home 200, health 204, protected API 401, CSP response header present, and
   non-root/checkpoint permissions verified.
+- **Exact-head CI:** Run
+  [45027035643](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/45027035643)
+  passed `contracts`, `maf-core`, `maf-frontend`, `maf-compose`,
+  `maf-independent`, and `maf-infrastructure` for implementation head
+  `91eaa6392082c1084c05bc9b07cb9052857d5b2f`. Source and generated backend
+  suites each passed 72; generated verification passed 44 with no skips or
+  expected failures; root contracts passed 56 with one expected
+  adapter-not-selected skip; infrastructure passed 9 tests per copy and
+  frontend passed 9 tests per copy. The producer reported approval/recovery
+  passed and explanation/hint unverified; the independent validator's exit 1
+  and unverified status were the expected fail-closed result. Merge ref
+  `d421eeb98024810465c1ac9ce77cfa1ac4ac7a70` had exact base/head parents
+  `de1cbe4cc3a93f2473a6f8f5f9e063d1ae278fa3` /
+  `91eaa6392082c1084c05bc9b07cb9052857d5b2f`; its tree
+  `9500dd904441b53adbb3f0499beb12cf083e7f4f` matched the head tree.
 - **Attempts and limitations:** The first Docker dependency build could not
   reach public PyPI because of a TLS handshake failure; the complete Compose
   sequence succeeded using the configured package mirrors. A local PowerShell
@@ -1280,9 +1297,10 @@ available PR or test record does not establish one.
   of public PyPI TLS; fresh environments were installed from `uv export
   --locked` requirements with pip hash enforcement, while `uv.lock` checks and
   mirrored Compose builds passed.
-- **Remaining:** Commit and push without rewriting, retarget #17 to `main`,
-  then inspect all six exact-head Actions jobs and generated-verifier no-skip
-  logs before refreshing evidence and the PR body. These local checks do not
-  verify Foundry caller binding, lost-response recovery, private networking,
-  live identities, managed PostgreSQL, or cloud telemetry. No Azure resource
-  was provisioned, and no PR was merged.
+- **Remaining:** Local direct `uv sync --locked` is unverified due public-PyPI
+  TLS, although the exact GitHub locked installs passed. A documentation-only
+  evidence update follows the tested implementation commit and requires its
+  own exact-head CI before merge. Foundry caller binding, lost-response
+  recovery, private networking, live identities, managed PostgreSQL, and
+  cloud telemetry remain unverified. No Azure resource was provisioned, and
+  no PR was merged.

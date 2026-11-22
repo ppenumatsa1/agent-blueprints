@@ -114,10 +114,15 @@ that the verifier passed; logs for the prior PR heads recorded 44 tests and
 passed all five jobs for foundation head `d0e1727`. The dependent PRs had
 separate successful head-specific runs, which are not evidence for the
 reconciled tree.
-The current #17 working tree has resolved a normal, non-rewriting merge from
-`main`, but the merge is not yet committed or pushed and the PR still targets
-`modularity-foundation`; no run applies to this tree. Its local validation and
-network/harness caveats are recorded in the
+The #17 implementation reconciliation is commit
+`91eaa6392082c1084c05bc9b07cb9052857d5b2f`, with the non-rewriting merge of
+`main` at `de1cbe4cc3a93f2473a6f8f5f9e063d1ae278fa3` as its second parent.
+It targets `main`; exact-head
+[run 45027035643](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/45027035643)
+passed all six jobs. Merge ref `d421eeb98024810465c1ac9ce77cfa1ac4ac7a70`
+has the expected base/head parents and a tree equal to the head. These results
+cover the implementation commit, not later documentation edits or other tree
+changes. Local validation and network/harness caveats are recorded in the
 [integration journal](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-22---main-reconciliation-and-local-validation).
 The [targeted MAF supply-chain audit](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-22---targeted-maf-supply-chain-audit)
 distinguishes the approved `agent-framework-core==1.26.0` dependency from the
