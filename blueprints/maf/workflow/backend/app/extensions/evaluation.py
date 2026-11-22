@@ -16,6 +16,24 @@ def _require_text(value: str, label: str) -> None:
         raise ValueError(f"{label} must be non-empty and whitespace-trimmed.")
 
 
+def _validate_known_check_ids(known_check_ids: tuple[str, ...]) -> set[str]:
+    if not isinstance(known_check_ids, tuple) or not known_check_ids:
+        raise ValueError("Known readiness check IDs must be a non-empty tuple.")
+    for check_id in known_check_ids:
+        _require_text(check_id, "Known readiness check IDs")
+    if len(known_check_ids) != len(set(known_check_ids)):
+        raise ValueError("Known readiness check IDs must be unique.")
+    return set(known_check_ids)
+
+
+def _is_valid_score(value: object) -> bool:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return False
+    if isinstance(value, int):
+        return 0 <= value <= 1
+    return isfinite(value) and 0 <= value <= 1
+
+
 @dataclass(frozen=True)
 class EvaluationCase:
     case_id: str
@@ -62,12 +80,7 @@ class RubricCriterion:
     def __post_init__(self) -> None:
         _require_text(self.criterion_id, "Rubric criterion IDs")
         _require_text(self.check_id, "Readiness check IDs")
-        if (
-            isinstance(self.minimum_score, bool)
-            or not isinstance(self.minimum_score, (int, float))
-            or not isfinite(self.minimum_score)
-            or not 0 <= self.minimum_score <= 1
-        ):
+        if not _is_valid_score(self.minimum_score):
             raise ValueError("Rubric minimum scores must be finite numbers from 0 to 1.")
 
 
@@ -89,11 +102,18 @@ class EvaluationRubric:
         if len({item.criterion_id for item in self.criteria}) != len(self.criteria):
             raise ValueError("Evaluation rubrics must contain criteria with unique IDs.")
 
-    def validate_for(self, dataset: EvaluationDataset) -> None:
+    def validate_for(self, dataset: EvaluationDataset, known_check_ids: tuple[str, ...]) -> None:
+        known_checks = _validate_known_check_ids(known_check_ids)
         case_checks = {check_id for case in dataset.cases for check_id in case.check_ids}
         criterion_checks = {item.check_id for item in self.criteria}
         if case_checks != criterion_checks:
             raise ValueError("Dataset check IDs must match rubric readiness check IDs.")
+        unknown_checks = case_checks - known_checks
+        if unknown_checks:
+            raise ValueError(
+                f"Dataset and rubric contain checks outside the selected readiness contract: "
+                f"{', '.join(sorted(unknown_checks))}."
+            )
         for criterion in self.criteria:
             if not any(criterion.check_id in case.check_ids for case in dataset.cases):
                 raise ValueError(f"Rubric check {criterion.check_id!r} has no dataset cases.")
@@ -165,12 +185,7 @@ def _assessment(
 
 
 def _valid_score(value: object) -> bool:
-    return (
-        not isinstance(value, bool)
-        and isinstance(value, (int, float))
-        and isfinite(value)
-        and 0 <= value <= 1
-    )
+    return _is_valid_score(value)
 
 
 def _valid_trace_reference(value: object) -> bool:
@@ -178,9 +193,11 @@ def _valid_trace_reference(value: object) -> bool:
 
 
 def unavailable_assessment(
-    dataset: EvaluationDataset, rubric: EvaluationRubric
+    dataset: EvaluationDataset,
+    rubric: EvaluationRubric,
+    known_check_ids: tuple[str, ...],
 ) -> EvaluationAssessment:
-    rubric.validate_for(dataset)
+    rubric.validate_for(dataset, known_check_ids)
     check_ids = sorted({criterion.check_id for criterion in rubric.criteria})
     return _assessment(
         dataset,
@@ -200,10 +217,11 @@ def unavailable_assessment(
 def map_observations(
     dataset: EvaluationDataset,
     rubric: EvaluationRubric,
+    known_check_ids: tuple[str, ...],
     observations: Sequence[EvaluationObservation],
 ) -> EvaluationAssessment:
     """Adjudicate evaluator observations; references are not evidence or provenance."""
-    rubric.validate_for(dataset)
+    rubric.validate_for(dataset, known_check_ids)
     cases = {case.case_id: case for case in dataset.cases}
     criteria = {criterion.criterion_id: criterion for criterion in rubric.criteria}
     expected = tuple(
@@ -318,11 +336,12 @@ async def evaluate_agent(
     agent: Agent,
     dataset: EvaluationDataset,
     rubric: EvaluationRubric,
+    known_check_ids: tuple[str, ...],
     evaluator: AgentEvaluator | None,
 ) -> EvaluationAssessment:
     """Run an application-owned evaluator; provider errors propagate without fallback."""
-    rubric.validate_for(dataset)
+    rubric.validate_for(dataset, known_check_ids)
     if evaluator is None:
-        return unavailable_assessment(dataset, rubric)
+        return unavailable_assessment(dataset, rubric, known_check_ids)
     observations = await evaluator.evaluate(agent, dataset, rubric)
-    return map_observations(dataset, rubric, observations)
+    return map_observations(dataset, rubric, known_check_ids, observations)

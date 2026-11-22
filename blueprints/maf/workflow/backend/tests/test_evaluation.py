@@ -5,6 +5,8 @@ from unittest.mock import AsyncMock, Mock
 from agent_framework import Agent
 
 from app.extensions.evaluation import (
+    EvaluationCase,
+    EvaluationDataset,
     EvaluationObservation,
     EvaluationRubric,
     RubricCriterion,
@@ -12,7 +14,11 @@ from app.extensions.evaluation import (
     map_observations,
     unavailable_assessment,
 )
-from examples.evaluation_fixture import SYNTHETIC_DATASET, SYNTHETIC_RUBRIC
+from examples.evaluation_fixture import (
+    SYNTHETIC_DATASET,
+    SYNTHETIC_KNOWN_CHECK_IDS,
+    SYNTHETIC_RUBRIC,
+)
 
 
 class EvaluationExtensionTests(unittest.TestCase):
@@ -28,7 +34,9 @@ class EvaluationExtensionTests(unittest.TestCase):
         )
 
     def test_synthetic_configuration_maps_to_existing_check_results(self):
-        result = map_observations(SYNTHETIC_DATASET, SYNTHETIC_RUBRIC, self.observations())
+        result = map_observations(
+            SYNTHETIC_DATASET, SYNTHETIC_RUBRIC, SYNTHETIC_KNOWN_CHECK_IDS, self.observations()
+        )
         self.assertEqual(result.outcome, "passed")
         checks = {item.check_id: item for item in result.check_results}
         self.assertEqual(set(checks), {"CHECK-EXPLANATION", "CHECK-HINT"})
@@ -44,14 +52,32 @@ class EvaluationExtensionTests(unittest.TestCase):
         self.assertEqual(checks["CHECK-HINT"].observations[0].reference, "trace-hint-1")
 
     def test_threshold_edges_are_inclusive_and_below_threshold_fails(self):
-        edge = map_observations(SYNTHETIC_DATASET, SYNTHETIC_RUBRIC, self.observations(1.0, 0.9))
-        below = map_observations(SYNTHETIC_DATASET, SYNTHETIC_RUBRIC, self.observations(0.99, 0.89))
+        edge = map_observations(
+            SYNTHETIC_DATASET,
+            SYNTHETIC_RUBRIC,
+            SYNTHETIC_KNOWN_CHECK_IDS,
+            self.observations(1.0, 0.9),
+        )
+        below = map_observations(
+            SYNTHETIC_DATASET,
+            SYNTHETIC_RUBRIC,
+            SYNTHETIC_KNOWN_CHECK_IDS,
+            self.observations(0.99, 0.89),
+        )
         self.assertEqual(edge.outcome, "passed")
         self.assertEqual(below.outcome, "failed")
         self.assertTrue(all(item.outcome == "failed" for item in below.check_results))
 
     def test_unavailable_evaluator_is_unverified_and_does_not_invoke_agent(self):
-        result = asyncio.run(evaluate_agent(self.agent, SYNTHETIC_DATASET, SYNTHETIC_RUBRIC, None))
+        result = asyncio.run(
+            evaluate_agent(
+                self.agent,
+                SYNTHETIC_DATASET,
+                SYNTHETIC_RUBRIC,
+                SYNTHETIC_KNOWN_CHECK_IDS,
+                None,
+            )
+        )
         self.assertEqual(result.outcome, "unverified")
         self.assertTrue(all(item.outcome == "unverified" for item in result.check_results))
 
@@ -62,14 +88,25 @@ class EvaluationExtensionTests(unittest.TestCase):
                 evaluator.evaluate = AsyncMock(side_effect=RuntimeError(error))
                 with self.assertRaisesRegex(RuntimeError, error):
                     asyncio.run(
-                        evaluate_agent(self.agent, SYNTHETIC_DATASET, SYNTHETIC_RUBRIC, evaluator)
+                        evaluate_agent(
+                            self.agent,
+                            SYNTHETIC_DATASET,
+                            SYNTHETIC_RUBRIC,
+                            SYNTHETIC_KNOWN_CHECK_IDS,
+                            evaluator,
+                        )
                     )
                 evaluator.evaluate.assert_awaited_once_with(
                     self.agent, SYNTHETIC_DATASET, SYNTHETIC_RUBRIC
                 )
 
     def test_missing_observations_remain_unverified(self):
-        result = map_observations(SYNTHETIC_DATASET, SYNTHETIC_RUBRIC, self.observations()[:1])
+        result = map_observations(
+            SYNTHETIC_DATASET,
+            SYNTHETIC_RUBRIC,
+            SYNTHETIC_KNOWN_CHECK_IDS,
+            self.observations()[:1],
+        )
         checks = {item.check_id: item.outcome for item in result.check_results}
         self.assertEqual(checks["CHECK-EXPLANATION"], "passed")
         self.assertEqual(checks["CHECK-HINT"], "unverified")
@@ -78,11 +115,15 @@ class EvaluationExtensionTests(unittest.TestCase):
     def test_unknown_and_duplicate_observations_cannot_pass(self):
         observations = self.observations()
         duplicate = map_observations(
-            SYNTHETIC_DATASET, SYNTHETIC_RUBRIC, (*observations, observations[0])
+            SYNTHETIC_DATASET,
+            SYNTHETIC_RUBRIC,
+            SYNTHETIC_KNOWN_CHECK_IDS,
+            (*observations, observations[0]),
         )
         unknown = map_observations(
             SYNTHETIC_DATASET,
             SYNTHETIC_RUBRIC,
+            SYNTHETIC_KNOWN_CHECK_IDS,
             (
                 observations[1],
                 EvaluationObservation("unknown-case", "grounded-explanation", 1.0, "trace"),
@@ -99,13 +140,18 @@ class EvaluationExtensionTests(unittest.TestCase):
         unknown = map_observations(
             SYNTHETIC_DATASET,
             SYNTHETIC_RUBRIC,
+            SYNTHETIC_KNOWN_CHECK_IDS,
             (
                 EvaluationObservation("synthetic-explanation", "unknown-criterion", 1.0, "trace"),
                 self.observations()[1],
             ),
         )
-        malformed = map_observations(SYNTHETIC_DATASET, SYNTHETIC_RUBRIC, (None,))
-        invalid_collection = map_observations(SYNTHETIC_DATASET, SYNTHETIC_RUBRIC, None)
+        malformed = map_observations(
+            SYNTHETIC_DATASET, SYNTHETIC_RUBRIC, SYNTHETIC_KNOWN_CHECK_IDS, (None,)
+        )
+        invalid_collection = map_observations(
+            SYNTHETIC_DATASET, SYNTHETIC_RUBRIC, SYNTHETIC_KNOWN_CHECK_IDS, None
+        )
         self.assertEqual(unknown.outcome, "failed")
         self.assertEqual(malformed.outcome, "failed")
         self.assertEqual(invalid_collection.outcome, "failed")
@@ -116,7 +162,9 @@ class EvaluationExtensionTests(unittest.TestCase):
             invalid_score[0],
             EvaluationObservation("synthetic-hint", "accurate-hint", 0.9, " "),
         )
-        result = map_observations(SYNTHETIC_DATASET, SYNTHETIC_RUBRIC, invalid_trace)
+        result = map_observations(
+            SYNTHETIC_DATASET, SYNTHETIC_RUBRIC, SYNTHETIC_KNOWN_CHECK_IDS, invalid_trace
+        )
         self.assertEqual(result.outcome, "failed")
 
     def test_malformed_threshold_is_rejected_before_evaluator_runs(self):
@@ -127,6 +175,21 @@ class EvaluationExtensionTests(unittest.TestCase):
                 RubricCriterion("criterion", "CHECK-EXPLANATION", threshold)
         self.assertEqual(evaluator.evaluate.await_count, 0)
 
+    def test_oversized_integer_threshold_and_score_fail_safely(self):
+        with self.assertRaisesRegex(ValueError, "finite numbers"):
+            RubricCriterion("criterion", "CHECK-EXPLANATION", 10**1000)
+        invalid = (
+            EvaluationObservation(
+                "synthetic-explanation", "grounded-explanation", 10**1000, "synthetic-trace"
+            ),
+            self.observations()[1],
+        )
+        result = map_observations(
+            SYNTHETIC_DATASET, SYNTHETIC_RUBRIC, SYNTHETIC_KNOWN_CHECK_IDS, invalid
+        )
+        self.assertEqual(result.outcome, "failed")
+        self.assertEqual(result.check_results[0].outcome, "failed")
+
     def test_dataset_rubric_check_mapping_must_be_explicit_and_complete(self):
         rubric = EvaluationRubric(
             "incomplete",
@@ -134,7 +197,7 @@ class EvaluationExtensionTests(unittest.TestCase):
             (RubricCriterion("criterion", "CHECK-UNKNOWN", 0.5),),
         )
         with self.assertRaisesRegex(ValueError, "must match"):
-            rubric.validate_for(SYNTHETIC_DATASET)
+            rubric.validate_for(SYNTHETIC_DATASET, SYNTHETIC_KNOWN_CHECK_IDS)
 
     def test_multiple_criteria_produce_one_check_result_with_each_trace(self):
         rubric = EvaluationRubric(
@@ -151,7 +214,9 @@ class EvaluationExtensionTests(unittest.TestCase):
             EvaluationObservation("synthetic-explanation", "safe", 0.9, "trace-safe"),
             EvaluationObservation("synthetic-hint", "accurate-hint", 0.9, "trace-hint"),
         )
-        result = map_observations(SYNTHETIC_DATASET, rubric, observations)
+        result = map_observations(
+            SYNTHETIC_DATASET, rubric, SYNTHETIC_KNOWN_CHECK_IDS, observations
+        )
         explanation = [
             item for item in result.check_results if item.check_id == "CHECK-EXPLANATION"
         ]
@@ -159,8 +224,59 @@ class EvaluationExtensionTests(unittest.TestCase):
         self.assertEqual(
             {item.criterion_id for item in explanation[0].observations}, {"grounded", "safe"}
         )
-        unavailable = unavailable_assessment(SYNTHETIC_DATASET, rubric)
+        unavailable = unavailable_assessment(SYNTHETIC_DATASET, rubric, SYNTHETIC_KNOWN_CHECK_IDS)
         self.assertEqual(len(unavailable.check_results), 2)
+
+    def test_unknown_matching_dataset_and_rubric_check_is_rejected_before_evaluation(self):
+        dataset = EvaluationDataset(
+            "unknown-check", "v1", (EvaluationCase("case", {}, ("CHECK-NOT-IN-CONTRACT",)),)
+        )
+        rubric = EvaluationRubric(
+            "unknown-check",
+            "v1",
+            (RubricCriterion("criterion", "CHECK-NOT-IN-CONTRACT", 0.5),),
+        )
+        evaluator = Mock()
+        evaluator.evaluate = AsyncMock()
+
+        with self.assertRaisesRegex(ValueError, "outside the selected readiness contract"):
+            asyncio.run(
+                evaluate_agent(
+                    self.agent,
+                    dataset,
+                    rubric,
+                    SYNTHETIC_KNOWN_CHECK_IDS,
+                    evaluator,
+                )
+            )
+        evaluator.evaluate.assert_not_awaited()
+        for assessment in (
+            lambda: map_observations(
+                dataset,
+                rubric,
+                SYNTHETIC_KNOWN_CHECK_IDS,
+                (EvaluationObservation("case", "criterion", 1.0, "synthetic-trace"),),
+            ),
+            lambda: unavailable_assessment(dataset, rubric, SYNTHETIC_KNOWN_CHECK_IDS),
+        ):
+            with self.assertRaisesRegex(ValueError, "outside the selected readiness contract"):
+                assessment()
+
+    def test_malformed_or_duplicate_known_checks_are_rejected_before_evaluation(self):
+        evaluator = Mock()
+        evaluator.evaluate = AsyncMock()
+        for known_checks in ((), ("CHECK-EXPLANATION", "CHECK-EXPLANATION"), (" ",)):
+            with self.subTest(known_checks=known_checks), self.assertRaises(ValueError):
+                asyncio.run(
+                    evaluate_agent(
+                        self.agent,
+                        SYNTHETIC_DATASET,
+                        SYNTHETIC_RUBRIC,
+                        known_checks,
+                        evaluator,
+                    )
+                )
+        evaluator.evaluate.assert_not_awaited()
 
 
 if __name__ == "__main__":

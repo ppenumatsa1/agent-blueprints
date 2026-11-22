@@ -125,18 +125,20 @@ and recovery, trusted readiness evidence, and consequential external effects
 remain unverified or blocked; see the [MAF extension guidance](../blueprints/maf/workflow/docs/architecture.md#typed-maf-extension-patterns).
 
 The local #25 follow-on adds application-owned, versioned evaluation dataset
-and rubric contracts, explicit score thresholds, and trace mapping to the
-existing readiness check IDs. The application supplies the evaluator that
-invokes its configured MAF agent/provider; evaluation errors propagate and no
-synthetic fallback is used. Missing observations and unavailable evaluators
-remain unverified, while invalid, unknown, duplicate, or below-threshold
-observations cannot pass. Trace references are not evidence bytes or
-authenticated provenance. At branch test head `d22ee2b`, source and fresh
-generated-copy Ruff checks passed and each ran 19 extension tests; the root
-verifier suite passed 50 tests with one expected adapter-not-selected skip.
-The branch includes updated #37 base `7171aa8`; its CI was pending at
-documentation time. No actual model call, browser end-to-end run, independent
-evidence trust, or hosted validation is claimed.
+and rubric contracts, explicit score thresholds, and trace mapping to existing
+readiness check IDs. Callers must supply the unique IDs from the selected
+readiness contract before evaluation, mapping, or unavailable-evaluator
+reporting; the set establishes consistency, not trusted authorization.
+Matching but unknown configured IDs are rejected before the evaluator runs.
+The application supplies the evaluator that invokes its configured MAF
+agent/provider; evaluation errors propagate and no synthetic fallback is used.
+Missing observations and unavailable evaluators remain unverified, while
+invalid, unknown, duplicate, or below-threshold observations cannot pass.
+Oversized integer thresholds are rejected and oversized scores fail closed.
+Trace references are not evidence bytes or authenticated provenance. The
+explicitly synthetic fixture and source/generated tests do not represent a
+real model call, browser end-to-end run, independent evidence trust, or hosted
+validation.
 
 Local PostgreSQL container initialization can briefly accept Unix socket
 connections before the final TCP server starts. Issue [#38](https://github.com/ppenumatsa1/agent-blueprints/issues/38)

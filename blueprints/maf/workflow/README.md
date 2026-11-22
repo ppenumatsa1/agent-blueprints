@@ -268,7 +268,10 @@ canonical modules directly when implementing application extensions.
   and `backend/app/extensions/`. The synthetic fixture builds a native
   `Agent` without invoking a model; evaluation contracts map versioned,
   application-owned rubric observations to existing readiness check IDs but
-  do not generate or attest evidence. Live provider evaluation, browser-hint
+  require the application to pass the unique IDs from its selected readiness
+  contract at each evaluation/mapping boundary. Those IDs provide consistency,
+  not trusted authorization. The fixture is synthetic and does not generate
+  or attest evidence. Live provider evaluation, browser-hint
   end-to-end behavior, hosted identity and recovery, trusted readiness
   evidence, and consequential external effects remain unverified or blocked.
 

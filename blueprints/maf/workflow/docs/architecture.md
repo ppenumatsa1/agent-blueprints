@@ -72,17 +72,24 @@ they are not a second runtime or a guarantee that a provider is configured.
   [#22](https://github.com/ppenumatsa1/agent-blueprints/issues/22).
 - **Evaluation contracts (#25):** applications define versioned
   `EvaluationDataset` cases and an `EvaluationRubric` with explicit finite
-  score thresholds. An application supplies `AgentEvaluator` to invoke its
-  configured MAF agent/provider; `evaluate_agent` has no default evaluator
+  score thresholds. Before mapping or evaluation, the application must pass
+  the unique readiness check IDs from its selected contract to every
+  `validate_for`, `evaluate_agent`, `map_observations`, or
+  `unavailable_assessment` call. This list is a consistency boundary, not
+  trusted authorization or a substitute for the independent validator.
+  Unknown, malformed, or duplicate configured check IDs are rejected before
+  evaluator invocation. An application supplies `AgentEvaluator` to invoke
+  its configured MAF agent/provider; `evaluate_agent` has no default evaluator
   and propagates provider or tool errors without a synthetic fallback.
   `map_observations` maps configured case and criterion traces to one
   `CheckEvaluation` per readiness check ID. Missing observations or an
   unavailable evaluator remain unverified; below-threshold, duplicate,
-  unknown, or malformed observations fail. Invalid thresholds are rejected
-  before evaluation. Trace references and scores are not evidence bytes,
+  unknown, or malformed observations fail. Invalid thresholds, including
+  oversized integers, are rejected before evaluation; invalid observation
+  scores fail closed. Trace references and scores are not evidence bytes,
   digests, or authenticated provenance, and do not change the independent
-  readiness validator. The synthetic fixture tests mapping only; no model
-  call or browser end-to-end hint was run. See
+  readiness validator. The explicitly named synthetic fixture tests mapping
+  only; no model call or browser end-to-end hint was run. See
   [evaluation.py](../backend/app/extensions/evaluation.py) and the
   [evaluation tests](testing.md#evaluation-extension-tests).
 

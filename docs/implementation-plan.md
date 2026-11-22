@@ -90,15 +90,21 @@ identity/checkpoints/recovery (#19/#20/#22), and trusted readiness evidence
 
 The #25 follow-on adds typed application-owned evaluation datasets, rubric
 criteria with explicit thresholds, and mapping from case/criterion/trace
-observations to individual readiness check IDs. The application supplies the
-evaluator that invokes its MAF agent/provider; unavailable evaluators and
-missing observations remain unverified, while failed, malformed, unknown, or
-duplicate observations cannot pass. Provider/tool errors propagate without a
-fallback. Source and fresh generated-copy Ruff checks passed, and both ran
-19 extension tests; the root verifier suite passed 50 tests with one expected
-adapter-not-selected skip at branch test head `d22ee2b`. The branch includes
-updated #37 base `7171aa8`, whose CI was pending. No actual model or browser
+observations to individual readiness check IDs. Each caller must supply the
+unique IDs from its selected readiness contract to the validation, evaluation,
+mapping, and unavailable-evaluator paths; these IDs are a consistency boundary,
+not trusted authorization. Matching but unknown dataset/rubric IDs are
+rejected before evaluator invocation. Oversized integer thresholds are rejected
+as invalid, and oversized observation scores fail closed. The application
+supplies the evaluator that invokes its MAF agent/provider; unavailable
+evaluators and missing observations remain unverified, while failed,
+malformed, unknown, or duplicate observations cannot pass. Provider/tool errors
+propagate without a fallback. The explicitly synthetic fixture and focused
+source/generated tests exercise these boundaries. No actual model or browser
 evidence, independent trust/provenance, or hosted validation is claimed.
+The stacked #37 base `7171aa801a8ec73788103c802704f6f48d249f16` passed all six
+exact-head CI jobs in run [44964330392](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/44964330392);
+the feature head must still pass its own exact-head CI.
 
 ### Execution sequence and work packages
 

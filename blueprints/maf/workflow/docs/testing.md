@@ -76,7 +76,11 @@ results as such.
 `tests.test_evaluation` exercises explicit versioned synthetic dataset and
 rubric configuration, inclusive threshold edges, multiple criteria per
 readiness check, trace mapping, missing and unavailable evaluations,
-malformed thresholds and scores, unknown and duplicate observations, and
-provider/tool failures. These are contract tests, not actual agent or browser
-evaluations. Source and generated CI run the same tests; the synthetic
-observations do not produce or attest readiness evidence.
+malformed and oversized thresholds/scores, unknown and duplicate configured
+check IDs, unknown and duplicate observations, and provider/tool failures.
+The evaluation tests provide the explicit known-check tuple from the
+synthetic selected contract and verify invalid configuration is rejected
+before evaluator invocation. This tuple is not trusted authorization. These
+are contract tests, not actual agent or browser evaluations. Source and
+generated CI run the same tests; the clearly synthetic observations do not
+produce or attest readiness evidence.
