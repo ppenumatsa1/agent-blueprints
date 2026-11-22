@@ -66,6 +66,34 @@ directly onto current `main` without replaying #37. Its new exact-head
 validation is required; earlier stacked-branch CI does not validate this
 baseline.
 
+## Azure/Foundry Workstream B
+
+**Status: In Progress - ready for independent validation, not deployed.**
+
+Starting from exact main
+`886b628fdea02f9089c385b4ed0fc46d90f375e8`, Workstream B adds the
+[deployment plan](../.azure/deployment-plan.md), root azd configuration,
+modular public-network Bicep, guarded operations, infrastructure contract
+tests, and the [operator evidence](azure-foundry/infrastructure.md). East US 2
+is selected without a split-region design for `gpt-4.1-mini`
+`2025-04-14` on `GlobalStandard` capacity 10. Read-only evidence found enough
+model quota/capacity and dependent-service quota, while the current azd
+account and tenant do not match Azure CLI. The deployment path therefore
+fails closed.
+
+Acceptance evidence: Bicep build/lint and 8 infrastructure contracts pass; the
+root suite passes 68 tests with two expected adapter-selection skips; all new
+PowerShell/Python files parse. No Azure resource, RBAC assignment, database
+principal, migration, deployment, rollback, or teardown was executed.
+Deployment is additionally gated until Agents A/C replace the current static
+PostgreSQL DSN, local-only workflow host, and Compose-only frontend proxy with
+the managed-identity/hosted Azure integrations.
+
+**Next action:** independently validate the exact PR revision, repair azd
+authentication outside this PR, rerun preflight/what-if, and obtain approval
+of resource inventory, cost, identity, and public-network controls before any
+deployment.
+
 ## Reconciled engineering backlog
 
 The foundation and the integrated review do not establish blueprint

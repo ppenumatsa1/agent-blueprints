@@ -96,6 +96,43 @@ The topology is implemented and locally tested, but Azure identity, RBAC,
 networking, managed PostgreSQL, hosted execution, and telemetry remain
 unverified until an authorized integrated deployment.
 
+## Azure/Foundry Workstream B
+
+The prepared Azure topology preserves the application/runtime boundaries:
+
+```text
+Public React Container App
+  -> Entra-protected public FastAPI Container App
+  -> Foundry project and explicit model deployment
+
+FastAPI -> PostgreSQL Flexible Server: business state and approval/effect data
+Foundry Hosted Agent -> framework-owned hosted execution/checkpoints
+All services -> workspace-based Application Insights and Log Analytics
+```
+
+East US 2 is the selected single region. Public networking is deliberate for
+this milestone, with TLS, API platform authentication, managed identities,
+least-privilege roles, Key Vault references, and exact-IP PostgreSQL firewall
+configuration. No VNet, private endpoint, private DNS, or private runner is
+included. A failure of deployment-specific capacity in East US 2 stops the
+deployment; it does not authorize an implicit cross-region topology.
+
+The infrastructure exposes typed azd outputs to the independent runtime,
+application, and evidence workstreams; it does not add a shared runtime.
+Hosted agent code/version ownership remains with Agent A. API/frontend and
+business persistence integration remains with Agent C. Exact deployment,
+trace, evaluation, and browser evidence remains with Agent D. Conversation
+state, framework checkpoints, PostgreSQL business state, and human approval
+remain separate.
+
+The deployment plan is `Ready for Validation`, not deployed or production
+ready. The current azd account and tenant differ from Azure CLI, and every
+mutation path fails closed on that mismatch. Application deployment also
+remains blocked until the current static database DSN, local-only host, and
+Compose-only frontend proxy are replaced by the corresponding A/C integration.
+See the
+[infrastructure evidence and operator contract](azure-foundry/infrastructure.md).
+
 ## MAF modularity foundation and target
 
 The local blueprint and its generated copy now have sibling `backend` and

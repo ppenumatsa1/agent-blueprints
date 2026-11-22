@@ -138,6 +138,47 @@ confirmation, Agent B output binding, and live Azure/Foundry/PostgreSQL
 verification. This workstream does not provision, deploy, merge, or close
 production-readiness issues.
 
+## Azure/Foundry Workstream B
+
+Workstream B prepares, but does not execute, the Azure deployment path. Its
+source of truth is [`.azure/deployment-plan.md`](../.azure/deployment-plan.md),
+with the detailed inventory, regional evidence, cost assumptions, role matrix,
+operations, and cross-workstream outputs in
+[`docs/azure-foundry/infrastructure.md`](azure-foundry/infrastructure.md).
+
+The selected single region is East US 2. The model contract is
+`gpt-4.1-mini` version `2025-04-14`, `GlobalStandard`, capacity 10. The
+subscription and platform checks found sufficient capacity, but Standard
+`gpt-4.1-mini` quota is exhausted and is rejected. East US and Central US are
+reviewed fallbacks only; failure in East US 2 stops the deployment and
+requires a complete fallback-region recheck rather than silent resource
+splitting.
+
+The implementation provides modular Foundry/model, identity/RBAC,
+observability, ACR, Container Apps, Key Vault, and PostgreSQL Bicep; root azd
+orchestration; guarded preflight, what-if, deploy, database configuration,
+migration, health, rollback, and teardown scripts; and non-deploying contract
+tests. Hosted agent code deployment remains owned by Agent A and intentionally
+has no ACR dependency. The API/frontend ACR is retained for Container Apps
+remote builds.
+
+Deployment-time Entra automation idempotently creates or reuses the authorized
+single-tenant API/SPA registrations, exposes only the three workflow scopes,
+defines user/approver roles, and creates no secret or test user. Live app
+deployment remains fail-closed until Agents A/C implement renewable
+managed-identity PostgreSQL authentication, hosted workflow selection, and the
+deployed frontend proxy target.
+
+**Acceptance evidence:** exact base verified; read-only Azure discovery
+completed; Bicep build/lint and 8 infrastructure contracts pass; 68 root tests
+pass with two expected adapter-selection skips; script syntax checks pass.
+The current Azure CLI identity matches the authorized target, but azd is a
+different account and tenant. All mutation paths fail closed until both
+identities match. No Azure mutation or deployment has occurred.
+
+**Next action:** independent validation on the draft PR, then an approved
+what-if after azd reauthentication. Deployment remains outside this PR.
+
 Specification Studio has not yet produced an artifact, so the proposed
 handoff is not an end-to-end compatibility claim. Phase 0 does not implement
 the validator or an agent template, integrate Specification Studio, deploy
