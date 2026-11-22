@@ -19,6 +19,49 @@ authorization denial. It requires framework-native workflow/checkpoint
 providers and keeps PostgreSQL application persistence separate; it does not
 add a runtime, custom checkpointer, compatibility shim, or Azure resource.
 
+Merged [PR #42](https://github.com/ppenumatsa1/agent-blueprints/pull/42)
+adds the [executable acceptance fixture](../scenarios/order-resolution/README.md),
+versions that contract as `order-resolution-spec/0.1.0`, and encodes exactly
+`ORS-001` through `ORS-009`. Root tests enforce the exact synthetic policies,
+decimal USD round-half-up refund amounts, approval/action/outcome expectations,
+and explicit policy-evidence failures. Normalized `business_outcome`
+assertions remain separate from framework-specific `technical_execution`
+assertions. This is contract encoding, not implementation or readiness
+evidence. Parallel workstreams B, C, and D depend on this contract and must not
+redefine its normalized facts or outcomes.
+
+Merged [PR #44](https://github.com/ppenumatsa1/agent-blueprints/pull/44)
+adds one explicit `order-resolution` generation profile to the existing safe
+copy generator. Default generation remains unchanged. The generated project
+owns its FastAPI/React/PostgreSQL/Compose application, deterministic policy
+rules, database-only synthetic action, native MAF `Executor` and
+`WorkflowBuilder`, host-selected file checkpoints, tests, locks, and copied
+acceptance assets. A fresh external generation passed 117 inherited and
+profile backend tests on PostgreSQL 17; those tests executed `ORS-001` as one
+automatic `USD 7.90` action, `ORS-002` as a native pause followed by one
+authorized `USD 18.50` action, and `ORS-006` as a persisted fail-closed case
+with no checkpoint, decision, action claim, or effect. Generated frontend
+tests/build/CSP checks and a standalone Compose root/health/auth boundary also
+passed locally. These results are implementation evidence, not full nine-case,
+hosted, remote-effect, evaluation, or production-readiness evidence.
+
+Draft [PR #41](https://github.com/ppenumatsa1/agent-blueprints/pull/41)
+integrates application-owned PostgreSQL requests, proposals, atomic decisions,
+effects, audit records, synthetic downstream reconciliation, and an explicit
+profile migration into that generated application. Effect identity includes
+case, proposal version, action, and destination. Process tests cover termination
+around decision persistence and effect send; timeout-after-send remains unknown
+until authoritative observation. The generated runtime adapter executes
+`ORS-001` through `ORS-009` while keeping normalized business outcomes separate
+from API, native-checkpoint, and PostgreSQL execution evidence. Native MAF
+continues to own checkpoint bytes. Real downstream guarantees remain unverified
+and blocked by #32; draft #43 remains the separate evaluation/readiness work.
+A fresh external generation passed 136 backend tests, 10 frontend tests plus
+build/CSP, all nine canonical scenarios without skips, 20 repeated concurrent
+duplicate-request runs, source-independence checks, and Compose root
+`200`/health `204`/protected API `401`. Exact-head CI and independent review
+remain required before merge consideration.
+
 Specification Studio has not yet produced an artifact, so the proposed
 handoff is not an end-to-end compatibility claim. Phase 0 does not implement
 the validator or an agent template, integrate Specification Studio, deploy
@@ -75,10 +118,11 @@ remaining acceptance criteria, dependencies and evidence in these issues:
   [#34](https://github.com/ppenumatsa1/agent-blueprints/issues/34).
 
 Merged PR [#40](https://github.com/ppenumatsa1/agent-blueprints/pull/40)
-adds a standardized Order Resolution specification only. Treat its business
-scenario as a separate proposal, not an implementation request. The current
-order-adjustment scenario remains a synthetic test fixture, and no #40 runtime
-behavior or contract is included in this blueprint.
+adds the standardized Order Resolution specification. Its focused executable
+fixture remains separate from the current blueprint runtime and from the
+legacy order-adjustment scenario. A framework mapping must consume the
+normalized fixture and add native checkpoint/execution evidence rather than
+redefining the business contract.
 
 Hosted recovery remains explicitly deferred, not waived. Azure deployment
 requires the implemented and independently verified offline prerequisites,

@@ -79,7 +79,28 @@ export function WorkflowWorkspace({
 
   async function decide(decision: "approved" | "rejected") {
     if (!record) return;
-    await run(async () => setRecord(await client.decide(record.id, decision)));
+    const rawProposal = record.payload.proposal;
+    const proposal = rawProposal && typeof rawProposal === "object" && !Array.isArray(rawProposal)
+      ? rawProposal as Record<string, unknown>
+      : undefined;
+    const binding = proposal
+      && typeof proposal.version === "number"
+      && typeof proposal.action === "string"
+      && typeof proposal.destination_id === "string"
+      && typeof record.decision_handle === "string"
+      ? {
+          proposal_version: proposal.version,
+          action: proposal.action,
+          destination_id: proposal.destination_id,
+          handle: record.decision_handle,
+          channel: "api",
+        }
+      : undefined;
+    await run(async () => setRecord(
+      binding
+        ? await client.decide(record.id, decision, binding)
+        : await client.decide(record.id, decision),
+    ));
   }
 
   const status = record?.status === "completed" && !record.execution_complete ? "recovering" : record?.status;

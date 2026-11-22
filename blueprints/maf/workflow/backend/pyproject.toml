@@ -35,3 +35,4 @@ line-length = 100
 [tool.ruff.lint.per-file-ignores]
 # The verifier loads this adapter by file path before backend imports are available.
 "tests/order_adjustment_adapter.py" = ["E402"]
+"tests/order_resolution_adapter.py" = ["E402"]

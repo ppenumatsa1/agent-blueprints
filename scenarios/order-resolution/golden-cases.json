@@ -1,0 +1,436 @@
+{
+  "scenario_set": "order-resolution-spec/0.1.0",
+  "cases": [
+    {
+      "id": "ORS-001",
+      "title": "low-risk auto-resolution",
+      "input": {
+        "actor": "USER-A",
+        "order": "ORDER-LOW",
+        "policy_evidence": [
+          {
+            "policy": "POLICY-LATE@1",
+            "current": true,
+            "applicable": true,
+            "digest_valid": true
+          }
+        ],
+        "commands": [
+          "submit"
+        ]
+      },
+      "expected": {
+        "business_outcome": {
+          "proposal_authoritative": true,
+          "proposed_action": {
+            "type": "partial_refund_10",
+            "currency": "USD",
+            "amount": "7.90"
+          },
+          "approval_required": false,
+          "decision": "not_required",
+          "verified_actions": [
+            {
+              "type": "partial_refund_10",
+              "currency": "USD",
+              "amount": "7.90"
+            }
+          ],
+          "state": "completed"
+        },
+        "technical_execution": {
+          "native_pause_required": false,
+          "authorized_decision_count": 0,
+          "action_claim_count": 1,
+          "side_effect_count": 1,
+          "terminal_event_count": 1
+        }
+      }
+    },
+    {
+      "id": "ORS-002",
+      "title": "high-risk approval",
+      "input": {
+        "actor": "USER-A",
+        "order": "ORDER-HIGH",
+        "policy_evidence": [
+          {
+            "policy": "POLICY-LATE@1",
+            "current": true,
+            "applicable": true,
+            "digest_valid": true
+          }
+        ],
+        "commands": [
+          "submit",
+          {
+            "decision": "approve",
+            "reviewer": "REVIEWER-A",
+            "proposal": "current"
+          }
+        ]
+      },
+      "expected": {
+        "business_outcome": {
+          "proposal_authoritative": true,
+          "proposed_action": {
+            "type": "partial_refund_10",
+            "currency": "USD",
+            "amount": "18.50"
+          },
+          "approval_required": true,
+          "decision": "approved",
+          "verified_actions": [
+            {
+              "type": "partial_refund_10",
+              "currency": "USD",
+              "amount": "18.50"
+            }
+          ],
+          "state": "completed"
+        },
+        "technical_execution": {
+          "native_pause_required": true,
+          "native_pause_before_action": true,
+          "authorized_decision_count": 1,
+          "action_claim_count": 1,
+          "side_effect_count": 1,
+          "terminal_event_count": 1
+        }
+      }
+    },
+    {
+      "id": "ORS-003",
+      "title": "human rejection",
+      "input": {
+        "actor": "USER-A",
+        "order": "ORDER-DAMAGED",
+        "policy_evidence": [
+          {
+            "policy": "POLICY-DAMAGED@1",
+            "current": true,
+            "applicable": true,
+            "digest_valid": true
+          }
+        ],
+        "commands": [
+          "submit",
+          {
+            "decision": "reject",
+            "reviewer": "REVIEWER-A",
+            "proposal": "current"
+          }
+        ]
+      },
+      "expected": {
+        "business_outcome": {
+          "proposal_authoritative": true,
+          "proposed_action": {
+            "type": "replacement_shipment",
+            "quantity": 1
+          },
+          "approval_required": true,
+          "decision": "rejected",
+          "verified_actions": [],
+          "state": "escalated"
+        },
+        "technical_execution": {
+          "native_pause_required": true,
+          "native_pause_before_action": true,
+          "rejection_count": 1,
+          "action_claim_count": 0,
+          "side_effect_count": 0,
+          "terminal_event_count": 1
+        }
+      }
+    },
+    {
+      "id": "ORS-004",
+      "title": "duplicate request and action",
+      "input": {
+        "actor": "USER-A",
+        "order": "ORDER-LOW",
+        "policy_evidence": [
+          {
+            "policy": "POLICY-LATE@1",
+            "current": true,
+            "applicable": true,
+            "digest_valid": true
+          }
+        ],
+        "request_identity": "same_server_recognized_identity",
+        "commands": [
+          "submit",
+          "repeat_before_completion",
+          "repeat_after_completion"
+        ]
+      },
+      "expected": {
+        "business_outcome": {
+          "proposal_authoritative": true,
+          "proposed_action": {
+            "type": "partial_refund_10",
+            "currency": "USD",
+            "amount": "7.90"
+          },
+          "approval_required": false,
+          "decision": "not_required",
+          "verified_actions": [
+            {
+              "type": "partial_refund_10",
+              "currency": "USD",
+              "amount": "7.90"
+            }
+          ],
+          "state": "completed",
+          "returned_original_outcome": true
+        },
+        "technical_execution": {
+          "request_identity_reused": true,
+          "action_claim_count": 1,
+          "side_effect_count": 1,
+          "terminal_event_count": 1,
+          "duplicate_terminal_event_emitted": false
+        }
+      }
+    },
+    {
+      "id": "ORS-005",
+      "title": "worker restart and recovery",
+      "input": {
+        "actor": "USER-A",
+        "order": "ORDER-HIGH",
+        "policy_evidence": [
+          {
+            "policy": "POLICY-LATE@1",
+            "current": true,
+            "applicable": true,
+            "digest_valid": true
+          }
+        ],
+        "commands": [
+          "submit",
+          {
+            "decision": "approve",
+            "reviewer": "REVIEWER-A",
+            "proposal": "current"
+          },
+          "terminate_worker_after_decision_commit_before_native_resume_acknowledgement",
+          "restart"
+        ]
+      },
+      "expected": {
+        "business_outcome": {
+          "proposal_authoritative": true,
+          "proposed_action": {
+            "type": "partial_refund_10",
+            "currency": "USD",
+            "amount": "18.50"
+          },
+          "approval_required": true,
+          "decision": "approved",
+          "verified_actions": [
+            {
+              "type": "partial_refund_10",
+              "currency": "USD",
+              "amount": "18.50"
+            }
+          ],
+          "state": "completed"
+        },
+        "technical_execution": {
+          "native_pause_required": true,
+          "termination_point": "after_decision_commit_before_native_resume_acknowledgement",
+          "native_continuation_reconciled": true,
+          "stored_decision_reused": true,
+          "original_decision_audit_preserved": true,
+          "action_claim_count": 1,
+          "side_effect_count": 1,
+          "terminal_event_count": 1
+        }
+      }
+    },
+    {
+      "id": "ORS-006",
+      "title": "missing policy evidence",
+      "input": {
+        "actor": "USER-A",
+        "order": "ORDER-LOW",
+        "policy_evidence": [],
+        "commands": [
+          "submit"
+        ]
+      },
+      "expected": {
+        "business_outcome": {
+          "proposal_authoritative": false,
+          "proposed_action": null,
+          "approval_required": null,
+          "decision": "none",
+          "verified_actions": [],
+          "state": "failed",
+          "error": "policy_evidence_missing"
+        },
+        "technical_execution": {
+          "native_pause_required": false,
+          "authorized_decision_count": 0,
+          "action_claim_count": 0,
+          "side_effect_count": 0,
+          "terminal_event_count": 1
+        }
+      }
+    },
+    {
+      "id": "ORS-007",
+      "title": "conflicting policy evidence",
+      "input": {
+        "actor": "USER-A",
+        "order": "ORDER-LOW",
+        "policy_evidence": [
+          {
+            "policy": "POLICY-LATE@1",
+            "current": true,
+            "applicable": true,
+            "digest_valid": true,
+            "asserted_action": "partial_refund_10",
+            "asserted_approval_required": false
+          },
+          {
+            "policy": "POLICY-LATE@1",
+            "current": true,
+            "applicable": true,
+            "digest_valid": true,
+            "asserted_action": "replacement_shipment",
+            "asserted_approval_required": true
+          }
+        ],
+        "commands": [
+          "submit"
+        ]
+      },
+      "expected": {
+        "business_outcome": {
+          "proposal_authoritative": false,
+          "proposed_action": null,
+          "approval_required": null,
+          "decision": "none",
+          "verified_actions": [],
+          "state": "failed",
+          "error": "policy_evidence_conflict"
+        },
+        "technical_execution": {
+          "native_pause_required": false,
+          "authorized_decision_count": 0,
+          "action_claim_count": 0,
+          "side_effect_count": 0,
+          "terminal_event_count": 1
+        }
+      }
+    },
+    {
+      "id": "ORS-008",
+      "title": "invalid policy evidence",
+      "input": {
+        "actor": "USER-A",
+        "order": "ORDER-LOW",
+        "policy_evidence_variants": [
+          {
+            "policy": "POLICY-LATE@1",
+            "invalid_reason": "digest-invalid"
+          },
+          {
+            "policy": "POLICY-LATE@1",
+            "invalid_reason": "expired"
+          },
+          {
+            "policy": "POLICY-LATE@1",
+            "invalid_reason": "non-applicable"
+          }
+        ],
+        "commands": [
+          "submit_each_variant"
+        ]
+      },
+      "expected": {
+        "business_outcome": {
+          "proposal_authoritative": false,
+          "proposed_action": null,
+          "approval_required": null,
+          "decision": "none",
+          "verified_actions": [],
+          "state": "failed",
+          "error": "policy_evidence_invalid"
+        },
+        "technical_execution": {
+          "invalid_variants_checked": [
+            "digest-invalid",
+            "expired",
+            "non-applicable"
+          ],
+          "all_variants_failed_explicitly": true,
+          "native_pause_required": false,
+          "authorized_decision_count": 0,
+          "action_claim_count": 0,
+          "side_effect_count": 0,
+          "terminal_event_count_per_variant": 1
+        }
+      }
+    },
+    {
+      "id": "ORS-009",
+      "title": "authorization failure",
+      "input": {
+        "actor": "USER-A",
+        "order": "ORDER-HIGH",
+        "policy_evidence": [
+          {
+            "policy": "POLICY-LATE@1",
+            "current": true,
+            "applicable": true,
+            "digest_valid": true
+          }
+        ],
+        "commands": [
+          "submit",
+          {
+            "decision": "approve",
+            "reviewer": "REVIEWER-B",
+            "proposal": "current"
+          },
+          {
+            "decision": "approve",
+            "reviewer": "USER-B",
+            "proposal": "current"
+          }
+        ]
+      },
+      "expected": {
+        "business_outcome": {
+          "proposal_authoritative": true,
+          "proposed_action": {
+            "type": "partial_refund_10",
+            "currency": "USD",
+            "amount": "18.50"
+          },
+          "approval_required": true,
+          "decision": "pending",
+          "verified_actions": [],
+          "state": "awaiting_approval",
+          "error": "authorization_denied"
+        },
+        "technical_execution": {
+          "native_pause_required": true,
+          "denied_actors": [
+            "REVIEWER-B",
+            "USER-B"
+          ],
+          "authorization_denial_count": 2,
+          "denial_privacy_safe": true,
+          "denial_auditable": true,
+          "action_claim_count": 0,
+          "side_effect_count": 0
+        }
+      }
+    }
+  ]
+}

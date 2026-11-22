@@ -189,6 +189,40 @@ The [testing guide](testing.md) describes the synthetic evidence and its
 limits. Foundry-managed checkpoints and hosting are planned and unverified;
 they must not be conflated with local file storage.
 
+## Explicit generation profiles
+
+The repository generator may copy this framework-native project and then apply
+the named `order-resolution` overlay. That overlay is application source, not a
+registry, plugin framework, template compiler, or dependency on the blueprint
+repository. It selects concrete Order Resolution rules, database-only effects,
+native `WorkflowBuilder` composition, and UI rendering while retaining this
+project's FastAPI, React, PostgreSQL, Compose, lock files, and local MAF host.
+The default generator path applies no profile and remains byte-for-byte
+compatible with the base copy.
+
+The profile copies the authoritative
+`scenarios/order-resolution/acceptance-contract.json` and
+`scenarios/order-resolution/golden-cases.json` from merged
+[#42](https://github.com/ppenumatsa1/agent-blueprints/pull/42) into the generated
+verification tree, together with `tests/test_order_resolution_contract.py`.
+The generated runtime does not read those assets or this repository. Explicit
+asset overrides exist only for isolated generator tests; they do not replace
+the canonical generated assets.
+
+The profile keeps framework and application state distinct. Low-risk proposals
+run through a concrete MAF `Executor` and `WorkflowBuilder` to a terminal native
+checkpoint. Approval-required proposals persist a native pause before an
+authorized decision can resume the same workflow. Missing, conflicting, or
+invalid policy evidence persists a terminal application failure without
+creating a proposal or checkpoint. PostgreSQL records the synthetic
+database-only action and action claim; it is not the MAF checkpoint provider
+and does not establish remote exactly-once effects.
+
+Optional profile-root `backend/` and `verification/` trees merge after the
+explicit overlay. This is the deterministic integration seam for the reserved
+durability/effect/migration work in draft #41 and evaluation/readiness work in
+draft #43; the generator does not copy or emulate those implementations.
+
 The [staged infrastructure](../infra/README.md) defines a Foundry
 account/project with public data-plane access disabled, a private PostgreSQL
 server, and monitoring resources with public ingestion/query disabled, plus
