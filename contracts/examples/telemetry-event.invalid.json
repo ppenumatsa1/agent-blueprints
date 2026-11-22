@@ -1,0 +1,7 @@
+{
+  "schema_version": "1.0.0",
+  "event": "operation",
+  "operation": "model.invoke",
+  "outcome": "success",
+  "raw_prompt": "sensitive payloads are forbidden"
+}

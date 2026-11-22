@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Privacy-safe blueprint telemetry event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "event"],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "event": {
+      "enum": [
+        "operation",
+        "model.usage",
+        "retry",
+        "recovery",
+        "telemetry.export",
+        "telemetry.flush",
+        "telemetry.instrumentation",
+        "telemetry.log",
+        "telemetry.metric",
+        "telemetry.metric_export",
+        "telemetry.metric_flush",
+        "telemetry.metric_shutdown",
+        "telemetry.shutdown"
+      ]
+    },
+    "operation": {
+      "enum": [
+        "http.request",
+        "foundry.invoke",
+        "workflow.start",
+        "workflow.resume",
+        "model.invoke",
+        "tool.execute",
+        "database.connect",
+        "database.read",
+        "database.create",
+        "database.decision",
+        "database.finish",
+        "identity.obo",
+        "other"
+      ]
+    },
+    "outcome": {
+      "enum": [
+        "success",
+        "error",
+        "client_error",
+        "configured",
+        "disabled",
+        "failure",
+        "conflict",
+        "action_failure"
+      ]
+    },
+    "technical_status": {
+      "enum": ["succeeded", "failed", "interrupted", "retrying", "unknown"]
+    },
+    "business_outcome": {
+      "enum": ["created", "pending", "approved", "rejected", "completed", "failed", "unknown"]
+    },
+    "duration_ms": { "type": "number", "minimum": 0 },
+    "http_status_code": { "type": "integer", "minimum": 100, "maximum": 599 },
+    "trace_id": { "type": "string", "pattern": "^[a-f0-9]{32}$" },
+    "span_id": { "type": "string", "pattern": "^[a-f0-9]{16}$" },
+    "request_id": { "$ref": "#/$defs/uuid" },
+    "correlation_id": { "$ref": "#/$defs/uuid" },
+    "case_id": { "$ref": "#/$defs/uuid" },
+    "agent_version": { "$ref": "#/$defs/identifier" },
+    "deployment_revision": { "$ref": "#/$defs/identifier" },
+    "provider": { "$ref": "#/$defs/identifier" },
+    "model": { "$ref": "#/$defs/identifier" },
+    "input_tokens": { "type": "integer", "minimum": 0 },
+    "output_tokens": { "type": "integer", "minimum": 0 },
+    "cached_tokens": { "type": "integer", "minimum": 0 },
+    "reason": {
+      "enum": ["transient", "timeout", "conflict", "interrupted", "unknown_outcome"]
+    },
+    "retry_count": { "type": "integer", "minimum": 1 }
+  },
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$"
+    },
+    "identifier": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$"
+    }
+  }
+}

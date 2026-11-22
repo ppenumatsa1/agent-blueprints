@@ -1,0 +1,32 @@
+{
+  "schema_version": "1.0.0",
+  "authority": "diagnostic_non_authorizing",
+  "source_revision": "revision",
+  "environment": "local",
+  "agent_version": "0.1.0",
+  "deployment_revision": null,
+  "recorded_at": "2026-11-22T21:00:00Z",
+  "dimensions": {
+    "implementation": {
+      "status": "passed",
+      "reason": "A passing claim without evidence is invalid.",
+      "required_checks": ["LOCAL-TESTS"],
+      "evidence": [],
+      "blockers": []
+    },
+    "azure_runtime": {
+      "status": "unverified",
+      "reason": "Not run.",
+      "required_checks": ["ACTIVE-REVISION"],
+      "evidence": [],
+      "blockers": []
+    },
+    "production": {
+      "status": "blocked",
+      "reason": "Blocked without a named blocker is invalid.",
+      "required_checks": ["HUMAN-REVIEW"],
+      "evidence": [],
+      "blockers": []
+    }
+  }
+}

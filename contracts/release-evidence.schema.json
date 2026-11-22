@@ -1,0 +1,135 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Revision-bound release evidence manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "authority",
+    "source_revision",
+    "environment",
+    "agent_version",
+    "deployment_revision",
+    "recorded_at",
+    "dimensions"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "authority": { "const": "diagnostic_non_authorizing" },
+    "source_revision": { "$ref": "#/$defs/text" },
+    "environment": { "$ref": "#/$defs/text" },
+    "agent_version": { "$ref": "#/$defs/identifier" },
+    "deployment_revision": {
+      "oneOf": [
+        { "$ref": "#/$defs/identifier" },
+        { "type": "null" }
+      ]
+    },
+    "recorded_at": { "type": "string", "format": "date-time" },
+    "dimensions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["implementation", "azure_runtime", "production"],
+      "properties": {
+        "implementation": { "$ref": "#/$defs/dimension" },
+        "azure_runtime": { "$ref": "#/$defs/dimension" },
+        "production": { "$ref": "#/$defs/dimension" }
+      }
+    }
+  },
+  "$defs": {
+    "text": { "type": "string", "minLength": 1, "pattern": "\\S" },
+    "identifier": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$"
+    },
+    "state": { "enum": ["passed", "failed", "blocked", "unverified"] },
+    "check_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z][A-Za-z0-9._-]{0,127}$"
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "check_id",
+        "kind",
+        "reference",
+        "source_revision",
+        "deployment_revision",
+        "environment",
+        "recorded_at",
+        "sha256"
+      ],
+      "properties": {
+        "check_id": { "$ref": "#/$defs/check_id" },
+        "kind": {
+          "enum": [
+            "local_test",
+            "evaluation_result",
+            "active_revision",
+            "hosted_test",
+            "browser_test",
+            "failure_injection",
+            "telemetry_query",
+            "security_report",
+            "cost_report",
+            "human_review",
+            "other"
+          ]
+        },
+        "reference": { "$ref": "#/$defs/text" },
+        "source_revision": { "$ref": "#/$defs/text" },
+        "deployment_revision": {
+          "oneOf": [
+            { "$ref": "#/$defs/identifier" },
+            { "type": "null" }
+          ]
+        },
+        "environment": { "$ref": "#/$defs/text" },
+        "recorded_at": { "type": "string", "format": "date-time" },
+        "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      }
+    },
+    "dimension": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "reason", "required_checks", "evidence", "blockers"],
+      "properties": {
+        "status": { "$ref": "#/$defs/state" },
+        "reason": { "$ref": "#/$defs/text" },
+        "required_checks": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/check_id" }
+        },
+        "evidence": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/evidence" }
+        },
+        "blockers": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/text" }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "passed" } } },
+          "then": {
+            "properties": {
+              "evidence": { "minItems": 1 },
+              "blockers": { "maxItems": 0 }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "status": { "const": "blocked" } } },
+          "then": { "properties": { "blockers": { "minItems": 1 } } }
+        }
+      ]
+    }
+  }
+}
