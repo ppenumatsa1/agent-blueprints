@@ -96,6 +96,9 @@ application role before the same journaled version is required active; hosted
 code receives no direct database access. Agent Consumer assignment additionally
 uses only the official exact agent scope derived from validated project output
 and the fixed publisher agent name; wider or another-agent scopes fail closed.
+The hosted app role authenticates service identity only; API-owned exact
+case/principal/caller/session/conversation/channel binding must exist before
+Responses dispatch and cannot be inferred from the hosted token.
 
 **Next action:** independently validate the exact PR revision, supply the
 deployment-specific hosted endpoint/agent scope/administrator/journal values,

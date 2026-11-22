@@ -229,6 +229,13 @@ returns tenant/client/app-ID-URI values directly to the deployment orchestrator;
 optional azd mode may persist the same nonsecret identifiers. It creates no
 credentials or users.
 
+The hosted app role authenticates only the platform service identity; it never
+mints or substitutes human authority. Before any Responses dispatch, the
+application must pre-establish the exact case/principal/Foundry
+caller/session/conversation/channel binding. Hosted binding calls verify that
+server-owned record and fail closed on absence or mismatch. This infrastructure
+workstream does not implement or weaken that business authorization boundary.
+
 Directory permissions are independent of subscription `Owner`. The operator
 must be allowed to create/update the two app registrations, create the API
 service principal, inspect the hosted version service principal, and assign an
