@@ -101,7 +101,7 @@ human principal/case authority bound to the server-selected conversation and
 channel must exist before Responses dispatch and cannot be inferred from the
 hosted token. Foundry user/session/call values are opaque platform correlation,
 not human authority; no caller-selected session or actor metadata is sent.
-Exact immutable A `c3e733a8` plus final C `2a04d5be` generation produced
+Exact final A `708a4185` plus final C `2a04d5be` generation produced
 byte-identical owned files, built/imported the canonical no-dev backend, and
 passed nonconnecting wire composition. The integration coordinator
 independently reports 13/13 exact A+C PostgreSQL 17 authority/wire tests passed;

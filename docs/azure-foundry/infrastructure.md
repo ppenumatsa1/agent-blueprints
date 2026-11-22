@@ -357,13 +357,17 @@ Local non-deploying evidence:
 - Agent C's generated application interface is frozen at draft PR #48 head
   `2a04d5be3013e782a7c1222b2a16a7047cbb15cd`; all six C CI jobs passed in run
   `45084615221`. Agent A's immutable replacement is
-  `c3e733a8c7d2e03e41e9045ee9277f504e028f6b`, archive SHA-256
-  `3becbb28da4eae014a47d20fe5d8f93d7b56c2f93d9558f0afdf2218868d44ca`.
+  `708a4185abe149526c606477de02cd57c5d90a9c`; all six A CI jobs passed in
+  run `45085543517`, and its exact `git archive`
+  tar SHA-256 is
+  `96E4F3ECEECE65A686ED6F941AD56E1B111CA29EC03879010E00D1766A341BC0`.
 - Exact immutable A+C generation produced byte-identical bridge/client and C
   composition files. The canonical backend built with `--no-dev`, verified the
   Agent Framework wheel digest, imported the bridge, and selected
-  `ResponsesWorkflowHost`; local manifest-list digest was
-  `sha256:92d03b7dd970726c266b6d6cdda5abe7bee8fe65627f94392e033fdd4de2fefe`.
+  `ResponsesWorkflowHost`; content image-manifest digest was
+  `sha256:877d09dbc5a06522efc59b45894cdd255c2ccccb8162b5eccc899e769f45563a`.
+  BuildKit's attestation-dependent manifest-list digest is intentionally
+  omitted.
   The integration coordinator independently reports 13/13 exact A+C
   PostgreSQL 17 authority/wire tests passed; B did not rerun that suite.
   Canonical packaging evidence is complete and integration awaits the A/C
