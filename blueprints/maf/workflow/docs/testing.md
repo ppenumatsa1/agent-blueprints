@@ -74,15 +74,19 @@ results as such.
 ## Evaluation extension tests
 
 `tests.test_evaluation` exercises explicit versioned synthetic dataset and
-rubric configuration, inclusive threshold edges, multiple criteria per
-readiness check, trace mapping, missing and unavailable evaluations,
-malformed and oversized thresholds/scores, unknown and duplicate configured
-check IDs, unknown and duplicate observations, and provider/tool failures.
+rubric configuration through MAF's native `@evaluator`, `LocalEvaluator`, and
+`evaluate_agent()` path, then checks inclusive configured-threshold edges,
+multiple criteria per readiness check, trace mapping, missing and unavailable
+results, failed/canceled/unknown native run statuses, malformed and oversized
+thresholds/scores, unknown and duplicate
+configured check IDs, unknown evaluator criteria, unknown and duplicate
+observations, and propagated evaluator failures.
 The source test derives the complete known-check tuple from the repository's
 selected verification contract; the generated-copy test derives it from that
 copy's `verification/scenarios/order-adjustment/verification-contract.json`.
 The clearly synthetic fixture's check IDs must be in that derived tuple, and a
 matching but unknown dataset/rubric ID is rejected before evaluator invocation.
-This tuple is not trusted authorization. These are contract tests, not actual
-agent or browser evaluations. Source and generated CI run the same tests; the
-synthetic observations do not produce or attest readiness evidence.
+This tuple is not trusted authorization. Native evaluation uses explicit
+synthetic responses and does not invoke a live model or establish evaluation
+quality. Source and generated CI run the same tests; the synthetic results do
+not produce or attest readiness evidence or browser behavior.

@@ -3,9 +3,9 @@
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from math import isfinite
-from typing import Literal, Protocol
+from typing import Literal
 
-from agent_framework import Agent
+from agent_framework import EvalItemResult, EvalResults, EvalScoreResult
 
 
 Outcome = Literal["passed", "failed", "unverified"]
@@ -117,20 +117,13 @@ class EvaluationRubric:
         for criterion in self.criteria:
             if not any(criterion.check_id in case.check_ids for case in dataset.cases):
                 raise ValueError(f"Rubric check {criterion.check_id!r} has no dataset cases.")
-
-
-@dataclass(frozen=True)
-class EvaluationObservation:
-    case_id: str
-    criterion_id: str
-    score: float
-    trace_reference: str
-
-
-class AgentEvaluator(Protocol):
-    async def evaluate(
-        self, agent: Agent, dataset: EvaluationDataset, rubric: EvaluationRubric
-    ) -> Sequence[EvaluationObservation]: ...
+        queries = []
+        for case in dataset.cases:
+            query = case.inputs.get("query")
+            _require_text(query, "Evaluation case query")
+            queries.append(query)
+        if len(queries) != len(set(queries)):
+            raise ValueError("Evaluation case queries must be unique for native result mapping.")
 
 
 @dataclass(frozen=True)
@@ -192,6 +185,157 @@ def _valid_trace_reference(value: object) -> bool:
     return isinstance(value, str) and bool(value) and value == value.strip()
 
 
+def map_evaluation_results(
+    dataset: EvaluationDataset,
+    rubric: EvaluationRubric,
+    known_check_ids: tuple[str, ...],
+    evaluations: Sequence[EvalResults],
+) -> EvaluationAssessment:
+    """Normalize native MAF per-item results; references are not evidence or provenance."""
+    rubric.validate_for(dataset, known_check_ids)
+    cases_by_query = {case.inputs["query"]: case for case in dataset.cases}
+    criteria = {criterion.criterion_id: criterion for criterion in rubric.criteria}
+    expected = tuple(
+        sorted(
+            {
+                (case.case_id, criterion.criterion_id)
+                for case in dataset.cases
+                for criterion in rubric.criteria
+                if criterion.check_id in case.check_ids
+            }
+        )
+    )
+    recorded: dict[tuple[str, str], EvaluationTraceReference] = {}
+    invalid_checks: set[str] = set()
+    diagnostics: list[str] = []
+    all_check_ids = {criterion.check_id for criterion in rubric.criteria}
+    if not isinstance(evaluations, Sequence) or isinstance(evaluations, (str, bytes)):
+        diagnostics.append("MAF did not return an evaluation result sequence.")
+        return _assessment(
+            dataset,
+            rubric,
+            tuple(
+                CheckEvaluation(
+                    check_id=check_id,
+                    outcome="failed",
+                    reason="MAF returned a malformed evaluation result collection.",
+                    observations=(),
+                )
+                for check_id in sorted(all_check_ids)
+            ),
+            diagnostics,
+        )
+
+    for evaluation in evaluations:
+        if not isinstance(evaluation, EvalResults):
+            diagnostics.append("MAF returned a malformed evaluation result.")
+            invalid_checks.update(all_check_ids)
+            continue
+        if evaluation.status == "failed":
+            diagnostics.append("MAF evaluation failed.")
+            invalid_checks.update(all_check_ids)
+            continue
+        if evaluation.status in {"canceled", "timeout"}:
+            continue
+        if evaluation.status != "completed":
+            diagnostics.append("MAF returned an unknown evaluation status.")
+            invalid_checks.update(all_check_ids)
+            continue
+        if not isinstance(evaluation.items, Sequence) or isinstance(evaluation.items, (str, bytes)):
+            diagnostics.append("MAF returned a malformed per-item result collection.")
+            invalid_checks.update(all_check_ids)
+            continue
+        for item in evaluation.items:
+            if not isinstance(item, EvalItemResult):
+                diagnostics.append("MAF returned a malformed per-item result.")
+                invalid_checks.update(all_check_ids)
+                continue
+            case = cases_by_query.get(item.input_text)
+            if case is None:
+                diagnostics.append("MAF returned a result with an unknown or malformed input.")
+                invalid_checks.update(all_check_ids)
+                continue
+            relevant_criteria = [
+                criterion for criterion in rubric.criteria if criterion.check_id in case.check_ids
+            ]
+            if not isinstance(item.scores, Sequence) or isinstance(item.scores, (str, bytes)):
+                diagnostics.append("MAF returned a malformed evaluator score collection.")
+                invalid_checks.update(criterion.check_id for criterion in relevant_criteria)
+                continue
+            if item.status == "fail":
+                invalid_checks.update(criterion.check_id for criterion in relevant_criteria)
+            elif item.status in {"error", "errored"}:
+                continue
+            elif item.status != "pass":
+                diagnostics.append("MAF returned an item with an unknown status.")
+                invalid_checks.update(criterion.check_id for criterion in relevant_criteria)
+                continue
+            trace_reference = item.response_id or item.item_id
+            for score in item.scores:
+                if not isinstance(score, EvalScoreResult):
+                    diagnostics.append("MAF returned a malformed evaluator score.")
+                    invalid_checks.update(criterion.check_id for criterion in relevant_criteria)
+                    continue
+                criterion = criteria.get(score.name)
+                if criterion is None:
+                    diagnostics.append("MAF returned a score for an unknown rubric criterion.")
+                    invalid_checks.update(criterion.check_id for criterion in relevant_criteria)
+                    continue
+                check_id = criterion.check_id
+                key = (case.case_id, criterion.criterion_id)
+                if key not in expected:
+                    if check_id not in case.check_ids:
+                        continue
+                    diagnostics.append("MAF returned a score outside the dataset mapping.")
+                    invalid_checks.add(check_id)
+                    continue
+                if key in recorded:
+                    diagnostics.append("MAF returned a duplicate case/evaluator score.")
+                    invalid_checks.add(check_id)
+                    continue
+                if not _valid_score(score.score) or (
+                    score.passed is not None and not isinstance(score.passed, bool)
+                ):
+                    diagnostics.append("MAF returned a malformed evaluator score.")
+                    invalid_checks.add(check_id)
+                    continue
+                if not _valid_trace_reference(trace_reference):
+                    diagnostics.append("MAF returned an invalid trace reference.")
+                    invalid_checks.add(check_id)
+                    continue
+                if score.passed is False:
+                    invalid_checks.add(check_id)
+                recorded[key] = EvaluationTraceReference(
+                    case.case_id,
+                    criterion.criterion_id,
+                    float(score.score),
+                    criterion.minimum_score,
+                    trace_reference,
+                )
+
+    results = []
+    for check_id in sorted(all_check_ids):
+        check_keys = [key for key in expected if criteria[key[1]].check_id == check_id]
+        traces = tuple(recorded[key] for key in check_keys if key in recorded)
+        below_threshold = any(
+            trace.score < criteria[key[1]].minimum_score
+            for key in check_keys
+            if (trace := recorded.get(key)) is not None
+        )
+        missing = [key for key in check_keys if key not in recorded]
+        if check_id in invalid_checks or below_threshold:
+            outcome: Outcome = "failed"
+            reason = "A native evaluation result was invalid or below its configured threshold."
+        elif missing:
+            outcome = "unverified"
+            reason = "One or more configured native evaluation results are missing."
+        else:
+            outcome = "passed"
+            reason = "Every configured native result met its rubric threshold."
+        results.append(CheckEvaluation(check_id, outcome, reason, traces))
+    return _assessment(dataset, rubric, results, diagnostics)
+
+
 def unavailable_assessment(
     dataset: EvaluationDataset,
     rubric: EvaluationRubric,
@@ -206,142 +350,9 @@ def unavailable_assessment(
             CheckEvaluation(
                 check_id=check_id,
                 outcome="unverified",
-                reason="No application-owned evaluator is configured.",
+                reason="No native MAF evaluation result is available.",
                 observations=(),
             )
             for check_id in check_ids
         ),
     )
-
-
-def map_observations(
-    dataset: EvaluationDataset,
-    rubric: EvaluationRubric,
-    known_check_ids: tuple[str, ...],
-    observations: Sequence[EvaluationObservation],
-) -> EvaluationAssessment:
-    """Adjudicate evaluator observations; references are not evidence or provenance."""
-    rubric.validate_for(dataset, known_check_ids)
-    cases = {case.case_id: case for case in dataset.cases}
-    criteria = {criterion.criterion_id: criterion for criterion in rubric.criteria}
-    expected = tuple(
-        sorted(
-            {
-                (case.case_id, criterion.criterion_id)
-                for case in dataset.cases
-                for criterion in rubric.criteria
-                if criterion.check_id in case.check_ids
-            }
-        )
-    )
-    recorded: dict[tuple[str, str], EvaluationObservation] = {}
-    invalid_checks: set[str] = set()
-    diagnostics: list[str] = []
-    all_check_ids = {criterion.check_id for criterion in rubric.criteria}
-    if not isinstance(observations, Sequence) or isinstance(observations, (str, bytes)):
-        diagnostics.append("Evaluator did not return an observation sequence.")
-        return _assessment(
-            dataset,
-            rubric,
-            tuple(
-                CheckEvaluation(
-                    check_id=check_id,
-                    outcome="failed",
-                    reason="Evaluator returned a malformed observation collection.",
-                    observations=(),
-                )
-                for check_id in sorted(all_check_ids)
-            ),
-            diagnostics,
-        )
-
-    for observation in observations:
-        if not isinstance(observation, EvaluationObservation):
-            diagnostics.append("Evaluator returned a malformed observation.")
-            invalid_checks.update(all_check_ids)
-            continue
-        if (
-            not isinstance(observation.case_id, str)
-            or not observation.case_id
-            or not isinstance(observation.criterion_id, str)
-            or not observation.criterion_id
-        ):
-            diagnostics.append("Evaluator returned an observation with malformed IDs.")
-            invalid_checks.update(all_check_ids)
-            continue
-        case = cases.get(observation.case_id)
-        criterion = criteria.get(observation.criterion_id)
-        if case is None:
-            diagnostics.append("Evaluator returned an unknown case ID.")
-            invalid_checks.update(all_check_ids)
-            continue
-        if criterion is None:
-            diagnostics.append("Evaluator returned an unknown criterion ID.")
-            invalid_checks.update(case.check_ids)
-            continue
-        check_id = criterion.check_id
-        key = (observation.case_id, observation.criterion_id)
-        if key not in expected:
-            diagnostics.append("Evaluator returned an observation outside the dataset mapping.")
-            invalid_checks.add(check_id)
-            continue
-        if key in recorded:
-            diagnostics.append("Evaluator returned a duplicate case/criterion observation.")
-            invalid_checks.add(check_id)
-            continue
-        recorded[key] = observation
-        if not _valid_score(observation.score):
-            diagnostics.append("Evaluator returned a malformed score.")
-            invalid_checks.add(check_id)
-        if not _valid_trace_reference(observation.trace_reference):
-            diagnostics.append("Evaluator returned an invalid trace reference.")
-            invalid_checks.add(check_id)
-
-    results = []
-    for check_id in sorted(all_check_ids):
-        check_keys = [key for key in expected if criteria[key[1]].check_id == check_id]
-        traces = tuple(
-            EvaluationTraceReference(
-                observation.case_id,
-                observation.criterion_id,
-                float(observation.score),
-                criteria[key[1]].minimum_score,
-                observation.trace_reference,
-            )
-            for key in check_keys
-            if (observation := recorded.get(key)) is not None
-            and _valid_score(observation.score)
-            and _valid_trace_reference(observation.trace_reference)
-        )
-        below_threshold = any(
-            observation.score < criteria[key[1]].minimum_score
-            for key in check_keys
-            if (observation := recorded.get(key)) is not None and _valid_score(observation.score)
-        )
-        missing = [key for key in check_keys if key not in recorded]
-        if check_id in invalid_checks or below_threshold:
-            outcome: Outcome = "failed"
-            reason = "An evaluation observation was invalid or below its configured threshold."
-        elif missing:
-            outcome = "unverified"
-            reason = "One or more configured evaluation observations are missing."
-        else:
-            outcome = "passed"
-            reason = "Every configured observation met its rubric threshold."
-        results.append(CheckEvaluation(check_id, outcome, reason, traces))
-    return _assessment(dataset, rubric, results, diagnostics)
-
-
-async def evaluate_agent(
-    agent: Agent,
-    dataset: EvaluationDataset,
-    rubric: EvaluationRubric,
-    known_check_ids: tuple[str, ...],
-    evaluator: AgentEvaluator | None,
-) -> EvaluationAssessment:
-    """Run an application-owned evaluator; provider errors propagate without fallback."""
-    rubric.validate_for(dataset, known_check_ids)
-    if evaluator is None:
-        return unavailable_assessment(dataset, rubric, known_check_ids)
-    observations = await evaluator.evaluate(agent, dataset, rubric)
-    return map_observations(dataset, rubric, known_check_ids, observations)

@@ -2,24 +2,28 @@ import asyncio
 import json
 import unittest
 from pathlib import Path
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import Mock
 
-from agent_framework import Agent
+from agent_framework import (
+    AgentResponse,
+    EvalItemResult,
+    EvalResults,
+    EvalScoreResult,
+    LocalEvaluator,
+    Message,
+    evaluate_agent as maf_evaluate_agent,
+    evaluator,
+)
 
 from app.extensions.evaluation import (
     EvaluationCase,
     EvaluationDataset,
-    EvaluationObservation,
     EvaluationRubric,
     RubricCriterion,
-    evaluate_agent,
-    map_observations,
+    map_evaluation_results,
     unavailable_assessment,
 )
-from examples.evaluation_fixture import (
-    SYNTHETIC_DATASET,
-    SYNTHETIC_RUBRIC,
-)
+from examples.evaluation_fixture import SYNTHETIC_DATASET, SYNTHETIC_RUBRIC
 
 
 def selected_contract_check_ids() -> tuple[str, ...]:
@@ -44,23 +48,49 @@ def selected_contract_check_ids() -> tuple[str, ...]:
     return tuple(sorted(check_ids))
 
 
+@evaluator(name="grounded-explanation")
+def deterministic_explanation_check(response: str) -> bool:
+    return "facts" in response
+
+
+@evaluator(name="accurate-hint")
+def deterministic_hint_check(response: str) -> bool:
+    return "hint" in response
+
+
+@evaluator(name="raises")
+async def unavailable_check(response: str) -> float:
+    raise RuntimeError("native evaluator failed")
+
+
 class EvaluationExtensionTests(unittest.TestCase):
     def setUp(self):
-        self.agent = Mock(spec=Agent)
         self.known_check_ids = selected_contract_check_ids()
 
-    def observations(self, explanation=1.0, hint=0.9):
-        return (
-            EvaluationObservation(
-                "synthetic-explanation", "grounded-explanation", explanation, "trace-exp-1"
-            ),
-            EvaluationObservation("synthetic-hint", "accurate-hint", hint, "trace-hint-1"),
+    def native_results(self, explanation="facts hint", hint="facts hint"):
+        responses = [
+            AgentResponse(messages=[Message(role="assistant", contents=[response])])
+            for response in (explanation, hint)
+        ]
+        return asyncio.run(
+            maf_evaluate_agent(
+                queries=[case.inputs["query"] for case in SYNTHETIC_DATASET.cases],
+                responses=responses,
+                evaluators=LocalEvaluator(
+                    deterministic_explanation_check,
+                    deterministic_hint_check,
+                ),
+                eval_name="synthetic-local-contract-test",
+            )
         )
 
-    def test_synthetic_configuration_maps_to_existing_check_results(self):
-        result = map_observations(
-            SYNTHETIC_DATASET, SYNTHETIC_RUBRIC, self.known_check_ids, self.observations()
+    def assess(self, results):
+        return map_evaluation_results(
+            SYNTHETIC_DATASET, SYNTHETIC_RUBRIC, self.known_check_ids, results
         )
+
+    def test_native_local_results_map_to_selected_readiness_checks(self):
+        result = self.assess(self.native_results())
         self.assertEqual(result.outcome, "passed")
         checks = {item.check_id: item for item in result.check_results}
         configured_check_ids = {
@@ -68,252 +98,192 @@ class EvaluationExtensionTests(unittest.TestCase):
         }
         self.assertTrue(configured_check_ids.issubset(self.known_check_ids))
         self.assertEqual(set(checks), configured_check_ids)
-        self.assertEqual(
-            checks[SYNTHETIC_RUBRIC.criteria[0].check_id].observations[0].case_id,
-            "synthetic-explanation",
-        )
-        self.assertEqual(
-            checks[SYNTHETIC_RUBRIC.criteria[0].check_id].observations[0].criterion_id,
-            "grounded-explanation",
-        )
         explanation = checks[SYNTHETIC_RUBRIC.criteria[0].check_id].observations[0]
         hint = checks[SYNTHETIC_RUBRIC.criteria[1].check_id].observations[0]
+        self.assertEqual(explanation.case_id, SYNTHETIC_DATASET.cases[0].case_id)
+        self.assertEqual(explanation.criterion_id, "grounded-explanation")
         self.assertEqual(explanation.score, 1.0)
         self.assertEqual(explanation.minimum_score, 1.0)
-        self.assertEqual(explanation.reference, "trace-exp-1")
-        self.assertEqual(hint.reference, "trace-hint-1")
+        self.assertTrue(explanation.reference)
+        self.assertEqual(hint.case_id, SYNTHETIC_DATASET.cases[1].case_id)
+        self.assertEqual(hint.criterion_id, "accurate-hint")
+        self.assertEqual(hint.score, 1.0)
 
-    def test_threshold_edges_are_inclusive_and_below_threshold_fails(self):
-        edge = map_observations(
-            SYNTHETIC_DATASET,
-            SYNTHETIC_RUBRIC,
-            self.known_check_ids,
-            self.observations(1.0, 0.9),
-        )
-        below = map_observations(
-            SYNTHETIC_DATASET,
-            SYNTHETIC_RUBRIC,
-            self.known_check_ids,
-            self.observations(0.99, 0.89),
-        )
+    def test_configured_threshold_edges_are_inclusive_and_below_fails(self):
+        edge_results = self.native_results()
+        for item in edge_results[0].items:
+            for score in item.scores:
+                score.score = 1.0 if score.name == "grounded-explanation" else 0.9
+        edge = self.assess(edge_results)
+        below_results = self.native_results()
+        for item in below_results[0].items:
+            for score in item.scores:
+                if score.name == "grounded-explanation":
+                    score.score = 0.99
+                elif score.name == "accurate-hint":
+                    score.score = 0.89
+        below = self.assess(below_results)
         self.assertEqual(edge.outcome, "passed")
         self.assertEqual(below.outcome, "failed")
         self.assertTrue(all(item.outcome == "failed" for item in below.check_results))
 
-    def test_unavailable_evaluator_is_unverified_and_does_not_invoke_agent(self):
-        result = asyncio.run(
-            evaluate_agent(
-                self.agent,
-                SYNTHETIC_DATASET,
-                SYNTHETIC_RUBRIC,
-                self.known_check_ids,
-                None,
-            )
+    def test_unavailable_native_results_remain_unverified(self):
+        unavailable = unavailable_assessment(
+            SYNTHETIC_DATASET, SYNTHETIC_RUBRIC, self.known_check_ids
         )
-        self.assertEqual(result.outcome, "unverified")
-        self.assertTrue(all(item.outcome == "unverified" for item in result.check_results))
+        missing = self.assess(())
+        self.assertEqual(unavailable.outcome, "unverified")
+        self.assertEqual(missing.outcome, "unverified")
+        self.assertTrue(all(item.outcome == "unverified" for item in missing.check_results))
 
-    def test_failed_evaluator_propagates_without_fabricating_a_result(self):
-        for error in ("provider unavailable", "tool failed"):
-            with self.subTest(error=error):
-                evaluator = Mock()
-                evaluator.evaluate = AsyncMock(side_effect=RuntimeError(error))
-                with self.assertRaisesRegex(RuntimeError, error):
-                    asyncio.run(
-                        evaluate_agent(
-                            self.agent,
-                            SYNTHETIC_DATASET,
-                            SYNTHETIC_RUBRIC,
-                            self.known_check_ids,
-                            evaluator,
-                        )
-                    )
-                evaluator.evaluate.assert_awaited_once_with(
-                    self.agent, SYNTHETIC_DATASET, SYNTHETIC_RUBRIC
+    def test_native_evaluator_exceptions_propagate(self):
+        responses = [
+            AgentResponse(messages=[Message(role="assistant", contents=["synthetic"])])
+            for _case in SYNTHETIC_DATASET.cases
+        ]
+        with self.assertRaisesRegex(RuntimeError, "native evaluator failed"):
+            asyncio.run(
+                maf_evaluate_agent(
+                    queries=[case.inputs["query"] for case in SYNTHETIC_DATASET.cases],
+                    responses=responses,
+                    evaluators=LocalEvaluator(unavailable_check),
                 )
+            )
 
-    def test_missing_observations_remain_unverified(self):
-        result = map_observations(
-            SYNTHETIC_DATASET,
-            SYNTHETIC_RUBRIC,
-            self.known_check_ids,
-            self.observations()[:1],
-        )
-        checks = {item.check_id: item.outcome for item in result.check_results}
-        self.assertEqual(checks[SYNTHETIC_RUBRIC.criteria[0].check_id], "passed")
-        self.assertEqual(checks[SYNTHETIC_RUBRIC.criteria[1].check_id], "unverified")
-        self.assertEqual(result.outcome, "unverified")
+    def test_failed_native_scores_and_oversized_scores_fail_closed(self):
+        results = self.native_results()
+        item = results[0].items[0]
+        item.scores[0].passed = False
+        failed = self.assess(results)
+        self.assertEqual(failed.outcome, "failed")
 
-    def test_unknown_and_duplicate_observations_cannot_pass(self):
-        observations = self.observations()
-        duplicate = map_observations(
-            SYNTHETIC_DATASET,
-            SYNTHETIC_RUBRIC,
-            self.known_check_ids,
-            (*observations, observations[0]),
-        )
-        unknown = map_observations(
-            SYNTHETIC_DATASET,
-            SYNTHETIC_RUBRIC,
-            self.known_check_ids,
-            (
-                observations[1],
-                EvaluationObservation("unknown-case", "grounded-explanation", 1.0, "trace"),
-            ),
-        )
-        self.assertEqual(duplicate.outcome, "failed")
-        self.assertEqual(unknown.outcome, "failed")
-        self.assertEqual(
-            {item.check_id: item.outcome for item in duplicate.check_results}[
-                SYNTHETIC_RUBRIC.criteria[0].check_id
+        oversized = EvalResults(
+            provider="synthetic",
+            items=[
+                EvalItemResult(
+                    item_id="synthetic-item",
+                    status="pass",
+                    input_text=SYNTHETIC_DATASET.cases[0].inputs["query"],
+                    scores=[
+                        EvalScoreResult(
+                            name="grounded-explanation",
+                            score=10**1000,
+                            passed=True,
+                        )
+                    ],
+                )
             ],
-            "failed",
         )
+        malformed = self.assess((oversized,))
+        self.assertEqual(malformed.outcome, "failed")
 
-    def test_unknown_criterion_and_malformed_evaluator_output_fail(self):
-        unknown = map_observations(
-            SYNTHETIC_DATASET,
-            SYNTHETIC_RUBRIC,
-            self.known_check_ids,
-            (
-                EvaluationObservation("synthetic-explanation", "unknown-criterion", 1.0, "trace"),
-                self.observations()[1],
-            ),
+    def test_unknown_and_duplicate_native_results_cannot_pass(self):
+        results = self.native_results()
+        unknown = EvalResults(
+            provider="synthetic",
+            items=[
+                EvalItemResult(
+                    item_id="unknown-item",
+                    status="pass",
+                    input_text="not in the configured dataset",
+                    scores=[EvalScoreResult(name="grounded-explanation", score=1.0, passed=True)],
+                )
+            ],
         )
-        malformed = map_observations(
-            SYNTHETIC_DATASET, SYNTHETIC_RUBRIC, self.known_check_ids, (None,)
+        unknown_criterion = EvalResults(
+            provider="synthetic",
+            items=[
+                EvalItemResult(
+                    item_id="unknown-criterion-item",
+                    status="pass",
+                    input_text=SYNTHETIC_DATASET.cases[0].inputs["query"],
+                    scores=[EvalScoreResult(name="not-in-rubric", score=1.0, passed=True)],
+                )
+            ],
         )
-        invalid_collection = map_observations(
+        duplicate = EvalResults(
+            provider="synthetic",
+            items=[*results[0].items, results[0].items[0]],
+        )
+        self.assertEqual(self.assess((unknown, *results)).outcome, "failed")
+        self.assertEqual(self.assess((unknown_criterion, *results)).outcome, "failed")
+        self.assertEqual(self.assess((duplicate,)).outcome, "failed")
+
+    def test_malformed_native_results_fail_closed(self):
+        malformed = self.assess((None,))
+        invalid_collection = map_evaluation_results(
             SYNTHETIC_DATASET, SYNTHETIC_RUBRIC, self.known_check_ids, None
         )
-        self.assertEqual(unknown.outcome, "failed")
+        malformed_items = EvalResults(provider="synthetic")
+        malformed_items.items = None
+        malformed_scores = self.native_results()
+        malformed_scores[0].items[0].scores = None
         self.assertEqual(malformed.outcome, "failed")
         self.assertEqual(invalid_collection.outcome, "failed")
+        self.assertEqual(self.assess((malformed_items,)).outcome, "failed")
+        self.assertEqual(self.assess(malformed_scores).outcome, "failed")
 
-    def test_malformed_scores_and_trace_references_fail_closed(self):
-        invalid_score = self.observations(float("nan"), 0.9)
-        invalid_trace = (
-            invalid_score[0],
-            EvaluationObservation("synthetic-hint", "accurate-hint", 0.9, " "),
-        )
-        result = map_observations(
-            SYNTHETIC_DATASET, SYNTHETIC_RUBRIC, self.known_check_ids, invalid_trace
-        )
-        self.assertEqual(result.outcome, "failed")
+    def test_native_run_failures_fail_and_cancellation_remains_unverified(self):
+        failed = EvalResults(provider="synthetic", status="failed")
+        canceled = EvalResults(provider="synthetic", status="canceled")
+        unknown_status = EvalResults(provider="synthetic", status="unexpected")
+        self.assertEqual(self.assess((failed,)).outcome, "failed")
+        self.assertEqual(self.assess((canceled,)).outcome, "unverified")
+        self.assertEqual(self.assess((unknown_status,)).outcome, "failed")
 
-    def test_malformed_threshold_is_rejected_before_evaluator_runs(self):
-        evaluator = Mock()
-        evaluator.evaluate = AsyncMock()
+    def test_oversized_thresholds_reject_before_native_evaluation(self):
+        evaluator = Mock(spec=LocalEvaluator)
         check_id = SYNTHETIC_RUBRIC.criteria[0].check_id
-        for threshold in (float("nan"), float("inf"), -0.01, 1.01, True):
+        for threshold in (float("nan"), float("inf"), -0.01, 1.01, True, 10**1000):
             with self.subTest(threshold=threshold), self.assertRaises(ValueError):
                 RubricCriterion("criterion", check_id, threshold)
-        self.assertEqual(evaluator.evaluate.await_count, 0)
+        evaluator.evaluate.assert_not_called()
 
-    def test_oversized_integer_threshold_and_score_fail_safely(self):
-        check_id = SYNTHETIC_RUBRIC.criteria[0].check_id
-        with self.assertRaisesRegex(ValueError, "finite numbers"):
-            RubricCriterion("criterion", check_id, 10**1000)
-        invalid = (
-            EvaluationObservation(
-                "synthetic-explanation", "grounded-explanation", 10**1000, "synthetic-trace"
-            ),
-            self.observations()[1],
-        )
-        result = map_observations(
-            SYNTHETIC_DATASET, SYNTHETIC_RUBRIC, self.known_check_ids, invalid
-        )
-        self.assertEqual(result.outcome, "failed")
-        self.assertEqual(result.check_results[0].outcome, "failed")
-
-    def test_dataset_rubric_check_mapping_must_be_explicit_and_complete(self):
-        rubric = EvaluationRubric(
-            "incomplete",
-            "v1",
-            (RubricCriterion("criterion", "CHECK-UNKNOWN", 0.5),),
-        )
-        with self.assertRaisesRegex(ValueError, "must match"):
-            rubric.validate_for(SYNTHETIC_DATASET, self.known_check_ids)
-
-    def test_multiple_criteria_produce_one_check_result_with_each_trace(self):
-        explanation_check_id = SYNTHETIC_RUBRIC.criteria[0].check_id
-        hint_check_id = SYNTHETIC_RUBRIC.criteria[1].check_id
-        rubric = EvaluationRubric(
-            "two-explanation-criteria",
-            "v1",
-            (
-                RubricCriterion("grounded", explanation_check_id, 0.8),
-                RubricCriterion("safe", explanation_check_id, 0.9),
-                RubricCriterion("accurate-hint", hint_check_id, 0.9),
-            ),
-        )
-        observations = (
-            EvaluationObservation("synthetic-explanation", "grounded", 0.95, "trace-grounded"),
-            EvaluationObservation("synthetic-explanation", "safe", 0.9, "trace-safe"),
-            EvaluationObservation("synthetic-hint", "accurate-hint", 0.9, "trace-hint"),
-        )
-        result = map_observations(SYNTHETIC_DATASET, rubric, self.known_check_ids, observations)
-        explanation = [
-            item for item in result.check_results if item.check_id == explanation_check_id
-        ]
-        self.assertEqual(len(explanation), 1)
-        self.assertEqual(
-            {item.criterion_id for item in explanation[0].observations}, {"grounded", "safe"}
-        )
-        unavailable = unavailable_assessment(SYNTHETIC_DATASET, rubric, self.known_check_ids)
-        self.assertEqual(len(unavailable.check_results), 2)
-
-    def test_unknown_matching_dataset_and_rubric_check_is_rejected_before_evaluation(self):
+    def test_dataset_rubric_identity_is_checked_against_contract_before_native_call(self):
         dataset = EvaluationDataset(
-            "unknown-check", "v1", (EvaluationCase("case", {}, ("CHECK-NOT-IN-CONTRACT",)),)
+            "unknown-check",
+            "v1",
+            (EvaluationCase("case", {"query": "synthetic query"}, ("CHECK-NOT-IN-CONTRACT",)),),
         )
         rubric = EvaluationRubric(
             "unknown-check",
             "v1",
             (RubricCriterion("criterion", "CHECK-NOT-IN-CONTRACT", 0.5),),
         )
-        evaluator = Mock()
-        evaluator.evaluate = AsyncMock()
-
+        native_evaluator = Mock(spec=LocalEvaluator)
         with self.assertRaisesRegex(ValueError, "outside the selected readiness contract"):
+            rubric.validate_for(dataset, self.known_check_ids)
             asyncio.run(
-                evaluate_agent(
-                    self.agent,
-                    dataset,
-                    rubric,
-                    self.known_check_ids,
-                    evaluator,
+                maf_evaluate_agent(
+                    queries=["synthetic query"],
+                    responses=[
+                        AgentResponse(messages=[Message(role="assistant", contents=["synthetic"])])
+                    ],
+                    evaluators=native_evaluator,
                 )
             )
-        evaluator.evaluate.assert_not_awaited()
-        for assessment in (
-            lambda: map_observations(
-                dataset,
-                rubric,
-                self.known_check_ids,
-                (EvaluationObservation("case", "criterion", 1.0, "synthetic-trace"),),
-            ),
-            lambda: unavailable_assessment(dataset, rubric, self.known_check_ids),
-        ):
-            with self.assertRaisesRegex(ValueError, "outside the selected readiness contract"):
-                assessment()
+        native_evaluator.evaluate.assert_not_called()
+        with self.assertRaisesRegex(ValueError, "outside the selected readiness contract"):
+            map_evaluation_results(dataset, rubric, self.known_check_ids, ())
+        with self.assertRaisesRegex(ValueError, "outside the selected readiness contract"):
+            unavailable_assessment(dataset, rubric, self.known_check_ids)
 
-    def test_malformed_or_duplicate_known_checks_are_rejected_before_evaluation(self):
-        evaluator = Mock()
-        evaluator.evaluate = AsyncMock()
-        duplicate_check_id = self.known_check_ids[0]
-        for known_checks in ((), (duplicate_check_id, duplicate_check_id), (" ",)):
+    def test_malformed_or_duplicate_known_checks_are_rejected(self):
+        for known_checks in ((), (self.known_check_ids[0],) * 2, (" ",)):
             with self.subTest(known_checks=known_checks), self.assertRaises(ValueError):
-                asyncio.run(
-                    evaluate_agent(
-                        self.agent,
-                        SYNTHETIC_DATASET,
-                        SYNTHETIC_RUBRIC,
-                        known_checks,
-                        evaluator,
-                    )
-                )
-        evaluator.evaluate.assert_not_awaited()
+                SYNTHETIC_RUBRIC.validate_for(SYNTHETIC_DATASET, known_checks)
+
+    def test_duplicate_dataset_queries_are_rejected_as_ambiguous(self):
+        dataset = EvaluationDataset(
+            "duplicate-queries",
+            "v1",
+            (
+                EvaluationCase("case-1", {"query": "same"}, ("CHECK-EXPLANATION",)),
+                EvaluationCase("case-2", {"query": "same"}, ("CHECK-HINT",)),
+            ),
+        )
+        with self.assertRaisesRegex(ValueError, "queries must be unique"):
+            SYNTHETIC_RUBRIC.validate_for(dataset, self.known_check_ids)
 
 
 if __name__ == "__main__":

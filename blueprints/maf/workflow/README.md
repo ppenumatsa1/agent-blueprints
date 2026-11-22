@@ -263,17 +263,21 @@ canonical modules directly when implementing application extensions.
 - `WorkflowWorkspace` accepts a `WorkflowClient` and `renderCase` for UI
   composition. Applications own any domain-specific views and evaluation
   fixtures; the order-adjustment scenario belongs only in tests.
-- Typed MAF model, agent, prompt, tool/authorization, executor/workflow, and
-  evaluation patterns are in [architecture and extensions](docs/architecture.md#typed-maf-extension-patterns)
+- MAF model selection, versioned prompt assets, native `Agent`/`@tool`
+  composition, application authorization, and native executor/workflow
+  patterns are in [architecture and extensions](docs/architecture.md#typed-maf-extension-patterns)
   and `backend/app/extensions/`. The synthetic fixture builds a native
-  `Agent` without invoking a model; evaluation contracts map versioned,
-  application-owned rubric observations to existing readiness check IDs but
-  require the application to pass the unique IDs from its selected readiness
-  contract at each evaluation/mapping boundary. Those IDs provide consistency,
-  not trusted authorization. The fixture is synthetic and does not generate
-  or attest evidence. Live provider evaluation, browser-hint
-  end-to-end behavior, hosted identity and recovery, trusted readiness
-  evidence, and consequential external effects remain unverified or blocked.
+  `Agent` without invoking a model; application-owned versioned datasets and
+  rubrics normalize standard MAF evaluation results to readiness checks.
+  Applications invoke native MAF evaluation APIs directly; this extension adds
+  no evaluator protocol or orchestration wrapper. Callers pass unique IDs from
+  the selected readiness contract to validation and mapping; those IDs provide
+  consistency, not trusted authorization. The tests exercise native local
+  evaluation with explicit synthetic responses, not live model quality. The
+  fixture does not generate or attest evidence. Live provider evaluation,
+  browser-hint end-to-end behavior, hosted identity and recovery, trusted
+  readiness evidence, and consequential external effects remain unverified
+  or blocked.
 
 The native local host expects a workflow producing one request with `case_id`
 and one matching outcome. A different graph must preserve that contract or

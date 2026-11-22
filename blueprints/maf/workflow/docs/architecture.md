@@ -20,37 +20,46 @@ checkpoint is a human approval.
 The contracts in `backend/app/extensions/` compose MAF-native components;
 they are not a second runtime or a guarantee that a provider is configured.
 
-- **Model selection:** `ModelSelection` requires an explicit provider ID and
-  model ID. `select_chat_client` resolves only an application-registered
-  `ModelClientFactory` and requires its result to satisfy MAF's
-  `SupportsChatGetResponse` contract. Provider factories own endpoints, credentials, client
-  lifetime, and provider-specific options. No default provider or fake
-  response is installed.
+- **Model selection:** `ModelSelection` is a small application-owned
+  configuration value with explicit provider and model IDs; it is not a
+  replacement for MAF's client protocol. The application resolves its selected
+  provider-specific client and passes the MAF `SupportsChatGetResponse`
+  directly to `Agent`. The synthetic fixture accepts a provider mapping only
+  to test that selection; it adds no reusable provider registry or factory
+  protocol. No default provider or fake response is installed.
 - **Prompt assets and agent construction:** `PromptAsset` is loaded from an
   application-owned, explicitly versioned file. Its SHA-256 content digest
   identifies bytes for reproducibility; it is not a signature, approval, or
-  trust proof. `AgentDefinition` binds a prompt name/version and
-  `build_chat_agent` constructs MAF `Agent` with its typed chat client
-  and registered tools. Prompts are instructions, not authorization.
-  Principal-bound agents are request-scoped and must not be shared across
-  callers.
-- **Tools and authorization:** `ToolRegistry` binds typed MAF
-  `FunctionTool` implementations to a trusted, authenticated `Principal` and
-  an application-owned `ToolAuthorization`. Each tool must reauthorize the
-  principal and model-supplied resource identifiers inside its handler before
-  reading protected data or causing an effect; the authorization callback must
-  return exactly `True`, and the example rejects `False` or `None`. The synthetic tool in
-  [synthetic_application.py](../backend/examples/synthetic_application.py)
-  demonstrates a scope- and resource-gated read-only call. This example does
-  not authorize business decisions or external effects. `ToolRegistry` is
-  registration and request-scoped binding convenience only: it does not force
-  handlers to authorize, sandbox Python, or provide idempotency. Consequential
+  trust proof. The app supplies `PromptAsset.instructions`, its configured
+  client, and tools directly to MAF `Agent`; the SDK already owns agent
+  construction. Prompts are instructions, not authorization. Principal-bound
+  agents are request-scoped and must not be shared across callers.
+- **Tools and authorization:** The synthetic fixture uses MAF's native
+  `@tool` decorator and gives the resulting `FunctionTool` directly to
+  `Agent`. It binds the authenticated `Principal` in a request-scoped closure.
+  The only custom boundary is application-owned `ToolAuthorization`, because
+  MAF tool registration does not authorize application resources. Each handler
+  must reauthorize the principal and model-supplied resource identifiers before
+  reading protected data or causing an effect; the callback must return exactly
+  `True`, and the example rejects `False` or `None`. The example demonstrates a
+  scope- and resource-gated read-only call; it does not authorize business
+  decisions or external effects. No generic tool registry is needed, and direct
+  registration does not sandbox Python or provide idempotency. Consequential
   remote effects remain blocked pending service-specific authorization,
   verified downstream idempotency, authoritative reconciliation, and
   fault-injection evidence required by [#32](https://github.com/ppenumatsa1/agent-blueprints/issues/32).
   An outbox persists intent but cannot deduplicate a downstream effect after a
   lost acknowledgment; without verified idempotency and reconciliation, fail
   closed and use manual resolution.
+- **Reference alignment:** At pinned `foundry-public` revision
+  [`4543075`](https://github.com/ppenumatsa1/maf-monorepo/tree/45430753c5f3e75716ea3822d2b2b52fbb4f1c34/agents/underwriting/foundry-public/backend),
+  `create_foundry_maf_client` constructs the configured provider client,
+  `build_underwriting_workflow` composes concrete `Executor` instances with
+  `WorkflowBuilder` and host-provided checkpoint storage, and prompt content
+  is built by a direct application function. This blueprint follows those
+  native composition seams rather than copying the reference's separate
+  wrappers. Its model client's synthetic fallback is deliberately not reused;
+  failed or unavailable model calls must not become fabricated output.
 - **Extension limits:** Typed contracts and fixture tests do not sandbox
   arbitrary trusted Python callbacks or prove that every possible extension
   cannot bypass authorization, approval, recovery, idempotency, or readiness.
@@ -72,24 +81,26 @@ they are not a second runtime or a guarantee that a provider is configured.
   [#22](https://github.com/ppenumatsa1/agent-blueprints/issues/22).
 - **Evaluation contracts (#25):** applications define versioned
   `EvaluationDataset` cases and an `EvaluationRubric` with explicit finite
-  score thresholds. Before mapping or evaluation, the application must pass
-  the unique readiness check IDs from its selected contract to every
-  `validate_for`, `evaluate_agent`, `map_observations`, or
-  `unavailable_assessment` call. This list is a consistency boundary, not
-  trusted authorization or a substitute for the independent validator.
-  Unknown, malformed, or duplicate configured check IDs are rejected before
-  evaluator invocation. An application supplies `AgentEvaluator` to invoke
-  its configured MAF agent/provider; `evaluate_agent` has no default evaluator
-  and propagates provider or tool errors without a synthetic fallback.
-  `map_observations` maps configured case and criterion traces to one
-  `CheckEvaluation` per readiness check ID. Missing observations or an
-  unavailable evaluator remain unverified; below-threshold, duplicate,
-  unknown, or malformed observations fail. Invalid thresholds, including
-  oversized integers, are rejected before evaluation; invalid observation
-  scores fail closed. Trace references and scores are not evidence bytes,
+  score thresholds. The application invokes MAF's native `Evaluator`,
+  `LocalEvaluator`, `@evaluator`, and `evaluate_agent()` APIs; this extension
+  owns no evaluator protocol or orchestration wrapper. Before mapping or
+  reporting unavailable results, the application passes the unique readiness
+  check IDs from its selected contract to `validate_for`,
+  `map_evaluation_results`, or `unavailable_assessment`. This list is a
+  consistency input, not trusted authorization or a substitute for the
+  independent validator. Unknown, malformed, or duplicate configured check
+  IDs reject before the application invokes the native evaluator.
+  `map_evaluation_results` normalizes native per-item scores to one
+  `CheckEvaluation` per readiness check ID. Missing observations or unavailable
+  native results remain unverified; below-threshold, duplicate, unknown, or
+  malformed observations fail. Invalid thresholds, including oversized
+  integers, reject before evaluation; invalid observation scores fail closed.
+  Exceptions from the native evaluator/provider/tool propagate without
+  synthetic fallback. Trace references and scores are not evidence bytes,
   digests, or authenticated provenance, and do not change the independent
-  readiness validator. The explicitly named synthetic fixture tests mapping
-  only; no model call or browser end-to-end hint was run. See
+  readiness validator. The explicitly named synthetic fixture exercises
+  native local evaluation with synthetic responses and result mapping only;
+  no live model quality or browser end-to-end hint was verified. See
   [evaluation.py](../backend/app/extensions/evaluation.py) and the
   [evaluation tests](testing.md#evaluation-extension-tests).
 

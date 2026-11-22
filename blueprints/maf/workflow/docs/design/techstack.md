@@ -55,6 +55,11 @@ to `127.0.0.1`.
 The exact Python requirements are in
 [`backend/pyproject.toml`](../../backend/pyproject.toml), with the resolved
 graph and hashes in [`backend/uv.lock`](../../backend/uv.lock); the
+approved `agent-framework-core==1.26.0` wheel digest is recorded in
+[`backend/agent-framework-core.sha256`](../../backend/agent-framework-core.sha256)
+and checked against both the downloaded wheel and its canonical lock entry by
+[`backend/scripts/verify_framework_supply_chain.py`](../../backend/scripts/verify_framework_supply_chain.py).
+The one `uv.lock` remains the dependency graph used for installation.
 frontend's direct dependency manifest and lock are
 [`frontend/package.json`](../../frontend/package.json) and
 [`frontend/package-lock.json`](../../frontend/package-lock.json).
@@ -114,7 +119,11 @@ Frontend variables are Vite build arguments, not runtime secrets. See
 
 ## Dependency and alternative status
 
-The backend image exports the lock and verifies artifact hashes during install.
+The backend image exports the canonical lock and installs with artifact-hash
+verification. Before installation, the supply-chain guard rejects the
+compromised `agent-framework` umbrella distribution and verifies the approved
+core wheel digest also present in `uv.lock`; `uv` remains the sole dependency
+resolver and installer.
 Foundry host integration and live managed identity binding remain planned.
 Staged Bicep and azd files do not establish a deployment or verified host
 integration. The current local image uses tags rather than

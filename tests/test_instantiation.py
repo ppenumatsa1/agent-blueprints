@@ -82,9 +82,9 @@ class InstantiationTests(unittest.TestCase):
                         self.assertEqual(source.read_bytes(), copied.read_bytes())
             self.assertTrue((target / "compose.yaml").is_file())
             self.assertTrue((target / "backend" / "tests" / "order_adjustment_adapter.py").is_file())
+            self.assertFalse((target / "backend" / "app" / "extensions" / "agents.py").exists())
             for relative in (
                 "backend/app/extensions/model.py",
-                "backend/app/extensions/agents.py",
                 "backend/app/extensions/prompts.py",
                 "backend/app/extensions/tools.py",
                 "backend/app/extensions/evaluation.py",
@@ -98,6 +98,17 @@ class InstantiationTests(unittest.TestCase):
                     (target / relative).read_bytes(),
                 )
             self.assertTrue((target / "backend" / "Dockerfile").is_file())
+            for relative in (
+                Path("agent-framework-core.sha256"),
+                Path("scripts") / "verify_framework_supply_chain.py",
+            ):
+                source_backend_file = (
+                    ROOT / "blueprints" / "maf" / "workflow" / "backend" / relative
+                )
+                self.assertEqual(
+                    source_backend_file.read_bytes(),
+                    (target / "backend" / relative).read_bytes(),
+                )
             source_docs = ROOT / "blueprints" / "maf" / "workflow" / "docs"
             for source in source_docs.rglob("*.md"):
                 copied = target / "docs" / source.relative_to(source_docs)

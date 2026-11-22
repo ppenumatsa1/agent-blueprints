@@ -13,12 +13,12 @@ SYNTHETIC_DATASET = EvaluationDataset(
     cases=(
         EvaluationCase(
             case_id="synthetic-explanation",
-            inputs={"kind": "synthetic explanation evaluation"},
+            inputs={"query": "synthetic explanation query"},
             check_ids=("CHECK-EXPLANATION",),
         ),
         EvaluationCase(
             case_id="synthetic-hint",
-            inputs={"kind": "synthetic browser-hint evaluation"},
+            inputs={"query": "synthetic browser-hint query"},
             check_ids=("CHECK-HINT",),
         ),
     ),
