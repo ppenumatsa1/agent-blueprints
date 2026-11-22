@@ -214,9 +214,11 @@ bytes.
 The executable `order-resolution-spec/0.1.0` acceptance fixture carries exactly
 `ORS-001` through `ORS-009`. It fixes the synthetic policy arithmetic and
 business outcomes while leaving native checkpoint identity and implementation
-evidence to each framework mapping. Passing the root fixture tests validates
-the contract encoding only; it does not prove a blueprint implementation,
-authorization, side effects, or readiness.
+evidence to each framework mapping. Focused draft
+[PR #42](https://github.com/ppenumatsa1/agent-blueprints/pull/42) carries the
+fixture and root acceptance tests. Passing those tests validates the contract
+encoding only; it does not prove a blueprint implementation, authorization,
+side effects, or readiness.
 
 Every future implementation must use its selected framework's native workflow
 and checkpoint provider. PostgreSQL is application-owned persistence for

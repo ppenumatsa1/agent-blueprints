@@ -19,8 +19,9 @@ authorization denial. It requires framework-native workflow/checkpoint
 providers and keeps PostgreSQL application persistence separate; it does not
 add a runtime, custom checkpointer, compatibility shim, or Azure resource.
 
-The focused [executable acceptance fixture](../scenarios/order-resolution/README.md)
-versions that contract as `order-resolution-spec/0.1.0` and encodes exactly
+Focused draft [PR #42](https://github.com/ppenumatsa1/agent-blueprints/pull/42)
+adds the [executable acceptance fixture](../scenarios/order-resolution/README.md),
+versions that contract as `order-resolution-spec/0.1.0`, and encodes exactly
 `ORS-001` through `ORS-009`. Root tests enforce the exact synthetic policies,
 decimal USD round-half-up refund amounts, approval/action/outcome expectations,
 and explicit policy-evidence failures. Normalized `business_outcome`
