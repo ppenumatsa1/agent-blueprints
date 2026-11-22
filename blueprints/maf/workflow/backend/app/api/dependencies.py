@@ -20,5 +20,15 @@ def current_identity(
     return identity.authenticate(credentials.credentials)
 
 
+def current_service_identity(
+    request: Request,
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)],
+) -> AuthenticatedRequest:
+    if credentials is None or credentials.scheme.lower() != "bearer":
+        raise AuthenticationFailed("A bearer access token is required.")
+    identity: IdentityProvider = request.app.state.identity
+    return identity.authenticate_service(credentials.credentials)
+
+
 def workflow_service(request: Request) -> WorkflowService:
     return request.app.state.service

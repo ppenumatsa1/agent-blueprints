@@ -79,6 +79,8 @@ class MafSupplyChainTests(unittest.TestCase):
         self.assertIn("pyproject.toml uv.lock", dockerfile)
         self.assertIn("scripts/verify_framework_supply_chain.py", dockerfile)
         self.assertIn("uv pip install --system --no-cache --require-hashes", dockerfile)
+        self.assertIn("ca-certificates", dockerfile)
+        self.assertIn("test -r /etc/ssl/certs/ca-certificates.crt", dockerfile)
         self.assertIn("COPY --chown=blueprint:blueprint migrations/ migrations/", dockerfile)
         self.assertNotIn("requirements.txt", dockerfile)
 

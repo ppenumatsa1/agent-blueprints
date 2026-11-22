@@ -1,14 +1,16 @@
 import asyncio
 import hashlib
 import os
+import socket
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
-from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 import psycopg
@@ -18,7 +20,7 @@ from psycopg import sql
 from app.composition import create_app
 from app.config import Settings
 from app.infrastructure.identity import EntraIdentity
-from app.domain.errors import ActionError, Conflict
+from app.domain.errors import ActionError
 from app.domain.models import Principal
 from app.order_resolution.action import RecordOrderResolutionAction
 from app.order_resolution.application import build_application
@@ -30,7 +32,6 @@ from app.order_resolution.durability import (
 )
 from app.order_resolution.effects import EffectIdentity
 from app.order_resolution.host import OrderResolutionWorkflowHost
-from app.order_resolution.hosted_bindings import PostgresHostedIdentityBindings
 from app.order_resolution.migrations import upgrade
 from app.order_resolution.persistence import (
     HOSTED_CHANNEL,
@@ -40,6 +41,9 @@ from app.order_resolution.persistence import (
 from app.order_resolution.rules import OrderResolutionRules
 from app.order_resolution.workflow import build_order_resolution_workflow
 from tests.test_security import API, OWNER, REVIEWER, TENANT, TokenFixture, scoped_url
+
+HOSTED_SERVICE = "60000000-0000-4000-8000-000000000006"
+HOSTED_SERVICE_ROLE = "Hosted.Workflow.Invoke"
 
 
 def payload(order_id: str, amount: str, delay_days: int, evidence: list[dict]) -> dict:
@@ -86,6 +90,8 @@ class OrderResolutionApiTests(unittest.TestCase):
             API,
             scoped_url(self.dsn, self.schema),
             Path(self.temp.name) / "checkpoints",
+            hosted_service_principal_id=HOSTED_SERVICE,
+            hosted_service_app_role=HOSTED_SERVICE_ROLE,
         )
         upgrade(self.settings.database_url)
         self.store = OrderResolutionStore(self.settings.database_url)
@@ -95,6 +101,11 @@ class OrderResolutionApiTests(unittest.TestCase):
             subject=REVIEWER,
             scopes="workflow.read workflow.approve",
             roles=["Workflow.Approver"],
+        )
+        self.service_token = self.tokens.token(
+            subject=HOSTED_SERVICE,
+            scopes=None,
+            roles=[HOSTED_SERVICE_ROLE],
         )
 
     def _drop_schema(self):
@@ -136,9 +147,7 @@ class OrderResolutionApiTests(unittest.TestCase):
             frozenset({"workflow.read"}),
             frozenset(),
         )
-        validated = OrderResolutionRules().validate(
-            payload(order_id, amount, 5, [late_policy()])
-        )
+        validated = OrderResolutionRules().validate(payload(order_id, amount, 5, [late_policy()]))
         case = self.store.create(
             owner,
             REVIEWER,
@@ -307,136 +316,184 @@ class OrderResolutionApiTests(unittest.TestCase):
             ).fetchone()["count"]
         self.assertEqual(count, 1)
 
-    def test_hosted_identity_binding_and_operation_journal_are_durable(self):
-        owner, case, proposal = self.hosted_case(
-            "ORDER-HOSTED-BINDING", "185.00"
-        )
-        reviewer = Principal(
-            TENANT,
-            REVIEWER,
-            frozenset({"workflow.read", "workflow.approve"}),
-            frozenset({"Workflow.Approver"}),
-        )
+    def test_hosted_service_endpoints_are_authorized_durable_and_idempotent(self):
+        _, case, proposal = self.hosted_case("ORDER-HOSTED-SERVICE", "185.00")
         case_id = case.id
         caller_id = "00000000-0000-0000-0000-000000000123"
         session_id = f"case:{case_id}"
-        conversation_id = "conversation-hosted-binding"
-        self.store.bind_hosted_principal(
-            case_id,
-            owner,
-            caller_id=caller_id,
-            session_id=session_id,
-            conversation_id=conversation_id,
-            principal_kind="owner",
+        conversation_id = "conversation-hosted-service"
+        binding = {
+            "caller_id": caller_id,
+            "session_id": session_id,
+            "conversation_id": conversation_id,
+            "channel": HOSTED_CHANNEL,
+        }
+        headers = self.headers(self.service_token)
+        base = f"/api/internal/hosted/v1/cases/{case_id}"
+        client = self.client()
+        self.addCleanup(client.close)
+        start_headers = self.headers(
+            self.service_token,
+            f"case:{case_id}:bind-start:test",
         )
-        bindings = PostgresHostedIdentityBindings(self.store)
-        caller = SimpleNamespace(user_id=caller_id, session_id=session_id)
-        self.assertEqual(bindings.resolve_principal(caller), owner)
-        bindings.bind_start(
-            case_id=case_id,
-            caller=caller,
-            conversation_id=conversation_id,
+
+        invalid = client.post(
+            f"{base}/bindings/start",
+            headers=self.headers(self.owner_token, f"case:{case_id}:bind-start:test"),
+            json=binding,
         )
-        with self.assertRaises(Conflict):
-            bindings.bind_start(
-                case_id=case_id,
-                caller=SimpleNamespace(user_id=caller_id, session_id="other"),
-                conversation_id=conversation_id,
-            )
+        self.assertEqual(invalid.status_code, 401, invalid.text)
+        missing_key = client.post(
+            f"{base}/bindings/start",
+            headers=headers,
+            json=binding,
+        )
+        self.assertEqual(missing_key.status_code, 422, missing_key.text)
+        bound = client.post(f"{base}/bindings/start", headers=start_headers, json=binding)
+        self.assertEqual(bound.status_code, 200, bound.text)
+        self.assertEqual(bound.json()["subject"], OWNER)
+
+        cross_session = {**binding, "session_id": "different-session", "principal_kind": "owner"}
+        denied = client.post(f"{base}/read", headers=headers, json=cross_session)
+        self.assertEqual(denied.status_code, 409, denied.text)
+
+        read_binding = {**binding, "principal_kind": "owner"}
+        read = client.post(f"{base}/read", headers=headers, json=read_binding)
+        self.assertEqual(read.status_code, 200, read.text)
+        self.assertNotIn("checkpoint_id", read.json())
+        current = client.post(f"{base}/proposal/read", headers=headers, json=read_binding)
+        self.assertEqual(current.status_code, 200, current.text)
+        self.assertEqual(current.json()["proposal_version"], proposal.proposal_version)
 
         request_id = f"case:{case_id}:approval:v1"
-        prepared = self.store.prepare_hosted_approval(
-            case_id,
-            request_id,
-            channel=HOSTED_CHANNEL,
+        prepare_body = {**binding, "request_id": request_id}
+        prepare_headers = self.headers(
+            self.service_token,
+            f"case:{case_id}:approval:{request_id}",
         )
-        self.assertEqual(prepared.case_id, str(case_id))
+        prepared = client.post(
+            f"{base}/approvals/prepare",
+            headers=prepare_headers,
+            json=prepare_body,
+        )
+        repeated_prepare = client.post(
+            f"{base}/approvals/prepare",
+            headers=prepare_headers,
+            json=prepare_body,
+        )
+        self.assertEqual(prepared.status_code, 200, prepared.text)
+        self.assertEqual(repeated_prepare.json(), prepared.json())
         self.assertIsNone(self.store.get(case_id).checkpoint_id)
-        self.store.bind_hosted_principal(
-            case_id,
-            reviewer,
-            caller_id=caller_id,
-            session_id=session_id,
-            conversation_id=conversation_id,
-            principal_kind="reviewer",
-        )
-        self.assertEqual(bindings.resolve_principal(caller), reviewer)
-        bindings.authorize_resume(
-            case_id=case_id,
-            caller=caller,
-            conversation_id=conversation_id,
-            channel=HOSTED_CHANNEL,
-        )
 
-        class HostedDecisionStore:
-            get_current_proposal = self.store.get_current_proposal
-            claim_decision = self.store.claim_hosted_decision
+        resume_headers = self.headers(
+            self.service_token,
+            f"case:{case_id}:bind-resume:test",
+        )
+        reviewer_binding = {
+            **binding,
+            "caller_id": "00000000-0000-0000-0000-000000000456",
+        }
+        resumed = client.post(
+            f"{base}/bindings/resume",
+            headers=resume_headers,
+            json=reviewer_binding,
+        )
+        self.assertEqual(resumed.status_code, 200, resumed.text)
+        self.assertEqual(resumed.json()["subject"], REVIEWER)
+        decision_body = {
+            **reviewer_binding,
+            "proposal_version": proposal.proposal_version,
+            "action": proposal.action,
+            "destination_id": proposal.destination_id,
+            "handle": request_id,
+            "decision": "approved",
+        }
+        decision_headers = self.headers(
+            self.service_token,
+            f"case:{case_id}:decision:{proposal.proposal_version}:approved",
+        )
+        decided = client.post(
+            f"{base}/decisions/claim",
+            headers=decision_headers,
+            json=decision_body,
+        )
+        repeated_decision = client.post(
+            f"{base}/decisions/claim",
+            headers=decision_headers,
+            json=decision_body,
+        )
+        self.assertEqual(decided.status_code, 200, decided.text)
+        self.assertEqual(repeated_decision.json(), decided.json())
+        conflict = client.post(
+            f"{base}/decisions/claim",
+            headers=decision_headers,
+            json={**decision_body, "decision": "rejected"},
+        )
+        self.assertEqual(conflict.status_code, 409, conflict.text)
 
-        decision = record_decision(
-            HostedDecisionStore(),
-            proposal=self.store.get_current_proposal(str(case_id)),
-            actor=Actor(
-                reviewer.tenant_id,
-                reviewer.subject,
-                reviewer.scopes,
-                reviewer.roles,
-            ),
-            command=DecisionCommand(
-                case_id=str(case_id),
-                proposal_version=proposal.proposal_version,
-                action=proposal.action,
-                destination_id=proposal.destination_id,
-                handle=request_id,
-                decision=Decision.APPROVED,
-                scope="workflow.approve",
-                channel=HOSTED_CHANNEL,
-            ),
-            now=datetime.now(timezone.utc),
+        effect_body = {**reviewer_binding, "mode": "approved"}
+        effect_headers = self.headers(
+            self.service_token,
+            f"case:{case_id}:action:approved",
         )
-        self.assertEqual(
-            self.store.claim_hosted_decision(decision),
-            decision,
+        first_effect = client.post(
+            f"{base}/effects/apply",
+            headers=effect_headers,
+            json=effect_body,
         )
-        decided_case = self.store.get(case_id)
-        self.assertEqual(
-            (decided_case.status, decided_case.decision),
-            ("approved", "approved"),
+        repeated_effect = client.post(
+            f"{base}/effects/apply",
+            headers=effect_headers,
+            json=effect_body,
         )
-        action = RecordOrderResolutionAction().bind(self.store)
-        self.store.apply_once(case_id, True, action)
-        self.store.apply_once(case_id, True, action)
-        self.store.finish_hosted(case_id)
-        self.store.finish_hosted(case_id)
+        self.assertEqual(first_effect.status_code, 200, first_effect.text)
+        self.assertEqual(repeated_effect.status_code, 200, repeated_effect.text)
+
+        finish_body = {**reviewer_binding, "mode": "approved"}
+        finish_headers = self.headers(
+            self.service_token,
+            f"case:{case_id}:completion:approved",
+        )
+        first_finish = client.post(
+            f"{base}/finish",
+            headers=finish_headers,
+            json=finish_body,
+        )
+        client.close()
+        client = self.client()
+        self.addCleanup(client.close)
+        repeated_finish = client.post(
+            f"{base}/finish",
+            headers=finish_headers,
+            json=finish_body,
+        )
+        self.assertEqual(first_finish.status_code, 200, first_finish.text)
+        self.assertEqual(repeated_finish.json(), first_finish.json())
         completed = self.store.get(case_id)
         self.assertEqual((completed.status, completed.execution_complete), ("completed", True))
+        self.assertIsNone(completed.checkpoint_id)
         self.assertIsNone(completed.terminal_checkpoint_id)
+        self.assertEqual(self.database_counts(case_id)["actions"], 1)
+        self.assertEqual(self.durability_counts(case_id)["synthetic_effects"], 1)
 
-        operation_id = f"case:{case_id}:start"
-        digest = hashlib.sha256(b"hosted-start").hexdigest()
-        claimed = self.store.claim_hosted_operation(
-            case_id, operation_id, "start", digest
-        )
-        self.assertEqual(
-            self.store.claim_hosted_operation(
-                case_id, operation_id, "start", digest
-            ),
-            claimed,
-        )
-        self.store.update_hosted_operation(operation_id, digest, "unknown", None)
-        acknowledged = self.store.update_hosted_operation(
-            operation_id,
-            digest,
-            "acknowledged",
-            "response-123",
-        )
-        self.assertEqual(acknowledged.remote_id, "response-123")
-        with self.assertRaises(Conflict):
-            self.store.claim_hosted_operation(
-                case_id,
-                operation_id,
-                "start",
-                hashlib.sha256(b"different").hexdigest(),
+        restarted = OrderResolutionStore(self.settings.database_url)
+        self.addCleanup(restarted.close)
+        restart_client = TestClient(
+            create_app(
+                self.settings,
+                build_application(),
+                store=restarted,
+                identity=self.identity,
             )
+        )
+        self.addCleanup(restart_client.close)
+        restarted_read = restart_client.post(
+            f"{base}/read",
+            headers=headers,
+            json={**reviewer_binding, "principal_kind": "reviewer"},
+        )
+        self.assertEqual(restarted_read.status_code, 200, restarted_read.text)
+        self.assertTrue(restarted_read.json()["execution_complete"])
 
     def test_hosted_rejection_and_automatic_completion_keep_checkpoints_external(self):
         reviewer = Principal(
@@ -445,9 +502,7 @@ class OrderResolutionApiTests(unittest.TestCase):
             frozenset({"workflow.read", "workflow.approve"}),
             frozenset({"Workflow.Approver"}),
         )
-        owner, rejected_case, rejected_proposal = self.hosted_case(
-            "ORDER-HOSTED-REJECT", "185.00"
-        )
+        owner, rejected_case, rejected_proposal = self.hosted_case("ORDER-HOSTED-REJECT", "185.00")
         caller_id = "00000000-0000-0000-0000-000000000123"
         rejected_session = f"case:{rejected_case.id}"
         rejected_conversation = "conversation-hosted-rejection"
@@ -512,9 +567,7 @@ class OrderResolutionApiTests(unittest.TestCase):
         self.assertIsNone(rejected.checkpoint_id)
         self.assertIsNone(rejected.terminal_checkpoint_id)
 
-        owner, automatic_case, _ = self.hosted_case(
-            "ORDER-HOSTED-AUTOMATIC", "8.00"
-        )
+        owner, automatic_case, _ = self.hosted_case("ORDER-HOSTED-AUTOMATIC", "8.00")
         restarted.bind_hosted_principal(
             automatic_case.id,
             owner,
@@ -530,6 +583,357 @@ class OrderResolutionApiTests(unittest.TestCase):
         self.assertEqual((automatic.status, automatic.execution_complete), ("completed", True))
         self.assertIsNone(automatic.checkpoint_id)
         self.assertIsNone(automatic.terminal_checkpoint_id)
+
+    def test_hosted_service_effect_modes_preserve_rejection_and_automatic_outcomes(self):
+        client = self.client()
+        self.addCleanup(client.close)
+
+        for mode, amount, expected_status, expected_actions in (
+            ("automatic", "8.00", "completed", 1),
+            ("rejected", "185.00", "rejected", 0),
+        ):
+            with self.subTest(mode=mode):
+                _, case, proposal = self.hosted_case(
+                    f"ORDER-HOSTED-{mode.upper()}",
+                    amount,
+                )
+                case_id = case.id
+                binding = {
+                    "caller_id": "00000000-0000-0000-0000-000000000123",
+                    "session_id": f"case:{case_id}",
+                    "conversation_id": f"conversation-{mode}",
+                    "channel": HOSTED_CHANNEL,
+                }
+                base = f"/api/internal/hosted/v1/cases/{case_id}"
+                self.assertEqual(
+                    client.post(
+                        f"{base}/bindings/start",
+                        headers=self.headers(
+                            self.service_token,
+                            f"case:{case_id}:bind-start:{mode}",
+                        ),
+                        json=binding,
+                    ).status_code,
+                    200,
+                )
+                if mode == "rejected":
+                    request_id = f"case:{case_id}:approval:v1"
+                    self.assertEqual(
+                        client.post(
+                            f"{base}/approvals/prepare",
+                            headers=self.headers(
+                                self.service_token,
+                                f"case:{case_id}:approval:{request_id}",
+                            ),
+                            json={**binding, "request_id": request_id},
+                        ).status_code,
+                        200,
+                    )
+                    self.assertEqual(
+                        client.post(
+                            f"{base}/bindings/resume",
+                            headers=self.headers(
+                                self.service_token,
+                                f"case:{case_id}:bind-resume:{mode}",
+                            ),
+                            json=binding,
+                        ).status_code,
+                        200,
+                    )
+                    self.assertEqual(
+                        client.post(
+                            f"{base}/decisions/claim",
+                            headers=self.headers(
+                                self.service_token,
+                                f"case:{case_id}:decision:{proposal.proposal_version}:rejected",
+                            ),
+                            json={
+                                **binding,
+                                "proposal_version": proposal.proposal_version,
+                                "action": proposal.action,
+                                "destination_id": proposal.destination_id,
+                                "handle": request_id,
+                                "decision": "rejected",
+                            },
+                        ).status_code,
+                        200,
+                    )
+                effect = client.post(
+                    f"{base}/effects/apply",
+                    headers=self.headers(
+                        self.service_token,
+                        f"case:{case_id}:action:{mode}",
+                    ),
+                    json={**binding, "mode": mode},
+                )
+                finish = client.post(
+                    f"{base}/finish",
+                    headers=self.headers(
+                        self.service_token,
+                        f"case:{case_id}:completion:{mode}",
+                    ),
+                    json={**binding, "mode": mode},
+                )
+                self.assertEqual(effect.status_code, 200, effect.text)
+                self.assertEqual(finish.status_code, 200, finish.text)
+                stored = self.store.get(case_id)
+                self.assertEqual(stored.status, expected_status)
+                self.assertTrue(stored.execution_complete)
+                self.assertIsNone(stored.checkpoint_id)
+                self.assertIsNone(stored.terminal_checkpoint_id)
+                self.assertEqual(self.database_counts(case_id)["actions"], expected_actions)
+
+    def test_agent_a_http_business_store_composes_over_loopback_and_postgres(self):
+        agent_a_source = os.environ.get("ORDER_RESOLUTION_AGENT_A_SOURCE")
+        if not agent_a_source:
+            self.skipTest("ORDER_RESOLUTION_AGENT_A_SOURCE does not select Agent A source.")
+
+        import importlib.util
+        import types
+
+        import uvicorn
+
+        package_root = Path(agent_a_source) / "order_resolution_hosted"
+        package = types.ModuleType("order_resolution_hosted")
+        package.__path__ = [str(package_root)]
+        sys.modules["order_resolution_hosted"] = package
+        loaded_modules = ["order_resolution_hosted"]
+        for module_name in ("application", "business", "client"):
+            qualified_name = f"order_resolution_hosted.{module_name}"
+            spec = importlib.util.spec_from_file_location(
+                qualified_name,
+                package_root / f"{module_name}.py",
+            )
+            if spec is None or spec.loader is None:
+                self.fail(f"Cannot load Agent A module {qualified_name}.")
+            module = importlib.util.module_from_spec(spec)
+            sys.modules[qualified_name] = module
+            loaded_modules.append(qualified_name)
+            spec.loader.exec_module(module)
+        self.addCleanup(
+            lambda: [sys.modules.pop(module_name, None) for module_name in loaded_modules]
+        )
+        from order_resolution_hosted.application import CallerContext
+        from order_resolution_hosted.business import HttpHostedBusinessStore
+        from order_resolution_hosted.client import (
+            OperationClaim,
+            OperationStatus,
+            ResponsesClient,
+        )
+
+        from app.order_resolution.hosted_journal import PostgresOperationJournal
+
+        _, case, proposal = self.hosted_case("ORDER-HOSTED-AGENT-A", "185.00")
+        application = create_app(
+            self.settings,
+            build_application(),
+            store=self.store,
+            identity=self.identity,
+        )
+        foundry_calls: list[tuple[str, dict]] = []
+
+        @application.post("/conversations")
+        def create_conversation(payload: dict) -> dict:
+            foundry_calls.append(("conversation", payload))
+            return {"id": "conversation-agent-a"}
+
+        @application.post("/responses")
+        def create_response(payload: dict) -> dict:
+            foundry_calls.append(("response", payload))
+            return {"id": f"response-{len(foundry_calls)}"}
+
+        listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        listener.bind(("127.0.0.1", 0))
+        listener.listen()
+        port = listener.getsockname()[1]
+        server = uvicorn.Server(
+            uvicorn.Config(
+                application,
+                host="127.0.0.1",
+                port=port,
+                log_level="error",
+                lifespan="off",
+            )
+        )
+        thread = threading.Thread(
+            target=server.run,
+            kwargs={"sockets": [listener]},
+            daemon=True,
+        )
+        thread.start()
+
+        def stop_server():
+            server.should_exit = True
+            thread.join(timeout=10)
+            listener.close()
+
+        self.addCleanup(stop_server)
+        for _ in range(100):
+            if server.started:
+                break
+            time.sleep(0.01)
+        self.assertTrue(server.started)
+
+        token = self.service_token
+
+        class StaticTokenProvider:
+            @staticmethod
+            def authorization_header() -> str:
+                return f"Bearer {token}"
+
+        endpoint = f"http://127.0.0.1:{port}/api/internal/hosted/v1"
+        api = HttpHostedBusinessStore(endpoint, StaticTokenProvider())
+        conversation_id = "conversation-agent-a"
+        session_id = f"case:{case.id}"
+        owner = CallerContext(OWNER, session_id, "call-start")
+        reviewer = CallerContext(REVIEWER, session_id, "call-resume")
+
+        owner_principal = api.bind_start(
+            case_id=case.id,
+            caller=owner,
+            conversation_id=conversation_id,
+        )
+        owner_store = api.for_binding(owner, conversation_id, "owner")
+        prepared = owner_store.prepare_hosted_approval(
+            case.id,
+            f"case:{case.id}:approval:v1",
+            channel=HOSTED_CHANNEL,
+        )
+        reviewer_principal = api.authorize_resume(
+            case_id=case.id,
+            caller=reviewer,
+            conversation_id=conversation_id,
+            channel=HOSTED_CHANNEL,
+        )
+        reviewer_store = api.for_binding(reviewer, conversation_id, "reviewer")
+        decision = reviewer_store.record_hosted_decision(
+            DecisionCommand(
+                case_id=str(case.id),
+                proposal_version=proposal.proposal_version,
+                action=proposal.action,
+                destination_id=proposal.destination_id,
+                handle=f"case:{case.id}:approval:v1",
+                decision=Decision.APPROVED,
+                scope="workflow.approve",
+                channel=HOSTED_CHANNEL,
+            )
+        )
+        reviewer_store.apply_once(case.id, True, object())
+        reviewer_store.finish_hosted(case.id)
+
+        restarted_api = HttpHostedBusinessStore(endpoint, StaticTokenProvider())
+        restarted_store = restarted_api.for_binding(reviewer, conversation_id, "reviewer")
+        restarted_store.apply_once(case.id, True, object())
+        restarted_store.finish_hosted(case.id)
+
+        journal = PostgresOperationJournal(self.store)
+        probe = journal.claim(
+            f"case:{case.id}:decision:journal-probe",
+            hashlib.sha256(b"journal-probe").hexdigest(),
+        )
+        duplicate_probe = journal.claim(
+            f"case:{case.id}:decision:journal-probe",
+            hashlib.sha256(b"journal-probe").hexdigest(),
+        )
+        self.assertIsInstance(probe, OperationClaim)
+        self.assertIs(type(probe.record.status), OperationStatus)
+        self.assertTrue(probe.acquired)
+        self.assertFalse(duplicate_probe.acquired)
+
+        responses = ResponsesClient(
+            f"http://127.0.0.1:{port}/responses?api-version=v1",
+            journal,
+            conversation_endpoint=(f"http://127.0.0.1:{port}/conversations?api-version=v1"),
+            token_provider=StaticTokenProvider(),
+        )
+        conversation_operation = f"case:{case.id}:conversation"
+        start_operation = f"case:{case.id}:start"
+        decision_operation = f"case:{case.id}:decision:{proposal.proposal_version}"
+        responses_binding = responses.create_conversation(
+            operation_id=conversation_operation,
+            caller_id=OWNER,
+            session_id=session_id,
+        )
+        start_id = responses.start(
+            operation_id=start_operation,
+            binding=responses_binding,
+            case_id=str(case.id),
+        )
+        repeated_start_id = responses.start(
+            operation_id=start_operation,
+            binding=responses_binding,
+            case_id=str(case.id),
+        )
+        request_id = f"case:{case.id}:approval:v1"
+        decision_payload = {
+            "case_id": str(case.id),
+            "proposal_version": proposal.proposal_version,
+            "action": proposal.action,
+            "destination_id": proposal.destination_id,
+            "handle": request_id,
+            "decision": "approved",
+            "conversation_id": responses_binding.conversation_id,
+            "session_id": responses_binding.session_id,
+            "channel": HOSTED_CHANNEL,
+        }
+        response_id = responses.resume(
+            operation_id=decision_operation,
+            binding=responses_binding,
+            request_id=request_id,
+            decision=decision_payload,
+        )
+        restarted_responses = ResponsesClient(
+            f"http://127.0.0.1:{port}/responses?api-version=v1",
+            PostgresOperationJournal(self.store),
+            conversation_endpoint=(f"http://127.0.0.1:{port}/conversations?api-version=v1"),
+            token_provider=StaticTokenProvider(),
+        )
+        self.assertEqual(
+            restarted_responses.create_conversation(
+                operation_id=conversation_operation,
+                caller_id=OWNER,
+                session_id=session_id,
+            ).conversation_id,
+            responses_binding.conversation_id,
+        )
+        self.assertEqual(
+            restarted_responses.start(
+                operation_id=start_operation,
+                binding=responses_binding,
+                case_id=str(case.id),
+            ),
+            start_id,
+        )
+        self.assertEqual(
+            restarted_responses.resume(
+                operation_id=decision_operation,
+                binding=responses_binding,
+                request_id=request_id,
+                decision=decision_payload,
+            ),
+            response_id,
+        )
+
+        self.assertEqual(owner_principal.subject, OWNER)
+        self.assertEqual(reviewer_principal.subject, REVIEWER)
+        self.assertEqual(prepared.proposal_version, proposal.proposal_version)
+        self.assertEqual(decision.actor_id, REVIEWER)
+        self.assertEqual(start_id, repeated_start_id)
+        self.assertEqual(
+            [kind for kind, _ in foundry_calls],
+            ["conversation", "response", "response"],
+        )
+        self.assertEqual(
+            foundry_calls[1][1]["input"],
+            f'{{"case_id":"{case.id}"}}',
+        )
+        self.assertEqual(foundry_calls[2][1]["input"][0]["type"], "function_call_output")
+        stored = self.store.get(case.id)
+        self.assertEqual((stored.status, stored.execution_complete), ("completed", True))
+        self.assertIsNone(stored.checkpoint_id)
+        self.assertIsNone(stored.terminal_checkpoint_id)
+        self.assertEqual(self.database_counts(case.id)["actions"], 1)
+        self.assertEqual(self.database_counts(case.id)["decisions"], 1)
 
     def test_ors_002_approval_pauses_before_usd_18_50_refund(self):
         with self.client() as client:
@@ -644,7 +1048,11 @@ class OrderResolutionApiTests(unittest.TestCase):
 
                 completed = self.store.get(case_id)
                 self.assertEqual(
-                    (completed.status, completed.decision, completed.execution_complete),
+                    (
+                        completed.status,
+                        completed.decision,
+                        completed.execution_complete,
+                    ),
                     ("completed", "approved", True),
                 )
                 self.assertEqual(

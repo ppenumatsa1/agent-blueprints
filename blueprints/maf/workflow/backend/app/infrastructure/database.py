@@ -47,6 +47,7 @@ class DatabaseConnectionOptions:
     password: str | None = None
     managed_identity_client_id: str | None = None
     tls_mode: str | None = None
+    tls_root_cert: str | None = None
 
 
 class DatabaseConnector:
@@ -69,6 +70,8 @@ class DatabaseConnector:
         kwargs = {}
         if self.options.tls_mode:
             kwargs["sslmode"] = self.options.tls_mode
+        if self.options.tls_root_cert:
+            kwargs["sslrootcert"] = self.options.tls_root_cert
         if dict_rows:
             kwargs["row_factory"] = dict_row
         if password:
@@ -164,17 +167,23 @@ class BoundedConnectionPool:
                     break
                 connection.close()
 
+
 def connector_from_environment(dsn: str) -> DatabaseConnector:
     configured_tls = parse_qs(urlsplit(dsn).query).get("sslmode", ["disable"])[0]
+    configured_root_cert = parse_qs(urlsplit(dsn).query).get("sslrootcert", [None])[0]
+    tls_mode = os.environ.get("DATABASE_TLS_MODE", configured_tls)
     return DatabaseConnector(
         DatabaseConnectionOptions(
             dsn=dsn,
             auth_mode=os.environ.get("DATABASE_AUTH_MODE", "password"),
             password=os.environ.get("DATABASE_PASSWORD") or None,
-            managed_identity_client_id=os.environ.get(
-                "DATABASE_MANAGED_IDENTITY_CLIENT_ID"
-            )
+            managed_identity_client_id=os.environ.get("DATABASE_MANAGED_IDENTITY_CLIENT_ID")
             or None,
-            tls_mode=os.environ.get("DATABASE_TLS_MODE", configured_tls),
+            tls_mode=tls_mode,
+            tls_root_cert=(
+                os.environ.get("DATABASE_TLS_ROOT_CERT")
+                or configured_root_cert
+                or ("system" if tls_mode == "verify-full" else None)
+            ),
         )
     )

@@ -7,7 +7,11 @@ WORKDIR /app
 ARG PYTHON_PACKAGE_INDEX=https://pypi.org/simple
 COPY pyproject.toml uv.lock .python-version agent-framework-core.sha256 ./
 COPY scripts/verify_framework_supply_chain.py scripts/
-RUN python -m pip install --no-cache-dir --index-url "$PYTHON_PACKAGE_INDEX" uv==0.9.26 \
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates \
+    && test -r /etc/ssl/certs/ca-certificates.crt \
+    && rm -rf /var/lib/apt/lists/* \
+    && python -m pip install --no-cache-dir --index-url "$PYTHON_PACKAGE_INDEX" uv==0.9.26 \
     && python scripts/verify_framework_supply_chain.py \
         --index-url "$PYTHON_PACKAGE_INDEX" \
     && uv export --locked --no-dev --no-emit-project --no-header --no-annotate > /app/requirements-lock.txt \

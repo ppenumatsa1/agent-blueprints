@@ -1,12 +1,12 @@
 from fastapi import FastAPI
 
 from app.api.app import create_api_app
+from app.api.routes.hosted_service import router as hosted_service_router
 from app.application import ApplicationComponents
 from app.config import Settings
-from app.domain.models import StateRepository
+from app.domain.errors import HostedWorkflowError
+from app.domain.models import StateRepository, WorkflowHost
 from app.infrastructure.delegation import OnBehalfOf
-from app.infrastructure.database import DefaultAzureCredentialTokenProvider
-from app.infrastructure.hosted import HostedWorkflowClient, HttpHostedWorkflowClient
 from app.infrastructure.identity import EntraIdentity, IdentityProvider
 from app.infrastructure.store import PostgresStore
 from app.infrastructure.telemetry import Telemetry
@@ -18,7 +18,6 @@ from app.order_resolution.rules import OrderResolutionRules
 from app.order_resolution.service import OrderResolutionService
 from app.usecases.service import WorkflowService
 from app.workflows.host import LocalWorkflowHost
-from app.workflows.hosted import HostedWorkflowHost
 
 
 def create_app(
@@ -27,7 +26,7 @@ def create_app(
     *,
     store: StateRepository | None = None,
     identity: IdentityProvider | None = None,
-    hosted_client: HostedWorkflowClient | None = None,
+    hosted_host: WorkflowHost | None = None,
 ) -> FastAPI:
     order_resolution = isinstance(components.rules, OrderResolutionRules)
     repository = (
@@ -60,20 +59,11 @@ def create_app(
                 telemetry=telemetry,
             )
         else:
-            token_provider = DefaultAzureCredentialTokenProvider(
-                settings.api_managed_identity_client_id
-            )
-            workflow_host = HostedWorkflowHost(
-                repository,
-                action,
-                hosted_client
-                or HttpHostedWorkflowClient(
-                    settings.hosted_workflow_endpoint or "",
-                    settings.hosted_workflow_scope or "",
-                    token_provider,
-                ),
-                telemetry=telemetry,
-            )
+            if hosted_host is None:
+                raise HostedWorkflowError(
+                    "Hosted mode requires the integrated Agent A Responses workflow adapter."
+                )
+            workflow_host = hosted_host
         if isinstance(repository, PostgresStore):
             repository.telemetry = telemetry
         if order_resolution:
@@ -100,6 +90,7 @@ def create_app(
             OnBehalfOf(settings, telemetry=telemetry),
             lifespan,
             telemetry,
+            additional_routers=(hosted_service_router,),
         )
     except BaseException:
         telemetry.shutdown()

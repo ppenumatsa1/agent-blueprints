@@ -43,29 +43,40 @@ order-adjustment remains an independent legacy fixture.
 The cloud application architecture keeps framework and identity concerns at
 narrow composition boundaries. `WorkflowHost` remains the use-case port.
 Local mode selects the existing MAF/FileCheckpointStorage host. Hosted mode
-selects `HostedWorkflowHost`, which calls an Agent A HTTPS contract through
-`HostedWorkflowClient`; Foundry SDK types do not enter API, policy, service,
-or persistence modules.
+requires an integrated Agent A native Responses adapter implementing that
+port; without it the API fails closed. No generic `/runs` transport or
+second hosted orchestration path is supplied. Foundry SDK types do not enter
+API, policy, service, or persistence modules.
 
 FastAPI validates and authorizes the end user before hosted dispatch.
 `DefaultAzureCredential` is created on demand only in infrastructure and is
-constrained to the configured API UAMI. That identity calls Agent A and may
-acquire an Azure PostgreSQL token, but cannot authorize a user action.
-Agent A's hosted execution identity remains separate and owns hosted
-checkpoint/session state. Order Resolution's synthetic downstream identity is
-application-owned and receives no user, API, or hosted credential.
+constrained to the configured API UAMI. That identity calls Agent A and is the
+sole runtime principal allowed to acquire an Azure PostgreSQL token, but it
+cannot authorize a user action. Agent A's hosted execution identity remains
+separate, owns hosted checkpoint/session state, and calls only the protected
+FastAPI hosted-state API with the fixed `Hosted.Workflow.Invoke` app role. It
+receives no database configuration or role. Order Resolution's synthetic
+downstream identity is application-owned and receives no user, API, or hosted
+credential.
 
 PostgreSQL stores business state plus opaque operation/execution/request
 correlation, never MAF checkpoint bytes. Dispatch is claimed before send.
 Ambiguous acknowledgments remain unknown and are reconciled by operation ID
-after restart rather than replayed. Local transactional action/effect
-application occurs only after a hosted result matches the recorded decision,
-preserving the action ledger and proposal/action/destination binding. See the
+after restart rather than replayed. The native hosted workflow owns action invocation; PostgreSQL verifies and
+projects the idempotent business outcome, preserving the action ledger and
+proposal/action/destination binding. See the
 [security and configuration contract](azure-foundry/application-security.md).
 Hosted approvals use a separate business projection: an opaque request ID,
 caller/session/conversation binding, and decision channel are durable, but
 local `checkpoint_id` and `terminal_checkpoint_id` remain null because Foundry
 owns native checkpoint/session state.
+The internal base `/api/internal/hosted/v1` exposes only case-bound
+start/resume, read/proposal, approval/decision, effect-projection, and
+completion operations. App-only tenant/issuer/audience/principal/role checks,
+exact binding checks, and durable case-bound idempotency keys protect that
+surface. Agent A's native `ResponsesClient` uses C's narrow
+`PostgresOperationJournal` inside the API process; there is no generic `/runs`
+transport and no hosted-to-PostgreSQL connection.
 The topology is implemented and locally tested, but Azure identity, RBAC,
 networking, managed PostgreSQL, hosted execution, and telemetry remain
 unverified until an authorized integrated deployment.
