@@ -26,10 +26,12 @@ class EvaluationCase:
         _require_text(self.case_id, "Evaluation case IDs")
         if not isinstance(self.inputs, Mapping):
             raise ValueError("Evaluation case inputs must be a mapping.")
-        if not self.check_ids or len(self.check_ids) != len(set(self.check_ids)):
+        if not isinstance(self.check_ids, tuple) or not self.check_ids:
             raise ValueError("Evaluation cases must map to unique readiness check IDs.")
         for check_id in self.check_ids:
             _require_text(check_id, "Readiness check IDs")
+        if len(self.check_ids) != len(set(self.check_ids)):
+            raise ValueError("Evaluation cases must map to unique readiness check IDs.")
 
 
 @dataclass(frozen=True)
@@ -41,7 +43,13 @@ class EvaluationDataset:
     def __post_init__(self) -> None:
         _require_text(self.dataset_id, "Evaluation dataset IDs")
         _require_text(self.version, "Evaluation dataset versions")
-        if not self.cases or len({case.case_id for case in self.cases}) != len(self.cases):
+        if (
+            not isinstance(self.cases, tuple)
+            or not self.cases
+            or any(not isinstance(case, EvaluationCase) for case in self.cases)
+        ):
+            raise ValueError("Evaluation datasets must contain cases with unique IDs.")
+        if len({case.case_id for case in self.cases}) != len(self.cases):
             raise ValueError("Evaluation datasets must contain cases with unique IDs.")
 
 
@@ -72,9 +80,13 @@ class EvaluationRubric:
     def __post_init__(self) -> None:
         _require_text(self.rubric_id, "Evaluation rubric IDs")
         _require_text(self.version, "Evaluation rubric versions")
-        if not self.criteria or len({item.criterion_id for item in self.criteria}) != len(
-            self.criteria
+        if (
+            not isinstance(self.criteria, tuple)
+            or not self.criteria
+            or any(not isinstance(item, RubricCriterion) for item in self.criteria)
         ):
+            raise ValueError("Evaluation rubrics must contain criteria with unique IDs.")
+        if len({item.criterion_id for item in self.criteria}) != len(self.criteria):
             raise ValueError("Evaluation rubrics must contain criteria with unique IDs.")
 
     def validate_for(self, dataset: EvaluationDataset) -> None:
@@ -105,6 +117,8 @@ class AgentEvaluator(Protocol):
 class EvaluationTraceReference:
     case_id: str
     criterion_id: str
+    score: float
+    minimum_score: float
     reference: str
 
 
@@ -148,6 +162,19 @@ def _assessment(
         tuple(results),
         tuple(diagnostics),
     )
+
+
+def _valid_score(value: object) -> bool:
+    return (
+        not isinstance(value, bool)
+        and isinstance(value, (int, float))
+        and isfinite(value)
+        and 0 <= value <= 1
+    )
+
+
+def _valid_trace_reference(value: object) -> bool:
+    return isinstance(value, str) and bool(value) and value == value.strip()
 
 
 def unavailable_assessment(
@@ -227,13 +254,11 @@ def map_observations(
         case = cases.get(observation.case_id)
         criterion = criteria.get(observation.criterion_id)
         if case is None:
-            diagnostics.append(f"Evaluator returned unknown case ID {observation.case_id!r}.")
+            diagnostics.append("Evaluator returned an unknown case ID.")
             invalid_checks.update(all_check_ids)
             continue
         if criterion is None:
-            diagnostics.append(
-                f"Evaluator returned unknown criterion ID {observation.criterion_id!r}."
-            )
+            diagnostics.append("Evaluator returned an unknown criterion ID.")
             invalid_checks.update(case.check_ids)
             continue
         check_id = criterion.check_id
@@ -243,51 +268,37 @@ def map_observations(
             invalid_checks.add(check_id)
             continue
         if key in recorded:
-            diagnostics.append(
-                f"Evaluator returned duplicate observation for {key[0]!r}/{key[1]!r}."
-            )
+            diagnostics.append("Evaluator returned a duplicate case/criterion observation.")
             invalid_checks.add(check_id)
             continue
         recorded[key] = observation
-        if (
-            isinstance(observation.score, bool)
-            or not isinstance(observation.score, (int, float))
-            or not isfinite(observation.score)
-            or not 0 <= observation.score <= 1
-        ):
-            diagnostics.append(f"Evaluator returned malformed score for {key[0]!r}/{key[1]!r}.")
+        if not _valid_score(observation.score):
+            diagnostics.append("Evaluator returned a malformed score.")
             invalid_checks.add(check_id)
-        if (
-            not isinstance(observation.trace_reference, str)
-            or not observation.trace_reference
-            or observation.trace_reference != observation.trace_reference.strip()
-        ):
-            diagnostics.append(
-                f"Evaluator returned invalid trace reference for {key[0]!r}/{key[1]!r}."
-            )
+        if not _valid_trace_reference(observation.trace_reference):
+            diagnostics.append("Evaluator returned an invalid trace reference.")
             invalid_checks.add(check_id)
 
     results = []
     for check_id in sorted(all_check_ids):
         check_keys = [key for key in expected if criteria[key[1]].check_id == check_id]
-        check_observations = [recorded[key] for key in check_keys if key in recorded]
         traces = tuple(
             EvaluationTraceReference(
-                observation.case_id, observation.criterion_id, observation.trace_reference
+                observation.case_id,
+                observation.criterion_id,
+                float(observation.score),
+                criteria[key[1]].minimum_score,
+                observation.trace_reference,
             )
-            for observation in check_observations
-            if isinstance(observation.trace_reference, str)
-            and observation.trace_reference
-            and observation.trace_reference == observation.trace_reference.strip()
+            for key in check_keys
+            if (observation := recorded.get(key)) is not None
+            and _valid_score(observation.score)
+            and _valid_trace_reference(observation.trace_reference)
         )
         below_threshold = any(
             observation.score < criteria[key[1]].minimum_score
             for key in check_keys
-            if (observation := recorded.get(key)) is not None
-            and isinstance(observation.score, (int, float))
-            and not isinstance(observation.score, bool)
-            and isfinite(observation.score)
-            and 0 <= observation.score <= 1
+            if (observation := recorded.get(key)) is not None and _valid_score(observation.score)
         )
         missing = [key for key in check_keys if key not in recorded]
         if check_id in invalid_checks or below_threshold:

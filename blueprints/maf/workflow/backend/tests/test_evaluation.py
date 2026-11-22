@@ -38,6 +38,8 @@ class EvaluationExtensionTests(unittest.TestCase):
         self.assertEqual(
             checks["CHECK-EXPLANATION"].observations[0].criterion_id, "grounded-explanation"
         )
+        self.assertEqual(checks["CHECK-EXPLANATION"].observations[0].score, 1.0)
+        self.assertEqual(checks["CHECK-EXPLANATION"].observations[0].minimum_score, 1.0)
         self.assertEqual(checks["CHECK-EXPLANATION"].observations[0].reference, "trace-exp-1")
         self.assertEqual(checks["CHECK-HINT"].observations[0].reference, "trace-hint-1")
 
