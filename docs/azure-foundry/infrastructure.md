@@ -176,6 +176,11 @@ dependency. ACR stores only the generated API and frontend images.
 
 The PostgreSQL role is created separately because Azure RBAC does not create
 database principals. Migration ownership and runtime DML remain distinct.
+`Hosted.Workflow.Invoke` authenticates a service principal only and conveys no
+human authority. The API must create the exact
+case/principal/caller/session/conversation/channel binding before Responses
+dispatch; hosted binding endpoints verify that server-owned record and fail
+closed on absence or mismatch.
 No project-scoped API fallback is created. Deployment derives the documented
 agent scope exclusively from the validated Foundry project resource ID and the
 same fixed agent name passed to the journaled publisher. It accepts no arbitrary

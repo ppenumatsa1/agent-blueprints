@@ -116,7 +116,9 @@ pending identity, assigns only a dedicated API application role, then requires
 the same journaled version active without another create. Foundry Agent
 Consumer scope is derived only from the validated project resource ID and the
 same fixed publisher agent name; no scope input or project/subscription fallback
-is permitted.
+is permitted. The hosted app role is service authentication only; exact
+API-owned case/principal/caller/session/conversation/channel binding must
+precede Responses dispatch.
 
 **Acceptance evidence:** exact base verified; read-only Azure discovery
 completed; Bicep build/lint and 17 infrastructure contracts pass; 68 root tests
