@@ -80,9 +80,10 @@ behavior where no suitable stable AVM contract exists.
 ## Identity and RBAC
 
 - API and frontend use separate user-assigned managed identities.
-- API receives Foundry Agent Consumer only at the explicit hosted-agent scope
-  after one acknowledged immutable version exists. It receives Monitoring
-  Metrics Publisher at Application Insights scope.
+- API receives Foundry Agent Consumer only at the documented exact agent scope,
+  derived from the validated project resource ID and the same fixed agent name
+  passed to the journaled publisher. It receives Monitoring Metrics Publisher
+  at Application Insights scope.
 - API and frontend receive AcrPull at registry scope.
 - API receives Key Vault Secrets User at vault scope.
 - The Foundry project identity receives Cognitive Services OpenAI User at
@@ -143,7 +144,7 @@ backend/frontend, and `WORKFLOW_HOST=local` are prohibited.
 - [x] Modular Bicep, Azure CLI orchestration, and optional infrastructure-only
   azd configuration generated.
 - [x] Operations automation and documentation generated.
-- [x] Bicep build/lint and 12 non-deploying contract tests pass.
+- [x] Bicep build/lint and 17 non-deploying contract tests pass.
 - [x] Root unit suite passes: 68 tests with two expected adapter-selection
   skips.
 - [x] PowerShell and Python syntax validation passes.
@@ -153,7 +154,7 @@ backend/frontend, and `WORKFLOW_HOST=local` are prohibited.
 
 | Command or check | Result |
 | --- | --- |
-| `pwsh ./scripts/azure/validate.ps1` | Bicep build/lint succeeded; 12 infrastructure contracts passed |
+| `pwsh ./scripts/azure/validate.ps1` | Bicep build/lint succeeded; 17 infrastructure contracts passed |
 | Isolated `python -m unittest discover -s tests -v` with `requirements-dev.txt` | 68 passed; 2 expected adapter-selection skips |
 | PowerShell parser over `scripts/azure/*.ps1` | Passed |
 | `python -m compileall -q ./scripts/azure ./infra/tests` | Passed |
@@ -178,9 +179,16 @@ reported in evidence, and blocks only explicitly selected azd mode.
 
 Deployment also fails before mutation unless it can instantiate an independent
 Order Resolution project and find the generated backend, frontend,
-`hosted-agent`, and Agent A publisher. The hosted adapter endpoint, documented
-agent RBAC scope, stable publish operation, durable journal, PostgreSQL
+`hosted-agent`, and Agent A publisher. The hosted adapter endpoint, stable
+publish operation, durable journal, PostgreSQL
 administrator, and output path are mandatory explicit inputs.
+
+No RBAC scope input is accepted. Deployment derives
+`<project-resource-id>/agents/<agent-name>` from validated Bicep output and the
+same safe agent-name segment passed to the publisher, following the documented
+Foundry agent-scope contract. Project, account, resource-group, subscription,
+agent-version, role-assignment, and another-agent scopes are rejected by
+offline contracts.
 
 The publisher contract requires `agent_version`, `agent_version_id`,
 `agent_guid`, `identity_principal_id`, `identity_client_id`, and an `active`
@@ -202,11 +210,11 @@ runtime database principal. API PostgreSQL clients use `verify-full` with
 `sslrootcert=system`, and generated API image builds fail if the system CA
 bundle is absent.
 
-The generated application interface was reviewed against Agent C draft PR #48
-head `b4c7ed825833c20fa6549aa5a8e206cfbe85a77d` (implementation
-`395dbeb`). Agent A froze the publisher field contract above while its final
-post-composition revision remains pending; live A/C composition is therefore
-still unverified and deployment remains outside this plan.
+The generated application interface is frozen at Agent C draft PR #48 head
+`60fd83fc05acc290aab3ed96f8f8c255e493d28d`. Agent A froze the publisher
+field contract above while its final post-composition revision remains pending;
+live A/C composition is therefore still unverified and deployment remains
+outside this plan.
 
 ## Directory application contract
 

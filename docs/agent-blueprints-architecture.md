@@ -137,7 +137,10 @@ adapter endpoint, and agent-scoped API access. `BLUEPRINT_APPLICATION`,
 Hosted publication is staged after the protected API business-state boundary
 is deployed. The platform identity receives only a dedicated API application
 role before active readiness polling; it receives no PostgreSQL URL, role, or
-firewall access. Only API Container App outbound IPs are allowlisted.
+firewall access. Only API Container App outbound IPs are allowlisted. Agent
+Consumer assignment uses the official exact agent scope derived from validated
+project output and the fixed publisher name; parent or another-agent scopes are
+rejected.
 See the
 [infrastructure evidence and operator contract](azure-foundry/infrastructure.md).
 

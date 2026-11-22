@@ -174,10 +174,13 @@ runtime paths, local workflow hosting, synthetic application selection, and
 file checkpoints. The API UAMI is the sole database runtime principal. Hosted publication occurs
 after the protected API state boundary is deployed, captures the authoritative
 pending identity, assigns only a dedicated API application role, then requires
-the same journaled version active without another create.
+the same journaled version active without another create. Foundry Agent
+Consumer scope is derived only from the validated project resource ID and the
+same fixed publisher agent name; no scope input or project/subscription fallback
+is permitted.
 
 **Acceptance evidence:** exact base verified; read-only Azure discovery
-completed; Bicep build/lint and 12 infrastructure contracts pass; 68 root tests
+completed; Bicep build/lint and 17 infrastructure contracts pass; 68 root tests
 pass with two expected adapter-selection skips; script syntax checks pass.
 The current Azure CLI identity matches the authorized target, but azd is a
 different account and tenant. Azure CLI mode reports that mismatch without
