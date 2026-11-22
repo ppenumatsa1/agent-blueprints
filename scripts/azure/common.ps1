@@ -70,6 +70,9 @@ function Assert-GeneratedOrderResolutionProject {
         'backend\app\api\app.py',
         'backend\app\api\routes\hosted_service.py',
         'backend\app\config.py',
+        'backend\order_resolution_hosted\__init__.py',
+        'backend\order_resolution_hosted\client.py',
+        'backend\order_resolution_hosted\bridge.py',
         'frontend\Dockerfile',
         'frontend\nginx.conf',
         'hosted-agent\main.py',
@@ -86,12 +89,10 @@ function Assert-GeneratedOrderResolutionProject {
     return $resolved
 }
 
-function Initialize-GeneratedApiImageContext {
+function Assert-GeneratedApiImageContext {
     param(
         [Parameter(Mandatory)]
-        [string]$ProjectRoot,
-        [Parameter(Mandatory)]
-        [string]$DockerfileSource
+        [string]$ProjectRoot
     )
     $resolved = Assert-GeneratedOrderResolutionProject -ProjectRoot $ProjectRoot
     $sourcePackage = Join-Path `
@@ -99,41 +100,64 @@ function Initialize-GeneratedApiImageContext {
         'hosted-agent\src\order_resolution_hosted'
     $backend = Join-Path $resolved 'backend'
     $targetPackage = Join-Path $backend 'order_resolution_hosted'
-    $resolvedDockerfile = (Resolve-Path -LiteralPath $DockerfileSource).Path
 
-    $client = Get-Content `
-        -LiteralPath (Join-Path $sourcePackage 'client.py') `
-        -Raw
-    $bridge = Get-Content `
-        -LiteralPath (Join-Path $sourcePackage 'bridge.py') `
+    foreach ($name in @('client.py', 'bridge.py')) {
+        $sourceHash = (
+            Get-FileHash `
+                -LiteralPath (Join-Path $sourcePackage $name) `
+                -Algorithm SHA256
+        ).Hash
+        $targetHash = (
+            Get-FileHash `
+                -LiteralPath (Join-Path $targetPackage $name) `
+                -Algorithm SHA256
+        ).Hash
+        if ($sourceHash -cne $targetHash) {
+            throw "Generated backend bridge source is not byte-identical: $name"
+        }
+    }
+
+    $client = Get-Content -LiteralPath (Join-Path $targetPackage 'client.py') -Raw
+    $bridge = Get-Content -LiteralPath (Join-Path $targetPackage 'bridge.py') -Raw
+    $initializer = Get-Content `
+        -LiteralPath (Join-Path $targetPackage '__init__.py') `
         -Raw
     if (
         $client -match '\bagent_framework\b' -or
         $client -match '\bazure\.ai\.agentserver\b' -or
         $bridge -match '\bfrom\s+\.(application|host|model|business)\b' -or
         $bridge -match '\bagent_framework\b' -or
-        $bridge -match '\bazure\.ai\.agentserver\b'
+        $bridge -match '\bazure\.ai\.agentserver\b' -or
+        $initializer -match '(?m)^\s*(from|import)\s+'
     ) {
         throw 'The API bridge depends on the full hosted runtime; refusing to package it.'
     }
 
-    New-Item -ItemType Directory -Path $targetPackage -Force | Out-Null
-    Copy-Item `
-        -LiteralPath (Join-Path $sourcePackage 'client.py') `
-        -Destination (Join-Path $targetPackage 'client.py') `
-        -Force
-    Copy-Item `
-        -LiteralPath (Join-Path $sourcePackage 'bridge.py') `
-        -Destination (Join-Path $targetPackage 'bridge.py') `
-        -Force
-    Set-Content `
-        -LiteralPath (Join-Path $targetPackage '__init__.py') `
-        -Value '"""API-only Foundry Responses bridge."""' `
-        -NoNewline
-    Copy-Item `
-        -LiteralPath $resolvedDockerfile `
-        -Destination (Join-Path $backend '.azure-api.Dockerfile') `
-        -Force
+    $projectManifest = Get-Content `
+        -LiteralPath (Join-Path $backend 'pyproject.toml') `
+        -Raw
+    $runtimeProject = $projectManifest.Split('[dependency-groups]')[0]
+    if ($runtimeProject -notmatch '"httpx==0\.28\.1"') {
+        throw 'Generated backend runtime dependencies must pin httpx==0.28.1.'
+    }
+
+    $dockerfile = Get-Content `
+        -LiteralPath (Join-Path $backend 'Dockerfile') `
+        -Raw
+    if (
+        $dockerfile -notmatch [regex]::Escape(
+            'COPY --chown=blueprint:blueprint order_resolution_hosted/'
+        ) -or
+        $dockerfile -notmatch [regex]::Escape(
+            'from order_resolution_hosted.bridge import build_workflow_host'
+        ) -or
+        $dockerfile -notmatch [regex]::Escape('uv export --locked --no-dev') -or
+        $dockerfile -match '\bPYTHONPATH\b' -or
+        $dockerfile -match '\bhosted-agent\b' -or
+        $dockerfile -match 'uv export --locked --group dev'
+    ) {
+        throw 'Generated backend Dockerfile does not contain the canonical bridge contract.'
+    }
     return $backend
 }
 

@@ -162,8 +162,9 @@ backend/frontend, and `WORKFLOW_HOST=local` are prohibited.
 | Azure CLI identity preflight with mismatched azd | Passed the authorized Azure CLI context, preserved the active subscription/tenant/user exactly, and reported the unrelated azd mismatch |
 | Azure CLI negative identity contracts | Wrong subscription fails before azd inspection; explicit azd mode blocks mismatch |
 | Generated hosted-composition deployment gate | Current unintegrated source generation stopped before preflight/mutation on missing `backend/app/api/routes/hosted_service.py` and cleaned temporary artifacts |
-| Exact A/C generated API image composition | C `60fd83fc05acc290aab3ed96f8f8c255e493d28d` generated backend plus A `228aa7721be5f0c418f01a16ad505f42ad47cba8` hosted source built successfully from the backend-only Docker context; the standalone container imported `order_resolution_hosted.bridge:build_workflow_host` without sibling `PYTHONPATH` or hosted server/application modules |
-| Package-index boundary during image proof | Direct PyPI failed on this laptop with a TLS handshake error; rerun with credentialless `https://packagefeedproxy.microsoft.io/pypi/simple` passed while retaining lockfile hashes and Agent Framework wheel-digest verification |
+| Exploratory A/C API image composition | C `60fd83fc05acc290aab3ed96f8f8c255e493d28d` plus A `228aa7721be5f0c418f01a16ad505f42ad47cba8` built and imported the bridge only after B staged the files and included C's dev dependency group. This proves the module boundary but is not accepted as final generator/runtime-lock proof. |
+| Required final API image composition | Pending immutable A generator output containing byte-identical backend `client.py`/`bridge.py` plus a side-effect-free initializer, and immutable C runtime `httpx==0.28.1` dependency/lock. B then requires a backend-only no-dev image import/startup/wire-parity pass. |
+| Package-index boundary during exploratory proof | Direct PyPI failed on this laptop with a TLS handshake error; rerun with credentialless `https://packagefeedproxy.microsoft.io/pypi/simple` passed while retaining lockfile hashes and Agent Framework wheel-digest verification |
 | Subscription what-if | Not run: deployment-specific Entra/admin/hosted endpoint and fixed agent-name values are intentionally unset |
 
 The Azure validation workflow is intentionally incomplete and the plan remains
@@ -218,15 +219,17 @@ head is `228aa7721be5f0c418f01a16ad505f42ad47cba8`, with explicit bridge factory
 `order_resolution_hosted.bridge:build_workflow_host`. Its final
 post-composition revision remains pending; live A/C
 compatibility beyond the API image import remains unverified and deployment
-remains outside this plan. Exact-head API image composition has passed.
-Deployment stages the API-only `client.py` and `bridge.py` modules
-into the generated backend with a side-effect-free package initializer, then
-uses only that backend as the API image build context. Hosted-agent source
-remains a separate publishable context. The API image neither relies on a
-sibling `PYTHONPATH` nor imports the full hosted runtime. The non-deploying
+remains outside this plan. Agent A owns generator production of byte-identical
+API-only `client.py` and `bridge.py` modules, a side-effect-free backend package
+initializer, and the canonical backend Dockerfile copy/import smoke. Agent C
+owns the runtime `httpx==0.28.1` dependency and lock. B validates those outputs
+without copying or replacing them, then builds that canonical backend context.
+Hosted-agent source remains a separate publishable context. The API image
+neither relies on a sibling `PYTHONPATH` nor imports the full hosted runtime.
+The non-deploying
 `test-generated-api-image.ps1` regression must build the composed generated
-project and import the bridge factory in a standalone container before live
-validation.
+project with production dependencies only and prove import/startup/wire parity
+before live validation.
 
 ## Directory application contract
 

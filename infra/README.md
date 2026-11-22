@@ -67,12 +67,14 @@ must contain the known Compose upstream; deployment replaces that copy with the
 exact HTTPS API FQDN before the image build. Source files in this repository are
 not patched or used as runtime dependencies.
 
-The API ACR build stages only Agent A's API-side `client.py` and `bridge.py`
-modules into Agent C's generated backend with a side-effect-free package
-initializer. `infra/docker/order-resolution-api.Dockerfile` then builds from
-that backend context only. Hosted-agent source remains separately publishable;
-the API does not depend on sibling `PYTHONPATH` configuration or install/import
-the full hosted runtime.
+Agent A's generator must place byte-identical API-side `client.py` and
+`bridge.py` modules in Agent C's generated backend with a side-effect-free
+package initializer. B validates that output without copying it.
+The canonical generated backend Dockerfile builds that context with production
+dependencies only. Hosted-agent source remains separately publishable; the API
+does not depend on sibling `PYTHONPATH` configuration or install/import the
+full hosted runtime. Agent C must pin `httpx==0.28.1` in the backend runtime
+dependencies and lock.
 
 Before any live deployment, validate the composed generated image locally:
 
