@@ -88,6 +88,30 @@ authorization failure when the binding is absent or mismatched. They must never
 assign a case owner/reviewer from hosted correlation input. A different caller,
 session, conversation, channel, or unchecked client ID fails closed.
 
+The generated API loads the explicit factory module spec
+`order_resolution_hosted.bridge:build_workflow_host`. Its narrow composition
+contract is:
+
+```python
+def build_workflow_host(
+    settings,
+    store,
+    authority_bindings,
+    operation_journal,
+) -> ResponsesWorkflowHost: ...
+```
+
+`ResponsesWorkflowHost.start(case_id, actor)` creates or reconciles the
+server-selected conversation, persists the authenticated owner binding, then
+dispatches the native Responses start. `resume(case_id, actor,
+decision_command)` loads the existing conversation/session, persists the
+authenticated reviewer and exact decision intent, then sends one structured
+`function_call_output`. The authority adapter owns those direct PostgreSQL
+bindings; Agent A does not apply or record the business decision in this API
+bridge. Stable operation IDs are `case:{id}:conversation`, `case:{id}:start`,
+and `case:{id}:decision:{proposal_version}`. There is no generic `/runs`
+protocol or fallback host, and missing factory composition fails closed.
+
 The API implements the exported `HostedBusinessStore` seam against its
 application-owned PostgreSQL state:
 
@@ -232,6 +256,7 @@ ID for the hosted version, so callers must not invent one.
 | Standard hosted checkpoint provider | Verified locally | Public `CheckpointStoreProvider(allowed_checkpoint_types=...)`; no custom provider or local file storage in hosted composition |
 | Responses protocol `2.0.0` manifest | Verified locally | Deterministic publisher contract and SDK model construction test |
 | Structured native approval resume | Verified locally | Generated package tests validate stable hosted request identity, decision recording, business completion without a local checkpoint ID, and exact caller/session/conversation/channel binding |
+| Authenticated API-to-Responses bridge | Interface and ordering verified locally; C composition pending | Explicit factory creates/reconciles the conversation, prebinds authenticated owner/reviewer authority before dispatch, and uses only `/conversations` plus `/responses`; no generic `/runs` fallback |
 | Application-owned hosted business seam | Functional composition verified; authorization integration blocked | Agent A's adapter and Workstream C `60fd83fc05acc290aab3ed96f8f8c255e493d28d` passed the real-PostgreSQL lifecycle, but that C revision created owner/reviewer bindings from opaque hosted input and is rejected as authorization evidence |
 | Protected API business port | Wire/idempotency verified; binding correction required | Exact C revision `60fd83fc05acc290aab3ed96f8f8c255e493d28d` passed bind/read/prepare/decision/effect/finish over loopback HTTP, but integration must be rerun against verification-only binding endpoints backed by an authenticated application command |
 | Managed-identity token acquisition | Verified locally | Mock credentials verify `https://ai.azure.com/.default`, the dedicated internal API `api://.../.default` scope, and Authorization headers |
@@ -250,11 +275,12 @@ ID for the hosted version, so callers must not invent one.
 
 ## Local validation evidence
 
-- 33 generated hosted-runtime tests passed, including absent and mismatched
-  pre-established owner/reviewer binding refusal before any business operation.
+- 38 generated hosted-runtime tests passed, including absent and mismatched
+  pre-established owner/reviewer binding refusal and API bridge
+  conversation/prebind/dispatch ordering.
 - 16 publisher/generator tests passed, including restart/concurrent publish
   exclusion and complete publication identity conflicts.
-- Generated Ruff check and format check passed across 88 Python files.
+- Generated Ruff check and format check passed across 90 Python files.
 - 39 focused generated backend tests passed on PostgreSQL 17.
 - ORS-001 through ORS-009 passed without skips on PostgreSQL 17.
 - The repository contract suite passed 68 tests with the two documented
@@ -271,8 +297,8 @@ ID for the hosted version, so callers must not invent one.
   bindings pre-established by an authenticated application command, plus a
   repeated composed proof with absent/mismatched binding negatives.
 - Two independently built source archives matched SHA-256
-  `42eedba1290a01213cb4b1229ace9e991b669ebc99303154126b0a76e1e3c19b`
-  and contained 55 files.
+  `54158e3a429039c0dd7bb8788c522aa2c02d84ae6b7ac356526e88c8120950b2`
+  and contained 56 files.
 
 ## Pinned SDKs
 

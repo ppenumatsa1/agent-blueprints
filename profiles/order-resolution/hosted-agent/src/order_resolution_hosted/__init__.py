@@ -7,6 +7,7 @@ from .application import (
     HostedBusinessStore,
     HostedIdentityBindings,
 )
+from .bridge import HostedAuthorityBindings, ResponsesWorkflowHost, build_workflow_host
 from .host import create_responses_server
 
 __all__ = [
@@ -15,5 +16,8 @@ __all__ = [
     "HostedApplication",
     "HostedBusinessStore",
     "HostedIdentityBindings",
+    "HostedAuthorityBindings",
+    "ResponsesWorkflowHost",
+    "build_workflow_host",
     "create_responses_server",
 ]

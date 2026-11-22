@@ -606,7 +606,7 @@ the independently generated Order Resolution application. Acceptance requires:
   repository contract tests.
 
 Implementation and current local evidence are recorded in the
-  [hosting report](azure-foundry/hosting.md). On 2026-11-22, 33 generated hosted
+  [hosting report](azure-foundry/hosting.md). On 2026-11-22, 38 generated hosted
   tests, 16 publisher/generator tests, Ruff, 39 focused generated PostgreSQL
   tests, ORS-001..009, and the 68-test repository contract suite (2 documented
   adapter skips) passed. Workstream C revision
@@ -617,9 +617,11 @@ Implementation and current local evidence are recorded in the
   `OperationClaim(record, acquired)`, and null business checkpoint fields, but
   security review rejected that revision's creation of owner/reviewer bindings
   from opaque hosted caller input. A now requires verification-only binding
-  gates backed by an authenticated application command. Final A/C compatibility
-  remains blocked until a new C revision and composed absent/mismatched-binding
-  negatives pass. Agents B and D consume the explicit API-only runtime
+  gates backed by an authenticated application command and exports the explicit
+  `order_resolution_hosted.bridge:build_workflow_host` API-to-Responses factory;
+  no generic `/runs` host is permitted. Final A/C compatibility remains blocked
+  until a new C revision and composed absent/mismatched-binding plus normal API
+  bridge tests pass. Agents B and D consume the explicit API-only runtime
   allowlist, atomic operation claim contract, and two-phase
   identity-then-active publication fields documented in the hosting report.
   Public hosted runtime never receives PostgreSQL connectivity; the protected

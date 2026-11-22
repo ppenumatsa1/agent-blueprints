@@ -61,6 +61,14 @@ opaque Foundry caller fields cannot create owner/reviewer authority. Missing or
 mismatched owner/reviewer bindings fail before any business read or write. The
 narrow `HostedBusinessStore` lifecycle provides stable opaque hosted request
 correlation, hosted decision claim, idempotent action, and business completion.
+Normal hosted API composition loads
+`order_resolution_hosted.bridge:build_workflow_host`, passing settings, the
+application store, its authenticated-human authority binding adapter, and the
+durable operation journal. That bridge creates/reconciles the server-selected
+conversation, prebinds the authenticated owner or reviewer before Responses
+dispatch, and exposes only async `start(case_id, actor)` and
+`resume(case_id, actor, decision_command)`. There is no generic `/runs`
+fallback.
 Foundry still owns native checkpoint state; the HTTP contract carries no
 checkpoint bytes or fabricated local checkpoint IDs. The copied
 `scripts/foundry/publish_order_resolution_hosted.py` packages the generated
