@@ -80,6 +80,11 @@ Hosted platform user, session, and call values remain opaque workload
 correlation. They never identify the human principal; changing a platform call
 ID does not change or conflict with an otherwise identical durable business
 operation.
+An identical approved or rejected human command after terminal projection still
+passes through the bridge: C reauthorizes the durable reviewer binding and
+exact intent, then Agent A's journal returns the acknowledged Responses result
+without another network dispatch or effect. Changed principals, conversations,
+channels, or decision commands fail closed.
 The internal base `/api/internal/hosted/v1` exposes only case-bound
 start/resume, read/proposal, approval/decision, effect-projection, and
 completion operations. App-only tenant/issuer/audience/principal/role checks,
