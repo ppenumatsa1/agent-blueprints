@@ -21,7 +21,7 @@ param foundryProjectEndpoint string
 param modelDeploymentName string
 param postgresHost string
 param postgresDatabaseName string
-param blueprintApplication string
+param hostedWorkflowEndpoint string
 param minReplicas int
 param maxReplicas int
 
@@ -134,12 +134,8 @@ resource api 'Microsoft.App/containerApps@2025-07-01' = {
               value: apiIdentityClientId
             }
             {
-              name: 'BLUEPRINT_APPLICATION'
-              value: blueprintApplication
-            }
-            {
-              name: 'CHECKPOINT_ROOT'
-              value: '/var/lib/blueprint/checkpoints'
+              name: 'API_MANAGED_IDENTITY_CLIENT_ID'
+              value: apiIdentityClientId
             }
             {
               name: 'CORS_ORIGINS'
@@ -147,7 +143,35 @@ resource api 'Microsoft.App/containerApps@2025-07-01' = {
             }
             {
               name: 'DATABASE_URL'
-              value: 'postgresql://${uriComponent(apiIdentityName)}@${postgresHost}:5432/${postgresDatabaseName}?sslmode=require'
+              value: 'postgresql://${uriComponent(apiIdentityName)}@${postgresHost}:5432/${postgresDatabaseName}?sslmode=verify-full'
+            }
+            {
+              name: 'DATABASE_AUTH_MODE'
+              value: 'managed-identity'
+            }
+            {
+              name: 'DATABASE_CONNECTION_MAX_LIFETIME_SECONDS'
+              value: '900'
+            }
+            {
+              name: 'DATABASE_MANAGED_IDENTITY_CLIENT_ID'
+              value: apiIdentityClientId
+            }
+            {
+              name: 'DATABASE_POOL_MAX_SIZE'
+              value: '8'
+            }
+            {
+              name: 'DATABASE_POOL_MIN_SIZE'
+              value: '0'
+            }
+            {
+              name: 'DATABASE_POOL_TIMEOUT_SECONDS'
+              value: '30'
+            }
+            {
+              name: 'DATABASE_TLS_MODE'
+              value: 'verify-full'
             }
             {
               name: 'AZURE_POSTGRESQL_DATABASE'
@@ -170,6 +194,14 @@ resource api 'Microsoft.App/containerApps@2025-07-01' = {
               value: tenant().tenantId
             }
             {
+              name: 'HOSTED_WORKFLOW_ENDPOINT'
+              value: hostedWorkflowEndpoint
+            }
+            {
+              name: 'HOSTED_WORKFLOW_SCOPE'
+              value: 'https://ai.azure.com/.default'
+            }
+            {
               name: 'OBO_ENABLED'
               value: 'false'
             }
@@ -179,7 +211,7 @@ resource api 'Microsoft.App/containerApps@2025-07-01' = {
             }
             {
               name: 'WORKFLOW_HOST'
-              value: 'local'
+              value: 'hosted'
             }
           ], secretEnvironment)
           resources: {

@@ -1,6 +1,9 @@
 [CmdletBinding()]
 param(
     [switch]$Apply,
+    [ValidateSet('AzureCli', 'Azd')]
+    [string]$DeploymentMode = 'AzureCli',
+    [string]$ValuesFile,
     [Parameter(Mandatory)]
     [string]$ConfirmApiDisplayName,
     [Parameter(Mandatory)]
@@ -22,8 +25,8 @@ if (
     throw 'DESTRUCTIVE: Entra application confirmation does not match.'
 }
 
-& "$PSScriptRoot\preflight.ps1" -FromAzdEnvironment
-$values = Get-AzdEnvironmentValues
+$values = Get-DeploymentValues -DeploymentMode $DeploymentMode -ValuesFile $ValuesFile
+Invoke-DeploymentPreflight -DeploymentMode $DeploymentMode -Values $values
 $expectedApiClientId = Get-RequiredValue $values 'AZURE_API_ENTRA_CLIENT_ID'
 $expectedSpaClientId = Get-RequiredValue $values 'AZURE_SPA_ENTRA_CLIENT_ID'
 
@@ -53,7 +56,7 @@ if (
     $apiApplication.appId -cne $expectedApiClientId -or
     $spaApplication.appId -cne $expectedSpaClientId
 ) {
-    throw 'DESTRUCTIVE: Entra application IDs do not match the selected azd environment.'
+    throw 'DESTRUCTIVE: Entra application IDs do not match the selected deployment values.'
 }
 
 az ad app delete --id $spaApplication.appId --only-show-errors

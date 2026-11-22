@@ -36,27 +36,29 @@ baseline.
 
 Starting from exact main
 `886b628fdea02f9089c385b4ed0fc46d90f375e8`, Workstream B adds the
-[deployment plan](../.azure/deployment-plan.md), root azd configuration,
-modular public-network Bicep, guarded operations, infrastructure contract
+[deployment plan](../.azure/deployment-plan.md), infrastructure-only azd
+descriptor, modular public-network Bicep, Azure CLI deployment orchestration,
+infrastructure contract
 tests, and the [operator evidence](azure-foundry/infrastructure.md). East US 2
 is selected without a split-region design for `gpt-4.1-mini`
 `2025-04-14` on `GlobalStandard` capacity 10. Read-only evidence found enough
-model quota/capacity and dependent-service quota, while the current azd
-account and tenant do not match Azure CLI. The deployment path therefore
-fails closed.
+model quota/capacity and dependent-service quota. Azure CLI mode validates the
+authorized active context and reports the unrelated azd mismatch without
+blocking; explicit azd mode still fails closed.
 
-Acceptance evidence: Bicep build/lint and 8 infrastructure contracts pass; the
+Acceptance evidence: Bicep build/lint and 11 infrastructure contracts pass; the
 root suite passes 68 tests with two expected adapter-selection skips; all new
 PowerShell/Python files parse. No Azure resource, RBAC assignment, database
 principal, migration, deployment, rollback, or teardown was executed.
-Deployment is additionally gated until Agents A/C replace the current static
-PostgreSQL DSN, local-only workflow host, and Compose-only frontend proxy with
-the managed-identity/hosted Azure integrations.
+Deployment generates an independent Order Resolution project, requires the
+Agent A/C hosted and managed-identity interfaces, patches only the generated
+nginx upstream to the exact API FQDN, and prohibits the source blueprint,
+synthetic application selector, local workflow host, and file checkpoints.
 
-**Next action:** independently validate the exact PR revision, repair azd
-authentication outside this PR, rerun preflight/what-if, and obtain approval
-of resource inventory, cost, identity, and public-network controls before any
-deployment.
+**Next action:** independently validate the exact PR revision, supply the
+deployment-specific hosted endpoint/agent scope/administrator/journal values,
+review Azure CLI provider what-if, and approve resource inventory, cost,
+identity, and public-network controls before deployment.
 
 ## Reconciled engineering backlog
 

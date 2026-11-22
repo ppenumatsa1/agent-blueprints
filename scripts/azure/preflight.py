@@ -122,7 +122,45 @@ REGIONAL_TYPES = (
 )
 
 
-def verify_identity(config: Configuration) -> dict[str, Any]:
+def inspect_azd_identity(active_user: str, tenant_id: str) -> dict[str, Any]:
+    try:
+        azd_status = run_text(AZD, "auth", "login", "--check-status")
+        match = re.search(r"Logged in to Azure as\s+(\S+)", azd_status)
+        azd_user = match.group(1) if match else ""
+        azd_claims = decode_azd_token_claims(
+            run_text(AZD, "auth", "token", "--no-prompt")
+        )
+    except PreflightError as error:
+        return {
+            "status": "unavailable",
+            "matched": False,
+            "message": str(error),
+        }
+
+    azd_tenant = str(azd_claims.get("tid", ""))
+    token_user = str(
+        azd_claims.get("preferred_username")
+        or azd_claims.get("upn")
+        or azd_claims.get("unique_name")
+        or ""
+    )
+    matched = bool(
+        azd_user
+        and azd_user.casefold() == active_user.casefold()
+        and token_user
+        and token_user.casefold() == active_user.casefold()
+        and azd_tenant.casefold() == tenant_id.casefold()
+    )
+    return {
+        "status": "matched" if matched else "mismatch",
+        "matched": matched,
+        "statusUser": azd_user,
+        "tokenUser": token_user,
+        "tenantId": azd_tenant,
+    }
+
+
+def verify_identity(config: Configuration, identity_mode: str) -> dict[str, Any]:
     account = run_json("account", "show")
     active_user = str((account.get("user") or {}).get("name", ""))
     if str(account.get("id", "")).casefold() != config.subscription_id.casefold():
@@ -132,35 +170,17 @@ def verify_identity(config: Configuration) -> dict[str, Any]:
     if active_user.casefold() != config.expected_user.casefold():
         raise PreflightError("Azure CLI user does not match the authorized target.")
 
-    azd_status = run_text(AZD, "auth", "login", "--check-status")
-    match = re.search(r"Logged in to Azure as\s+(\S+)", azd_status)
-    azd_user = match.group(1) if match else ""
-    azd_claims = decode_azd_token_claims(
-        run_text(AZD, "auth", "token", "--no-prompt")
-    )
-    azd_tenant = str(azd_claims.get("tid", ""))
-    token_user = str(
-        azd_claims.get("preferred_username")
-        or azd_claims.get("upn")
-        or azd_claims.get("unique_name")
-        or ""
-    )
-    if (
-        not azd_user
-        or azd_user.casefold() != active_user.casefold()
-        or not token_user
-        or token_user.casefold() != active_user.casefold()
-        or azd_tenant.casefold() != config.tenant_id.casefold()
-    ):
+    azd_identity = inspect_azd_identity(active_user, config.tenant_id)
+    if identity_mode == "azd" and not azd_identity["matched"]:
         raise PreflightError(
-            "Azure CLI and azd account or tenant differ; provisioning and deployment must stop."
+            "Azure CLI and azd account or tenant differ; azd mode must stop."
         )
     return {
+        "deploymentMode": identity_mode,
         "azureCliUser": active_user,
-        "azdUser": azd_user,
-        "azdTenantMatched": True,
         "subscriptionMatched": True,
         "tenantMatched": True,
+        "azdIdentity": azd_identity,
     }
 
 
@@ -331,10 +351,19 @@ def verify_region(
         "https://management.azure.com/subscriptions/"
         f"{config.subscription_id}/providers/Microsoft.CognitiveServices/locations/"
         f"{region}/modelCapacities"
-        f"?api-version=2024-10-01&modelFormat=OpenAI&modelName={config.model_name}"
-        f"&modelVersion={config.model_version}"
     )
-    capacity_payload = run_json("rest", "--method", "get", "--url", capacity_url)
+    capacity_payload = run_json(
+        "rest",
+        "--method",
+        "get",
+        "--url",
+        capacity_url,
+        "--uri-parameters",
+        "api-version=2024-10-01",
+        "modelFormat=OpenAI",
+        f"modelName={config.model_name}",
+        f"modelVersion={config.model_version}",
+    )
     matching_capacity = [
         item
         for item in capacity_payload.get("value", [])
@@ -365,9 +394,16 @@ def verify_region(
     app_usage_url = (
         "https://management.azure.com/subscriptions/"
         f"{config.subscription_id}/providers/Microsoft.App/locations/{region}/usages"
-        "?api-version=2024-03-01"
     )
-    app_usage = run_json("rest", "--method", "get", "--url", app_usage_url)
+    app_usage = run_json(
+        "rest",
+        "--method",
+        "get",
+        "--url",
+        app_usage_url,
+        "--uri-parameters",
+        "api-version=2024-03-01",
+    )
     environment_quota = next(
         (
             item
@@ -408,7 +444,7 @@ def verify_region(
     }
 
 
-def parse_arguments() -> Configuration:
+def parse_arguments() -> tuple[Configuration, str]:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--subscription-id", required=True)
     parser.add_argument("--tenant-id", required=True)
@@ -420,25 +456,34 @@ def parse_arguments() -> Configuration:
     parser.add_argument("--model-capacity", type=int, default=10)
     parser.add_argument("--postgres-sku", default="Standard_B1ms")
     parser.add_argument("--postgres-tier", default="Burstable")
+    parser.add_argument(
+        "--identity-mode",
+        choices=("azure-cli", "azd"),
+        default="azure-cli",
+        help="Azure CLI mode reports azd mismatch without blocking; azd mode requires a match.",
+    )
     arguments = parser.parse_args()
-    return Configuration(
-        subscription_id=arguments.subscription_id,
-        tenant_id=arguments.tenant_id,
-        expected_user=arguments.expected_user,
-        regions=tuple(arguments.regions),
-        model_name=arguments.model_name,
-        model_version=arguments.model_version,
-        model_sku=arguments.model_sku,
-        model_capacity=arguments.model_capacity,
-        postgres_sku=arguments.postgres_sku,
-        postgres_tier=arguments.postgres_tier,
+    return (
+        Configuration(
+            subscription_id=arguments.subscription_id,
+            tenant_id=arguments.tenant_id,
+            expected_user=arguments.expected_user,
+            regions=tuple(arguments.regions),
+            model_name=arguments.model_name,
+            model_version=arguments.model_version,
+            model_sku=arguments.model_sku,
+            model_capacity=arguments.model_capacity,
+            postgres_sku=arguments.postgres_sku,
+            postgres_tier=arguments.postgres_tier,
+        ),
+        arguments.identity_mode,
     )
 
 
 def main() -> int:
-    config = parse_arguments()
+    config, identity_mode = parse_arguments()
     try:
-        identity = verify_identity(config)
+        identity = verify_identity(config, identity_mode)
         roles = verify_permissions(config)
         providers = provider_metadata(config)
         regions = {

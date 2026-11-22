@@ -1,5 +1,7 @@
 [CmdletBinding()]
 param(
+    [ValidateSet('AzureCli', 'Azd')]
+    [string]$DeploymentMode = 'AzureCli',
     [switch]$FromAzdEnvironment,
     [string]$SubscriptionId = $env:AZURE_SUBSCRIPTION_ID,
     [string]$TenantId = $env:AZURE_TENANT_ID,
@@ -10,6 +12,9 @@ param(
 $ErrorActionPreference = 'Stop'
 
 if ($FromAzdEnvironment) {
+    if ($DeploymentMode -cne 'Azd') {
+        throw '-FromAzdEnvironment requires -DeploymentMode Azd.'
+    }
     $previousUserAgent = $env:AZURE_DEV_USER_AGENT
     try {
         $env:AZURE_DEV_USER_AGENT = 'microsoft_foundry_skill'
@@ -34,11 +39,13 @@ if (-not $SubscriptionId -or -not $TenantId -or -not $ExpectedUser -or -not $Loc
     throw 'AZURE_SUBSCRIPTION_ID, AZURE_TENANT_ID, AZURE_EXPECTED_USER, and AZURE_LOCATION are required.'
 }
 
+$identityMode = if ($DeploymentMode -ceq 'AzureCli') { 'azure-cli' } else { 'azd' }
 python "$PSScriptRoot\preflight.py" `
     --subscription-id $SubscriptionId `
     --tenant-id $TenantId `
     --expected-user $ExpectedUser `
-    --regions $Location
+    --regions $Location `
+    --identity-mode $identityMode
 
 if ($LASTEXITCODE -ne 0) {
     throw 'Azure preflight failed.'

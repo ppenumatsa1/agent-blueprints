@@ -1,6 +1,9 @@
 [CmdletBinding()]
 param(
     [switch]$Apply,
+    [ValidateSet('AzureCli', 'Azd')]
+    [string]$DeploymentMode = 'AzureCli',
+    [string]$ValuesFile,
     [Parameter(Mandatory)]
     [string]$ApiRevision,
     [Parameter(Mandatory)]
@@ -14,8 +17,8 @@ if (-not $Apply) {
     throw 'Rollback is disabled by default. Re-run with -Apply after reviewing the target revisions.'
 }
 
-& "$PSScriptRoot\preflight.ps1" -FromAzdEnvironment
-$values = Get-AzdEnvironmentValues
+$values = Get-DeploymentValues -DeploymentMode $DeploymentMode -ValuesFile $ValuesFile
+Invoke-DeploymentPreflight -DeploymentMode $DeploymentMode -Values $values
 $subscriptionId = Get-RequiredValue $values 'AZURE_SUBSCRIPTION_ID'
 $resourceGroup = Get-RequiredValue $values 'AZURE_RESOURCE_GROUP'
 $apiName = Get-RequiredValue $values 'AZURE_API_CONTAINER_APP_NAME'
@@ -51,5 +54,13 @@ function Restore-RevisionImage {
 Restore-RevisionImage -AppName $apiName -RevisionName $ApiRevision
 Restore-RevisionImage -AppName $webName -RevisionName $WebRevision
 
-python "$PSScriptRoot\health-check.py"
+$healthArguments = @(
+    "$PSScriptRoot\health-check.py",
+    '--deployment-mode',
+    $(if ($DeploymentMode -ceq 'AzureCli') { 'azure-cli' } else { 'azd' })
+)
+if ($DeploymentMode -ceq 'AzureCli') {
+    $healthArguments += @('--values-file', $ValuesFile)
+}
+python @healthArguments
 if ($LASTEXITCODE -ne 0) { throw 'Rollback health verification failed.' }

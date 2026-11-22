@@ -1,6 +1,12 @@
 [CmdletBinding()]
 param(
     [switch]$Apply,
+    [ValidateSet('AzureCli', 'Azd')]
+    [string]$DeploymentMode = 'AzureCli',
+    [string]$SubscriptionId = $env:AZURE_SUBSCRIPTION_ID,
+    [string]$TenantId = $env:AZURE_TENANT_ID,
+    [string]$ExpectedUser = $env:AZURE_EXPECTED_USER,
+    [string]$Location = $env:AZURE_LOCATION,
     [string]$ApiDisplayName = 'agent-blueprints-order-resolution-api',
     [string]$SpaDisplayName = 'agent-blueprints-order-resolution-spa',
     [string]$ApiAppIdUri,
@@ -132,13 +138,25 @@ function Assert-FrontendRedirectUri {
     return $parsed.GetLeftPart([System.UriPartial]::Authority)
 }
 
-& "$PSScriptRoot\preflight.ps1" -FromAzdEnvironment
-$values = Get-AzdEnvironmentValues
-$tenantId = Get-RequiredValue $values 'AZURE_TENANT_ID'
+if ($DeploymentMode -ceq 'Azd') {
+    & "$PSScriptRoot\preflight.ps1" `
+        -DeploymentMode Azd `
+        -FromAzdEnvironment | Out-Null
+    $values = Get-AzdEnvironmentValues
+    $SubscriptionId = Get-RequiredValue $values 'AZURE_SUBSCRIPTION_ID'
+    $TenantId = Get-RequiredValue $values 'AZURE_TENANT_ID'
+} else {
+    & "$PSScriptRoot\preflight.ps1" `
+        -DeploymentMode AzureCli `
+        -SubscriptionId $SubscriptionId `
+        -TenantId $TenantId `
+        -ExpectedUser $ExpectedUser `
+        -Location $Location | Out-Null
+}
 
 $activeTenant = az account show --query tenantId --output tsv --only-show-errors
-if ($LASTEXITCODE -ne 0 -or $activeTenant -cne $tenantId) {
-    throw 'Azure CLI tenant does not match the selected azd environment.'
+if ($LASTEXITCODE -ne 0 -or $activeTenant -cne $TenantId) {
+    throw 'Azure CLI tenant does not match the selected deployment context.'
 }
 
 $apiApplication = Ensure-Application -DisplayName $ApiDisplayName
@@ -258,9 +276,11 @@ if ($Apply) {
         )
     }
 
-    Set-AzdEnvironmentValue -Name 'AZURE_API_ENTRA_CLIENT_ID' -Value $apiApplication.appId
-    Set-AzdEnvironmentValue -Name 'AZURE_API_ENTRA_APP_ID_URI' -Value $resolvedApiAppIdUri
-    Set-AzdEnvironmentValue -Name 'AZURE_SPA_ENTRA_CLIENT_ID' -Value $spaApplication.appId
+    if ($DeploymentMode -ceq 'Azd') {
+        Set-AzdEnvironmentValue -Name 'AZURE_API_ENTRA_CLIENT_ID' -Value $apiApplication.appId
+        Set-AzdEnvironmentValue -Name 'AZURE_API_ENTRA_APP_ID_URI' -Value $resolvedApiAppIdUri
+        Set-AzdEnvironmentValue -Name 'AZURE_SPA_ENTRA_CLIENT_ID' -Value $spaApplication.appId
+    }
 }
 
 $apiApplication = Get-ExactApplication -DisplayName $ApiDisplayName
@@ -306,7 +326,7 @@ if (-not $valid) {
 [ordered]@{
     status = 'passed'
     mutationPerformed = [bool]$Apply
-    tenantId = $tenantId
+    tenantId = $TenantId
     apiClientId = $apiApplication.appId
     apiAppIdUri = $resolvedApiAppIdUri
     spaClientId = $spaApplication.appId

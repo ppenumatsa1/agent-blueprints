@@ -33,8 +33,9 @@ mutating Azure:
   `Microsoft.ManagedIdentity`, `Microsoft.OperationalInsights`, and
   `Microsoft.Resources`.
 - Azure Developer CLI was authenticated as a different account in a different
-  tenant. This is a hard deployment gate. `preflight.py` compares the Azure CLI
-  account and tenant with both the azd status account and azd token claims.
+  tenant. Azure CLI mode reports this mismatch without blocking; explicitly
+  selected azd mode still compares the status account and token claims and
+  fails closed.
 - All preferred regions advertised AI Services accounts, Container Apps
   environments/apps, PostgreSQL Flexible Server, Log Analytics, and
   Application Insights.
@@ -131,7 +132,7 @@ individual resources in another region.
 
 | Resource | Purpose | Important controls |
 | --- | --- | --- |
-| Resource group | Workload ownership and teardown boundary | Deterministic name; `azd-env-name`, workload, owner, and environment tags |
+| Resource group | Workload ownership and teardown boundary | Deterministic name; environment, workload, and ownership tags |
 | Foundry AI Services account | Project and model parent | System identity; local auth disabled; public authenticated endpoint |
 | Foundry project | Hosted-agent control plane | System identity; Application Insights connection; optional non-shared runtime secret connection |
 | Model deployment | Agent inference | Explicit model/version/SKU/capacity; no automatic version upgrade |
@@ -152,46 +153,49 @@ projects/connections, Container Apps auth, Key Vault, and PostgreSQL use
 direct resource definitions where the required contract is more precise or a
 suitable stable AVM was not verified.
 
-Hosted Agent code deployment remains the responsibility of the runtime
-workstream. This infrastructure does not create an ACR dependency for the
-hosted agent. ACR is retained only because azd remote builds and Container
-Apps require image storage for the API and frontend.
+The deployment orchestrator invokes Agent A's generated-source publisher after
+the Foundry project exists. Hosted source remains code-deployed and has no ACR
+dependency. ACR stores only the generated API and frontend images.
 
 ## Identity and least-privilege role matrix
 
 | Principal | Scope | Role or database privilege | Reason |
 | --- | --- | --- | --- |
 | Foundry project system identity | Foundry account | Cognitive Services OpenAI User | Invoke the selected model deployment |
-| API user-assigned identity | Foundry project initially | Foundry Agent Consumer | Initial fallback until Agent A can replace it with the same role at immutable agent scope |
+| API user-assigned identity | Exact supplied hosted-agent resource | Foundry Agent Consumer | Invoke only the published hosted workflow |
 | API user-assigned identity | Application Insights | Monitoring Metrics Publisher | Send Entra-authenticated telemetry |
 | API user-assigned identity | Key Vault | Key Vault Secrets User | Resolve only configured secret references |
 | API user-assigned identity | ACR | AcrPull | Pull the API image |
 | Frontend user-assigned identity | ACR | AcrPull | Pull the frontend image |
 | API PostgreSQL principal | Application database | Connect, schema usage, table DML, and sequence use | Runtime business persistence without schema ownership |
 | Reviewed PostgreSQL administrator | PostgreSQL server | Entra administrator | Create the runtime principal and execute reviewed migrations |
-| Hosted-agent version principal | Only scopes required by its runtime | Deferred until Agent A supplies an immutable version principal ID | Avoid assigning rights to an unknown or mutable principal |
+| Hosted-agent version principal | Application database | Object-ID-bound PostgreSQL role with connect, schema usage, table DML, and sequence use | Persist hosted workflow business operations without sharing the API UAMI |
+| Hosted-agent version principal | Foundry model/session plane | Platform-provided model/session access | No unrelated external-resource role is added |
 | End users | No Azure workload scope | Delegated API scopes plus `Workflow.User`/`Workflow.Approver` application roles | API validates tenant, audience, scopes/roles, and record-level authorization |
 | Deployment principal | New resource group/resources | Contributor plus Role Based Access Control Administrator or User Access Administrator; Owner is accepted for the authorized test subscription | Create resources and reviewed role assignments without runtime data-plane use |
 
 The PostgreSQL role is created separately because Azure RBAC does not create
 database principals. Migration ownership and runtime DML remain distinct.
-The API project-scoped Foundry assignment is temporary bootstrap scope. Agent A
-owns replacing it with agent scope and removing the project assignment once
-the immutable hosted agent resource ID exists.
+No project-scoped API fallback is created. Deployment requires an exact,
+documented hosted-agent RBAC scope and applies the API assignment only after the publisher
+returns one acknowledged version whose provisioning status is `active` and
+whose dedicated identity identifiers are populated.
 
 ## Configuration and secret handling
 
-- Subscription, tenant, user, API registration, and PostgreSQL administrator
-  values are azd environment inputs, not committed defaults.
+- Subscription, tenant, user, hosted endpoint/agent scope, API registration,
+  PostgreSQL administrator, publish journal, and output path are explicit
+  deployment inputs, not committed defaults.
 - `configure-entra.ps1` creates or reuses the uniquely named single-tenant API
   and SPA registrations, exposes `workflow.read`, `workflow.write`, and
   `workflow.approve`, and defines `Workflow.User` and `Workflow.Approver`.
   It outputs identifiers only, never credentials.
 - PostgreSQL password authentication is disabled. Deployment tooling obtains a
   short-lived Entra token and restores affected process environment variables.
-- The API receives the Foundry project endpoint, model deployment name,
-  identity client ID, PostgreSQL host, and database name as non-secret
-  settings.
+- The API receives hosted mode, the explicit HTTPS adapter endpoint and scope,
+  identity client ID, PostgreSQL managed-identity/TLS settings, Entra, and
+  telemetry configuration. It never receives `BLUEPRINT_APPLICATION`,
+  `CHECKPOINT_ROOT`, or `WORKFLOW_HOST=local`.
 - Optional secrets are Key Vault references resolved with the API managed
   identity. No `listKeys`, passwords, or connection strings are exported from
   the root template.
@@ -206,20 +210,20 @@ the immutable hosted agent resource ID exists.
 | Command | Behavior |
 | --- | --- |
 | `pwsh ./scripts/azure/validate.ps1` | Builds and lints Bicep, then runs non-deploying infrastructure contract tests |
-| `pwsh ./scripts/azure/preflight.ps1 -FromAzdEnvironment` | Performs identity, provider, permission, exact deployment region, model, quota, Container Apps, and PostgreSQL checks; fails on az/azd account or tenant mismatch |
-| `pwsh ./scripts/azure/configure-entra.ps1` | Read-only validation of the deterministic API/SPA registration contract |
-| `pwsh ./scripts/azure/configure-entra.ps1 -Apply` | Idempotently creates/reuses the two single-tenant registrations and records identifiers; no secret/user creation |
-| `pwsh ./scripts/azure/what-if.ps1 -Location eastus2 -ParameterFile <file>` | Runs subscription-scope what-if with `ProviderNoRbac`; it does not apply the plan |
-| `pwsh ./scripts/azure/deploy.ps1 -Apply -OperatorIp <current-public-ipv4>` | Explicitly provisions, temporarily allowlists the operator, configures PostgreSQL, migrates, deploys API/frontend, removes the temporary operator rule, and verifies health |
-| `pwsh ./scripts/azure/configure-postgres.ps1 -Apply -OperatorIp <current-public-ipv4>` | Reconciles exact API Container App outbound IPv4 rules, temporarily allowlists the operator in a self-cleaning scope, and creates the API Entra principal |
-| `pwsh ./scripts/azure/migrate.ps1 -Apply -OperatorIp <current-public-ipv4>` | Temporarily allowlists the operator, runs application-owned migrations as the Entra administrator, applies runtime grants, then removes the rule |
-| `python ./scripts/azure/health-check.py` | Verifies one healthy latest Container Apps revision, public health/auth boundaries, Foundry project state, and model deployment state |
-| `pwsh ./scripts/azure/rollback.ps1 -Apply -ApiRevision <revision> -WebRevision <revision>` | Restores reviewed immutable image digests from named revisions and reruns health checks |
-| `pwsh ./scripts/azure/teardown.ps1 -Apply -ConfirmEnvironmentName <name>` | Destructive; verifies exact environment confirmation and the resource-group ownership tag before `azd down --purge` |
-| `pwsh ./scripts/azure/teardown-entra.ps1 -Apply ...` | Separately destructive; verifies exact display names and azd-bound client IDs before deleting only the two registrations |
+| `pwsh ./scripts/azure/preflight.ps1 -DeploymentMode AzureCli ...` | Validates the active Azure CLI context, permissions, providers, exact region, model, quota, Container Apps, and PostgreSQL; reports azd mismatch without blocking |
+| `pwsh ./scripts/azure/preflight.ps1 -DeploymentMode Azd -FromAzdEnvironment` | Optional azd validation; fails closed unless Azure CLI and azd account/tenant match |
+| `pwsh ./scripts/azure/configure-entra.ps1 -DeploymentMode AzureCli ...` | Read-only validation of deterministic API/SPA registrations |
+| `pwsh ./scripts/azure/what-if.ps1 ...` | Runs subscription-scope Azure CLI what-if with `ProviderNoRbac`; it does not apply |
+| `pwsh ./scripts/azure/deploy.ps1 -Apply -DeploymentMode AzureCli ...` | Generates an independent ORS app, runs preflight/what-if/Bicep, configures Entra/PostgreSQL, runs both generated migrations, publishes hosted source, applies agent-scoped RBAC, builds immutable generated images, deploys, and verifies |
+| `pwsh ./scripts/azure/configure-postgres.ps1 -Apply -DeploymentMode AzureCli -ValuesFile <file> ...` | Reconciles exact API outbound IPv4 rules and creates the API Entra database principal |
+| `pwsh ./scripts/azure/migrate.ps1 -Apply -GeneratedProjectRoot <temp-generated-root> ...` | Runs both generated migration modules and applies runtime grants inside a temporary operator-IP scope |
+| `python ./scripts/azure/health-check.py --deployment-mode azure-cli --values-file <file>` | Verifies immutable healthy revisions, hosted-only API settings, public health/auth boundaries, Foundry project, and model deployment |
+| `pwsh ./scripts/azure/rollback.ps1 -Apply -DeploymentMode AzureCli -ValuesFile <file> ...` | Restores reviewed immutable image digests and reruns health checks |
+| `pwsh ./scripts/azure/teardown.ps1 -Apply -DeploymentMode AzureCli -ValuesFile <file> ...` | Destructive; verifies exact environment confirmation and ownership tag before scoped resource-group deletion |
+| `pwsh ./scripts/azure/teardown-entra.ps1 -Apply ...` | Separately destructive; deletes only the exactly confirmed registrations |
 
-Deployment, configuration, migration, rollback, and teardown all invoke the
-same identity preflight. Teardown never runs automatically.
+Deployment, configuration, migration, rollback, and teardown invoke the same
+selected identity mode. Teardown never runs automatically.
 
 ## Indicative cost drivers
 
@@ -256,38 +260,42 @@ does not manufacture a fixed workload estimate.
 
 Before any live operation:
 
-1. Reauthenticate azd as the same authorized Azure CLI account and tenant.
-2. Select an azd environment and provide all values referenced by
-   `infra/main.parameters.json`, including an existing API Entra application
-   contract and a reviewed PostgreSQL Entra administrator. The Entra setup
-   script can create/reuse the authorized deterministic app registrations.
-3. Rerun the complete preflight. East US 2 remains selected only if every
+1. Verify the active Azure CLI subscription, tenant, and user; do not call
+   `az account set` inside automation.
+2. Provide the reviewed PostgreSQL administrator, hosted adapter HTTPS
+   endpoint, hosted agent name/resource ID, stable publish operation ID,
+   durable publish journal, environment name, operator IPv4, and output path.
+3. Ensure the integrated generator copies Agent A's hosted source/publisher and
+   Agent C's managed-identity/hosted adapters into a new independent Order
+   Resolution project. Missing generated paths fail before Azure mutation.
+4. Rerun the complete preflight. East US 2 remains selected only if every
    model/dependency check passes at deployment time, including `agentsV2`,
    Responses API, lifecycle, version, quota, and platform capacity.
-4. Review the subscription-scope what-if, including resource names, tags,
+5. Review the subscription-scope what-if, including resource names, tags,
    roles, model capacity, public ingress, firewall inputs, and estimated cost.
-5. Ensure `psql`, `uv`, Azure CLI, azd, Bicep, Docker/remote build support, and
-   application migration dependencies are available.
-6. Agent A must add the `azure.ai.agent` service only after the hosted source
-   folder, entry point, immutable version behavior, and post-deploy principal
-   are known.
-7. Agent C must implement renewable managed-identity PostgreSQL token
-   acquisition, replace the current Compose-only frontend proxy target, and
-   confirm API/frontend environment-variable and Entra audience/issuer
-   behavior. The current base cannot set
-   `AZURE_APPLICATION_RUNTIME_READY=true`.
-8. Agent D must define the exact hosted revision, trace, evaluation, and
+6. Ensure `psql`, `uv`, Azure CLI/Bicep, ACR remote-build support, and generated
+   application migration dependencies are available. azd is optional and is
+   not used by the supported application deployment route.
+7. Agent D must define the exact hosted revision, trace, evaluation, and
    browser evidence to retain after deployment.
 
 ## Integration outputs
 
-The root Bicep template publishes typed azd outputs rather than a shared
-runtime dependency:
+The root Bicep template publishes typed deployment outputs rather than a shared
+runtime dependency. `deploy.ps1` adds the active acknowledged hosted agent
+version, data-plane version ID, agent GUID, dedicated principal/client IDs,
+provisioning status, documented RBAC scope, immutable image
+references, and exact API/web revisions to
+the selected output JSON file.
+
+The public SDK does not expose a documented hosted-agent ARM resource ID, so
+the deployment never invents one. The reviewed RBAC scope is a separate
+operator input; the returned version ID remains a data-plane identifier.
 
 | Consumer | Outputs |
 | --- | --- |
 | Agent A - Foundry hosted runtime | `AZURE_AI_ACCOUNT_NAME`, `AZURE_AI_PROJECT_NAME`, `AZURE_AI_PROJECT_ID`, `AZURE_AI_PROJECT_ENDPOINT`, `AZURE_AI_MODEL_DEPLOYMENT_NAME`, `FOUNDRY_RUNTIME_CONNECTION_NAME`, `APPLICATIONINSIGHTS_RESOURCE_ID` |
-| Agent C - API/frontend and persistence | `AZURE_API_IDENTITY_CLIENT_ID`, `AZURE_API_IDENTITY_NAME`, `AZURE_WEB_IDENTITY_CLIENT_ID`, `AZURE_POSTGRESQL_HOST`, `AZURE_POSTGRESQL_DATABASE`, `AZURE_POSTGRES_SERVER_NAME`, `AZURE_CONTAINER_REGISTRY_NAME`, `AZURE_CONTAINER_REGISTRY_ENDPOINT`, `AZURE_CONTAINER_APPS_ENVIRONMENT_NAME`, `AZURE_API_CONTAINER_APP_NAME`, `AZURE_API_FQDN`, `AZURE_WEB_CONTAINER_APP_NAME`, `AZURE_WEB_FQDN`, `AZURE_KEY_VAULT_NAME` |
+| Agent C - API/frontend and persistence | `AZURE_API_IDENTITY_CLIENT_ID`, `AZURE_API_IDENTITY_PRINCIPAL_ID`, `AZURE_API_IDENTITY_NAME`, web identity IDs, PostgreSQL host/database/server, ACR, Container Apps environment/app names/FQDNs, Key Vault, hosted endpoint, immutable images, and revisions |
 | Agent D - verification and operations | `AZURE_RESOURCE_GROUP`, `AZURE_LOCATION`, `APPLICATIONINSIGHTS_RESOURCE_ID`, `LOG_ANALYTICS_WORKSPACE_ID`, API/web names and FQDNs, Foundry project endpoint, and model deployment name |
 
 Application, workflow checkpoint, conversation/session, business state, and
@@ -298,33 +306,38 @@ person, prove a deployment, or establish production readiness.
 
 Local non-deploying evidence:
 
-- `pwsh ./scripts/azure/validate.ps1`: Bicep build and lint succeeded; 8
+- `pwsh ./scripts/azure/validate.ps1`: Bicep build and lint succeeded; 11
   infrastructure contract tests passed.
 - PowerShell parser validation passed for every `scripts/azure/*.ps1` file.
 - `python -m compileall -q ./scripts/azure ./infra/tests` passed.
 - `python -m unittest discover -s tests -v`: 68 tests passed with 2 expected
   adapter-not-selected skips.
-- The preflight was executed against the current identities and rejected the
-  az/azd account-or-tenant mismatch as designed.
-- Azure validation did not advance to provider what-if because azd identity is
-  mismatched and required deployment parameters are intentionally unset.
+- Identity contracts prove Azure CLI mode accepts the correct Azure CLI context
+  while reporting mismatched azd, wrong Azure CLI context fails before azd
+  inspection, and explicit azd mode blocks mismatch.
+- A deployment negative check instantiated the current unintegrated ORS profile,
+  stopped before Azure preflight/mutation when `hosted-agent/main.py` was
+  absent, and removed its temporary directory without output artifacts.
+- Agent C's generated application interface was reviewed at draft PR #48 head
+  `b4c7ed825833c20fa6549aa5a8e206cfbe85a77d`; Agent A froze the required
+  publisher identity fields, but its final composed revision is not yet pushed.
+- Azure validation did not advance to provider what-if because deployment
+  inputs are intentionally unset.
 
 Not verified by this workstream: resource provisioning, Azure RBAC writes,
 Container Apps image deployment, Hosted Agent creation/invocation, PostgreSQL
 connectivity/migration/restore, telemetry ingestion, browser execution,
 evaluation quality, rollback in Azure, teardown, or production readiness.
 
-The prepared Container Apps settings satisfy the existing configuration names
-(`ENTRA_*`, `CHECKPOINT_ROOT`, `BLUEPRINT_APPLICATION`, telemetry, and a
-passwordless PostgreSQL target URL), but the current application still opens
-PostgreSQL directly with a static DSN, supports only its local workflow host,
-and ships an nginx proxy for the Compose-only `api:8000` name. Deployment is
-therefore intentionally blocked before mutation until Agents A/C replace
-those integration points and set the readiness value.
+The deployment route never targets the source blueprint. It instantiates an
+independent Order Resolution project, validates the generated hosted/app
+interfaces, patches only the temporary generated nginx upstream to the exact
+API HTTPS FQDN, and builds those generated contexts. Cloud configuration is
+hosted-only and omits local file checkpoint and synthetic application settings.
 
 ## Cleanup ownership
 
-The azd environment owner is responsible for cost monitoring and cleanup.
+The deployment-output owner is responsible for cost monitoring and cleanup.
 Workstream B owns the tagged resource-group teardown path for resources in this
 topology only. Agent A owns deletion of hosted agent versions and any
 post-deployment principal assignments it adds. Agent C owns application

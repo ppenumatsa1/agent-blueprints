@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import shlex
@@ -54,10 +55,21 @@ def azd_values() -> dict[str, str]:
     return values
 
 
+def load_values(deployment_mode: str, values_file: str | None) -> dict[str, str]:
+    if deployment_mode == "azd":
+        return azd_values()
+    if not values_file:
+        raise VerificationError("--values-file is required in azure-cli mode.")
+    payload = json.loads(open(values_file, encoding="utf-8").read())
+    if not isinstance(payload, dict):
+        raise VerificationError("The deployment values file must contain one object.")
+    return {str(name): str(value) for name, value in payload.items()}
+
+
 def required(values: dict[str, str], name: str) -> str:
     value = values.get(name, "")
     if not value:
-        raise VerificationError(f"Missing azd environment value: {name}")
+        raise VerificationError(f"Missing deployment value: {name}")
     return value
 
 
@@ -114,7 +126,43 @@ def verify_container_app(subscription: str, resource_group: str, name: str) -> d
             .get("image", "")
         )
     )
+    if "@sha256:" not in image:
+        raise VerificationError(f"{name} is not running an immutable image digest.")
     return {"name": name, "revision": revision_name, "image": image, "fqdn": fqdn}
+
+
+def verify_api_runtime(subscription: str, resource_group: str, name: str) -> None:
+    app = command_json(
+        "containerapp",
+        "show",
+        "--subscription",
+        subscription,
+        "--resource-group",
+        resource_group,
+        "--name",
+        name,
+    )
+    containers = ((app.get("properties") or {}).get("template") or {}).get(
+        "containers", []
+    )
+    environment = {
+        item.get("name"): item.get("value", item.get("secretRef"))
+        for item in (containers[0].get("env", []) if containers else [])
+    }
+    if environment.get("WORKFLOW_HOST") != "hosted":
+        raise VerificationError("API WORKFLOW_HOST is not hosted.")
+    for forbidden in ("CHECKPOINT_ROOT", "BLUEPRINT_APPLICATION"):
+        if forbidden in environment:
+            raise VerificationError(f"API must not configure {forbidden} in Azure.")
+    for required_name in ("HOSTED_WORKFLOW_ENDPOINT", "HOSTED_WORKFLOW_SCOPE"):
+        if not environment.get(required_name):
+            raise VerificationError(f"API is missing {required_name}.")
+    if environment.get("HOSTED_WORKFLOW_SCOPE") != "https://ai.azure.com/.default":
+        raise VerificationError("API hosted workflow scope is not the reviewed scope.")
+    if environment.get("DATABASE_AUTH_MODE") != "managed-identity":
+        raise VerificationError("API database authentication is not managed identity.")
+    if environment.get("DATABASE_TLS_MODE") != "verify-full":
+        raise VerificationError("API database TLS verification is not enabled.")
 
 
 def request_status(url: str, expected: set[int]) -> int:
@@ -129,8 +177,14 @@ def request_status(url: str, expected: set[int]) -> int:
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--deployment-mode", choices=("azure-cli", "azd"), default="azure-cli"
+    )
+    parser.add_argument("--values-file")
+    arguments = parser.parse_args()
     try:
-        values = azd_values()
+        values = load_values(arguments.deployment_mode, arguments.values_file)
         subscription = required(values, "AZURE_SUBSCRIPTION_ID")
         resource_group = required(values, "AZURE_RESOURCE_GROUP")
         api_name = required(values, "AZURE_API_CONTAINER_APP_NAME")
@@ -138,9 +192,24 @@ def main() -> int:
         account_name = required(values, "AZURE_AI_ACCOUNT_NAME")
         project_name = required(values, "AZURE_AI_PROJECT_NAME")
         model_name = required(values, "AZURE_AI_MODEL_DEPLOYMENT_NAME")
+        for hosted_name in (
+            "AZURE_HOSTED_AGENT_VERSION",
+            "AZURE_HOSTED_AGENT_VERSION_ID",
+            "AZURE_HOSTED_AGENT_GUID",
+            "AZURE_HOSTED_AGENT_PRINCIPAL_ID",
+            "AZURE_HOSTED_AGENT_CLIENT_ID",
+            "AZURE_HOSTED_AGENT_PROVISIONING_STATUS",
+            "AZURE_HOSTED_AGENT_RESPONSES_ENDPOINT",
+            "AZURE_HOSTED_AGENT_CONVERSATION_ENDPOINT",
+            "AZURE_HOSTED_AGENT_ADAPTER_ENDPOINT",
+        ):
+            required(values, hosted_name)
+        if values["AZURE_HOSTED_AGENT_PROVISIONING_STATUS"] != "active":
+            raise VerificationError("Hosted Agent version is not active.")
 
         api = verify_container_app(subscription, resource_group, api_name)
         web = verify_container_app(subscription, resource_group, web_name)
+        verify_api_runtime(subscription, resource_group, api_name)
         request_status(f"https://{api['fqdn']}/healthz", {200, 204})
         request_status(f"https://{api['fqdn']}/api/cases", {401, 403})
         request_status(f"https://{web['fqdn']}/", {200})
