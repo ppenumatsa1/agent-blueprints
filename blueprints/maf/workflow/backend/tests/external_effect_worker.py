@@ -18,8 +18,8 @@ def main():
             time.sleep(1)
 
     class PausingDestination(DurableDestination):
-        def send(self, request):
-            super().send(request)
+        def send(self, request, *, timeout_seconds):
+            super().send(request, timeout_seconds=timeout_seconds)
             if barrier == "after-effect":
                 wait()
 

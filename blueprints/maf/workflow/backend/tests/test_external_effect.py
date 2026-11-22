@@ -20,7 +20,12 @@ from app.infrastructure.store import PostgresStore
 from app.usecases.service import WorkflowService
 from app.domain.policy import CaseAccessPolicy, JsonObjectRules
 from app.workflows.host import LocalWorkflowHost
-from examples.external_effect_boundary import EffectRequest, ExternalEffectAction, Observation
+from examples.external_effect_boundary import (
+    DOWNSTREAM_TIMEOUT_SECONDS,
+    EffectRequest,
+    ExternalEffectAction,
+    Observation,
+)
 from tests.test_core import OWNER, REVIEWER
 
 
@@ -65,6 +70,7 @@ class DurableDestination:
     def __init__(self, path):
         self.path = path
         self.fault = None
+        self.timeouts = []
         with closing(sqlite3.connect(path)) as db, db:
             db.execute(
                 "CREATE TABLE IF NOT EXISTS bindings "
@@ -75,10 +81,11 @@ class DurableDestination:
                 "(key TEXT PRIMARY KEY REFERENCES bindings(key), value TEXT NOT NULL)"
             )
 
-    def observe(self, request):
+    def observe(self, request, *, timeout_seconds):
+        self.timeouts.append(timeout_seconds)
         if self.fault == "unknown":
             return Observation.UNKNOWN
-        with closing(sqlite3.connect(self.path)) as db, db:
+        with closing(sqlite3.connect(self.path, timeout=timeout_seconds)) as db, db:
             row = db.execute(
                 "SELECT b.digest, b.body, e.value FROM bindings b "
                 "LEFT JOIN effects e ON e.key = b.key WHERE b.key = ?",
@@ -94,13 +101,14 @@ class DurableDestination:
         expected = json.dumps(json.loads(row[1])["payload"], sort_keys=True)
         return Observation.APPLIED if row[2] == expected else Observation.UNKNOWN
 
-    def send(self, request):
+    def send(self, request, *, timeout_seconds):
+        self.timeouts.append(timeout_seconds)
         if self.fault == "before-effect":
             raise RuntimeError("Failure before effect.")
         if hashlib.sha256(request.body).hexdigest() != request.digest:
             raise RuntimeError("Request digest does not match the body.")
         effect = json.dumps(json.loads(request.body)["payload"], sort_keys=True)
-        with closing(sqlite3.connect(self.path)) as db, db:
+        with closing(sqlite3.connect(self.path, timeout=timeout_seconds)) as db, db:
             db.execute("PRAGMA foreign_keys = ON")
             db.execute(
                 "INSERT OR IGNORE INTO bindings VALUES (?, ?, ?)",
@@ -120,7 +128,7 @@ class DurableDestination:
             if stored_effect != effect:
                 raise RuntimeError("Conflicting effect.")
         if self.fault == "after-effect":
-            raise RuntimeError("Acknowledgment lost.")
+            raise TimeoutError("The effect may have applied before the acknowledgment timed out.")
 
     def count(self):
         with closing(sqlite3.connect(self.path)) as db, db:
@@ -179,6 +187,14 @@ class ExternalEffectTests(unittest.IsolatedAsyncioTestCase):
         self.authorizer.allowed = True
         await self.host.resume(case.id)
         self.assertEqual(self.destination.count(), 1)
+
+    async def test_downstream_calls_share_a_bounded_timeout_budget(self):
+        case = await self.submit()
+        await self.service.decide(REVIEWER, case.id, "approved")
+        self.assertEqual(len(self.destination.timeouts), 3)
+        self.assertTrue(
+            all(0 < timeout <= DOWNSTREAM_TIMEOUT_SECONDS for timeout in self.destination.timeouts)
+        )
 
     async def test_nonaffirmative_authorizer_result_fails_closed(self):
         case = await self.submit()
@@ -312,18 +328,42 @@ class ExternalEffectTests(unittest.IsolatedAsyncioTestCase):
         body = b'{"payload":{"value":42}}'
         request = EffectRequest("shared", hashlib.sha256(body).hexdigest(), body)
         with ThreadPoolExecutor(max_workers=8) as pool:
-            futures = [pool.submit(self.destination.send, request) for _ in range(8)]
+            futures = [
+                pool.submit(
+                    self.destination.send,
+                    request,
+                    timeout_seconds=DOWNSTREAM_TIMEOUT_SECONDS,
+                )
+                for _ in range(8)
+            ]
             for future in futures:
                 future.result()
         self.assertEqual(self.destination.count(), 1)
         with self.assertRaises(RuntimeError):
-            self.destination.send(EffectRequest("shared", "forged", body))
+            self.destination.send(
+                EffectRequest("shared", "forged", body),
+                timeout_seconds=DOWNSTREAM_TIMEOUT_SECONDS,
+            )
         changed = b'{"payload":{"value":43}}'
         with self.assertRaises(RuntimeError):
             self.destination.send(
-                EffectRequest("shared", hashlib.sha256(changed).hexdigest(), changed)
+                EffectRequest("shared", hashlib.sha256(changed).hexdigest(), changed),
+                timeout_seconds=DOWNSTREAM_TIMEOUT_SECONDS,
             )
         self.assertEqual(self.destination.count(), 1)
+
+    async def test_sqlite_destination_honors_bounded_lock_wait(self):
+        body = b'{"payload":{"value":42}}'
+        request = EffectRequest("locked", hashlib.sha256(body).hexdigest(), body)
+        timeout_seconds = 0.05
+        with closing(sqlite3.connect(self.destination.path)) as blocker:
+            blocker.execute("BEGIN EXCLUSIVE")
+            started = time.monotonic()
+            with self.assertRaises(sqlite3.OperationalError):
+                self.destination.send(request, timeout_seconds=timeout_seconds)
+            self.assertLess(time.monotonic() - started, 1.0)
+            blocker.rollback()
+        self.assertEqual(self.destination.count(), 0)
 
     async def test_concurrent_retries_and_conflicting_decisions(self):
         case = await self.submit()

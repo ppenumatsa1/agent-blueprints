@@ -25,8 +25,10 @@ key-bound request and a representative effect. Its authorizer applies a
 fixed synthetic policy to the exact request, not a real human authorization.
 The tests exercise authorization,
 rejection, concurrent sends and retries, conflicting bindings, ambiguous
-reconciliation, failures before and after the effect and acknowledgment, and
-worker termination before the local ledger commits. Conflicting database
+reconciliation, bounded SQLite lock waits, failures before the effect and a
+timeout after the effect but before acknowledgment, and worker termination
+before the local ledger commits. A timeout does not imply absence; retries
+require request-bound downstream reconciliation. Conflicting database
 decisions race in synchronized threads; each crash barrier verifies the exact
 downstream effect before and after recovery. They do not prove any
 real service's durability, retention, authorization, or reconciliation

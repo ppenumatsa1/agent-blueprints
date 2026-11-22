@@ -41,10 +41,16 @@ checkpoint is a human approval.
    [external-effect pattern](../backend/examples/external_effect_boundary.py)
    checks application-supplied authorization for the approved case and exact
    request before reconciliation or sending, and uses
-   a stable case key and digest of the case, tenant, owner, reviewer,
+   the key `case:{case.id}:action` for the current single immutable action
+   per case, plus a digest of the case, tenant, owner, reviewer,
    operation, destination identity and payload. The application must pin the
    actual destination, operation and encoding across the full recovery horizon;
    an identifier cannot prevent a trusted adapter from switching services.
+   This narrow key does not represent proposal versions. A future Order
+   Resolution implementation must derive its server-side action identity from
+   the case, proposal version, action and intended destination, as specified
+   by [the merged #40 proposal](https://github.com/ppenumatsa1/agent-blueprints/blob/main/docs/order-resolution-specification-proposal.md);
+   this blueprint does not add proposal-version machinery.
    A trusted destination must atomically bind the key and digest to
    the effect, reject conflicting reuse, retain that binding for the entire
    retry/recovery horizon, and provide authoritative request-bound
@@ -56,8 +62,19 @@ checkpoint is a human approval.
 
    This pattern runs inside the existing action transaction and holds the
    case row lock during remote calls; it is not an outbox or a worker queue.
+   It gives all downstream `observe`/`send` calls one shared five-second
+   monotonic deadline and passes each adapter the remaining budget. The
+   synthetic SQLite adapter applies that budget to lock waits. A real adapter
+   must enforce a bounded transport/request timeout within the supplied budget;
+   this synchronous pattern cannot preempt arbitrary Python that ignores it.
+   Keep the budget within the database lock/transaction operational limits.
+   A timeout is an unknown outcome, never proof the effect was not applied:
+   the PostgreSQL transaction rolls back, and recovery must reauthorize and
+   reconcile the same key and digest. Only authoritative `APPLIED` permits
+   ledger completion; proven `ABSENT` may send, while `UNKNOWN` remains
+   blocked for operator resolution. Never blindly retry after timeout.
    The application must validate identity, approval, effect-specific authority,
-   immutable intent, destination guarantees, retention, timeouts and safe
+   immutable intent, destination guarantees, retention and safe
    operational recovery. Its authorizer and destination adapters are trusted
    code, not a sandbox: arbitrary Python can bypass this pattern or falsely
    report a guarantee. A changed or revoked authorization blocks even

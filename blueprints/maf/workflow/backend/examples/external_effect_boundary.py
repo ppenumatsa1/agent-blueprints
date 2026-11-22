@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import time
 from dataclasses import dataclass
 from enum import Enum
 from typing import Protocol
@@ -9,6 +10,9 @@ from typing import Protocol
 from psycopg import Connection
 
 from app.domain.models import Case
+
+
+DOWNSTREAM_TIMEOUT_SECONDS = 5.0
 
 
 class Observation(Enum):
@@ -32,12 +36,12 @@ class Authorizer(Protocol):
 
 
 class IdempotentDestination(Protocol):
-    def observe(self, request: EffectRequest) -> Observation:
-        """Return authoritative, request-bound status; UNKNOWN is not ABSENT."""
+    def observe(self, request: EffectRequest, *, timeout_seconds: float) -> Observation:
+        """Honor the remaining call budget; UNKNOWN is not ABSENT."""
         ...
 
-    def send(self, request: EffectRequest) -> None:
-        """Atomically bind key to digest and effect; reject conflicting reuse."""
+    def send(self, request: EffectRequest, *, timeout_seconds: float) -> None:
+        """Honor the budget and atomically bind key, digest and effect."""
         ...
 
 
@@ -84,11 +88,26 @@ class ExternalEffectAction:
         )
         if self.authorizer.authorize(connection, case, request) is not True:
             raise RuntimeError("External effect is not authorized.")
-        observation = self.destination.observe(request)
+        deadline = time.monotonic() + DOWNSTREAM_TIMEOUT_SECONDS
+
+        def remaining_timeout() -> float:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError("External-effect deadline expired.")
+            return remaining
+
+        observation = self.destination.observe(request, timeout_seconds=remaining_timeout())
+        if time.monotonic() >= deadline:
+            raise TimeoutError("External-effect deadline expired.")
         if observation is Observation.APPLIED:
             return
         if observation is not Observation.ABSENT:
             raise RuntimeError("External effect could not be safely reconciled.")
-        self.destination.send(request)
-        if self.destination.observe(request) is not Observation.APPLIED:
+        self.destination.send(request, timeout_seconds=remaining_timeout())
+        if time.monotonic() >= deadline:
+            raise TimeoutError("External-effect deadline expired.")
+        observation = self.destination.observe(request, timeout_seconds=remaining_timeout())
+        if time.monotonic() >= deadline:
+            raise TimeoutError("External-effect deadline expired.")
+        if observation is not Observation.APPLIED:
             raise RuntimeError("External effect acknowledgment could not be verified.")
