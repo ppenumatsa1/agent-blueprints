@@ -196,6 +196,21 @@ class ApplicationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(value["request_id"], self.store.case.request_id)
         self.assertIsNone(self.store.case.checkpoint_id)
         self.assertEqual(self.bindings.started[0]["caller"], self.caller)
+        self.assertNotEqual(self.caller.user_id, self.principal.subject)
+
+    def test_resume_accepts_platform_managed_session_for_bound_conversation(self):
+        started = self.application.authorize_start(
+            self.caller,
+            "conversation-1",
+            self.case_id,
+        )
+        response = self.application.authorize_resume(
+            self.caller,
+            "conversation-1",
+            started["request_id"],
+            self.decision(handle=started["request_id"], session_id=None),
+        )
+        self.assertTrue(response.approved)
 
     def test_missing_preestablished_api_binding_rejects_start_and_resume(self):
         application = GeneratedOrderResolutionApplication(

@@ -36,7 +36,11 @@ def _approval_request_id(
 
 @dataclass(frozen=True)
 class CallerContext:
-    """Trusted request identity supplied by AgentServer protocol 2.0.0."""
+    """Opaque platform identity supplied by AgentServer protocol 2.0.0.
+
+    The user ID identifies the authenticated API workload, not the human actor.
+    Human authority is resolved from the pre-established conversation binding.
+    """
 
     user_id: str
     session_id: str
@@ -53,7 +57,7 @@ class CallerContext:
 
 
 class HostedIdentityBindings(Protocol):
-    """Application-owned bridge from opaque Foundry identity to API authority."""
+    """Resolve human authority from an application-prebound conversation."""
 
     def resolve_start_principal(
         self,
@@ -319,7 +323,9 @@ class GeneratedOrderResolutionApplication:
             )
         if response.channel != FOUNDRY_RESPONSES_CHANNEL:
             raise PermissionError("Cross-channel workflow resume is not authorized.")
-        if response.conversation_id != conversation_id or response.session_id != caller.session_id:
+        if response.conversation_id != conversation_id or (
+            response.session_id is not None and response.session_id != caller.session_id
+        ):
             raise PermissionError("The workflow resume binding does not match this conversation.")
 
         principal = _require_application_principal(

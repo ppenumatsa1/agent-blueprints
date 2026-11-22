@@ -42,7 +42,7 @@ class ClientTests(unittest.TestCase):
     def setUp(self):
         self.journal = MemoryOperationJournal()
         self.credential = FakeCredential()
-        self.binding = ConversationBinding("caller", "conversation", "session")
+        self.binding = ConversationBinding("conversation")
 
     def client(self, post):
         return ResponsesClient(
@@ -78,7 +78,10 @@ class ClientTests(unittest.TestCase):
             requests[0][1]["headers"]["Authorization"],
             "Bearer managed-identity-token",
         )
-        self.assertTrue(requests[0][1]["json"]["background"])
+        payload = requests[0][1]["json"]
+        self.assertTrue(payload["background"])
+        self.assertNotIn("agent_session_id", payload)
+        self.assertEqual(payload["metadata"], {"operation_id": "start-1"})
 
     def test_conversation_create_returns_bound_identity(self):
         requests = []
@@ -89,14 +92,16 @@ class ClientTests(unittest.TestCase):
 
         binding = self.client(post).create_conversation(
             operation_id="conversation-1",
-            caller_id="caller",
-            session_id="session",
         )
         self.assertEqual(
             binding,
-            ConversationBinding("caller", "conversation-created", "session"),
+            ConversationBinding("conversation-created"),
         )
         self.assertIn("/conversations", requests[0][0][0])
+        self.assertEqual(
+            requests[0][1]["json"],
+            {"metadata": {"operation_id": "conversation-1"}},
+        )
 
     def test_rejects_insecure_conversation_endpoint(self):
         for endpoint in (
@@ -152,14 +157,10 @@ class ClientTests(unittest.TestCase):
         case_id = "c3dc94c3-7772-4249-bf63-95597591f49c"
         client = self.client(lambda *_args, **_kwargs: self.fail("POST must not run"))
         payload = {
-            "agent_session_id": self.binding.session_id,
             "background": True,
             "conversation": {"id": self.binding.conversation_id},
             "input": '{"case_id":"' + case_id + '"}',
-            "metadata": {
-                "operation_id": "start-pending",
-                "caller_id": self.binding.caller_id,
-            },
+            "metadata": {"operation_id": "start-pending"},
             "store": True,
         }
         claim = self.journal.claim(
@@ -267,7 +268,6 @@ class ClientTests(unittest.TestCase):
             "handle": "request-1",
             "channel": "api",
             "conversation_id": "conversation",
-            "session_id": "session",
         }
         with self.assertRaises(PermissionError):
             client.resume(
@@ -288,7 +288,6 @@ class ClientTests(unittest.TestCase):
             "handle": "request-1",
             "channel": "foundry-responses",
             "conversation_id": "conversation",
-            "session_id": "session",
             "decision": "approved",
         }
         self.client(post).resume(
@@ -300,6 +299,7 @@ class ClientTests(unittest.TestCase):
         output = requests[0][1]["json"]["input"][0]["output"]
         self.assertIsInstance(output, str)
         self.assertEqual(__import__("json").loads(output), decision)
+        self.assertNotIn("agent_session_id", requests[0][1]["json"])
 
 
 if __name__ == "__main__":

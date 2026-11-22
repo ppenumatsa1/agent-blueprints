@@ -213,7 +213,11 @@ class BusinessStoreTests(unittest.TestCase):
         self.assertTrue(all(url.startswith("https://api.example.test/") for url, _ in self.calls))
         payloads = [kwargs["json"] for _, kwargs in self.calls]
         self.assertTrue(all("caller" not in payload for payload in payloads))
-        self.assertTrue(all(payload["caller_id"] == "hosted-user" for payload in payloads))
+        self.assertTrue(all(payload["platform_user_id"] == "hosted-user" for payload in payloads))
+        self.assertTrue(
+            all(payload["platform_session_id"] == "hosted-session" for payload in payloads)
+        )
+        self.assertTrue(all(payload["platform_call_id"] == "hosted-call" for payload in payloads))
         read_payloads = [
             kwargs["json"]
             for url, kwargs in self.calls
@@ -253,11 +257,7 @@ class BusinessStoreTests(unittest.TestCase):
         def mismatch(*args, **kwargs):
             calls.append((args, kwargs))
             payload = kwargs["json"]
-            if (
-                payload["caller_id"] != self.caller.user_id
-                or payload["session_id"] != self.caller.session_id
-                or payload["conversation_id"] != "conversation"
-            ):
+            if payload["conversation_id"] != "conversation":
                 return Response(403, {"detail": "binding mismatch"})
             raise AssertionError("The test must use a mismatched binding.")
 

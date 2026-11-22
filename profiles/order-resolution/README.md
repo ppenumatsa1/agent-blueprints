@@ -44,20 +44,22 @@ The generated `hosted-agent` package is a separate Foundry Responses entry
 point. It hosts a fresh native MAF workflow per request, uses the public
 Foundry hosting checkpoint provider, and never attaches the API's local
 `FileCheckpointStorage`. `HttpHostedBusinessStore` calls the protected API with
-the hosted platform identity to verify a caller/conversation binding that an
-authenticated application command already established. The hosted identity and
-opaque Foundry caller fields cannot create owner/reviewer authority. Missing or
-mismatched owner/reviewer bindings fail before any business read or write. The
-narrow `HostedBusinessStore` lifecycle provides stable opaque hosted request
+the hosted platform identity to verify a conversation binding that an
+authenticated application command already established. The hosted platform
+user is the API workload, not the human actor, and opaque Foundry correlation
+cannot create owner/reviewer authority. Missing or mismatched owner/reviewer
+bindings fail before any business read or write. The narrow
+`HostedBusinessStore` lifecycle provides stable opaque hosted request
 correlation, hosted decision claim, idempotent action, and business completion.
 Normal hosted API composition loads
 `order_resolution_hosted.bridge:build_workflow_host`, passing settings, the
 application store, its authenticated-human authority binding adapter, and the
 durable operation journal. That bridge creates/reconciles the server-selected
 conversation, prebinds the authenticated owner or reviewer before Responses
-dispatch, and exposes only async `start(case_id, actor)` and
-`resume(case_id, actor, decision_command)`. There is no generic `/runs`
-fallback.
+dispatch, omits caller-supplied `agent_session_id` so Foundry owns the stable
+session associated with the conversation, and exposes only async
+`start(case_id, actor)` and `resume(case_id, actor, decision_command)`. There is
+no generic `/runs` fallback.
 The generator copies only the API bridge/client into
 `backend/order_resolution_hosted` with a non-eager initializer and adds that
 directory to the existing backend Docker context. The API does not import the

@@ -39,22 +39,24 @@ exactly `{"case_id":"<uuid>"}`. A resume uses a
 - framework approval handle;
 - fixed `foundry-responses` channel;
 - approved/rejected decision;
-- conversation and hosted session bindings.
+- server-selected conversation binding, with an optional platform session echo.
 
 The parser first calls the public `HostedResponseRequest.get_workflow_responses()`
 API so the SDK validates native pending-request authority. The application
-adapter then reauthorizes the resolved principal, rejects a different caller,
-session, conversation or channel, binds the native handle to the current
-proposal at pause creation, and records the application-owned decision before
-the workflow continues. Client/model-supplied identity is never treated as
-authority.
+adapter then reauthorizes the resolved principal, rejects a different
+conversation, channel, or conflicting optional session echo, binds the native
+handle to the current proposal at pause creation, and records the
+application-owned decision before the workflow continues. Client/model-supplied
+identity is never treated as authority.
 
-AgentServer's `scope.user_id` is an opaque platform-resolved identity. It is not
-assumed to equal an Entra object ID or the API subject. The hosted container
-uses `HttpHostedBusinessStore` for both `HostedIdentityBindings` and
-`HostedBusinessStore`. It calls only the authenticated internal API base in
-`ORDER_RESOLUTION_API_ENDPOINT`, with a `DefaultAzureCredential` token for
-`ORDER_RESOLUTION_API_SCOPE`.
+AgentServer's `scope.user_id` is an opaque platform-resolved identity for the
+authenticated API workload, not the human owner/reviewer and not an Entra
+object ID supplied by the application. `scope.session_id` is the authoritative
+platform session associated with the conversation; the API bridge never
+invents one. The hosted container uses `HttpHostedBusinessStore` for both
+`HostedIdentityBindings` and `HostedBusinessStore`. It calls only the
+authenticated internal API base in `ORDER_RESOLUTION_API_ENDPOINT`, with a
+`DefaultAzureCredential` token for `ORDER_RESOLUTION_API_SCOPE`.
 
 The frozen generated API base is `/api/internal/hosted/v1`. The deployment
 therefore sets `ORDER_RESOLUTION_API_ENDPOINT` to the API origin plus that
@@ -79,14 +81,18 @@ class HostedIdentityBindings(Protocol):
 
 The opaque Foundry caller fields and hosted managed-identity app role cannot
 establish end-user authority. Before native start or resume, an authenticated
-application command must pre-establish the exact case, principal, Foundry
-`user_id`, session, conversation and channel binding after server-selected
-conversation creation and before Responses dispatch. The hosted
+application command must pre-establish the exact case, human principal,
+server-selected conversation, and channel binding before Responses dispatch.
+The platform `user_id`, `session_id`, and `call_id` remain separate opaque
+workload correlation and cannot be compared to or substituted for the human
+principal. The hosted
 `/bindings/start` and `/bindings/resume` calls are verification-only gates: they
 return the already-bound owner or reviewer Principal and must return an
 authorization failure when the binding is absent or mismatched. They must never
-assign a case owner/reviewer from hosted correlation input. A different caller,
-session, conversation, channel, or unchecked client ID fails closed.
+assign a case owner/reviewer from hosted correlation input. A different
+conversation, channel, or unchecked client ID fails closed; the public hosting
+SDK separately rejects a request `agent_session_id` that conflicts with
+`FOUNDRY_AGENT_SESSION_ID`.
 
 The generated API loads the explicit factory module spec
 `order_resolution_hosted.bridge:build_workflow_host`. Its narrow composition
@@ -104,14 +110,16 @@ def build_workflow_host(
 `ResponsesWorkflowHost.start(case_id, actor)` creates or reconciles the
 server-selected conversation, persists the authenticated owner binding, then
 dispatches the native Responses start. `resume(case_id, actor,
-decision_command)` loads the existing conversation/session, persists the
-authenticated reviewer and exact decision intent, then sends one structured
-`function_call_output`. The authority adapter owns those direct PostgreSQL
-bindings; Agent A does not apply or record the business decision in this API
-bridge. Stable operation IDs are `case:{id}:conversation`, `case:{id}:start`,
-and `case:{id}:decision:{proposal_version}`. There is no generic `/runs`
-protocol or fallback host, and missing factory composition fails closed. The
-bridge acquires Foundry tokens only through
+decision_command)` loads the existing conversation, persists the authenticated
+reviewer and exact decision intent, then sends one structured
+`function_call_output`. Both Responses calls include the conversation and omit
+`agent_session_id`; Foundry supplies and validates the stable platform session.
+The authority adapter owns those direct PostgreSQL bindings; Agent A does not
+apply or record the business decision in this API bridge. Stable operation IDs
+are `case:{id}:conversation`, `case:{id}:start`, and
+`case:{id}:decision:{proposal_version}`. There is no generic `/runs` protocol
+or fallback host, and missing factory composition fails closed. The bridge
+acquires Foundry tokens only through
 `ManagedIdentityCredential(client_id=settings.api_managed_identity_client_id)`;
 it does not fall back to a developer or ambient credential.
 
@@ -147,15 +155,17 @@ filesystem checkpoint ID.
 The HTTP adapter uses the case-bound routes
 `POST /cases/{id}/bindings/start`, `/bindings/resume`, `/read`,
 `/proposal/read`, `/approvals/prepare`, `/decisions/claim`,
-`/effects/apply`, and `/finish`. Each request carries flat caller, session,
-conversation, channel, and principal-kind fields as applicable. The decision
-route receives the original native handle and resolves the authoritative actor
-API-side; the hosted process does not manufacture an actor identity. Every
-state-changing call carries a stable `Idempotency-Key`; lost or malformed
-acknowledgments become ambiguous and are not replayed automatically. Case
-responses omit checkpoint fields; the adapter constructs only local `None`
-placeholders required by the existing domain model and sends no checkpoint
-bytes.
+`/effects/apply`, and `/finish`. Each request carries the exact conversation,
+channel, and principal-kind fields as applicable. Separate
+`platform_user_id`, `platform_session_id`, and `platform_call_id` fields are
+opaque correlation only and must not select or create human authority. The
+decision route receives the original native handle and resolves the
+authoritative actor API-side; the hosted process does not manufacture an actor
+identity. Every state-changing call carries a stable `Idempotency-Key`; lost or
+malformed acknowledgments become ambiguous and are not replayed automatically.
+Case responses omit checkpoint fields; the adapter constructs only local
+`None` placeholders required by the existing domain model and sends no
+checkpoint bytes.
 
 Public hosted-agent egress has no isolation or stable source-IP guarantee.
 Therefore the hosted container receives no database URL, PostgreSQL
@@ -171,8 +181,11 @@ DSN, credential, network access, pool, or connection attempt.
 
 `order_resolution_hosted.client.ResponsesClient` uses
 `DefaultAzureCredential` with `https://ai.azure.com/.default`, sends
-`store=true`, binds an explicit conversation and `agent_session_id`, and emits
-structured `function_call_output` resumes.
+`store=true`, binds an explicit server-selected conversation, deliberately
+omits caller-supplied `agent_session_id`, and emits structured
+`function_call_output` resumes. The public SDK compatibility test verifies that
+hosted scope uses `FOUNDRY_AGENT_SESSION_ID` and rejects a conflicting request
+session.
 
 Every create has an application operation ID and canonical request digest.
 `OperationJournal.claim` must atomically return `OperationClaim(acquired=True)`
@@ -266,8 +279,9 @@ ID for the hosted version, so callers must not invent one.
 | Native MAF request-aware workflow hosting | Verified locally | `ResponsesHostServer(workflow=..., parse_response=...)` signature and mocked protocol tests |
 | Standard hosted checkpoint provider | Verified locally | Public `CheckpointStoreProvider(allowed_checkpoint_types=...)`; no custom provider or local file storage in hosted composition |
 | Responses protocol `2.0.0` manifest | Verified locally | Deterministic publisher contract and SDK model construction test |
-| Structured native approval resume | Verified locally | Generated package tests validate stable hosted request identity, decision recording, business completion without a local checkpoint ID, and exact caller/session/conversation/channel binding |
-| Authenticated API-to-Responses bridge | Interface and ordering verified locally; C composition pending | Explicit factory creates/reconciles the conversation, prebinds authenticated owner/reviewer authority before dispatch, and uses only `/conversations` plus `/responses`; no generic `/runs` fallback |
+| Structured native approval resume | Verified locally | Generated package tests validate platform-managed session scope, decision recording, business completion without a local checkpoint ID, and exact conversation/channel binding |
+| Authenticated API-to-Responses bridge | Interface and ordering verified locally; C composition pending | Explicit factory creates/reconciles the conversation, prebinds authenticated owner/reviewer authority before dispatch, omits caller-supplied `agent_session_id`, and uses only `/conversations` plus `/responses`; no generic `/runs` fallback |
+| Conversation-to-session routing | Official contract and public SDK guard verified locally | Microsoft Learn documents that a Responses conversation automatically reuses one stable `agent_session_id`; the pinned public `FoundryRequestScope` test rejects a conflicting request session |
 | Application-owned hosted business seam | Functional composition verified; authorization integration blocked | Agent A's adapter and Workstream C `60fd83fc05acc290aab3ed96f8f8c255e493d28d` passed the real-PostgreSQL lifecycle, but that C revision created owner/reviewer bindings from opaque hosted input and is rejected as authorization evidence |
 | Protected API business port | Wire/idempotency verified; binding correction required | Exact C revision `60fd83fc05acc290aab3ed96f8f8c255e493d28d` passed bind/read/prepare/decision/effect/finish over loopback HTTP, but integration must be rerun against verification-only binding endpoints backed by an authenticated application command |
 | Managed-identity token acquisition | Verified locally | Mock credentials verify `https://ai.azure.com/.default`, the dedicated internal API `api://.../.default` scope, and Authorization headers |
@@ -286,8 +300,9 @@ ID for the hosted version, so callers must not invent one.
 
 ## Local validation evidence
 
-- 38 generated hosted-runtime tests passed, including absent and mismatched
-  pre-established owner/reviewer binding refusal and API bridge
+- 40 generated hosted-runtime tests passed, including absent and mismatched
+  pre-established owner/reviewer binding refusal, platform-session conflict
+  rejection, API-workload/human identity separation, and API bridge
   conversation/prebind/dispatch ordering.
 - 16 publisher/generator tests passed, including restart/concurrent publish
   exclusion and complete publication identity conflicts.
@@ -308,7 +323,7 @@ ID for the hosted version, so callers must not invent one.
   bindings pre-established by an authenticated application command, plus a
   repeated composed proof with absent/mismatched binding negatives.
 - Two independently built source archives matched SHA-256
-  `3ccb46568c228d4112ad6c2e4c6d482dab37be2804f657877ddf567a51b4b3d7`
+  `3becbb28da4eae014a47d20fe5d8f93d7b56c2f93d9558f0afdf2218868d44ca`
   and contained 56 files.
 - A generated backend image built from its normal backend-only context using
   the configured Python package proxy. An in-container import resolved
@@ -342,6 +357,7 @@ private `_platform_headers` mutation is rejected.
 - [Deploy a hosted agent from source code](https://learn.microsoft.com/en-us/azure/ai-foundry/agents/how-to/deploy-hosted-agent-code?view=foundry)
 - [Foundry hosted agents concepts](https://learn.microsoft.com/en-us/azure/ai-foundry/agents/concepts/hosted-agents?view=foundry)
 - [Foundry agent runtime components](https://learn.microsoft.com/en-us/azure/ai-foundry/agents/concepts/runtime-components?view=foundry)
+- [Manage hosted agent sessions](https://learn.microsoft.com/en-us/azure/foundry/agents/how-to/manage-hosted-sessions)
 - [Azure AI Projects Python API reference](https://learn.microsoft.com/en-us/python/api/azure-ai-projects/azure.ai.projects.aiprojectclient?view=azure-python)
 - [Azure Identity `DefaultAzureCredential`](https://learn.microsoft.com/en-us/python/api/azure-identity/azure.identity.defaultazurecredential?view=azure-python)
 - [Foundry agent networking options](https://learn.microsoft.com/azure/foundry/agents/concepts/networking-options)

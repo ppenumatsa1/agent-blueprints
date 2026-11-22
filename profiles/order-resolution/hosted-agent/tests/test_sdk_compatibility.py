@@ -6,10 +6,12 @@ from unittest.mock import patch
 
 from agent_framework_foundry_hosting import (
     CheckpointStoreProvider,
+    FoundryRequestScope,
     HostedResponseRequest,
     ResponsesHostServer,
     WorkflowTurn,
 )
+from azure.ai.agentserver.core import AgentConfig, FoundryAgentRequestContext
 from azure.ai.projects.models import (
     CodeConfiguration,
     HostedAgentDefinition,
@@ -64,6 +66,39 @@ class SdkCompatibilityTests(unittest.TestCase):
         )
         self.assertEqual(definition.code_configuration.runtime, "python_3_13")
         self.assertEqual(definition.protocol_versions[0].version, "2.0.0")
+
+    def test_platform_scope_rejects_conflicting_caller_session(self):
+        config = AgentConfig(
+            agent_name="order-resolution",
+            agent_version="1",
+            agent_id="agent-id",
+            is_hosted=True,
+            project_endpoint="https://project.example.test",
+            project_id="project-id",
+            session_id="platform-session",
+            port=8088,
+            appinsights_connection_string="",
+            otlp_endpoint="",
+            sse_keepalive_interval=15,
+        )
+        context = FoundryAgentRequestContext(
+            call_id="platform-call",
+            user_id="api-workload-user",
+            session_id="platform-session",
+        )
+        scope = FoundryRequestScope.from_context(config, context)
+        self.assertEqual(scope.session_id, "platform-session")
+        self.assertEqual(scope.user_id, "api-workload-user")
+        self.assertEqual(scope.call_id, "platform-call")
+        with self.assertRaisesRegex(RuntimeError, "does not match"):
+            FoundryRequestScope.from_context(
+                config,
+                FoundryAgentRequestContext(
+                    call_id="platform-call",
+                    user_id="api-workload-user",
+                    session_id="caller-invented-session",
+                ),
+            )
 
     def test_foundry_chat_client_uses_only_injected_endpoint_and_model(self):
         credential = object()

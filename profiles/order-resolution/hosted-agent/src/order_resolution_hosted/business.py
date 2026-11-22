@@ -163,10 +163,11 @@ class HttpHostedBusinessStore:
         return cls(endpoint, ApiTokenProvider(scope), timeout_seconds=timeout)
 
     @staticmethod
-    def _caller(caller: CallerContext) -> dict[str, str]:
+    def _platform_correlation(caller: CallerContext) -> dict[str, str]:
         return {
-            "caller_id": caller.user_id,
-            "session_id": caller.session_id,
+            "platform_user_id": caller.user_id,
+            "platform_session_id": caller.session_id,
+            "platform_call_id": caller.call_id,
         }
 
     @staticmethod
@@ -281,8 +282,6 @@ class HttpHostedBusinessStore:
         operation_id = self._binding_operation(
             "verify-start-binding",
             case_id,
-            caller.user_id,
-            caller.session_id,
             conversation_id,
         )
         return self._principal(
@@ -290,7 +289,7 @@ class HttpHostedBusinessStore:
                 "POST",
                 f"/cases/{case_id}/bindings/start",
                 payload={
-                    **self._caller(caller),
+                    **self._platform_correlation(caller),
                     "conversation_id": conversation_id,
                     "channel": "foundry-responses",
                 },
@@ -309,8 +308,6 @@ class HttpHostedBusinessStore:
         operation_id = self._binding_operation(
             "verify-resume-binding",
             case_id,
-            caller.user_id,
-            caller.session_id,
             conversation_id,
             channel,
         )
@@ -319,7 +316,7 @@ class HttpHostedBusinessStore:
                 "POST",
                 f"/cases/{case_id}/bindings/resume",
                 payload={
-                    **self._caller(caller),
+                    **self._platform_correlation(caller),
                     "conversation_id": conversation_id,
                     "channel": channel,
                 },
@@ -391,7 +388,7 @@ class _BoundBusinessStore:
 
     def _binding(self) -> dict[str, str]:
         return {
-            **self._api._caller(self._caller),
+            **self._api._platform_correlation(self._caller),
             "conversation_id": self._conversation_id,
             "channel": "foundry-responses",
         }

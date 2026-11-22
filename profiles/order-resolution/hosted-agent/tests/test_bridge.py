@@ -23,11 +23,7 @@ class FakeResponses:
 
     def create_conversation(self, **values):
         self.events.append(("conversation", values))
-        return ConversationBinding(
-            values["caller_id"],
-            "conversation-server-selected",
-            values["session_id"],
-        )
+        return ConversationBinding("conversation-server-selected")
 
     def start(self, **values):
         self.events.append(("start", values))
@@ -45,11 +41,7 @@ class FakeAuthority:
 
     def bind_start(self, case_id, principal, **values):
         self.events.append(("bind-start", case_id, principal, values))
-        self.binding = ConversationBinding(
-            values["caller_id"],
-            values["conversation_id"],
-            values["session_id"],
-        )
+        self.binding = ConversationBinding(values["conversation_id"])
 
     def load_binding(self, case_id):
         self.events.append(("load-binding", case_id))
@@ -99,20 +91,20 @@ class BridgeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([event[0] for event in events], ["conversation", "bind-start", "start"])
         conversation = events[0][1]
         self.assertEqual(conversation["operation_id"], f"case:{self.case_id}:conversation")
-        self.assertEqual(conversation["session_id"], f"case:{self.case_id}")
+        self.assertNotIn("caller_id", conversation)
+        self.assertNotIn("session_id", conversation)
         binding = events[1][3]
         self.assertEqual(binding["conversation_id"], "conversation-server-selected")
+        self.assertNotIn("caller_id", binding)
+        self.assertNotIn("session_id", binding)
         self.assertEqual(events[2][1]["operation_id"], f"case:{self.case_id}:start")
+        self.assertNotIn("agent_session_id", events[2][1])
 
     async def test_resume_loads_and_prebinds_reviewer_intent_before_function_output(self):
         events = []
         authority = FakeAuthority(
             events,
-            ConversationBinding(
-                "owner",
-                "conversation-server-selected",
-                f"case:{self.case_id}",
-            ),
+            ConversationBinding("conversation-server-selected"),
         )
         host = ResponsesWorkflowHost(FakeResponses(events), authority)
         command = self.command()
@@ -124,7 +116,9 @@ class BridgeTests(unittest.IsolatedAsyncioTestCase):
             ["load-binding", "bind-resume", "resume"],
         )
         resume_binding = events[1][3]
-        self.assertEqual(resume_binding["caller_id"], "reviewer")
+        self.assertEqual(resume_binding["conversation_id"], "conversation-server-selected")
+        self.assertNotIn("caller_id", resume_binding)
+        self.assertNotIn("session_id", resume_binding)
         self.assertIs(resume_binding["decision_command"], command)
         request = events[2][1]
         self.assertEqual(
@@ -136,13 +130,14 @@ class BridgeTests(unittest.IsolatedAsyncioTestCase):
             request["decision"]["conversation_id"],
             "conversation-server-selected",
         )
-        self.assertEqual(request["decision"]["session_id"], f"case:{self.case_id}")
+        self.assertNotIn("session_id", request["decision"])
+        self.assertNotIn("agent_session_id", request)
 
     async def test_invalid_decision_never_prebinds_or_dispatches(self):
         events = []
         authority = FakeAuthority(
             events,
-            ConversationBinding("owner", "conversation", f"case:{self.case_id}"),
+            ConversationBinding("conversation"),
         )
         host = ResponsesWorkflowHost(FakeResponses(events), authority)
 
