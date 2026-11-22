@@ -143,7 +143,7 @@ backend/frontend, and `WORKFLOW_HOST=local` are prohibited.
 - [x] Modular Bicep, Azure CLI orchestration, and optional infrastructure-only
   azd configuration generated.
 - [x] Operations automation and documentation generated.
-- [x] Bicep build/lint and eleven non-deploying contract tests pass.
+- [x] Bicep build/lint and 12 non-deploying contract tests pass.
 - [x] Root unit suite passes: 68 tests with two expected adapter-selection
   skips.
 - [x] PowerShell and Python syntax validation passes.
@@ -158,9 +158,9 @@ backend/frontend, and `WORKFLOW_HOST=local` are prohibited.
 | PowerShell parser over `scripts/azure/*.ps1` | Passed |
 | `python -m compileall -q ./scripts/azure ./infra/tests` | Passed |
 | `git diff --check` | Passed |
-| Azure CLI identity preflight with mismatched azd | Passed Azure CLI context and reported the unrelated azd mismatch |
+| Azure CLI identity preflight with mismatched azd | Passed the authorized Azure CLI context, preserved the active subscription/tenant/user exactly, and reported the unrelated azd mismatch |
 | Azure CLI negative identity contracts | Wrong subscription fails before azd inspection; explicit azd mode blocks mismatch |
-| Generated hosted-composition deployment gate | Current unintegrated source generation stopped before preflight/mutation on missing `hosted-agent/main.py` and cleaned temporary artifacts |
+| Generated hosted-composition deployment gate | Current unintegrated source generation stopped before preflight/mutation on missing `backend/app/api/routes/hosted_service.py` and cleaned temporary artifacts |
 | Subscription what-if | Not run: deployment-specific Entra/admin/hosted endpoint and agent-scope values are intentionally unset |
 
 The Azure validation workflow is intentionally incomplete and the plan remains
@@ -179,21 +179,26 @@ reported in evidence, and blocks only explicitly selected azd mode.
 Deployment also fails before mutation unless it can instantiate an independent
 Order Resolution project and find the generated backend, frontend,
 `hosted-agent`, and Agent A publisher. The hosted adapter endpoint, documented
-agent RBAC scope, hosted database role, stable publish operation, durable journal, PostgreSQL
+agent RBAC scope, stable publish operation, durable journal, PostgreSQL
 administrator, and output path are mandatory explicit inputs.
 
 The publisher contract requires `agent_version`, `agent_version_id`,
 `agent_guid`, `identity_principal_id`, `identity_client_id`, and an `active`
 `provisioning_status` in the second phase. The first phase may return
-`creating` after the same fields are authoritative. PostgreSQL access and
-migrations are applied between those calls; `--require-active` must reuse the
-same operation/journal and perform no create. The data-plane version ID is not
-represented as an ARM resource ID.
+`creating` after the same fields are authoritative. The generated API and its
+internal hosted-state boundary are deployed first in hosted mode using the
+credentialless API resource service principal as the temporary identity. That
+principal has no `Hosted.Workflow.Invoke` assignment, so the boundary fails
+closed without local workflow mode or file checkpoints. The authoritative
+hosted principal then receives only the dedicated API app role. After active
+readiness, the final API revision binds the returned principal.
+`--require-active` must reuse the same operation/journal and perform no create.
+The data-plane version ID is not represented as an ARM resource ID.
 
-Deployment also requires a reviewed bounded public egress IPv4 set for the
-hosted runtime. If the platform cannot expose one without unsupported private
-networking/NAT, deployment remains blocked; no `0.0.0.0` Azure-services rule or
-invented address is allowed. All PostgreSQL clients use `verify-full` with
+Foundry hosted code receives no PostgreSQL URL, credential, database role, or
+firewall rule because public hosted egress has no stable source-IP contract.
+Only API Container App outbound IPs are allowlisted; the API UAMI is the sole
+runtime database principal. API PostgreSQL clients use `verify-full` with
 `sslrootcert=system`, and generated API image builds fail if the system CA
 bundle is absent.
 
@@ -208,13 +213,17 @@ still unverified and deployment remains outside this plan.
 `scripts/azure/configure-entra.ps1` provides non-interactive read-only
 validation and an explicit `-Apply` mode for two uniquely named single-tenant
 registrations. It exposes the three delegated workflow scopes, defines
-`Workflow.User` and `Workflow.Approver`, configures localhost and exact
-deployed SPA origins, and preauthorizes only the SPA client. Azure CLI mode
+`Workflow.User`, `Workflow.Approver`, and the application-only
+`Hosted.Workflow.Invoke` role, configures localhost and exact deployed SPA
+origins, and preauthorizes only the SPA client. The hosted version's dedicated
+principal receives only `Hosted.Workflow.Invoke`. Azure CLI mode
 returns tenant/client/app-ID-URI values directly to the deployment orchestrator;
 optional azd mode may persist the same nonsecret identifiers. It creates no
 credentials or users.
 
 Directory permissions are independent of subscription `Owner`. The operator
-must be allowed to create and own app registrations or hold a reviewed
-directory role. Entra deletion is a separately confirmed
+must be allowed to create/update the two app registrations, create the API
+service principal, inspect the hosted version service principal, and assign an
+application role through Microsoft Graph. Subscription roles do not imply
+those directory permissions. Entra deletion is a separately confirmed
 `teardown-entra.ps1` operation and is not part of resource-group teardown.

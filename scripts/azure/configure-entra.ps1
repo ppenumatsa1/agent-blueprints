@@ -10,7 +10,8 @@ param(
     [string]$ApiDisplayName = 'agent-blueprints-order-resolution-api',
     [string]$SpaDisplayName = 'agent-blueprints-order-resolution-spa',
     [string]$ApiAppIdUri,
-    [string]$FrontendRedirectUri
+    [string]$FrontendRedirectUri,
+    [string]$HostedServicePrincipalObjectId
 )
 
 $ErrorActionPreference = 'Stop'
@@ -97,6 +98,46 @@ function Invoke-GraphPatch {
     if ($LASTEXITCODE -ne 0) {
         throw "Unable to update Entra application object $ObjectId."
     }
+}
+
+function Invoke-GraphPost {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Url,
+        [Parameter(Mandatory)]
+        [hashtable]$Body
+    )
+    $json = $Body | ConvertTo-Json -Depth 8 -Compress
+    $result = az rest `
+        --method post `
+        --url $Url `
+        --headers 'Content-Type=application/json' `
+        --body $json `
+        --output json `
+        --only-show-errors
+    if ($LASTEXITCODE -ne 0) {
+        throw "Unable to create Microsoft Graph resource at $Url."
+    }
+    return $result | ConvertFrom-Json
+}
+
+function Ensure-ServicePrincipal {
+    param(
+        [Parameter(Mandatory)]
+        [string]$ApplicationId
+    )
+    $raw = az ad sp show --id $ApplicationId --output json --only-show-errors 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        if (-not $Apply) {
+            throw "Service principal for application $ApplicationId is not configured."
+        }
+        az ad sp create --id $ApplicationId --output none --only-show-errors
+        if ($LASTEXITCODE -ne 0) {
+            throw "Unable to create service principal for application $ApplicationId."
+        }
+        $raw = az ad sp show --id $ApplicationId --output json --only-show-errors
+    }
+    return $raw | ConvertFrom-Json
 }
 
 function Set-AzdEnvironmentValue {
@@ -220,18 +261,26 @@ $roleDefinitions = @(
         value = 'Workflow.User'
         displayName = 'Workflow user'
         description = 'Submit and read workflow cases permitted by record authorization.'
+        allowedMemberTypes = @('User')
     }
     @{
         value = 'Workflow.Approver'
         displayName = 'Workflow approver'
         description = 'Approve or reject assigned workflow cases.'
+        allowedMemberTypes = @('User')
+    }
+    @{
+        value = 'Hosted.Workflow.Invoke'
+        displayName = 'Hosted workflow service'
+        description = 'Use internal hosted-workflow business-state operations.'
+        allowedMemberTypes = @('Application')
     }
 )
 $roles = @(
     foreach ($definition in $roleDefinitions) {
         @{
             id = Get-StableId -Items $existingRoles -Value $definition.value
-            allowedMemberTypes = @('User')
+            allowedMemberTypes = $definition.allowedMemberTypes
             description = $definition.description
             displayName = $definition.displayName
             isEnabled = $true
@@ -285,8 +334,17 @@ if ($Apply) {
 
 $apiApplication = Get-ExactApplication -DisplayName $ApiDisplayName
 $spaApplication = Get-ExactApplication -DisplayName $SpaDisplayName
+$apiServicePrincipal = Ensure-ServicePrincipal -ApplicationId $apiApplication.appId
 $configuredScopes = @($apiApplication.api.oauth2PermissionScopes)
 $configuredRoles = @($apiApplication.appRoles)
+$configuredHostedServiceRoles = @(
+    $configuredRoles |
+        Where-Object {
+            $_.value -ceq 'Hosted.Workflow.Invoke' -and
+            @($_.allowedMemberTypes).Count -eq 1 -and
+            $_.allowedMemberTypes[0] -ceq 'Application'
+        }
+)
 $configuredPreauthorization = @(
     $apiApplication.api.preAuthorizedApplications |
         Where-Object { $_.appId -ceq $spaApplication.appId }
@@ -315,6 +373,7 @@ $valid = (
         @($scopeDefinitions.value | Sort-Object) -join ',' -and
     @($configuredRoles.value | Sort-Object) -join ',' -eq
         @($roleDefinitions.value | Sort-Object) -join ',' -and
+    $configuredHostedServiceRoles.Count -eq 1 -and
     @($redirectUris | Where-Object { $_ -notin @($spaApplication.spa.redirectUris) }).Count -eq 0 -and
     $requiredScopeIds -join ',' -eq $configuredScopeIds -join ',' -and
     $requiredScopeIds -join ',' -eq $configuredResourceScopeIds -join ','
@@ -323,14 +382,81 @@ if (-not $valid) {
     throw 'Entra application validation failed.'
 }
 
+$hostedServiceRole = $configuredRoles |
+    Where-Object { $_.value -ceq 'Hosted.Workflow.Invoke' } |
+    Select-Object -First 1
+$apiAssignmentUrl =
+    "https://graph.microsoft.com/v1.0/servicePrincipals/$($apiServicePrincipal.id)/appRoleAssignments"
+$apiAssignmentPayload = az rest `
+    --method get `
+    --url $apiAssignmentUrl `
+    --output json `
+    --only-show-errors
+if ($LASTEXITCODE -ne 0) {
+    throw 'Unable to inspect API service-principal app-role assignments.'
+}
+$apiSelfAssignments = @(
+    ($apiAssignmentPayload | ConvertFrom-Json).value |
+        Where-Object {
+            $_.resourceId -ceq $apiServicePrincipal.id -and
+            $_.appRoleId -ceq $hostedServiceRole.id
+        }
+)
+if ($apiSelfAssignments.Count -ne 0) {
+    throw 'The API bootstrap service principal must not hold the hosted-service role.'
+}
+$hostedServiceAssignment = $null
+if ($HostedServicePrincipalObjectId) {
+    $hostedPrincipalGuid = [guid]::Empty
+    if (-not [guid]::TryParse($HostedServicePrincipalObjectId, [ref]$hostedPrincipalGuid)) {
+        throw 'HostedServicePrincipalObjectId must be one Entra object GUID.'
+    }
+    $assignmentUrl =
+        "https://graph.microsoft.com/v1.0/servicePrincipals/$HostedServicePrincipalObjectId/appRoleAssignments"
+    $assignmentPayload = az rest `
+        --method get `
+        --url $assignmentUrl `
+        --output json `
+        --only-show-errors
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Unable to inspect hosted-service API app-role assignments.'
+    }
+    $hostedServiceAssignments = @(
+        ($assignmentPayload | ConvertFrom-Json).value |
+            Where-Object {
+                $_.resourceId -ceq $apiServicePrincipal.id -and
+                $_.appRoleId -ceq $hostedServiceRole.id
+            }
+    )
+    if ($hostedServiceAssignments.Count -gt 1) {
+        throw 'Duplicate hosted-service API app-role assignments exist.'
+    }
+    if ($hostedServiceAssignments.Count -eq 0) {
+        if (-not $Apply) {
+            throw 'Hosted-service API app-role assignment is not configured.'
+        }
+        $hostedServiceAssignment = Invoke-GraphPost -Url $assignmentUrl -Body @{
+            principalId = $HostedServicePrincipalObjectId
+            resourceId = $apiServicePrincipal.id
+            appRoleId = $hostedServiceRole.id
+        }
+    } else {
+        $hostedServiceAssignment = $hostedServiceAssignments[0]
+    }
+}
+
 [ordered]@{
     status = 'passed'
     mutationPerformed = [bool]$Apply
     tenantId = $TenantId
     apiClientId = $apiApplication.appId
     apiAppIdUri = $resolvedApiAppIdUri
+    apiServicePrincipalObjectId = $apiServicePrincipal.id
     spaClientId = $spaApplication.appId
     redirectUris = $redirectUris
     delegatedScopes = @($scopeDefinitions.value)
     appRoles = @($roleDefinitions.value)
+    hostedServiceAppRoleId = $hostedServiceRole.id
+    hostedServiceRoleValue = $hostedServiceRole.value
+    hostedServiceAssignmentId = $hostedServiceAssignment.id
 } | ConvertTo-Json -Depth 5

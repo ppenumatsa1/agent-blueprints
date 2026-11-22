@@ -6,7 +6,6 @@ param(
     [string]$ValuesFile,
     [Parameter(Mandatory)]
     [string]$GeneratedProjectRoot,
-    [string]$AdditionalRuntimePrincipalName,
     [Parameter(Mandatory)]
     [string]$OperatorIp
 )
@@ -30,12 +29,6 @@ $apiIdentityName = Get-RequiredValue $values 'AZURE_API_IDENTITY_NAME'
 
 if ($adminName -notmatch '^[A-Za-z0-9._#@-]+$' -or $apiIdentityName -notmatch '^[A-Za-z0-9._-]+$') {
     throw 'Database principal name contains unsupported characters.'
-}
-if (
-    $AdditionalRuntimePrincipalName -and
-    $AdditionalRuntimePrincipalName -notmatch '^[A-Za-z0-9._-]+$'
-) {
-    throw 'Additional runtime database principal name contains unsupported characters.'
 }
 
 $token = az account get-access-token `
@@ -87,23 +80,16 @@ try {
     }
 
     $env:PGPASSWORD = $token
-    $runtimePrincipals = @($apiIdentityName)
-    if ($AdditionalRuntimePrincipalName) {
-        $runtimePrincipals += $AdditionalRuntimePrincipalName
-    }
-    $grantSql = $runtimePrincipals | ForEach-Object {
-@"
-GRANT CONNECT ON DATABASE "$database" TO "$_";
-GRANT USAGE ON SCHEMA public TO "$_";
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO "$_";
-GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO "$_";
+    $grantSql = @"
+GRANT CONNECT ON DATABASE "$database" TO "$apiIdentityName";
+GRANT USAGE ON SCHEMA public TO "$apiIdentityName";
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO "$apiIdentityName";
+GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO "$apiIdentityName";
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
-  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "$_";
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "$apiIdentityName";
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
-  GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO "$_";
+  GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO "$apiIdentityName";
 "@
-    }
-    $grantSql = $grantSql -join "`n"
     psql "host=$postgresHost dbname=$database user=$adminName sslmode=verify-full sslrootcert=system" `
         --set ON_ERROR_STOP=1 `
         --command $grantSql

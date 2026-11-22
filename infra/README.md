@@ -73,6 +73,10 @@ managed-identity PostgreSQL, TLS `verify-full`, Entra, and Azure Monitor. It
 uses the trusted system CA store and does not receive `BLUEPRINT_APPLICATION`
 or `CHECKPOINT_ROOT`.
 
+The hosted definition receives only the Foundry project/model settings plus
+`ORDER_RESOLUTION_API_ENDPOINT`, `ORDER_RESOLUTION_API_SCOPE`, and a 30-second
+API timeout. It receives no database configuration or credentials.
+
 ## What-if
 
 Use an ARM deployment parameter file with concrete reviewed values:
@@ -110,8 +114,6 @@ administrator, or publish operation:
   -HostedConversationEndpoint '<https-conversation-endpoint>' `
   -HostedAgentName '<agent-name>' `
   -HostedAgentRbacScope '<documented-agent-rbac-scope>' `
-  -HostedDatabaseRoleName '<unique-database-role>' `
-  -HostedPostgresEgressIpv4 @('<reviewed-public-ipv4>') `
   -HostedPublishOperationId '<stable-operation-id>' `
   -HostedPublishJournal '<durable-journal-path>' `
   -OutputsFile '<deployment-values.json>'
@@ -124,24 +126,29 @@ The orchestrator:
    capacity while reporting but not blocking on an unrelated azd identity;
 3. creates/reuses the single-tenant API and SPA registrations without secrets;
 4. runs provider-backed subscription what-if and Bicep deployment;
-5. reconciles exact API and explicitly supplied hosted-runtime PostgreSQL
-   egress rules and creates the API database principal;
-6. publishes generated hosted source once and captures the authoritative
+5. reconciles only the exact API Container App PostgreSQL egress rules, creates
+   the API database principal, runs migrations, and deploys the protected API
+   bootstrap/internal hosted-state boundary in hosted mode. Its temporary
+   service identity is the credentialless API resource service principal,
+   which has no `Hosted.Workflow.Invoke` assignment and therefore fails closed;
+6. publishes generated hosted source configured with that API endpoint/scope
+   and captures the authoritative
    version identity while its provisioning status may still be `creating`;
-7. grants the API UAMI `Foundry Agent Consumer`, creates the hosted PostgreSQL
-   principal by exact object ID, and runs both generated migrations;
+7. grants the API UAMI `Foundry Agent Consumer` and assigns the dedicated
+   `Hosted.Workflow.Invoke` API application role to the hosted principal;
 8. reruns the identical journaled publisher operation with `--require-active`,
    which performs no create and verifies the same version identity is active;
-9. builds generated backend/frontend contexts in ACR, resolves immutable image
-   digests, updates both Container Apps, records outputs/revisions, and verifies
-   health and cloud runtime configuration.
+9. binds the API to the authoritative hosted principal and final Foundry
+   endpoints, builds the generated frontend context in ACR, resolves immutable
+   image digests, updates Container Apps, records outputs/revisions, and
+   verifies health and cloud runtime configuration.
 
 The operator firewall rule exists only inside self-cleaning `try/finally`
-scopes. Consumption and hosted-runtime outbound addresses are reconciled
-exactly; a changed address fails database access closed until reconciliation.
-If Foundry Hosted Agents do not expose a reviewed bounded public egress set,
-deployment is blocked. The broad Azure-services `0.0.0.0` exception is never
-used.
+scopes. Only API Container App outbound addresses are reconciled; a changed
+address fails database access closed until reconciliation. Foundry hosted code
+receives no database URL, credential, role, or firewall rule and reaches
+business state only through the protected API. The broad Azure-services
+`0.0.0.0` exception is never used.
 
 `-DeploymentMode Azd` validates the azd identity but intentionally refuses app
 deployment because root `azure.yaml` is infrastructure-only and cannot target a
@@ -173,5 +180,7 @@ environment name and ownership tag:
   -ConfirmEnvironmentName '<environment>'
 ```
 
-Entra applications are outside resource-group teardown and require the separate
-exact-name/client-ID-confirmed `teardown-entra.ps1` operation.
+Entra applications and service principals are outside resource-group teardown
+and require the separate exact-name/client-ID-confirmed
+`teardown-entra.ps1` operation. It removes the API/SPA identities and
+registrations but never deletes the platform hosted principal.

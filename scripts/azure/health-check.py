@@ -131,7 +131,9 @@ def verify_container_app(subscription: str, resource_group: str, name: str) -> d
     return {"name": name, "revision": revision_name, "image": image, "fqdn": fqdn}
 
 
-def verify_api_runtime(subscription: str, resource_group: str, name: str) -> None:
+def verify_api_runtime(
+    subscription: str, resource_group: str, name: str, values: dict[str, str]
+) -> None:
     app = command_json(
         "containerapp",
         "show",
@@ -154,11 +156,33 @@ def verify_api_runtime(subscription: str, resource_group: str, name: str) -> Non
     for forbidden in ("CHECKPOINT_ROOT", "BLUEPRINT_APPLICATION"):
         if forbidden in environment:
             raise VerificationError(f"API must not configure {forbidden} in Azure.")
-    for required_name in ("HOSTED_WORKFLOW_ENDPOINT", "HOSTED_WORKFLOW_SCOPE"):
+    for required_name in (
+        "HOSTED_WORKFLOW_ENDPOINT",
+        "HOSTED_CONVERSATION_ENDPOINT",
+        "HOSTED_WORKFLOW_SCOPE",
+        "HOSTED_SERVICE_PRINCIPAL_ID",
+        "HOSTED_SERVICE_APP_ROLE",
+    ):
         if not environment.get(required_name):
             raise VerificationError(f"API is missing {required_name}.")
     if environment.get("HOSTED_WORKFLOW_SCOPE") != "https://ai.azure.com/.default":
         raise VerificationError("API hosted workflow scope is not the reviewed scope.")
+    if environment.get("HOSTED_SERVICE_APP_ROLE") != required(
+        values, "AZURE_HOSTED_API_APP_ROLE_VALUE"
+    ):
+        raise VerificationError("API hosted service role is not the reviewed role.")
+    if environment.get("HOSTED_SERVICE_PRINCIPAL_ID") != required(
+        values, "AZURE_HOSTED_AGENT_PRINCIPAL_ID"
+    ):
+        raise VerificationError("API is not bound to the published hosted principal.")
+    if environment.get("HOSTED_WORKFLOW_ENDPOINT") != required(
+        values, "AZURE_HOSTED_AGENT_ADAPTER_ENDPOINT"
+    ):
+        raise VerificationError("API hosted workflow endpoint is not final.")
+    if environment.get("HOSTED_CONVERSATION_ENDPOINT") != required(
+        values, "AZURE_HOSTED_AGENT_CONVERSATION_ENDPOINT"
+    ):
+        raise VerificationError("API hosted conversation endpoint is not final.")
     if environment.get("DATABASE_AUTH_MODE") != "managed-identity":
         raise VerificationError("API database authentication is not managed identity.")
     if environment.get("DATABASE_TLS_MODE") != "verify-full":
@@ -206,6 +230,18 @@ def main() -> int:
             "AZURE_HOSTED_AGENT_RESPONSES_ENDPOINT",
             "AZURE_HOSTED_AGENT_CONVERSATION_ENDPOINT",
             "AZURE_HOSTED_AGENT_ADAPTER_ENDPOINT",
+            "AZURE_HOSTED_API_APP_ROLE_ASSIGNMENT_ID",
+            "AZURE_HOSTED_API_APP_ROLE_ID",
+            "AZURE_HOSTED_API_APP_ROLE_VALUE",
+            "ORDER_RESOLUTION_API_ENDPOINT",
+            "ORDER_RESOLUTION_API_SCOPE",
+            "AZURE_API_URL",
+            "AZURE_WEB_URL",
+            "AZURE_API_DATABASE_URL",
+            "AZURE_API_DATABASE_USER",
+            "MIGRATION_DATABASE_URL",
+            "MIGRATION_DATABASE_USER",
+            "MIGRATION_DATABASE_PASSWORD_REFERENCE",
         ):
             required(values, hosted_name)
         if values["AZURE_HOSTED_AGENT_PROVISIONING_STATUS"] != "active":
@@ -213,7 +249,7 @@ def main() -> int:
 
         api = verify_container_app(subscription, resource_group, api_name)
         web = verify_container_app(subscription, resource_group, web_name)
-        verify_api_runtime(subscription, resource_group, api_name)
+        verify_api_runtime(subscription, resource_group, api_name, values)
         request_status(f"https://{api['fqdn']}/healthz", {200, 204})
         request_status(f"https://{api['fqdn']}/api/cases", {401, 403})
         request_status(f"https://{web['fqdn']}/", {200})

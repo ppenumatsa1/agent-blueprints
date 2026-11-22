@@ -54,14 +54,14 @@ Deployment generates an independent Order Resolution project, requires the
 Agent A/C hosted and managed-identity interfaces, patches only the generated
 nginx upstream to the exact API FQDN, and prohibits the source blueprint,
 synthetic application selector, local workflow host, and file checkpoints.
-The hosted version identity is granted/migrated while pending before the same
-journaled version is required active. Deployment also requires a reviewed
-bounded hosted-runtime PostgreSQL egress set and never opens the broad
-Azure-services firewall exception.
+The protected API state boundary and API-only PostgreSQL access are established
+before publication. The pending hosted identity receives only a dedicated API
+application role before the same journaled version is required active; hosted
+code receives no direct database access.
 
 **Next action:** independently validate the exact PR revision, supply the
 deployment-specific hosted endpoint/agent scope/administrator/journal values,
-bounded hosted egress, review Azure CLI provider what-if, and approve resource
+review Azure CLI provider what-if, and approve resource
 inventory, cost, identity, and public-network controls before deployment.
 
 ## Reconciled engineering backlog
