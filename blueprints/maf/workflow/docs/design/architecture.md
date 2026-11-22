@@ -302,7 +302,9 @@ Foundry hosting/checkpoints, caller binding and lost-response recovery remain
 tracked separately in [#19](https://github.com/ppenumatsa1/agent-blueprints/issues/19),
 [#22](https://github.com/ppenumatsa1/agent-blueprints/issues/22), and
 [#20](https://github.com/ppenumatsa1/agent-blueprints/issues/20). Recovery
-was explicitly deferred to a scoped follow-up, not waived.
+was explicitly deferred to a scoped follow-up, not waived. Do not introduce a
+custom checkpoint provider without a demonstrated requirement and independent
+recovery evidence.
 
 ## Staged Foundry-first infrastructure
 
@@ -442,6 +444,5 @@ Foundry endpoint, Responses request parser, host-managed checkpoint client,
 or hosted caller-identity bridge. Bicep and azd assets are staged for static
 validation only; they do not represent provisioned resources or verified
 Azure identity, networking, or runtime behavior.
-
 For code responsibilities, see [project structure](projectstructure.md); for
 service and operator guidance, see the [project guide](../architecture.md).

@@ -26,8 +26,11 @@ maf-workflow/
 ├── backend/
 │   ├── Dockerfile
 │   ├── .python-version
+│   ├── agent-framework-core.sha256
 │   ├── pyproject.toml
 │   ├── uv.lock
+│   ├── scripts/
+│   │   └── verify_framework_supply_chain.py
 │   ├── examples/
 │   │   └── synthetic_application.py
 │   ├── app/
@@ -165,6 +168,8 @@ responsibilities and their direct imports.
 | `backend/app/workflows/` | Native MAF executor/workflow and local host/checkpoint recovery. | Preserve pending request identity and matching terminal outcome; host adapters own their provider. Compose app-owned executors with MAF `WorkflowBuilder` through the typed `WorkflowFactory`; hosted execution remains separate under [#19](https://github.com/ppenumatsa1/agent-blueprints/issues/19). |
 | `backend/app/infrastructure/` | PostgreSQL schema/store, Entra identity, and optional OBO adapter. | Keep credentials private; schema and checkpoint stores remain distinct. |
 | `backend/app/infrastructure/telemetry.py` | Manual privacy-safe traces, metrics, and structured operational logs. | Keep signal fields allowlisted; do not capture payloads, identities, or secrets. |
+| `backend/scripts/verify_framework_supply_chain.py` | Rejects the compromised MAF umbrella distribution and verifies the approved core wheel against the canonical lock and SHA-256 approval. | Keep `uv.lock` as the sole dependency graph; installation remains locked and hash-verified through uv. |
+| `backend/agent-framework-core.sha256` | Approved `agent-framework-core==1.26.0` wheel digest. | Update only with reviewed package approval and a matching locked wheel hash. |
 | `backend/migrations/` | Reviewed Alembic revisions and version-specific schema manifests. | Run explicit owner upgrades; runtime validates without DDL. |
 | `backend/examples/` | Explicitly selected synthetic application. | Never treat as a production fallback or customer example. |
 | `backend/tests/` | PostgreSQL integration, security, crash recovery, and synthetic evidence tests. | Use isolated test DB and test-only identity providers. |

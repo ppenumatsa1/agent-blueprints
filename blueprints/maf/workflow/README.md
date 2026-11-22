@@ -263,7 +263,8 @@ canonical modules directly when implementing application extensions.
 - `WorkflowWorkspace` accepts a `WorkflowClient` and `renderCase` for UI
   composition. Applications own any domain-specific views and evaluation
   fixtures; the order-adjustment scenario belongs only in tests.
-- Typed MAF model, agent, prompt, tool/authorization, and executor/workflow
+- MAF model selection, versioned prompt assets, native `Agent`/`@tool`
+  composition, application authorization, and native executor/workflow
   patterns are in [architecture and extensions](docs/architecture.md#typed-maf-extension-patterns)
   and `backend/app/extensions/`. The synthetic fixture builds a native
   `Agent` without invoking a model; provider calls, hosted identity and

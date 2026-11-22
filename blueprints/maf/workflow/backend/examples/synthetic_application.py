@@ -1,7 +1,6 @@
 import os
 from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import Any
 from uuid import UUID
 
 from agent_framework import (
@@ -9,6 +8,7 @@ from agent_framework import (
     CheckpointStorage,
     Executor,
     FunctionTool,
+    SupportsChatGetResponse,
     Workflow,
     WorkflowBuilder,
     WorkflowContext,
@@ -22,24 +22,15 @@ from app.application import ApplicationComponents
 from app.domain.errors import AccessDenied
 from app.domain.models import Case, Principal, StateRepository, TransactionalAction
 from app.domain.policy import CaseAccessPolicy, JsonObjectRules
-from app.extensions.agents import AgentDefinition, build_chat_agent
-from app.extensions.model import (
-    ModelClientFactory,
-    ModelSelection,
-    select_chat_client,
-)
+from app.extensions.model import ModelSelection
 from app.extensions.prompts import load_prompt_asset
-from app.extensions.tools import ToolAuthorization, ToolRegistry
+from app.extensions.tools import ToolAuthorization
 from app.workflows.workflow import WORKFLOW_NAME
 
 
 PROMPT_PATH = Path(__file__).parent / "prompts" / "synthetic-review.v1.md"
-SYNTHETIC_AGENT = AgentDefinition(
-    name="synthetic-review",
-    description="Reviews synthetic case data and returns findings for a human.",
-    prompt_name="synthetic-review",
-    prompt_version="v1",
-)
+SYNTHETIC_AGENT_NAME = "synthetic-review"
+SYNTHETIC_AGENT_DESCRIPTION = "Reviews synthetic case data and returns findings for a human."
 SYNTHETIC_TOOL_NAME = "inspect_synthetic_case"
 
 
@@ -132,36 +123,37 @@ async def _inspect_synthetic_case(
 
 def build_synthetic_tools(
     principal: Principal, authorization: ToolAuthorization
-) -> tuple[FunctionTool | Callable[..., Any], ...]:
-    registry = ToolRegistry()
+) -> tuple[FunctionTool, ...]:
+    @tool(
+        name=SYNTHETIC_TOOL_NAME,
+        description="Read an application-authorized synthetic case reference.",
+    )
+    async def inspect_synthetic_case(case_id: str) -> str:
+        return await _inspect_synthetic_case(principal, authorization, case_id)
 
-    def bind_inspector(
-        bound_principal: Principal, bound_authorization: ToolAuthorization
-    ) -> FunctionTool | Callable[..., object]:
-        @tool(
-            name=SYNTHETIC_TOOL_NAME,
-            description="Read an application-authorized synthetic case reference.",
-        )
-        async def inspect_synthetic_case(case_id: str) -> str:
-            return await _inspect_synthetic_case(bound_principal, bound_authorization, case_id)
-
-        return inspect_synthetic_case
-
-    registry.register(SYNTHETIC_TOOL_NAME, bind_inspector)
-    return registry.bind(principal, authorization)
+    return (inspect_synthetic_case,)
 
 
 def build_synthetic_agent(
     selection: ModelSelection,
-    providers: Mapping[str, ModelClientFactory],
+    providers: Mapping[str, Callable[[str], SupportsChatGetResponse]],
     principal: Principal,
     authorization: ToolAuthorization,
 ) -> Agent:
     """Build a request-scoped agent; do not share its principal-bound tools."""
-    client = select_chat_client(selection, providers)
-    prompt = load_prompt_asset("synthetic-review", "v1", PROMPT_PATH)
+    provider = providers.get(selection.provider_id)
+    if provider is None:
+        raise ValueError(f"No model provider is configured for {selection.provider_id!r}.")
+    client = provider(selection.model_id)
+    prompt = load_prompt_asset(SYNTHETIC_AGENT_NAME, "v1", PROMPT_PATH)
     tools = build_synthetic_tools(principal, authorization)
-    return build_chat_agent(SYNTHETIC_AGENT, client, prompt, tools)
+    return Agent(
+        client=client,
+        name=SYNTHETIC_AGENT_NAME,
+        description=SYNTHETIC_AGENT_DESCRIPTION,
+        instructions=prompt.instructions,
+        tools=tools,
+    )
 
 
 def build_application() -> ApplicationComponents:

@@ -9,14 +9,11 @@ from agent_framework import Agent, FunctionTool, Workflow
 
 from app.domain.errors import AccessDenied
 from app.domain.models import Principal
-from app.extensions.agents import AgentDefinition, build_chat_agent
-from app.extensions.model import ModelSelection, select_chat_client
+from app.extensions.model import ModelSelection
 from app.extensions.prompts import load_prompt_asset
-from app.extensions.tools import ToolRegistry
 from app.workflows.workflow import create_workflow
 from examples.synthetic_application import (
     PROMPT_PATH,
-    SYNTHETIC_AGENT,
     SyntheticToolAuthorization,
     _inspect_synthetic_case,
     build_application,
@@ -44,22 +41,30 @@ class ExtensionTests(unittest.TestCase):
         self.denied = Principal("tenant", "denied", frozenset(), frozenset())
 
     def test_model_selection_requires_explicit_valid_configuration_and_provider(self):
-        for provider_id, model_id in (("", "model"), ("provider", ""), ("provider ", "model")):
+        for provider_id, model_id in (
+            ("", "model"),
+            ("provider", ""),
+            ("provider ", "model"),
+            ("provider", " model"),
+            (None, "model"),
+            ("provider", None),
+        ):
             with self.subTest(provider_id=provider_id, model_id=model_id):
                 with self.assertRaises(ValueError):
                     ModelSelection(provider_id, model_id)
 
         selection = ModelSelection("synthetic-provider", "synthetic-model")
-        factory = Mock(return_value=self.client)
-        self.assertIs(select_chat_client(selection, {"synthetic-provider": factory}), self.client)
-        factory.assert_called_once_with(selection)
+        provider = Mock(return_value=self.client)
+        agent = build_synthetic_agent(
+            selection,
+            {"synthetic-provider": provider},
+            self.reader,
+            SyntheticToolAuthorization(),
+        )
+        self.assertIsInstance(agent, Agent)
+        provider.assert_called_once_with("synthetic-model")
         with self.assertRaisesRegex(ValueError, "No model provider"):
-            select_chat_client(selection, {})
-
-    def test_model_provider_must_return_a_maf_chat_client(self):
-        selection = ModelSelection("provider", "model")
-        with self.assertRaisesRegex(TypeError, "MAF chat client"):
-            select_chat_client(selection, {"provider": lambda _: object()})
+            build_synthetic_agent(selection, {}, self.reader, SyntheticToolAuthorization())
 
     def test_prompt_assets_require_explicit_version_and_matching_file(self):
         prompt = load_prompt_asset("synthetic-review", "v1", PROMPT_PATH)
@@ -75,30 +80,17 @@ class ExtensionTests(unittest.TestCase):
 
     def test_agent_composition_uses_native_maf_agent_without_running_a_model(self):
         prompt = load_prompt_asset("synthetic-review", "v1", PROMPT_PATH)
-        definition = AgentDefinition(
-            SYNTHETIC_AGENT.name,
-            SYNTHETIC_AGENT.description,
-            SYNTHETIC_AGENT.prompt_name,
-            SYNTHETIC_AGENT.prompt_version,
-        )
-        agent = build_chat_agent(definition, self.client, prompt)
-        self.assertIsInstance(agent, Agent)
-        with self.assertRaisesRegex(ValueError, "does not match"):
-            build_chat_agent(
-                AgentDefinition("agent", "description", "prompt", "v2"),
-                self.client,
-                prompt,
-            )
-
         provider = Mock(return_value=self.client)
-        synthetic_agent = build_synthetic_agent(
+        agent = build_synthetic_agent(
             ModelSelection("synthetic-provider", "synthetic-model"),
             {"synthetic-provider": provider},
             self.reader,
             SyntheticToolAuthorization(),
         )
-        self.assertIsInstance(synthetic_agent, Agent)
-        provider.assert_called_once_with(ModelSelection("synthetic-provider", "synthetic-model"))
+        self.assertIsInstance(agent, Agent)
+        self.assertEqual(agent.name, "synthetic-review")
+        self.assertEqual(agent.default_options["instructions"], prompt.instructions)
+        self.assertEqual(prompt.version, "v1")
 
     def test_tool_authorization_is_checked_before_the_tool_result(self):
         authorization = SyntheticToolAuthorization()
@@ -128,16 +120,6 @@ class ExtensionTests(unittest.TestCase):
                             _inspect_synthetic_case(self.reader, authorization, "synthetic-case")
                         )
                     read_case.assert_not_called()
-
-    def test_tool_registry_rejects_duplicate_names_and_binds_request_principal(self):
-        registry = ToolRegistry()
-        factory = Mock(return_value=FunctionTool(name="synthetic_tool"))
-        registry.register("synthetic_tool", factory)
-        with self.assertRaisesRegex(ValueError, "already registered"):
-            registry.register("synthetic_tool", factory)
-        authorization = SyntheticToolAuthorization()
-        registry.bind(self.reader, authorization)
-        factory.assert_called_once_with(self.reader, authorization)
 
     def test_workflow_extension_remains_a_native_maf_workflow(self):
         application = build_application()
