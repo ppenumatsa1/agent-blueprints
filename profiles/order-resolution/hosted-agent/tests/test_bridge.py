@@ -166,7 +166,7 @@ class BridgeTests(unittest.IsolatedAsyncioTestCase):
         )
         responses = object()
         with (
-            patch("order_resolution_hosted.bridge.DefaultAzureCredential") as credential_type,
+            patch("order_resolution_hosted.bridge.ManagedIdentityCredential") as credential_type,
             patch(
                 "order_resolution_hosted.bridge.ResponsesClient", return_value=responses
             ) as client,
@@ -178,7 +178,7 @@ class BridgeTests(unittest.IsolatedAsyncioTestCase):
                 MemoryOperationJournal(),
             )
 
-        credential_type.assert_called_once_with(managed_identity_client_id="api-uami-client-id")
+        credential_type.assert_called_once_with(client_id="api-uami-client-id")
         self.assertIs(host._responses, responses)
         self.assertEqual(client.call_args.args[0], settings.hosted_workflow_endpoint)
         self.assertEqual(
