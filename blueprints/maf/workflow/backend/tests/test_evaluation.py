@@ -2,7 +2,6 @@ import asyncio
 import json
 import unittest
 from pathlib import Path
-from unittest.mock import Mock
 
 from agent_framework import (
     AgentResponse,
@@ -105,7 +104,10 @@ class EvaluationExtensionTests(unittest.TestCase):
         self.assertEqual(explanation.score, 1.0)
         self.assertEqual(explanation.minimum_score, 1.0)
         self.assertTrue(explanation.reference)
-        self.assertEqual(hint.case_id, SYNTHETIC_DATASET.cases[1].case_id)
+        self.assertEqual(
+            tuple(item.case_id for item in checks["CHECK-HINT"].observations),
+            tuple(case.case_id for case in SYNTHETIC_DATASET.cases),
+        )
         self.assertEqual(hint.criterion_id, "accurate-hint")
         self.assertEqual(hint.score, 1.0)
 
@@ -177,6 +179,52 @@ class EvaluationExtensionTests(unittest.TestCase):
         malformed = self.assess((oversized,))
         self.assertEqual(malformed.outcome, "failed")
 
+    def test_native_item_failure_maps_to_the_failed_criterion(self):
+        result = self.assess(self.native_results("hint", "hint"))
+        checks = {item.check_id: item for item in result.check_results}
+        self.assertEqual(checks["CHECK-EXPLANATION"].outcome, "failed")
+        self.assertEqual(checks["CHECK-HINT"].outcome, "passed")
+
+    def test_native_score_for_unmapped_case_check_fails(self):
+        dataset = EvaluationDataset(
+            "strict-mapping",
+            "v1",
+            (
+                EvaluationCase(
+                    "explanation-only",
+                    {"query": "synthetic explanation"},
+                    ("CHECK-EXPLANATION",),
+                ),
+                EvaluationCase(
+                    "hint-only",
+                    {"query": "synthetic hint"},
+                    ("CHECK-HINT",),
+                ),
+            ),
+        )
+        extra_score = EvalResults(
+            provider="synthetic",
+            items=[
+                EvalItemResult(
+                    item_id="extra-score",
+                    status="pass",
+                    input_text="synthetic explanation",
+                    scores=[
+                        EvalScoreResult(
+                            name="accurate-hint",
+                            score=1.0,
+                            passed=True,
+                        )
+                    ],
+                )
+            ],
+        )
+        mapped = map_evaluation_results(
+            dataset, SYNTHETIC_RUBRIC, self.known_check_ids, (extra_score,)
+        )
+        self.assertEqual(mapped.outcome, "failed")
+        self.assertTrue(mapped.diagnostics)
+
     def test_unknown_and_duplicate_native_results_cannot_pass(self):
         results = self.native_results()
         unknown = EvalResults(
@@ -232,14 +280,12 @@ class EvaluationExtensionTests(unittest.TestCase):
         self.assertEqual(self.assess((unknown_status,)).outcome, "failed")
 
     def test_oversized_thresholds_reject_before_native_evaluation(self):
-        evaluator = Mock(spec=LocalEvaluator)
         check_id = SYNTHETIC_RUBRIC.criteria[0].check_id
         for threshold in (float("nan"), float("inf"), -0.01, 1.01, True, 10**1000):
             with self.subTest(threshold=threshold), self.assertRaises(ValueError):
                 RubricCriterion("criterion", check_id, threshold)
-        evaluator.evaluate.assert_not_called()
 
-    def test_dataset_rubric_identity_is_checked_against_contract_before_native_call(self):
+    def test_dataset_rubric_identity_is_checked_against_contract(self):
         dataset = EvaluationDataset(
             "unknown-check",
             "v1",
@@ -250,19 +296,8 @@ class EvaluationExtensionTests(unittest.TestCase):
             "v1",
             (RubricCriterion("criterion", "CHECK-NOT-IN-CONTRACT", 0.5),),
         )
-        native_evaluator = Mock(spec=LocalEvaluator)
         with self.assertRaisesRegex(ValueError, "outside the selected readiness contract"):
             rubric.validate_for(dataset, self.known_check_ids)
-            asyncio.run(
-                maf_evaluate_agent(
-                    queries=["synthetic query"],
-                    responses=[
-                        AgentResponse(messages=[Message(role="assistant", contents=["synthetic"])])
-                    ],
-                    evaluators=native_evaluator,
-                )
-            )
-        native_evaluator.evaluate.assert_not_called()
         with self.assertRaisesRegex(ValueError, "outside the selected readiness contract"):
             map_evaluation_results(dataset, rubric, self.known_check_ids, ())
         with self.assertRaisesRegex(ValueError, "outside the selected readiness contract"):

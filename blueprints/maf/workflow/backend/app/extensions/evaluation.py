@@ -114,9 +114,6 @@ class EvaluationRubric:
                 f"Dataset and rubric contain checks outside the selected readiness contract: "
                 f"{', '.join(sorted(unknown_checks))}."
             )
-        for criterion in self.criteria:
-            if not any(criterion.check_id in case.check_ids for case in dataset.cases):
-                raise ValueError(f"Rubric check {criterion.check_id!r} has no dataset cases.")
         queries = []
         for case in dataset.cases:
             query = case.inputs.get("query")
@@ -175,10 +172,6 @@ def _assessment(
         tuple(results),
         tuple(diagnostics),
     )
-
-
-def _valid_score(value: object) -> bool:
-    return _is_valid_score(value)
 
 
 def _valid_trace_reference(value: object) -> bool:
@@ -262,14 +255,13 @@ def map_evaluation_results(
                 diagnostics.append("MAF returned a malformed evaluator score collection.")
                 invalid_checks.update(criterion.check_id for criterion in relevant_criteria)
                 continue
-            if item.status == "fail":
-                invalid_checks.update(criterion.check_id for criterion in relevant_criteria)
-            elif item.status in {"error", "errored"}:
+            if item.status in {"error", "errored"}:
                 continue
-            elif item.status != "pass":
+            if item.status not in {"pass", "fail"}:
                 diagnostics.append("MAF returned an item with an unknown status.")
                 invalid_checks.update(criterion.check_id for criterion in relevant_criteria)
                 continue
+            item_failed_checks: set[str] = set()
             trace_reference = item.response_id or item.item_id
             for score in item.scores:
                 if not isinstance(score, EvalScoreResult):
@@ -284,8 +276,6 @@ def map_evaluation_results(
                 check_id = criterion.check_id
                 key = (case.case_id, criterion.criterion_id)
                 if key not in expected:
-                    if check_id not in case.check_ids:
-                        continue
                     diagnostics.append("MAF returned a score outside the dataset mapping.")
                     invalid_checks.add(check_id)
                     continue
@@ -293,7 +283,7 @@ def map_evaluation_results(
                     diagnostics.append("MAF returned a duplicate case/evaluator score.")
                     invalid_checks.add(check_id)
                     continue
-                if not _valid_score(score.score) or (
+                if not _is_valid_score(score.score) or (
                     score.passed is not None and not isinstance(score.passed, bool)
                 ):
                     diagnostics.append("MAF returned a malformed evaluator score.")
@@ -305,6 +295,9 @@ def map_evaluation_results(
                     continue
                 if score.passed is False:
                     invalid_checks.add(check_id)
+                    item_failed_checks.add(check_id)
+                if score.score < criterion.minimum_score:
+                    item_failed_checks.add(check_id)
                 recorded[key] = EvaluationTraceReference(
                     case.case_id,
                     criterion.criterion_id,
@@ -312,6 +305,8 @@ def map_evaluation_results(
                     criterion.minimum_score,
                     trace_reference,
                 )
+            if item.status == "fail" and not item_failed_checks:
+                invalid_checks.update(criterion.check_id for criterion in relevant_criteria)
 
     results = []
     for check_id in sorted(all_check_ids):

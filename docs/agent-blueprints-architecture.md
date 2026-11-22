@@ -62,9 +62,13 @@ approved core wheel digest against the lock and downloaded artifact before
 installation. The lock remains the sole dependency graph. PR #17 is merged
 into `main` at `0c1297cc8e93c62f69d61d0eb3bdabf3c27c683d`; exact-main
 [run 45027884271](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/45027884271)
-passed all six jobs. Earlier PR #17 head and merge-ref checks are historical
-snapshots; changes on top of this baseline require fresh validation. Local evidence is
-recorded in the
+passed all six jobs for that baseline. PRs #36, #37 and #40 are now merged;
+current `main` is `49932ee0cd61ee653a5f86be0f43873cec197ff9`, with exact-head
+run [45041465032](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/45041465032)
+passing all six jobs. PR #39 is being reconciled directly onto this baseline;
+its exact-head CI is required independently. Earlier PR #17 head and
+merge-ref checks are historical snapshots; changes on top of this baseline
+require fresh validation. Local evidence is recorded in the
 [integration journal](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-22---main-reconciliation-and-local-validation);
 
 The longer-term target adds a Foundry Responses adapter and host-managed
@@ -171,11 +175,10 @@ connections before the final TCP server starts. Issue [#38](https://github.com/p
 records this on disposable PostgreSQL 16.15 and 17, including a failed initial
 `createdb` and a successful 72/72 source/generated retry at historical head
 `8b3c357`. CI startup loops and Compose health checks use bounded loopback TCP
-probes; these are in merged `main` at `0c1297c` and passed exact-main run
-[45027884271](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/45027884271).
-Local source/generated Compose checks also passed on #37 implementation head
-`8795c46`; final-head CI is tracked on the PR. This does not establish managed
-PostgreSQL readiness.
+probes; these remain in current `main` at
+`49932ee0cd61ee653a5f86be0f43873cec197ff9`, whose exact-main run
+[45041465032](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/45041465032)
+passed all six jobs. This does not establish managed PostgreSQL readiness.
 
 The local integration at `af3955a` combined the engineering layers. Source and
 independently generated backends each passed 68 tests on PostgreSQL 16.15 and
@@ -197,6 +200,21 @@ merged-main CI and the separate #37 validation are recorded independently.
 Do not treat conversation history, workflow checkpoints, and business records
 as interchangeable. A model recommendation or remembered conversation is not
 human authorization.
+
+## Cross-framework business specification
+
+The [Order Resolution specification proposal](order-resolution-specification-proposal.md)
+defines a framework-neutral triage, policy retrieval, deterministic resolution,
+human decision, idempotency, recovery, and evaluation contract. It standardizes
+business invariants and evidence expectations, not runtime APIs or checkpoint
+bytes.
+
+Every future implementation must use its selected framework's native workflow
+and checkpoint provider. PostgreSQL is application-owned persistence for
+business records, decisions, action ledgers, and audit projections; it is not a
+universal/custom checkpointer. A framework may select a supported PostgreSQL
+checkpoint provider, but that framework-owned state remains logically separate
+from the application schema and lifecycle.
 
 ## First golden path: Foundry-first MAF workflow
 
@@ -349,7 +367,7 @@ replaced without importing the source repository.
 | Auth, telemetry, tests, documentation and deployment conventions | Share guidance and, later, small composable templates when justified |
 | Workflow graph, interrupts, checkpointing and recovery | Keep framework- and host-specific |
 | Model/tool loop, skills and session lifecycle | Use the selected framework or SDK natively |
-| Business policy, approvals and side effects | Keep in the generated application, not prompts or a shared agent runtime |
+| Business policy, approvals and side effects | Share the [Order Resolution invariants](order-resolution-specification-proposal.md) where applicable; keep concrete policy and enforcement in the generated application, not prompts or a shared agent runtime |
 
 The reference projects contain reusable patterns but also scenario-specific
 logic and settings. See the [evidence inventory](reference-repository-analysis.md)

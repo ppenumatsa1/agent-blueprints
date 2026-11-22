@@ -91,9 +91,10 @@ they are not a second runtime or a guarantee that a provider is configured.
   independent validator. Unknown, malformed, or duplicate configured check
   IDs reject before the application invokes the native evaluator.
   `map_evaluation_results` normalizes native per-item scores to one
-  `CheckEvaluation` per readiness check ID. Missing observations or unavailable
-  native results remain unverified; below-threshold, duplicate, unknown, or
-  malformed observations fail. Invalid thresholds, including oversized
+  `CheckEvaluation` per readiness check ID. Scores for a criterion not mapped
+  to that case are rejected rather than ignored. Missing observations or
+  unavailable native results remain unverified; below-threshold, duplicate,
+  unknown, or malformed observations fail. Invalid thresholds, including oversized
   integers, reject before evaluation; invalid observation scores fail closed.
   Exceptions from the native evaluator/provider/tool propagate without
   synthetic fallback. Trace references and scores are not evidence bytes,
@@ -131,15 +132,58 @@ remain blocked by [#32](https://github.com/ppenumatsa1/agent-blueprints/issues/3
    and [api.ts](../frontend/src/api.ts). Do not put credentials in the
    browser or treat client-provided identity as authoritative.
 4. A database action and ledger entry can commit together in one PostgreSQL
-   transaction. The transaction callback is arbitrary application code, not a
-   sandbox; it can make external calls that the database ledger cannot roll
-   back or deduplicate. Do not put consequential remote effects in that path.
-   Such effects require service-specific authorization, verified downstream
+   transaction; this does not prevent an application callback from making
+   remote calls. The callback is arbitrary trusted Python, not a sandbox, and
+   the database ledger cannot roll back or deduplicate a remote effect. Do not
+   put consequential remote effects in that path. Such effects require
+   service-specific authorization, verified downstream
    idempotency and authoritative reconciliation; otherwise fail closed and
-   use manual resolution instead of retrying an ambiguous effect. A transactional
-   outbox only persists intent; it cannot deduplicate an external effect after
-   a lost acknowledgment. Test retries and recovery windows; no general
-   exactly-once guarantee is implied. Model and tool input remain untrusted.
+   use manual resolution rather than retrying an ambiguous effect. The opt-in
+   [external-effect pattern](../backend/examples/external_effect_boundary.py)
+   checks application-supplied authorization for the approved case and exact
+   request before reconciliation or sending, and uses
+   the key `case:{case.id}:action` for the current single immutable action
+   per case, plus a digest of the case, tenant, owner, reviewer,
+   operation, destination identity and payload. The application must pin the
+   actual destination, operation and encoding across the full recovery horizon;
+   an identifier cannot prevent a trusted adapter from switching services.
+   This narrow key does not represent proposal versions. A future Order
+   Resolution implementation must derive its server-side action identity from
+   the case, proposal version, action and intended destination, as specified
+   by [the merged #40 proposal](https://github.com/ppenumatsa1/agent-blueprints/blob/main/docs/order-resolution-specification-proposal.md);
+   this blueprint does not add proposal-version machinery.
+   A trusted destination must atomically bind the key and digest to
+   the effect, reject conflicting reuse, retain that binding for the entire
+   retry/recovery horizon, and provide authoritative request-bound
+   reconciliation. `UNKNOWN`, a conflict, or an unverifiable acknowledgment
+   fails visibly; an empty or eventually consistent search is not proof of
+   absence. A lost send response is reconciled on the next attempt, not
+   assumed successful. A transactional outbox only persists intent; it cannot
+   deduplicate an external effect after a lost acknowledgment.
+
+   This pattern runs inside the existing action transaction and holds the
+   case row lock during remote calls; it is not an outbox or a worker queue.
+   It gives all downstream `observe`/`send` calls one shared five-second
+   monotonic deadline and passes each adapter the remaining budget. The
+   synthetic SQLite adapter applies that budget to lock waits. A real adapter
+   must enforce a bounded transport/request timeout within the supplied budget;
+   this synchronous pattern cannot preempt arbitrary Python that ignores it.
+   Keep the budget within the database lock/transaction operational limits.
+   A timeout is an unknown outcome, never proof the effect was not applied:
+   the PostgreSQL transaction rolls back, and recovery must reauthorize and
+   reconcile the same key and digest. Only authoritative `APPLIED` permits
+   ledger completion; proven `ABSENT` may send, while `UNKNOWN` remains
+   blocked for operator resolution. Never blindly retry after timeout.
+   The application must validate identity, approval, effect-specific authority,
+   immutable intent, destination guarantees, retention and safe
+   operational recovery. Its authorizer and destination adapters are trusted
+   code, not a sandbox: arbitrary Python can bypass this pattern or falsely
+   report a guarantee. A changed or revoked authorization blocks even
+   reconciliation; operators must resolve ambiguous outcomes without blindly
+   retrying. No arbitrary service, hosted behavior, or exactly-once guarantee
+   is established. Consequential remote actions remain P0-blocked by
+   [#32](https://github.com/ppenumatsa1/agent-blueprints/issues/32) pending
+   independent, service-specific evidence. Model and tool input remain untrusted.
 
 The [testing guide](testing.md) describes the synthetic evidence and its
 limits. Foundry-managed checkpoints and hosting are planned and unverified;
