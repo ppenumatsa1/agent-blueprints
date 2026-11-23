@@ -357,8 +357,10 @@ Local non-deploying evidence:
   `backend/app/api/routes/hosted_service.py` was absent, and removed its
   temporary directory without output artifacts.
 - Agent C's generated application interface is frozen at draft PR #48 head
-  `2a04d5be3013e782a7c1222b2a16a7047cbb15cd`; all six C CI jobs passed in run
-  `45084615221`. Agent A's immutable replacement is
+  `722fc4e32937df4bd94678ec12380cac2a7c84df`; all six C CI jobs passed in run
+  `45087843018`. Its TLS code parent is
+  `509fb0b20c80fa8e436de4ac782f618c47f38bd3`, whose all-six C CI run
+  `45087411666` passed. Agent A's immutable replacement is
   `708a4185abe149526c606477de02cd57c5d90a9c`; all six A CI jobs passed in
   run `45085543517`, and its exact `git archive`
   tar SHA-256 is
@@ -367,17 +369,17 @@ Local non-deploying evidence:
   composition files. The canonical backend built with `--no-dev`, verified the
   Agent Framework wheel digest, imported the bridge, and selected
   `ResponsesWorkflowHost`; content image-manifest digest was
-  `sha256:877d09dbc5a06522efc59b45894cdd255c2ccccb8162b5eccc899e769f45563a`.
+  `sha256:fd0f7c76f26d152789006aace213cd436e21be31567ddde8b0d7cfeb7a84496b`.
   BuildKit's attestation-dependent manifest-list digest is intentionally
   omitted.
-  The integration coordinator independently reports 13/13 exact A+C
-  PostgreSQL 17 authority/wire tests passed; B did not rerun that suite.
-  Normal `app.main`/lifespan startup subsequently exposed that bundled libpq
-  requires explicit image-owned
-  `SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt` even with
-  `PGSSLROOTCERT=system`. Agent C owns the Dockerfile correction. B deployment
+  The integration coordinator independently reports exact default Docker
+  CMD/app lifespan passed against isolated PostgreSQL 17 with inherited
+  `SSL_CERT_FILE`, `verify-full`, `sslrootcert=system`, and
+  `pg_stat_ssl.ssl=true`; health returned `204` and protected access returned
+  `401`. Trusted-CA/wrong-hostname and untrusted-CA/correct-hostname negatives
+  both failed closed. B did not rerun that PostgreSQL suite. B deployment
   intentionally does not set `SSL_CERT_FILE`, preserving the image default.
-  Exact image evidence must be refreshed against C's corrected immutable head.
+  Canonical packaging evidence is complete.
   Direct PyPI failed locally with a TLS handshake error; the credentialless
   Microsoft package mirror retained hash/digest verification. Live Azure
   remains unverified.

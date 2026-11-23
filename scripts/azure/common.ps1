@@ -147,6 +147,9 @@ function Assert-GeneratedApiImageContext {
         $dockerfile -notmatch [regex]::Escape(
             'COPY --chown=blueprint:blueprint order_resolution_hosted/'
         ) -or
+        $dockerfile -notmatch [regex]::Escape(
+            'SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt'
+        ) -or
         $dockerfile -notmatch [regex]::Escape('uv export --locked --no-dev') -or
         $dockerfile -match '\bPYTHONPATH\b' -or
         $dockerfile -match '\bhosted-agent\b' -or

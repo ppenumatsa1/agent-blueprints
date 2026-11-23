@@ -423,6 +423,10 @@ class InfrastructureContractTests(unittest.TestCase):
         self.assertIn('"caller_id"', common)
         self.assertIn(r'"actor(?:\.|_)subject"', common)
         self.assertIn(
+            "SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt",
+            common,
+        )
+        self.assertIn(
             "Generated backend Dockerfile does not contain the canonical bridge contract.",
             common,
         )

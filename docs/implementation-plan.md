@@ -207,17 +207,19 @@ authority; the bridge does not send caller-selected session or actor metadata.
 **Acceptance evidence:** exact base verified; read-only Azure discovery
 completed; Bicep build/lint and 17 infrastructure contracts pass; 68 root tests
 pass with two expected adapter-selection skips; script syntax checks pass.
-Exact final A `708a4185` plus final C `2a04d5be` generation produced
+Exact final A `708a4185` plus final C `722fc4e3` (all-six CI run
+`45087843018`) generation produced
 byte-identical owned files, built the canonical no-dev backend, imported the
 bridge, and passed nonconnecting composition. The integration coordinator
-independently reports 13/13 exact A+C PostgreSQL 17 authority/wire tests passed;
-B did not rerun that suite. The exact generated web image also built with
+independently reports default Docker CMD/app lifespan passed against isolated
+PostgreSQL 17 with inherited image CA setting, verified TLS, health `204`, and
+protected `401`; hostname and trust negatives failed closed. B did not rerun
+that suite. The exact generated web image also built with
 credentialless HTTPS npm proxy, unchanged `npm ci`, production Vite build, and
-CSP verification. Normal PostgreSQL-backed startup then exposed a bundled
-libpq trust-bundle defect. C owns the canonical image `SSL_CERT_FILE`
-correction; B deploy contracts prohibit overriding the image default. Exact
-composition evidence must be refreshed after C publishes the corrected
-immutable head. Live Azure composition is not proven.
+CSP verification. C's TLS code parent `509fb0b2` owns the canonical image
+`SSL_CERT_FILE`; B deploy contracts
+prohibit overriding the image default. Canonical packaging evidence is
+complete. Live Azure composition is not proven.
 The current Azure CLI identity matches the authorized target, but azd is a
 different account and tenant. Azure CLI mode reports that mismatch without
 blocking; explicit azd mode still fails closed. No Azure mutation or deployment
