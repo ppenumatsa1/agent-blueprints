@@ -15,6 +15,7 @@ module registry 'br/public:avm/res/container-registry/registry:0.13.2' = {
     acrAdminUserEnabled: false
     anonymousPullEnabled: false
     publicNetworkAccess: 'Enabled'
+    networkRuleSetDefaultAction: 'Allow'
     roleAssignments: [
       {
         principalId: apiPrincipalId

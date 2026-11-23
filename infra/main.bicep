@@ -49,7 +49,7 @@ param modelSkuName string = 'GlobalStandard'
 @maxValue(100)
 param modelCapacity int = 10
 
-param postgresSkuName string = 'Standard_B1ms'
+param postgresSkuName string = 'Standard_B2s'
 
 @allowed([
   'Burstable'

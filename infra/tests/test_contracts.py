@@ -266,6 +266,12 @@ class InfrastructureContractTests(unittest.TestCase):
         self.assertIn("publish_order_resolution_hosted.py", combined)
         self.assertIn("az deployment sub create", scripts["deploy.ps1"])
         self.assertIn("az acr build", scripts["deploy.ps1"])
+        self.assertIn(
+            "networkRuleSetDefaultAction: 'Allow'",
+            (ROOT / "infra" / "modules" / "registry.bicep").read_text(
+                encoding="utf-8"
+            ),
+        )
         self.assertIn("--file Dockerfile", scripts["deploy.ps1"])
         self.assertNotIn(".azure-api.Dockerfile", scripts["deploy.ps1"])
         self.assertIn(

@@ -96,7 +96,7 @@ No split-region topology is selected.
 
 | Priority | Region | Read-only result | Decision |
 | --- | --- | --- | --- |
-| 1 | East US 2 | Foundry project, Responses API, Agent Service, required dependent resource types, `gpt-4.1-mini` `2025-04-14`, `GlobalStandard`, 11,000 subscription quota available, 11,000 platform capacity, 42 Container Apps environments available, and `Standard_B1ms` available | Selected |
+| 1 | East US 2 | Foundry project, Responses API, Agent Service, required dependent resource types, `gpt-4.1-mini` `2025-04-14`, `GlobalStandard`, 11,000 subscription quota available, 11,000 platform capacity, 42 Container Apps environments available, and Burstable PostgreSQL capability metadata available. The first provider apply rejected catalog-listed `Standard_B1ms`, so the deployment uses the service's regional default `Standard_B2s`. | Selected |
 | 2 | East US | Required dependent resource types present; Global Standard `gpt-4.1-mini` quota reported 11,000 and Container Apps environments 50. The exact model-version capacity and PostgreSQL SKU result must be re-run if this fallback is considered. | Reviewed fallback, not selected |
 | 3 | Central US | Required dependent resource types present; Global Standard `gpt-4.1-mini` quota reported 11,000, Container Apps environments 50, and `Standard_B1ms` was returned. Exact model-version capacity must be re-run if this fallback is considered. | Reviewed fallback, not selected |
 
@@ -260,7 +260,7 @@ runtime duration, token mix, traffic, and future prices can change them.
 
 | Driver | Indicative public retail value |
 | --- | --- |
-| PostgreSQL `B1MS` compute | `$0.017/hour`, about `$12.41/month` at 730 hours |
+| PostgreSQL `B2S` compute | `$0.068/hour`, about `$49.64/month` at 730 hours |
 | PostgreSQL 32 GiB storage | `$0.115/GiB-month`, about `$3.68/month` |
 | PostgreSQL backup above included allowance | `$0.095/GB-month` |
 | ACR Basic | `$0.1666/day`, about `$5.00` per 30 days |

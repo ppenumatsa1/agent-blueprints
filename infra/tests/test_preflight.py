@@ -33,7 +33,7 @@ class IdentityModeTests(unittest.TestCase):
             model_version="2025-04-14",
             model_sku="GlobalStandard",
             model_capacity=10,
-            postgres_sku="Standard_B1ms",
+            postgres_sku="Standard_B2s",
             postgres_tier="Burstable",
         )
 

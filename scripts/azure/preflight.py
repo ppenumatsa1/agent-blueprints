@@ -454,7 +454,7 @@ def parse_arguments() -> tuple[Configuration, str]:
     parser.add_argument("--model-version", default="2025-04-14")
     parser.add_argument("--model-sku", default="GlobalStandard")
     parser.add_argument("--model-capacity", type=int, default=10)
-    parser.add_argument("--postgres-sku", default="Standard_B1ms")
+    parser.add_argument("--postgres-sku", default="Standard_B2s")
     parser.add_argument("--postgres-tier", default="Burstable")
     parser.add_argument(
         "--identity-mode",

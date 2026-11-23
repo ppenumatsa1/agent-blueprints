@@ -124,7 +124,7 @@ backend/frontend, and `WORKFLOW_HOST=local` are prohibited.
 ## Cost controls
 
 - Container Apps consumption with `minReplicas: 0`, `maxReplicas: 2`.
-- PostgreSQL Burstable `Standard_B1ms`, 32 GiB storage, 7-day backup, no HA or
+- PostgreSQL Burstable `Standard_B2s`, 32 GiB storage, 7-day backup, no HA or
   geo-redundant backup by default.
 - ACR Basic.
 - Log Analytics 30-day retention and 1 GB/day ingestion cap.
@@ -180,6 +180,15 @@ The Azure validation workflow is complete and the plan is `Validated`.
 Provisioning, live generated-source publication, hosted execution, and
 application verification remain unexecuted and must preserve the fail-closed
 deployment and readiness gates below.
+
+The first guarded apply exposed two provider behaviors not represented by the
+catalog-only preflight: ACR Basic rejected the AVM module's default deny
+network-rule object, and PostgreSQL rejected `Standard_B1ms` despite returning
+it in regional capability metadata. The corrected configuration keeps ACR
+public but authenticated by setting the network-rule default to `Allow`, with
+admin and anonymous access still disabled, and uses the service's regional
+default Burstable `Standard_B2s`. The failed apply created no application
+deployment evidence and does not change release readiness.
 
 ## Deployment gate
 
