@@ -487,12 +487,20 @@ class InfrastructureContractTests(unittest.TestCase):
         self.assertIn("order_resolution_hosted.bridge", smoke)
         self.assertIn("/api/internal/hosted/v1", deploy)
         self.assertIn("HOSTED_SERVICE_PRINCIPAL_ID", deploy)
-        self.assertIn("Suffix = '/responses'", deploy)
-        self.assertIn("Suffix = '/conversations'", deploy)
+        self.assertIn(
+            'Suffix = "/agents/$HostedAgentName/endpoint/protocols/openai/responses"',
+            deploy,
+        )
+        self.assertIn(
+            'Suffix = "/agents/$HostedAgentName/endpoint/protocols/openai/conversations"',
+            deploy,
+        )
         self.assertIn(
             "HostedWorkflowEndpoint and HostedResponsesEndpoint must identify",
             deploy,
         )
+        self.assertIn("configure-container-app-auth-clients.py", deploy)
+        self.assertIn("04b07795-8ddb-461a-bbee-02f9e1bf7b46", deploy)
         self.assertNotIn("WORKFLOW_HOST=local", deploy)
         self.assertNotIn("CHECKPOINT_ROOT", deploy)
         self.assertNotIn("bootstrap.invalid", deploy)

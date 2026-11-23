@@ -32,18 +32,22 @@ def _required(value: dict, name: str) -> str:
     return result
 
 
-def _endpoint(value: str, suffix: str) -> str:
+def _endpoint(value: str, agent_name: str, resource: str) -> str:
     parsed = urlsplit(value)
+    expected_path = f"/agents/{agent_name}/endpoint/protocols/openai/{resource}"
     if (
         parsed.scheme != "https"
         or not parsed.hostname
         or parsed.username
         or parsed.password
         or parsed.fragment
-        or not parsed.path.rstrip("/").endswith(suffix)
+        or not parsed.path.rstrip("/").endswith(expected_path)
         or not parsed.query.startswith("api-version=")
     ):
-        raise ReconciliationError(f"Hosted endpoint must be an explicit HTTPS {suffix} URL.")
+        raise ReconciliationError(
+            "Hosted endpoint must target the selected agent's explicit HTTPS "
+            f"{resource} protocol endpoint."
+        )
     return value
 
 
@@ -74,11 +78,18 @@ def reconcile(
     hosted_app_role_assignments: list[dict],
     acceptance_mode: bool,
 ) -> dict:
-    if len(source_revision) != 40 or any(character not in "0123456789abcdef" for character in source_revision):
-        raise ReconciliationError("Source revision must be one lowercase 40-character SHA.")
+    if len(source_revision) != 40 or any(
+        character not in "0123456789abcdef" for character in source_revision
+    ):
+        raise ReconciliationError(
+            "Source revision must be one lowercase 40-character SHA."
+        )
     if not deployment_revision or len(deployment_revision) > 128:
         raise ReconciliationError("Deployment revision must be a bounded identifier.")
-    if journal.get("status") != "acknowledged" or journal.get("provisioning_status") != "active":
+    if (
+        journal.get("status") != "acknowledged"
+        or journal.get("provisioning_status") != "active"
+    ):
         raise ReconciliationError("Hosted publication is not acknowledged and active.")
     for name in (
         "agent_version",
@@ -88,8 +99,10 @@ def reconcile(
         "identity_client_id",
     ):
         _required(journal, name)
-    responses_endpoint = _endpoint(responses_endpoint, "/responses")
-    conversation_endpoint = _endpoint(conversation_endpoint, "/conversations")
+    responses_endpoint = _endpoint(responses_endpoint, agent_name, "responses")
+    conversation_endpoint = _endpoint(
+        conversation_endpoint, agent_name, "conversations"
+    )
     if len(agent_role_assignments) != 1:
         raise ReconciliationError("Expected one exact Agent Consumer role assignment.")
     if len(hosted_app_role_assignments) != 1:
@@ -100,8 +113,13 @@ def reconcile(
     normalized = {str(name).upper(): value for name, value in values.items()}
     project_id = _required(normalized, "AZURE_AI_PROJECT_ID").rstrip("/")
     expected_scope = f"{project_id}/agents/{agent_name}"
-    if str(agent_role_assignments[0].get("scope", "")).casefold() != expected_scope.casefold():
-        raise ReconciliationError("Agent Consumer assignment is not exact-agent scoped.")
+    if (
+        str(agent_role_assignments[0].get("scope", "")).casefold()
+        != expected_scope.casefold()
+    ):
+        raise ReconciliationError(
+            "Agent Consumer assignment is not exact-agent scoped."
+        )
     api_fqdn = _required(normalized, "AZURE_API_FQDN")
     web_fqdn = _required(normalized, "AZURE_WEB_FQDN")
     database_host = _required(normalized, "AZURE_POSTGRESQL_HOST")
@@ -131,8 +149,12 @@ def reconcile(
             "AZURE_HOSTED_AGENT_ADAPTER_ENDPOINT": responses_endpoint,
             "AZURE_HOSTED_AGENT_RBAC_SCOPE": expected_scope,
             "AZURE_HOSTED_AGENT_RBAC_SCOPE_SOURCE": "official-foundry-agent-scope",
-            "AZURE_API_HOSTED_AGENT_ROLE_ASSIGNMENT_ID": agent_role_assignments[0]["id"],
-            "AZURE_HOSTED_API_APP_ROLE_ASSIGNMENT_ID": hosted_app_role_assignments[0]["id"],
+            "AZURE_API_HOSTED_AGENT_ROLE_ASSIGNMENT_ID": agent_role_assignments[0][
+                "id"
+            ],
+            "AZURE_HOSTED_API_APP_ROLE_ASSIGNMENT_ID": hosted_app_role_assignments[0][
+                "id"
+            ],
             "ORDER_RESOLUTION_API_ENDPOINT": f"https://{api_fqdn}/api/internal/hosted/v1",
             "ORDER_RESOLUTION_API_SCOPE": f"{app_id_uri}/.default",
             "HOSTED_WORKFLOW_ENDPOINT": responses_endpoint,
@@ -190,7 +212,9 @@ def main() -> int:
     parser.add_argument("--acceptance-mode", choices=("true", "false"), required=True)
     args = parser.parse_args()
     try:
-        values = {str(name).upper(): value for name, value in _read(args.values_file).items()}
+        values = {
+            str(name).upper(): value for name, value in _read(args.values_file).items()
+        }
         journal = _read(args.journal)
         subscription = _required(values, "AZURE_SUBSCRIPTION_ID")
         resource_group = _required(values, "AZURE_RESOURCE_GROUP")

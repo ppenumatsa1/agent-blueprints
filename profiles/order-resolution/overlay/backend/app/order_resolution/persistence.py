@@ -669,8 +669,11 @@ class OrderResolutionStore(PostgresStore):
         case = self.get(case_id)
         try:
             proposal = self.get_current_proposal(str(case_id))
-        except NotFound:
+        except (Conflict, NotFound):
             proposal = None
+        proposal_payload = case.payload.get("proposal")
+        if not isinstance(proposal_payload, dict):
+            proposal_payload = {}
         with self.connect() as connection:
             counts = connection.execute(
                 """
@@ -711,8 +714,8 @@ class OrderResolutionStore(PostgresStore):
                     "action": proposal.action,
                     "destination_id": proposal.destination_id,
                     "approval_required": proposal.approval_required,
-                    "amount": str(proposal.amount) if proposal.amount is not None else None,
-                    "currency": proposal.currency,
+                    "amount": proposal_payload.get("amount"),
+                    "currency": proposal_payload.get("currency"),
                 }
                 if proposal is not None
                 else None

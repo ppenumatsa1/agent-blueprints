@@ -58,15 +58,15 @@ if ($HostedAgentName -cnotmatch '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$') {
 foreach ($endpoint in @{
     HostedWorkflowEndpoint = @{
         Value = $HostedWorkflowEndpoint
-        Suffix = '/responses'
+        Suffix = "/agents/$HostedAgentName/endpoint/protocols/openai/responses"
     }
     HostedResponsesEndpoint = @{
         Value = $HostedResponsesEndpoint
-        Suffix = '/responses'
+        Suffix = "/agents/$HostedAgentName/endpoint/protocols/openai/responses"
     }
     HostedConversationEndpoint = @{
         Value = $HostedConversationEndpoint
-        Suffix = '/conversations'
+        Suffix = "/agents/$HostedAgentName/endpoint/protocols/openai/conversations"
     }
 }.GetEnumerator()) {
     $hostedUri = $null
@@ -85,7 +85,7 @@ foreach ($endpoint in @{
         ) -or
         $hostedUri.Query -cnotmatch '^\?api-version=[A-Za-z0-9._~-]+$'
     ) {
-        throw "$($endpoint.Key) must be an explicit Foundry HTTPS $($endpoint.Value.Suffix) endpoint with one api-version."
+        throw "$($endpoint.Key) must be the selected agent's explicit Foundry HTTPS protocol endpoint with one api-version."
     }
 }
 if ($HostedWorkflowEndpoint -cne $HostedResponsesEndpoint) {
@@ -493,6 +493,30 @@ try {
             -Record (Invoke-HostedPublisher -RequireActive) `
             -RequireActive `
             -ExpectedIdentity $pendingPublishRecord
+
+        $allowedApplications = @(
+            $entra.spaClientId
+            $publishRecord.identity_client_id
+        )
+        if ($EnableAcceptanceControls) {
+            $allowedApplications += '04b07795-8ddb-461a-bbee-02f9e1bf7b46'
+        }
+        $authClientArguments = @(
+            "$PSScriptRoot\configure-container-app-auth-clients.py"
+            '--subscription'
+            $SubscriptionId
+            '--resource-group'
+            $resourceGroup
+            '--app-name'
+            $apiName
+        )
+        foreach ($clientId in $allowedApplications) {
+            $authClientArguments += @('--allowed-application', $clientId)
+        }
+        python @authClientArguments | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            throw 'Unable to configure the API authentication client allowlist.'
+        }
     }
     finally {
         foreach ($name in $previousPublisherEnvironment.Keys) {

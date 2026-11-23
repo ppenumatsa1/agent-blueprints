@@ -5,15 +5,51 @@ from uuid import UUID
 from app.api.routes.acceptance import _authorized
 from app.config import Settings
 from app.domain.errors import AccessDenied
-from app.domain.models import Principal
+from app.domain.models import Case, Principal
 from app.infrastructure.identity import AuthenticatedRequest
 from app.order_resolution.acceptance import AcceptanceFaults
+from app.order_resolution.durability import Proposal
 from app.order_resolution.persistence import OrderResolutionStore
 from app.order_resolution.service import OrderResolutionService
 
 
 CASE_ID = UUID("10000000-0000-4000-8000-000000000001")
 REVISION = "a" * 40
+
+
+class FakeResult:
+    def __init__(self, value):
+        self.value = value
+
+    def fetchone(self):
+        return self.value
+
+    def fetchall(self):
+        return self.value
+
+
+class FakeConnection:
+    def __init__(self):
+        self.results = [
+            {
+                "approved": 0,
+                "rejected": 0,
+                "claims": 1,
+                "effects": 1,
+                "terminal": 1,
+                "denials": 0,
+            },
+            [{"action": "partial_refund_10", "amount": "7.90", "currency": "USD"}],
+        ]
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return None
+
+    def execute(self, *_args):
+        return FakeResult(self.results.pop(0))
 
 
 class AcceptanceFaultTests(unittest.TestCase):
@@ -73,6 +109,52 @@ class AcceptanceFaultTests(unittest.TestCase):
             _authorized(unauthorized, service, REVISION)
         with self.assertRaises(AccessDenied):
             _authorized(operator, service, "b" * 40)
+
+    def test_snapshot_uses_case_payload_for_proposal_money(self):
+        store = object.__new__(OrderResolutionStore)
+        store.get = lambda _case_id: Case(
+            id=CASE_ID,
+            tenant_id="tenant",
+            owner_id="owner",
+            reviewer_id="reviewer",
+            payload={
+                "proposal": {
+                    "amount": "7.90",
+                    "currency": "USD",
+                }
+            },
+            status="completed",
+            decision=None,
+            request_id=None,
+            checkpoint_id=None,
+            terminal_checkpoint_id="terminal",
+            execution_complete=True,
+            failure_code=None,
+        )
+        store.get_current_proposal = lambda _case_id: Proposal(
+            case_id=str(CASE_ID),
+            proposal_version=1,
+            tenant_id="tenant",
+            owner_id="owner",
+            reviewer_id="reviewer",
+            input_digest="1" * 64,
+            policy_evidence_digest="2" * 64,
+            policy_version="POLICY-LATE@1",
+            action="partial_refund_10",
+            destination_id="synthetic-refund",
+            approval_required=False,
+            reason_codes=("late_delivery",),
+            decision_handle_digest=None,
+            decision_expires_at=None,
+            decision_channel=None,
+        )
+        store.connect = FakeConnection
+
+        snapshot = store.acceptance_snapshot(CASE_ID)
+
+        self.assertEqual(snapshot["proposal"]["amount"], "7.90")
+        self.assertEqual(snapshot["proposal"]["currency"], "USD")
+        self.assertEqual(snapshot["counts"]["effects"], 1)
 
 
 if __name__ == "__main__":

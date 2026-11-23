@@ -14,6 +14,14 @@ SPEC.loader.exec_module(module)
 
 
 class ReconcileDeploymentValuesTests(unittest.TestCase):
+    @staticmethod
+    def endpoint(agent: str, resource: str) -> str:
+        return (
+            "https://foundry.example.test/api/projects/project/"
+            f"agents/{agent}/endpoint/protocols/openai/{resource}"
+            "?api-version=2025-11-15-preview"
+        )
+
     def test_reconcile_requires_exact_live_identity_and_emits_final_contract(self):
         subscription = "11111111-1111-4111-8111-111111111111"
         project = (
@@ -43,13 +51,17 @@ class ReconcileDeploymentValuesTests(unittest.TestCase):
         api_app = {
             "properties": {
                 "latestReadyRevisionName": "api--revision",
-                "template": {"containers": [{"image": "registry/api@sha256:" + "a" * 64}]},
+                "template": {
+                    "containers": [{"image": "registry/api@sha256:" + "a" * 64}]
+                },
             }
         }
         web_app = {
             "properties": {
                 "latestReadyRevisionName": "web--revision",
-                "template": {"containers": [{"image": "registry/web@sha256:" + "b" * 64}]},
+                "template": {
+                    "containers": [{"image": "registry/web@sha256:" + "b" * 64}]
+                },
             }
         }
         scope = f"{project}/agents/order-resolution"
@@ -59,10 +71,8 @@ class ReconcileDeploymentValuesTests(unittest.TestCase):
             source_revision="c" * 40,
             deployment_revision="c" * 40,
             agent_name="order-resolution",
-            responses_endpoint="https://foundry.example.test/responses?api-version=2025-11-15-preview",
-            conversation_endpoint=(
-                "https://foundry.example.test/conversations?api-version=2025-11-15-preview"
-            ),
+            responses_endpoint=self.endpoint("order-resolution", "responses"),
+            conversation_endpoint=self.endpoint("order-resolution", "conversations"),
             api_app=api_app,
             web_app=web_app,
             agent_role_assignments=[{"id": "role-assignment", "scope": scope}],
@@ -72,7 +82,9 @@ class ReconcileDeploymentValuesTests(unittest.TestCase):
         self.assertEqual(result["AGENT_VERSION"], "2")
         self.assertEqual(result["DEPLOYMENT_REVISION"], "c" * 40)
         self.assertEqual(result["AZURE_HOSTED_AGENT_RBAC_SCOPE"], scope)
-        self.assertEqual(result["AZURE_HOSTED_API_APP_ROLE_ASSIGNMENT_ID"], "app-role-assignment")
+        self.assertEqual(
+            result["AZURE_HOSTED_API_APP_ROLE_ASSIGNMENT_ID"], "app-role-assignment"
+        )
         self.assertEqual(result["ACCEPTANCE_MODE"], "true")
         self.assertIn("sslmode=verify-full", result["AZURE_API_DATABASE_URL"])
 
@@ -102,23 +114,36 @@ class ReconcileDeploymentValuesTests(unittest.TestCase):
                 source_revision="a" * 40,
                 deployment_revision="a" * 40,
                 agent_name="agent",
-                responses_endpoint="https://example.test/responses?api-version=v1",
-                conversation_endpoint="https://example.test/conversations?api-version=v1",
+                responses_endpoint=self.endpoint("agent", "responses"),
+                conversation_endpoint=self.endpoint("agent", "conversations"),
                 api_app={
                     "properties": {
                         "latestReadyRevisionName": "api--1",
-                        "template": {"containers": [{"image": "r/a@sha256:" + "a" * 64}]},
+                        "template": {
+                            "containers": [{"image": "r/a@sha256:" + "a" * 64}]
+                        },
                     }
                 },
                 web_app={
                     "properties": {
                         "latestReadyRevisionName": "web--1",
-                        "template": {"containers": [{"image": "r/w@sha256:" + "b" * 64}]},
+                        "template": {
+                            "containers": [{"image": "r/w@sha256:" + "b" * 64}]
+                        },
                     }
                 },
                 agent_role_assignments=[{"id": "bad", "scope": "/wrong"}],
                 hosted_app_role_assignments=[{"id": "assignment"}],
                 acceptance_mode=False,
+            )
+
+    def test_reconcile_rejects_generic_project_protocol_endpoints(self):
+        with self.assertRaisesRegex(module.ReconciliationError, "selected agent"):
+            module._endpoint(
+                "https://foundry.example.test/api/projects/project/openai/responses"
+                "?api-version=2025-11-15-preview",
+                "order-resolution",
+                "responses",
             )
 
 

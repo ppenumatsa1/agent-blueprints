@@ -254,6 +254,8 @@ class LiveClient:
         *,
         enabled: bool | None = None,
     ) -> dict:
+        if path.startswith("/acceptance"):
+            path = f"/api/internal/hosted/v1{path}"
         body = (
             {"deployment_revision": self.deployment_revision, "enabled": enabled}
             if enabled is not None
