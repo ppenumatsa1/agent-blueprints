@@ -274,6 +274,13 @@ class InfrastructureContractTests(unittest.TestCase):
         )
         self.assertIn("deployment-operator", scripts["common.ps1"])
         self.assertIn("configure-entra.ps1", scripts["deploy.ps1"])
+        preflight = re.search(
+            r'& "\$PSScriptRoot\\preflight\.ps1"(?P<arguments>.*?)\n\s*\$entraJson',
+            scripts["deploy.ps1"],
+            re.DOTALL,
+        )
+        self.assertIsNotNone(preflight)
+        self.assertNotIn("-OperatorObjectId", preflight.group("arguments"))
         self.assertIn(
             "scripts\\instantiate_maf.py --profile order-resolution",
             scripts["deploy.ps1"],

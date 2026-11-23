@@ -700,6 +700,9 @@ divides readiness into implementation, Azure runtime, and production
 dimensions while permanently blocking production authorization. Cloud evidence
 must match one exact source revision, environment, and immutable deployment
 revision. Implementation evidence cannot establish Azure runtime readiness.
+Deployment preflight accepts only identity, subscription, tenant, user, and
+region inputs; directory object IDs remain scoped to the later Entra
+configuration operation instead of broadening the preflight contract.
 Production authorization remains solely with the baseline-pinned trust
 validator, signed result attestations, and scoped, unexpired risk decisions;
 self-authored review files cannot waive critical or security-critical gates.

@@ -997,6 +997,13 @@ resolves the generated module path without importing runtime dependencies;
 actual imports remain covered by the locked generated-project job. A new
 exact-head CI run is still required before deployment.
 
+The final deployment preflight review found one non-mutating orchestration
+defect: `deploy.ps1` passed the directory operator object ID to
+`preflight.ps1`, whose supported contract intentionally validates only the
+Azure CLI identity, subscription, tenant, user, and region. The unsupported
+parameter is removed, an infrastructure contract prevents its return, and the
+live read-only preflight passes without changing the configured identities.
+
 The release manifest cannot waive or authorize production checks; production
 requires the baseline-pinned trust validator, signed result attestations, and
 scoped, unexpired risk decisions, while critical/security-critical blocking

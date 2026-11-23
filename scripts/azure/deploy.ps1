@@ -169,8 +169,7 @@ try {
         -SubscriptionId $SubscriptionId `
         -TenantId $TenantId `
         -ExpectedUser $ExpectedUser `
-        -Location $Location `
-        -OperatorObjectId $OperatorObjectId
+        -Location $Location
 
     $entraJson = & "$PSScriptRoot\configure-entra.ps1" `
         -Apply `
