@@ -61,7 +61,12 @@ corrected before the final complete suites passed; no tests were removed.
 seven jobs. Azure validation then passed live identity/quota/provider checks,
 subscription policy review, provider-backed validation, and a what-if with 21
 creates and no modifications or deletions. Proceed through the guarded
-deployment workflow. Live hosted execution, managed-identity token issuance,
+deployment workflow. The first corrected apply created the PostgreSQL server
+but exposed a Flexible Server control-plane concurrency constraint; the
+administrator, TLS configuration, database, and optional firewall resources
+are now explicitly serialized, with Bicep validation and all 17 infrastructure
+tests passing. Exact-head CI and a guarded live retry remain required. Live
+hosted execution, managed-identity token issuance,
 real-model evaluation, authenticated browser evidence, and independent
 production authorization remain unverified. The original architecture HTML
 remains unchanged.

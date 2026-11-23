@@ -161,6 +161,11 @@ Validation used the active authorized Azure CLI context and passed live
 identity, provider, region, quota, capacity, policy, subscription deployment,
 and what-if checks. The current azd account and tenant still differ from Azure
 CLI; Azure CLI mode reports that mismatch and explicit azd mode fails closed.
+PostgreSQL Flexible Server accepts one control-plane child operation at a time
+during provisioning. The module therefore serializes Entra administrator, TLS
+configuration, database creation, and optional firewall rules; this ordering
+does not merge checkpoint state with business state or grant the hosted
+identity database access.
 Cloud configuration requires hosted
 workflow mode, managed-identity PostgreSQL with TLS verification, an explicit
 adapter endpoint, and agent-scoped API access. `BLUEPRINT_APPLICATION`,

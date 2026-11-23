@@ -18,8 +18,13 @@ Draft PR #49 publishes exact head
 passed all seven jobs. Live Azure preflight, subscription policy review,
 provider validation, and provider-backed what-if passed with 21 creates and no
 modifications or deletions, so `.azure/deployment-plan.md` is `Validated`.
-Next: execute the guarded deployment and retain immutable live evidence. These
-checks do not authorize merge, release, or production-risk acceptance.
+The first corrected apply created the PostgreSQL server but exposed concurrent
+Flexible Server child writes. The module now orders administrator, TLS
+settings, database, and optional firewall resources; Bicep validation and all
+17 infrastructure tests pass locally. Next: obtain exact-head CI, retry the
+guarded deployment against the existing resource group, and retain immutable
+live evidence. These checks do not authorize merge, release, or production-risk
+acceptance.
 
 ## Phase 0: foundation
 

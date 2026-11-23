@@ -93,6 +93,7 @@ class InfrastructureContractTests(unittest.TestCase):
         self.assertEqual(deployments[0]["sku"]["capacity"], "[parameters('modelCapacity')]")
 
     def test_postgres_is_entra_only_public_and_tls_enforced(self):
+        source = (INFRA / "modules" / "postgres.bicep").read_text(encoding="utf-8")
         servers = self.of_type("Microsoft.DBforPostgreSQL/flexibleServers")
         self.assertEqual(len(servers), 1)
         properties = servers[0]["properties"]
@@ -112,6 +113,9 @@ class InfrastructureContractTests(unittest.TestCase):
         self.assertTrue(
             any("ssl_min_protocol_version" in name and value == "TLSv1.2" for name, value in values.items())
         )
+        self.assertIn("dependsOn: [\n    administrator\n  ]", source)
+        self.assertIn("dependsOn: [\n    requireTls\n  ]", source)
+        self.assertIn("dependsOn: [\n    minimumTls\n  ]", source)
 
     def test_container_apps_are_tls_only_bounded_and_api_authenticated(self):
         environments = self.of_type("Microsoft.App/managedEnvironments")

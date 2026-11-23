@@ -62,6 +62,30 @@ resource administrator 'Microsoft.DBforPostgreSQL/flexibleServers/administrators
   }
 }
 
+resource requireTls 'Microsoft.DBforPostgreSQL/flexibleServers/configurations@2025-08-01' = {
+  parent: server
+  name: 'require_secure_transport'
+  properties: {
+    source: 'user-override'
+    value: 'ON'
+  }
+  dependsOn: [
+    administrator
+  ]
+}
+
+resource minimumTls 'Microsoft.DBforPostgreSQL/flexibleServers/configurations@2025-08-01' = {
+  parent: server
+  name: 'ssl_min_protocol_version'
+  properties: {
+    source: 'user-override'
+    value: 'TLSv1.2'
+  }
+  dependsOn: [
+    requireTls
+  ]
+}
+
 resource database 'Microsoft.DBforPostgreSQL/flexibleServers/databases@2025-08-01' = {
   parent: server
   name: databaseName
@@ -69,6 +93,9 @@ resource database 'Microsoft.DBforPostgreSQL/flexibleServers/databases@2025-08-0
     charset: 'UTF8'
     collation: 'en_US.utf8'
   }
+  dependsOn: [
+    minimumTls
+  ]
 }
 
 resource publicFirewallRules 'Microsoft.DBforPostgreSQL/flexibleServers/firewallRules@2025-08-01' = [
@@ -79,26 +106,11 @@ resource publicFirewallRules 'Microsoft.DBforPostgreSQL/flexibleServers/firewall
       endIpAddress: rule.endIpAddress
       startIpAddress: rule.startIpAddress
     }
+    dependsOn: [
+      database
+    ]
   }
 ]
-
-resource requireTls 'Microsoft.DBforPostgreSQL/flexibleServers/configurations@2025-08-01' = {
-  parent: server
-  name: 'require_secure_transport'
-  properties: {
-    source: 'user-override'
-    value: 'ON'
-  }
-}
-
-resource minimumTls 'Microsoft.DBforPostgreSQL/flexibleServers/configurations@2025-08-01' = {
-  parent: server
-  name: 'ssl_min_protocol_version'
-  properties: {
-    source: 'user-override'
-    value: 'TLSv1.2'
-  }
-}
 
 output id string = server.id
 output name string = server.name

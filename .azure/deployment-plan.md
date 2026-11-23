@@ -174,6 +174,7 @@ backend/frontend, and `WORKFLOW_HOST=local` are prohibited.
 | Subscription policy review (`2026-11-23T00:49:53Z`) | Reviewed nine inherited/subscription assignments. The explicit resource-creation deny applies only to listed classic resource types; the planned modern resource types passed provider validation. |
 | `az deployment sub validate --validation-level ProviderNoRbac ...` (`2026-11-23T00:49:53Z`) | Succeeded for the exact target subscription, East US 2, resource group, current Entra PostgreSQL administrator object, and validated parameter shape. |
 | `pwsh ./scripts/azure/what-if.ps1 ...` (`2026-11-23T00:49:53Z`) | Succeeded with 21 creates, zero modifies, and zero deletes. Four role-assignment previews were reported as unsupported under `ProviderNoRbac`; static contracts verified their exact principals, data-plane roles, and least-privilege scopes. |
+| PostgreSQL ordering repair revalidation | `scripts/azure/validate.ps1` passed Bicep build/lint and all 17 infrastructure contracts. Live Azure CLI preflight passed again. Provider-backed what-if against the partially provisioned resource group succeeded with five remaining creates, 12 provider-normalization modifies, no resource deletes, and the same four unsupported deterministic RBAC previews. |
 | Draft integration PR exact-head CI | Draft PR #49 at `007f9bc0136c0d0e42bb22c4d45fd9a7f799cfb4`; run `45090269313` passed contracts, browser, Compose, core, frontend, independent generation, and infrastructure. |
 
 The Azure validation workflow is complete and the plan is `Validated`.
@@ -189,6 +190,14 @@ public but authenticated by setting the network-rule default to `Allow`, with
 admin and anonymous access still disabled, and uses the service's regional
 default Burstable `Standard_B2s`. The failed apply created no application
 deployment evidence and does not change release readiness.
+
+A subsequent guarded apply provisioned the PostgreSQL server but exposed a
+provider concurrency constraint: administrator and configuration child
+operations cannot safely run in parallel while the server is becoming
+accessible. The PostgreSQL module now serializes administrator, TLS
+configuration, database, and optional firewall resources. This is deployment
+ordering only; it does not change authentication, TLS, firewall, or runtime
+ownership.
 
 ## Deployment gate
 
