@@ -1,0 +1,70 @@
+{
+  "schema_version": "1.0.0",
+  "authority": "diagnostic_non_authorizing",
+  "source_revision": "886b628fdea02f9089c385b4ed0fc46d90f375e8",
+  "environment": "local-generated-order-resolution",
+  "agent_version": "0.1.0",
+  "deployment_revision": null,
+  "recorded_at": "2026-11-22T21:00:00Z",
+  "dimensions": {
+    "implementation": {
+      "status": "passed",
+      "reason": "Revision-bound local implementation checks passed.",
+      "required_checks": ["ORS-001-009", "TECHNICAL-EXECUTION", "BUSINESS-OUTCOME"],
+      "evidence": [
+        {
+          "check_id": "ORS-001-009",
+          "kind": "local_test",
+          "reference": "runner-results.json",
+          "source_revision": "886b628fdea02f9089c385b4ed0fc46d90f375e8",
+          "deployment_revision": null,
+          "environment": "local-generated-order-resolution",
+          "recorded_at": "2026-11-22T21:00:00Z",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        {
+          "check_id": "TECHNICAL-EXECUTION",
+          "kind": "evaluation_result",
+          "reference": "technical.json",
+          "source_revision": "886b628fdea02f9089c385b4ed0fc46d90f375e8",
+          "deployment_revision": null,
+          "environment": "local-generated-order-resolution",
+          "recorded_at": "2026-11-22T21:00:00Z",
+          "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        },
+        {
+          "check_id": "BUSINESS-OUTCOME",
+          "kind": "evaluation_result",
+          "reference": "business.json",
+          "source_revision": "886b628fdea02f9089c385b4ed0fc46d90f375e8",
+          "deployment_revision": null,
+          "environment": "local-generated-order-resolution",
+          "recorded_at": "2026-11-22T21:00:00Z",
+          "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        }
+      ],
+      "blockers": []
+    },
+    "azure_runtime": {
+      "status": "unverified",
+      "reason": "No exact active-revision Azure evidence exists.",
+      "required_checks": [
+        "ACTIVE-REVISION",
+        "HOSTED-EXECUTION",
+        "MODEL-QUALITY",
+        "BROWSER-E2E",
+        "FAILURE-INJECTION",
+        "APP-INSIGHTS-CORRELATION"
+      ],
+      "evidence": [],
+      "blockers": []
+    },
+    "production": {
+      "status": "blocked",
+      "reason": "Production readiness depends on verified Azure runtime evidence.",
+      "required_checks": ["SECURITY-REVIEW", "COST-REVIEW", "HUMAN-RISK-ACCEPTANCE"],
+      "evidence": [],
+      "blockers": ["Azure runtime readiness is unverified."]
+    }
+  }
+}

@@ -3,7 +3,8 @@ from fastapi import FastAPI
 from app.api.app import create_api_app
 from app.application import ApplicationComponents
 from app.config import Settings
-from app.domain.models import StateRepository
+from app.domain.errors import HostedWorkflowError
+from app.domain.models import StateRepository, WorkflowHost
 from app.infrastructure.delegation import OnBehalfOf
 from app.infrastructure.identity import EntraIdentity, IdentityProvider
 from app.infrastructure.store import PostgresStore
@@ -19,25 +20,41 @@ def create_app(
     *,
     store: StateRepository | None = None,
     identity: IdentityProvider | None = None,
+    hosted_host: WorkflowHost | None = None,
 ) -> FastAPI:
-    repository = store if store is not None else PostgresStore(settings.database_url)
+    repository = store if store is not None else PostgresStore.from_settings(settings)
     identity_provider = identity if identity is not None else EntraIdentity(settings)
     telemetry = Telemetry(
         settings.telemetry_mode,
         settings.applicationinsights_connection_string,
+        agent_version=settings.agent_version,
+        deployment_revision=settings.deployment_revision,
     )
     try:
-        workflow_host = LocalWorkflowHost(
-            repository,
-            components.action,
-            settings.checkpoint_root,
-            components.workflow_factory,
-            telemetry=telemetry,
-        )
+        if settings.host_mode == "local":
+            workflow_host = LocalWorkflowHost(
+                repository,
+                components.action,
+                settings.checkpoint_root,
+                components.workflow_factory,
+                telemetry=telemetry,
+            )
+        else:
+            if hosted_host is None:
+                raise HostedWorkflowError(
+                    "Hosted mode requires the integrated Agent A Responses workflow adapter."
+                )
+            workflow_host = hosted_host
         if isinstance(repository, PostgresStore):
             repository.telemetry = telemetry
         service = WorkflowService(repository, workflow_host, components.rules, components.policy)
-        lifespan = create_lifespan(repository, components, workflow_host, telemetry)
+        lifespan = create_lifespan(
+            repository,
+            components,
+            workflow_host,
+            telemetry,
+            close_store=store is None,
+        )
         return create_api_app(
             settings,
             service,

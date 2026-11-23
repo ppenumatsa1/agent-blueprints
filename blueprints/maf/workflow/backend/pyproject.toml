@@ -6,6 +6,7 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
     "alembic==1.16.5",
     "agent-framework-core==1.26.0",
+    "azure-identity==1.27.0",
     "azure-monitor-opentelemetry-exporter==1.0.0b59",
     "fastapi==0.162.7",
     "msal==1.39.0",

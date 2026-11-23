@@ -19,6 +19,7 @@ from app.extensions.evaluation import (
     EvaluationCase,
     EvaluationDataset,
     EvaluationRubric,
+    RealProviderEvaluationSettings,
     RubricCriterion,
     map_evaluation_results,
     unavailable_assessment,
@@ -109,6 +110,7 @@ ORDER_RESOLUTION_LOCAL_EVALUATOR: Evaluator = LocalEvaluator(
     exact_technical_execution,
     exact_business_outcome,
 )
+MODEL_QUALITY_CRITERION_ID = "order-resolution-model-quality"
 
 
 @dataclass(frozen=True)
@@ -307,6 +309,62 @@ async def evaluate_deterministic_results(
     )
 
 
+async def evaluate_real_provider_results(
+    configuration: OrderResolutionEvaluationConfiguration,
+    actual_results: Mapping[str, Mapping[str, object]],
+    expected_results: Mapping[str, Mapping[str, object]],
+    evaluator_provider: Evaluator,
+    settings: RealProviderEvaluationSettings,
+) -> EvaluationAssessment:
+    """Run an explicitly configured provider evaluator without synthetic fallback."""
+    if not settings.enabled:
+        raise ValueError("Real-provider evaluation was not explicitly enabled.")
+    dataset = EvaluationDataset(
+        dataset_id=f"{configuration.dataset.dataset_id}-real-provider",
+        version=configuration.dataset.version,
+        cases=tuple(
+            EvaluationCase(
+                case_id=group.case_id,
+                inputs={"query": group.query},
+                check_ids=(MODEL_QUALITY_CHECK_ID,),
+            )
+            for group in configuration.groups
+        ),
+    )
+    rubric = EvaluationRubric(
+        rubric_id="order-resolution-real-provider",
+        version=configuration.rubric.version,
+        criteria=(
+            RubricCriterion(
+                MODEL_QUALITY_CRITERION_ID,
+                MODEL_QUALITY_CHECK_ID,
+                settings.minimum_score,
+            ),
+        ),
+    )
+    rubric.validate_for(dataset, READINESS_CHECK_IDS)
+    actual_payloads = build_group_payloads(configuration, actual_results)
+    expected_payloads = build_group_payloads(configuration, expected_results)
+    native_results = await evaluate_agent(
+        queries=[group.query for group in configuration.groups],
+        responses=[
+            AgentResponse(messages=[Message(role="assistant", contents=[payload])])
+            for payload in actual_payloads
+        ],
+        expected_output=list(expected_payloads),
+        evaluators=evaluator_provider,
+        eval_name=(
+            f"order-resolution-real-provider-{settings.provider_id}-{settings.deployment_revision}"
+        ),
+    )
+    return map_evaluation_results(
+        dataset,
+        rubric,
+        READINESS_CHECK_IDS,
+        native_results,
+    )
+
+
 def unavailable_deterministic_assessment(
     configuration: OrderResolutionEvaluationConfiguration,
 ) -> EvaluationAssessment:
@@ -319,9 +377,22 @@ def unavailable_deterministic_assessment(
 
 def map_readiness_states(
     assessment: EvaluationAssessment,
+    model_assessment: EvaluationAssessment | None = None,
 ) -> tuple[ReadinessState, ...]:
     """Keep deterministic, model, browser, and provenance evidence independent."""
     mapped = {result.check_id: result for result in assessment.check_results}
+    model_result = (
+        next(
+            (
+                result
+                for result in model_assessment.check_results
+                if result.check_id == MODEL_QUALITY_CHECK_ID
+            ),
+            None,
+        )
+        if model_assessment is not None
+        else None
+    )
     return (
         ReadinessState(
             "technical_execution",
@@ -338,8 +409,12 @@ def map_readiness_states(
         ReadinessState(
             "model_quality",
             MODEL_QUALITY_CHECK_ID,
-            "unverified",
-            "No explicitly configured real model or provider evaluation was executed.",
+            model_result.outcome if model_result is not None else "unverified",
+            (
+                model_result.reason
+                if model_result is not None
+                else "No explicitly configured real model or provider evaluation was executed."
+            ),
         ),
         ReadinessState(
             "browser_evidence",

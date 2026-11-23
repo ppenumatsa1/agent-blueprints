@@ -19,15 +19,18 @@ from app.order_resolution.evaluation import (  # noqa: E402
     BUSINESS_OUTCOME_CHECK_ID,
     EXPECTED_SCENARIO_IDS,
     ORDER_RESOLUTION_LOCAL_EVALUATOR,
+    MODEL_QUALITY_CHECK_ID,
     READINESS_CHECK_IDS,
     TECHNICAL_EXECUTION_CHECK_ID,
     build_group_payloads,
     evaluate_deterministic_results,
+    evaluate_real_provider_results,
     load_evaluation_configuration,
     load_golden_expected_outputs,
     map_readiness_states,
     unavailable_deterministic_assessment,
 )
+from app.extensions.evaluation import RealProviderEvaluationSettings  # noqa: E402
 from tests.order_resolution_evidence_runner import produce  # noqa: E402
 
 
@@ -52,6 +55,11 @@ def contracts_path() -> Path:
 @evaluator(name="unavailable-order-resolution-check")
 async def unavailable_check(response: str) -> bool:
     raise RuntimeError("native evaluator failed")
+
+
+@evaluator(name="order-resolution-model-quality")
+def fixture_real_provider_check(response: str, expected_output: str) -> bool:
+    return response == expected_output
 
 
 class OrderResolutionEvaluationTests(unittest.TestCase):
@@ -164,6 +172,35 @@ class OrderResolutionEvaluationTests(unittest.TestCase):
         self.assertEqual(readiness["browser_evidence"].outcome, "unverified")
         self.assertEqual(readiness["provenance"].outcome, "unverified")
 
+    def test_real_provider_mapping_is_separate_and_requires_explicit_settings(self):
+        settings = RealProviderEvaluationSettings(
+            enabled=True,
+            provider_id="azure-ai-foundry",
+            model_id="configured-deployment",
+            evaluator_factory="tests.fixture:create",
+            result_factory="tests.fixture:results",
+            base_url="https://synthetic.invalid",
+            source_revision="source-123",
+            deployment_revision="revision-123",
+            minimum_score=0.8,
+        )
+        model = asyncio.run(
+            evaluate_real_provider_results(
+                self.configuration,
+                self.expected,
+                self.expected,
+                LocalEvaluator(fixture_real_provider_check),
+                settings,
+            )
+        )
+        self.assertEqual(model.outcome, "passed")
+        self.assertEqual(
+            [(item.check_id, item.outcome) for item in model.check_results],
+            [(MODEL_QUALITY_CHECK_ID, "passed")],
+        )
+        readiness = {state.area: state for state in map_readiness_states(self.assess(), model)}
+        self.assertEqual(readiness["model_quality"].outcome, "passed")
+
     def test_group_payloads_do_not_mix_business_and_technical_facts(self):
         payloads = [
             json.loads(value) for value in build_group_payloads(self.configuration, self.expected)
@@ -239,9 +276,26 @@ class OrderResolutionEvaluationTests(unittest.TestCase):
                     "unit-test",
                 )
             readiness = json.loads((output / "readiness-input.json").read_text(encoding="utf-8"))
+            release = json.loads((output / "release-evidence.json").read_text(encoding="utf-8"))
+            release_schema = json.loads(
+                (contracts_path() / "release-evidence.schema.json").read_text(encoding="utf-8")
+            )
+            Draft202012Validator(
+                release_schema,
+                format_checker=FormatChecker(),
+            ).validate(release)
+            for evidence in release["dimensions"]["implementation"]["evidence"]:
+                self.assertEqual(
+                    evidence["sha256"],
+                    hashlib.sha256((output / evidence["reference"]).read_bytes()).hexdigest(),
+                )
         states = {item["check_id"]: item["outcome"] for item in readiness["results"]}
         self.assertEqual(matrix["local_factory_status"], "passed")
         self.assertEqual(matrix["release_status"], "blocked")
+        self.assertEqual(release["authority"], "diagnostic_non_authorizing")
+        self.assertEqual(release["dimensions"]["implementation"]["status"], "passed")
+        self.assertEqual(release["dimensions"]["azure_runtime"]["status"], "unverified")
+        self.assertEqual(release["dimensions"]["production"]["status"], "blocked")
         self.assertEqual(states[TECHNICAL_EXECUTION_CHECK_ID], "passed")
         self.assertEqual(states[BUSINESS_OUTCOME_CHECK_ID], "passed")
         self.assertEqual(states["ORDER-RESOLUTION-MODEL-QUALITY"], "unverified")

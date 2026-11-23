@@ -62,10 +62,38 @@ not rotate an existing database password.
 
 ## Direct backend and frontend inputs
 
-The backend reads `ENTRA_TENANT_ID`, `ENTRA_API_CLIENT_ID`, `DATABASE_URL`
-(a PostgreSQL URL containing credentials), `CHECKPOINT_ROOT` (private
-directory), and `BLUEPRINT_APPLICATION`. `WORKFLOW_HOST` defaults to
-`local`, the only implemented mode. `CORS_ORIGINS` is an optional
+For hosted backend execution, set `WORKFLOW_HOST=hosted` and omit
+`CHECKPOINT_ROOT`. Supply `HOSTED_WORKFLOW_ENDPOINT`,
+`HOSTED_CONVERSATION_ENDPOINT`,
+`HOSTED_WORKFLOW_SCOPE`, and `API_MANAGED_IDENTITY_CLIENT_ID`; all are
+required and startup fails closed when any is missing or invalid. Local mode
+requires `WORKFLOW_HOST=local` and `CHECKPOINT_ROOT`. The generated standalone
+app has no default hosted transport: Agent A integration must inject the native
+Responses `WorkflowHost` adapter, otherwise hosted startup fails closed.
+For the Order Resolution hosted-state boundary also set
+`ENTRA_API_APP_ID_URI`, `HOSTED_SERVICE_PRINCIPAL_ID`, and
+`HOSTED_SERVICE_APP_ROLE=Hosted.Workflow.Invoke`. The hosted runtime calls the
+generated API with `ORDER_RESOLUTION_API_ENDPOINT` and
+`ORDER_RESOLUTION_API_SCOPE=api://<API-client-id>/.default`; do not provide it
+with PostgreSQL URLs, TLS settings, credentials, or roles.
+
+For API-owned Azure PostgreSQL, set `DATABASE_TLS_MODE=verify-full`,
+`DATABASE_TLS_ROOT_CERT=system` or libpq-compatible `PGSSLROOTCERT=system` (or
+the generated container CA bundle at
+`/etc/ssl/certs/ca-certificates.crt`), and choose exactly one authentication
+mode. `DATABASE_AUTH_MODE=managed-identity` forbids a password and obtains the
+PostgreSQL scope only when opening a connection, using
+`DATABASE_MANAGED_IDENTITY_CLIENT_ID` or the API UAMI. Password mode accepts
+`DATABASE_PASSWORD` from a secret manager. Keep `DATABASE_URL` restricted to
+runtime privileges and use `MIGRATION_DATABASE_URL` for explicit schema-owner
+migrations. Configure bounded use with `DATABASE_POOL_MIN_SIZE`,
+`DATABASE_POOL_MAX_SIZE`, `DATABASE_POOL_TIMEOUT_SECONDS`, and
+`DATABASE_CONNECTION_MAX_LIFETIME_SECONDS`.
+
+The backend reads `ENTRA_TENANT_ID`, `ENTRA_API_CLIENT_ID`, `DATABASE_URL`,
+`CHECKPOINT_ROOT` (private directory), and `BLUEPRINT_APPLICATION`.
+`WORKFLOW_HOST` defaults to `local`; hosted mode requires an injected Agent A
+adapter. `CORS_ORIGINS` is an optional
 comma-separated list of explicit origins; HTTP is accepted only for loopback.
 OBO settings above also apply. The frontend reads the public
 `VITE_ENTRA_TENANT_ID`, `VITE_ENTRA_SPA_CLIENT_ID`, and

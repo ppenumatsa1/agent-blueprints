@@ -1,0 +1,36 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "environmentName": {
+      "value": "${AZURE_ENV_NAME}"
+    },
+    "location": {
+      "value": "${AZURE_LOCATION}"
+    },
+    "apiEntraClientId": {
+      "value": "${AZURE_API_ENTRA_CLIENT_ID}"
+    },
+    "apiEntraAppIdUri": {
+      "value": "${AZURE_API_ENTRA_APP_ID_URI}"
+    },
+    "spaEntraClientId": {
+      "value": "${AZURE_SPA_ENTRA_CLIENT_ID}"
+    },
+    "postgresAdministratorObjectId": {
+      "value": "${AZURE_POSTGRES_ADMIN_OBJECT_ID}"
+    },
+    "postgresAdministratorPrincipalName": {
+      "value": "${AZURE_POSTGRES_ADMIN_PRINCIPAL_NAME}"
+    },
+    "hostedWorkflowEndpoint": {
+      "value": "${HOSTED_WORKFLOW_ENDPOINT}"
+    },
+    "apiImage": {
+      "value": "${AZURE_API_IMAGE}"
+    },
+    "webImage": {
+      "value": "${AZURE_WEB_IMAGE}"
+    }
+  }
+}

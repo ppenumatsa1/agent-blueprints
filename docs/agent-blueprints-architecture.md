@@ -8,6 +8,150 @@ contracts and documented engineering patterns where they have demonstrated
 value; do not hide MAF, LangGraph, or a harness behind a universal runtime.
 Generated projects must not import this repository at runtime.
 
+## Locally integrated Azure/Foundry boundary
+
+The [local integration acceptance](master-checklist.md#local-azurefoundry-integration-acceptance)
+preserves three distinct stores: native MAF local checkpoints,
+Foundry-managed hosted workflow state, and PostgreSQL business state.
+Hosted execution calls the protected API with its service identity; only the
+API identity accesses PostgreSQL. Opaque platform session/user/call context
+does not grant human authority. Authenticated API prebinding and durable
+decision intent remain required, including authorized terminal replay without
+new Responses dispatch. There is no private SDK monkeypatch, invented hosted
+checkpoint ID, shared runtime dependency, or public Foundry-to-database route.
+
+The canonical API image owns its system-CA path through `SSL_CERT_FILE`.
+Deployment cannot override that trust contract. A disposable PostgreSQL 17
+fixture proves normal hosted application startup with `verify-full` and system
+trust, and rejection of both hostname mismatch and an untrusted CA. This
+proves local composition and TLS enforcement, not Azure identity issuance,
+live Foundry checkpoint/recovery behavior, or production readiness.
+The preserved original architecture HTML is not revised by this integration.
+
+## Live acceptance boundary
+
+The 2026-11-23 acceptance attempt verified the deployed immutable API/web
+revisions, public HTTP boundaries, managed-identity database connection, active
+hosted version, and exact-scoped RBAC. It did not verify a human-authorized
+hosted workflow. Delegated API consent, authenticated browser state, reviewed
+provider/result factories, and bounded live fault controls were unavailable.
+Application Insights also identified the runtime as agent `0.1.0` and
+deployment `local-unversioned`, so its rows cannot satisfy exact hosted
+revision correlation. These are explicit blocked/failed evidence boundaries,
+not reasons to collapse Foundry state, business state, authentication, or
+approval into a shared runtime.
+
+The remediation preserves those boundaries. Telemetry now binds the active
+hosted agent version and immutable deployment revision and exposes only
+privacy-safe W3C correlation identifiers. Synthetic fault controls are a
+separate, default-disabled acceptance surface requiring delegated
+`Acceptance.Operator`, an exact revision match, and hosted mode. They can
+inject a PostgreSQL transient or one-shot hosted decision/effect
+acknowledgement loss, but cannot create a refund or shipment outside the
+existing synthetic destination. Because the controls are process-local,
+live fault execution must pin the API to one replica; restart scenarios rely
+only on durable business/hosted state after the process-local control is gone.
+
+Positive approval and rejection evidence requires two distinct delegated
+Entra users: an owner with `workflow.write` and a reviewer with
+`workflow.approve` plus `Workflow.Approver`. The operator role does not weaken
+owner/reviewer separation, and workload identities cannot substitute for a
+human delegated token. Missing second-user credentials therefore remain an
+external blocked prerequisite rather than an authorization bypass.
+
+Live remediation confirmed that privacy-safe correlation and deployment
+normalization do not require a shared runtime or broader identity. App Insights
+corroborated an exact HTTP request ID, business case ID, W3C trace ID, hosted
+agent version, and deployment revision without prompt or identity content.
+Azure reconciliation independently bound the active immutable API/web images,
+hosted `order-resolution:1`, and exact-agent RBAC scope. Hosted completion is
+represented by the durable `hosted_workflow_finished` audit event; acceptance
+normalization counts that event as the single terminal outcome while leaving
+Foundry checkpoints external and PostgreSQL business state independent.
+
+Deployment preserves the PostgreSQL `verify-full` connection string as one
+opaque Azure CLI argument. On Windows, API updates bypass the `az.cmd` wrapper
+and invoke the packaged Azure CLI Python module so the `&sslrootcert=system`
+suffix cannot be reinterpreted by `cmd.exe`; this changes orchestration only
+and does not weaken database TLS or identity boundaries.
+
+Infrastructure and application rollout are also separated by an immutable
+image guard. Subscription Bicep has no placeholder image defaults: callers
+must provide both images. The guarded orchestrator reuses an existing
+digest-pinned template, permits the bootstrap placeholder only before any
+immutable revision exists, and refuses a placeholder template when immutable
+application history proves that a live workload has already been deployed.
+
+The hosted process relies on AgentServer's supported constructor-time
+observability initialization. Application and MAF construction is lazy, so the
+single Azure Monitor provider and supported HTTP instrumentation exist before
+native MAF objects are created. Raw message capture remains disabled; durable
+resume creates a new trace with an explicit link rather than fabricating a
+cross-boundary parent.
+
+### Accepted version-9 runtime boundary
+
+The immutable rollout from
+`a302e939810283bce47867b8fa088374f3d204ad`, validated by all seven jobs in
+CI run `45275635199`, establishes the deployed runtime boundary without
+collapsing its stores or identities. Active hosted `order-resolution:9` owns
+Foundry execution and checkpoints. API revision
+`aborsfoundpv2n45-api--a302e939` owns authorization and PostgreSQL business
+state and uses only its managed identity for a `verify-full` TLS 1.3 database
+connection. The unchanged web revision remains a separate public client. The
+API and web image digests, hosted archive/publication digests, exact-scoped
+roles, version binding, health, and protected `401` boundary are retained in
+the deployment evidence; 32/32 deployment checks passed.
+
+The two-case version-9 signal comparison passed 16/16 checks while preserving
+the same architecture. The automatic trace completed with one database-only
+synthetic effect and no real or external effect. The approval-required trace
+stopped durably at `workflow.hitl_waiting` with no decision or effect and was
+not resumed. Stable `workflow.run`, authorization, policy, proposal, approval,
+effect, persistence, resolution-submit, and HITL-wait stages now describe the
+business trajectory without raw content. Normal pooled borrows no longer emit
+`database.connect`; physical connection creation and failure visibility remain.
+Foundry, MSI, Azure SDK, and HTTP dependencies remain visible. Both trace
+graphs resolve internally except for the expected external caller and
+AgentServer platform-parent boundaries.
+
+Network hardening remains a separate operational boundary. PostgreSQL public
+network access is still enabled. Retained read-only evidence records the broad
+temporary E2E rule, five existing single-address Container Apps rules, and 407
+advertised environment outbound addresses. The repository's supported
+migration tooling creates and removes a temporary exact-IP operator rule, but
+that operator path and a sufficient API allowlist have not been jointly
+validated with the broad rule absent. Firewall hardening is therefore
+deferred, not silently treated as complete. No firewall or network mutation
+was made. Human resume remains separately blocked until a distinct delegated
+reviewer can prove approval and the durable trace link without weakening
+authorization.
+
+### Post-deployment hosted durability correction
+
+The source branch now closes two local durability gaps; these corrections are
+not present in the deployed `a302e939` artifacts. First, the transition to
+pending, hosted binding update, audit record, and native decision-handle
+binding share one PostgreSQL transaction. A failure during handle binding
+therefore rolls the case and binding back instead of leaving an unbound
+pending proposal. Replay locks the same rows and verifies or repairs an exact
+legacy handle/channel binding before returning it.
+
+Second, the hosted Responses client acquires its workload authorization token
+before creating a fresh durable operation claim. A credential failure before
+the request boundary now sends no POST and leaves no ambiguous claim; a later
+retry may claim and submit exactly once. Once a request may have been sent,
+the existing lost-ack rule remains fail-closed and requires reconciliation.
+
+Focused PostgreSQL crash-window and durable-journal regressions, 63 source
+hosted tests, 166 independently generated PostgreSQL/backend tests, 63
+generated hosted tests, nine canonical ORS contract tests, and 105 repository
+contract/readiness tests passed locally. The generated backend retained one
+explicit provider-opt-in skip and the repository suite retained two documented
+adapter-selection skips. This evidence changes no cloud state and does not
+authorize deployment; a green exact-head CI run and a separately authorized
+immutable rollout remain prerequisites.
+
 ## Open architecture and verification gaps
 
 The engineering foundation is not a deployment-readiness claim. Open work
@@ -37,6 +181,133 @@ defines Order Resolution terminology and requirements. The separate
 encodes its normalized business outcomes and keeps framework/runtime execution
 assertions distinct. It is not this blueprint's business implementation;
 order-adjustment remains an independent legacy fixture.
+
+## Azure/Foundry Workstream C
+
+The cloud application architecture keeps framework and identity concerns at
+narrow composition boundaries. `WorkflowHost` remains the use-case port.
+Local mode selects the existing MAF/FileCheckpointStorage host. Hosted mode
+loads Agent A's API-only bridge/client copied into the generated backend; the
+API does not import the sibling hosted runtime or hosting SDK. Without that
+backend-native adapter the API fails closed. No generic `/runs` transport or
+second hosted orchestration path is supplied. Foundry SDK types do not enter
+API, policy, service, or persistence modules.
+
+FastAPI validates and authorizes the end user before hosted dispatch.
+Foundry calls use an explicit `ManagedIdentityCredential` for the configured
+API UAMI; PostgreSQL token acquisition remains constrained to that UAMI. That identity calls Agent A and is the
+sole runtime principal allowed to acquire an Azure PostgreSQL token, but it
+cannot authorize a user action. Agent A's hosted execution identity remains
+separate, owns hosted checkpoint/session state, and calls only the protected
+FastAPI hosted-state API with the fixed `Hosted.Workflow.Invoke` app role. It
+receives no database configuration or role. Order Resolution's synthetic
+downstream identity is application-owned and receives no user, API, or hosted
+credential.
+
+PostgreSQL stores business state plus opaque operation/execution/request
+correlation, never MAF checkpoint bytes. Dispatch is claimed before send.
+The API container installs the Debian CA bundle and exports
+`SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt`; this is a trust-store
+discovery hint for bundled libpq/OpenSSL, not a TLS-policy override.
+`PGSSLROOTCERT=system` and `verify-full` remain the application contract.
+Ambiguous acknowledgments remain unknown and are reconciled by operation ID
+after restart rather than replayed. The native hosted workflow owns action invocation; PostgreSQL verifies and
+projects the idempotent business outcome, preserving the action ledger and
+proposal/action/destination binding. See the
+[security and configuration contract](azure-foundry/application-security.md).
+Hosted approvals use a separate business projection: an opaque request ID,
+case/conversation binding and decision channel are durable, but
+local `checkpoint_id` and `terminal_checkpoint_id` remain null because Foundry
+owns native checkpoint/session state.
+The binding is established only by an authenticated human API command after
+the server selects the conversation. Service-MI binding routes verify that
+existing owner/reviewer authority and cannot manufacture it. Resume persists
+a hashed, expiring, proposal-bound human decision intent before dispatch; only
+an exactly matching hosted callback records the business decision.
+Hosted platform user, session, and call values remain opaque workload
+correlation. They never identify the human principal; changing a platform call
+ID does not change or conflict with an otherwise identical durable business
+operation.
+An identical approved or rejected human command after terminal projection still
+passes through the bridge: C reauthorizes the durable reviewer binding and
+exact intent, then Agent A's journal returns the acknowledged Responses result
+without another network dispatch or effect. Changed principals, conversations,
+channels, or decision commands fail closed.
+The internal base `/api/internal/hosted/v1` exposes only case-bound
+start/resume, read/proposal, approval/decision, effect-projection, and
+completion operations. App-only tenant/issuer/audience/principal/role checks,
+exact binding checks, and durable case-bound idempotency keys protect that
+surface. Agent A's native `ResponsesClient` uses C's narrow
+`PostgresOperationJournal` inside the API process; there is no generic `/runs`
+transport and no hosted-to-PostgreSQL connection.
+The topology is implemented and locally tested, but Azure identity, RBAC,
+networking, managed PostgreSQL, hosted execution, and telemetry remain
+unverified until an authorized integrated deployment.
+
+## Azure/Foundry Workstream B
+
+The prepared Azure topology preserves the application/runtime boundaries:
+
+```text
+Public React Container App
+  -> Entra-protected public FastAPI Container App
+  -> Foundry project and explicit model deployment
+
+FastAPI -> PostgreSQL Flexible Server: business state and approval/effect data
+Foundry Hosted Agent -> framework-owned hosted execution/checkpoints
+All services -> workspace-based Application Insights and Log Analytics
+```
+
+East US 2 is the selected single region. Public networking is deliberate for
+this milestone, with TLS, API platform authentication, managed identities,
+least-privilege roles, Key Vault references, and exact-IP PostgreSQL firewall
+configuration. No VNet, private endpoint, private DNS, or private runner is
+included. A failure of deployment-specific capacity in East US 2 stops the
+deployment; it does not authorize an implicit cross-region topology.
+
+The infrastructure exposes typed deployment outputs to the independent
+runtime, application, and evidence workstreams; it does not add a shared
+runtime. The supported Azure CLI route generates a new independent Order
+Resolution project, publishes its Agent A hosted source, and builds its Agent C
+API/frontend contexts. It never deploys the source blueprint. The generated
+Agent A's generator owns a byte-identical API-side Responses client/bridge copy
+inside the backend context; B validates rather than creates that boundary.
+Hosted source remains separately publishable, and the API does not import the
+full hosted runtime or rely on a sibling `PYTHONPATH`.
+The generated frontend's Compose upstream is replaced only in the temporary
+generated copy with the exact API HTTPS FQDN. Exact deployment, trace,
+evaluation, and browser
+evidence remains with Agent D. Conversation state, hosted framework
+checkpoints, PostgreSQL business state, and human approval remain separate.
+
+The deployment plan is `Validated`, not deployed or production ready.
+Validation used the active authorized Azure CLI context and passed live
+identity, provider, region, quota, capacity, policy, subscription deployment,
+and what-if checks. The current azd account and tenant still differ from Azure
+CLI; Azure CLI mode reports that mismatch and explicit azd mode fails closed.
+PostgreSQL Flexible Server accepts one control-plane child operation at a time
+during provisioning. The module therefore serializes Entra administrator, TLS
+configuration, database creation, and optional firewall rules; this ordering
+does not merge checkpoint state with business state or grant the hosted
+identity database access.
+Cloud configuration requires hosted
+workflow mode, managed-identity PostgreSQL with TLS verification, an explicit
+adapter endpoint, and agent-scoped API access. `BLUEPRINT_APPLICATION`,
+`CHECKPOINT_ROOT`, and local workflow hosting are excluded.
+Hosted publication is staged after the protected API business-state boundary
+is deployed. The platform identity receives only a dedicated API application
+role before active readiness polling; it receives no PostgreSQL URL, role, or
+firewall access. Only API Container App outbound IPs are allowlisted. Agent
+Consumer assignment uses the official exact agent scope derived from validated
+project output and the fixed publisher name; parent or another-agent scopes are
+rejected.
+The hosted application role establishes service identity only. Human authority
+remains server-bound to the exact principal/case, server-selected conversation,
+and channel before any Responses dispatch. Foundry user/session/call values are
+opaque platform correlation and continuity, not human authority; the API bridge
+sends no caller-selected session or actor metadata.
+See the
+[infrastructure evidence and operator contract](azure-foundry/infrastructure.md).
 
 ## MAF modularity foundation and target
 
@@ -72,6 +343,13 @@ its exact-head CI is required independently. Earlier PR #17 head and
 merge-ref checks are historical snapshots; changes on top of this baseline
 require fresh validation. Local evidence is recorded in the
 [integration journal](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-22---main-reconciliation-and-local-validation);
+
+Revision-bound release evidence has a stricter source boundary than ordinary
+pull-request merge validation. The `maf-independent` evidence producer checks
+out the pull-request head explicitly before generating and hashing artifacts;
+the manual cloud workflow then requires that same source revision plus the
+immutable deployment revision. A merge-ref artifact cannot be relabeled as the
+deployed head and must remain unusable until regenerated.
 
 The longer-term target adds a Foundry Responses adapter and host-managed
 checkpoints, neither of which is implemented. Staged Foundry-first Bicep/azd describes
@@ -313,6 +591,35 @@ documented. Local business idempotency does not solve hosted response identity
 recovery; do not silently retry. See the [hosted blocker
 journal](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-21---hosted-caller-binding-and-lost-responses).
 
+### Azure/Foundry Workstream A
+
+The Order Resolution profile now generates a separate native MAF Responses
+host and deterministic source bundle. The host uses a request-aware workflow
+factory and the standard Foundry checkpoint provider; it never attaches local
+filesystem checkpoints or writes whole workflow state to PostgreSQL. The
+application still owns human authorization, decisions, effects, and business
+records behind its protected API.
+
+The authenticated API creates the server-selected Responses conversation and
+prebinds the validated owner or reviewer to the exact case, conversation, and
+channel before dispatch. Requests omit caller-selected `agent_session_id`;
+Foundry associates the conversation with its stable hosted session. Platform
+user, session, and call values are retained only as opaque workload
+correlation and cannot mint a human principal or role. The hosted container
+resolves the pre-established conversation binding and never receives
+PostgreSQL connectivity.
+
+Responses and hosted-version creates use application operation journals. An
+acknowledged identical terminal resume is reauthorized against the exact
+stored intent and returns through the existing operation without another
+Responses dispatch; conflicting content and unauthorized actors fail closed.
+Lost acknowledgments become `unknown` and are not replayed; only an
+authoritative unique remote match may reconcile them. Exact local A/C
+compatibility and its limits are documented in
+[the hosting report](azure-foundry/hosting.md). Live hosted identity,
+checkpoint recovery, model calls, telemetry and networking remain unverified
+and cannot support production readiness.
+
 The fallback hosts the framework runtime in Azure Container Apps and selects a
 tested framework-compatible checkpoint strategy. Do not assume that its
 checkpoint mechanism is identical to Foundry's. React, FastAPI, and PostgreSQL
@@ -441,3 +748,83 @@ agent-blueprints/
 Phase 1 will copy the selected blueprint and verification assets into an
 independently buildable project. Specification Studio integration remains
 Phase 6 work.
+
+## Azure/Foundry Workstream D
+
+The observability boundary uses one process-global OpenTelemetry provider per
+runtime. AgentServer configures its supported Azure Monitor exporter and HTTP,
+HTTPX, urllib, and Azure SDK instrumentation before native MAF instrumentation
+is enabled on that provider. The API reuses its process-global provider and
+injects W3C context into the Foundry request. A request UUID starts at the API;
+a case UUID is added only after the application has established it. W3C
+trace/span IDs, conversation ID, hosted agent version, and deployment revision
+bind technical evidence, but none authorizes a user, approval, case, or side
+effect. Technical status and business outcome remain separate.
+
+Native MAF instrumentation is enabled only with sensitive-data and message
+capture disabled. The hosted `invoke_agent` root, native workflow/executor and
+message spans, and application workflow-stage spans share the global provider.
+Durable HITL resume starts under its new hosted root and carries an explicit
+OpenTelemetry link to the persisted start span; it does not fabricate a parent
+chain across the durable boundary. Model usage is required only when the real
+production path invokes a model. Prompts, completions, credentials, SQL,
+exception messages, arbitrary baggage, and business payloads remain excluded.
+The local Order Resolution host validates the complete persisted request
+identity—case plus deterministic local conversation—when it first observes and
+later restores a checkpoint, so adding durable correlation metadata cannot
+silently disable recovery or weaken the checkpoint binding.
+Application Insights verification requires a connected OperationId/ParentId
+tree, conversation continuity, deployment metadata, restart links, privacy
+checks, and matching Foundry trajectory trace IDs.
+
+Hosted request finalization uses AgentServer's supported awaited async flush.
+The default background flush is not sufficient for a hosted sandbox that can
+suspend immediately after returning a response: a live version-2 trace retained
+W3C identifiers in downstream API callbacks while every hosted parent span was
+absent. Publication therefore fixes `AGENTSERVER_FLUSH_MODE=async` rather than
+adding another provider, exporter, telemetry framework, or manually recreated
+MAF spans. This preserves one process-wide pipeline and native semantic spans;
+the only application-owned spans are bounded business anchors and the only
+durable-boundary relationship is an explicit OpenTelemetry link.
+
+Application Insights has local authentication disabled, so the hosted
+publisher also fixes AgentServer's supported
+`APPLICATIONINSIGHTS_AUTH_MODE=entra` environment selection. The pinned
+AgentServer path creates `ManagedIdentityCredential()` and supplies it to the
+Azure Monitor distro; the deployment orchestrator grants that hosted-version
+identity only `Monitoring Metrics Publisher` at the exact Application Insights
+component resource ID. No subscription- or resource-group-scope telemetry role
+is permitted. API telemetry metadata prefers the deployment-bound
+`HOSTED_AGENT_VERSION` over the compatibility `AGENT_VERSION` value so an
+immutable hosted publication and the API trace label cannot silently diverge
+after the coordinated deployment completes. Sensitive and message-content
+capture remain disabled.
+
+Release evidence is a separate architecture layer, not runtime state. Its
+manifest is diagnostic and non-authorizing: it validates immutable files and
+divides readiness into implementation, Azure runtime, and production
+dimensions while permanently blocking production authorization. Cloud evidence
+must match one exact source revision, environment, and immutable deployment
+revision. Implementation evidence cannot establish Azure runtime readiness.
+Deployment preflight accepts only identity, subscription, tenant, user, and
+region inputs; directory object IDs remain scoped to the later Entra
+configuration operation instead of broadening the preflight contract.
+Generated deployment work is required to live outside the blueprint repository
+so the independent-project guard remains meaningful; callers supply a durable
+evidence root rather than falling back to an operating-system temporary path.
+PostgreSQL principal and firewall configuration is a separately selectable
+deployment stage so an immutable application-only rollout does not replay
+one-time database administration; skipping that stage does not relax runtime
+TLS, managed identity, or post-deployment health verification.
+Production authorization remains solely with the baseline-pinned trust
+validator, signed result attestations, and scoped, unexpired risk decisions;
+self-authored review files cannot waive critical or security-critical gates.
+
+The manual cloud workflow observes existing resources but never provisions,
+deploys, changes traffic, retries an ambiguous business operation, or rolls
+back. Agent A supplies native hosted lifecycle and reconciliation semantics;
+Agent B supplies immutable revision/resource evidence and telemetry endpoints;
+Agent C supplies authenticated application/database behavior and bounded
+synthetic fault controls. See the
+[Workstream D readiness guide](azure-foundry/readiness.md) for executable gates
+and the current blocked/unverified matrix.

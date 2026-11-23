@@ -1,8 +1,12 @@
 from uuid import UUID
 
-from app.domain.errors import CheckpointError
+from agent_framework import FileCheckpointStorage
+
+from app.domain.errors import ActionError, CheckpointError
+from app.domain.models import Principal
 from app.infrastructure.telemetry import instrumented
 from app.order_resolution.persistence import OrderResolutionStore
+from app.order_resolution.workflow import OrderResolutionDecision
 from app.workflows.host import LocalWorkflowHost
 from app.workflows.workflow import WORKFLOW_NAME
 
@@ -10,20 +14,44 @@ from app.workflows.workflow import WORKFLOW_NAME
 class OrderResolutionWorkflowHost(LocalWorkflowHost):
     """Allow either automatic completion or the base host's native approval pause."""
 
+    @staticmethod
+    def _validate_request_data(data: object, case_id: UUID) -> None:
+        expected = {
+            "case_id": str(case_id),
+            "conversation_id": f"local:{case_id}",
+        }
+        if data != expected:
+            raise CheckpointError("The pending request does not match the record.")
+
+    def _storage(self, case_id: UUID) -> FileCheckpointStorage:
+        directory = self.root / str(case_id)
+        self._private_directory(directory)
+        return FileCheckpointStorage(
+            directory,
+            allowed_checkpoint_types=["app.order_resolution.workflow:OrderResolutionDecision"],
+        )
+
     async def _events(self, stream, case_id: UUID) -> tuple[list[str], list[object]]:
         requests: list[str] = []
         outputs: list[object] = []
         async for event in stream:
             if event.type == "request_info":
-                if event.data != {"case_id": str(case_id)}:
-                    raise CheckpointError("The pending request does not match the record.")
+                self._validate_request_data(event.data, case_id)
                 requests.append(event.request_id)
             elif event.type == "output":
                 outputs.append(event.data)
         return requests, outputs
 
+    async def _requests(self, stream, case_id: UUID) -> list[str]:
+        requests = []
+        async for event in stream:
+            if event.type == "request_info":
+                self._validate_request_data(event.data, case_id)
+                requests.append(event.request_id)
+        return requests
+
     @instrumented("workflow.start")
-    async def start(self, case_id: UUID) -> None:
+    async def start(self, case_id: UUID, actor: Principal | None = None) -> None:
         with self.store.run_lock(case_id):
             case = self.store.get(case_id)
             if case.status != "created":
@@ -79,12 +107,62 @@ class OrderResolutionWorkflowHost(LocalWorkflowHost):
             self.store.finish_automatic(case_id, terminal.checkpoint_id)
 
     @instrumented("workflow.resume")
-    async def resume(self, case_id: UUID) -> None:
-        case = self.store.get(case_id)
-        if (
-            not case.execution_complete
-            and case.request_id
-            and case.payload.get("proposal", {}).get("approval_required") is True
-        ):
-            self.store.bind_decision_handle(case_id, case.request_id)
-        await super().resume(case_id)
+    async def resume(
+        self,
+        case_id: UUID,
+        actor: Principal | None = None,
+        decision_command: object | None = None,
+    ) -> None:
+        with self.store.run_lock(case_id):
+            case = self.store.get(case_id)
+            storage = self._storage(case_id)
+            checkpoints = await self._checkpoints(storage)
+            by_id = {checkpoint.checkpoint_id: checkpoint for checkpoint in checkpoints}
+            if case.execution_complete:
+                if not case.terminal_checkpoint_id or case.terminal_checkpoint_id not in by_id:
+                    raise CheckpointError("The completed workflow checkpoint is missing.")
+                if not self._is_terminal(by_id[case.terminal_checkpoint_id], case.checkpoint_id):
+                    raise CheckpointError("The completed workflow checkpoint is incomplete.")
+                return
+            if not case.checkpoint_id or case.checkpoint_id not in by_id or not case.request_id:
+                raise CheckpointError("The pending workflow checkpoint is missing.")
+            workflow = self._workflow(storage)
+            requests = await self._requests(
+                workflow.run(checkpoint_id=case.checkpoint_id, stream=True), case_id
+            )
+            if requests != [case.request_id]:
+                raise CheckpointError(
+                    "The checkpoint does not contain the recorded pending request."
+                )
+            proposal = self.store.bind_decision_handle(case_id, case.request_id)
+            if case.decision is None:
+                return
+            response = OrderResolutionDecision(
+                case_id=case_id,
+                proposal_version=proposal.proposal_version,
+                action=proposal.action,
+                destination_id=proposal.destination_id,
+                handle=case.request_id,
+                channel=proposal.decision_channel or "api",
+                decision=case.decision,
+            )
+            expected = {"case_id": str(case_id), "decision": case.decision}
+            outputs = []
+            try:
+                async for event in workflow.run(responses={case.request_id: response}, stream=True):
+                    if event.type == "output":
+                        outputs.append(event.data)
+            except ActionError:
+                self.store.mark_action_failed(case_id)
+                raise
+            if outputs != [expected]:
+                raise CheckpointError("The workflow did not produce the expected outcome.")
+            checkpoints = await self._checkpoints(storage)
+            terminal_id = workflow.get_last_checkpoint_id()
+            terminal = next(
+                (item for item in checkpoints if item.checkpoint_id == terminal_id),
+                None,
+            )
+            if terminal is None or not self._is_terminal(terminal, case.checkpoint_id):
+                raise CheckpointError("The completed workflow checkpoint was not saved.")
+            self.store.finish(case_id, terminal.checkpoint_id)

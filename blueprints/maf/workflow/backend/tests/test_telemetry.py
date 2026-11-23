@@ -13,12 +13,18 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 from uuid import UUID
 
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
+from jsonschema import Draft202012Validator
+from azure.monitor.opentelemetry.exporter.export.trace._exporter import (
+    _convert_span_to_envelope,
+)
 from opentelemetry.sdk.metrics.export import (
     AggregationTemporality,
     InMemoryMetricReader,
     MetricExportResult,
 )
+from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor, SpanExportResult
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from opentelemetry.trace import StatusCode
@@ -68,6 +74,10 @@ class TelemetryTests(unittest.TestCase):
         async def fail():
             raise RuntimeError(CANARY)
 
+        @app.get("/nested/healthz")
+        async def nested_health():
+            return {"ok": True}
+
         trace_id = "1234567890abcdef1234567890abcdef"
         with self.assertLogs("blueprint.telemetry", level="INFO") as logs:
             with TestClient(app) as client:
@@ -105,6 +115,20 @@ class TelemetryTests(unittest.TestCase):
                     },
                 )
                 self.assertEqual(unsampled.status_code, 204)
+                sampled_health = client.get(
+                    "/healthz",
+                    headers={
+                        "traceparent": f"00-{trace_id}-1234567890abcdef-01",
+                    },
+                )
+                self.assertEqual(sampled_health.status_code, 204)
+                nested_health = client.get(
+                    "/nested/healthz",
+                    headers={
+                        "traceparent": f"00-{trace_id}-1234567890abcdef-01",
+                    },
+                )
+                self.assertEqual(nested_health.status_code, 200)
                 unsampled_error = client.get(
                     "/test-error",
                     headers={
@@ -138,13 +162,176 @@ class TelemetryTests(unittest.TestCase):
             for span in exporter.get_finished_spans()
             if span.name in {"http.request", "workflow.resume"}
         ]
-        self.assertEqual(len(spans), 4)
+        self.assertEqual(len(spans), 5)
+        self.assertFalse(
+            any(
+                span.attributes.get("blueprint.request.id")
+                == sampled_health.headers["X-Correlation-ID"]
+                for span in spans
+            )
+        )
+        self.assertTrue(
+            any(
+                span.attributes.get("blueprint.request.id")
+                == nested_health.headers["X-Correlation-ID"]
+                for span in spans
+            )
+        )
         error = next(s for s in spans if s.status.status_code == StatusCode.ERROR)
         self.assertFalse(error.events)
         child = next(s for s in spans if s.name == "workflow.resume")
         self.assertEqual(child.context.trace_id, int(trace_id, 16))
         self.assertTrue(any(s.context.span_id == child.parent.span_id for s in spans))
+        denied_span = next(
+            span
+            for span in spans
+            if span.attributes.get("blueprint.request.id") == denied.headers["X-Correlation-ID"]
+        )
+        self.assertEqual(
+            denied_span.attributes["blueprint.case.id"],
+            "30000000-0000-4000-8000-000000000003",
+        )
+        self.assertEqual(
+            denied_log["case_id"],
+            "30000000-0000-4000-8000-000000000003",
+        )
         self.assertNotIn(CANARY, str(records) + repr(spans) + "".join(s.to_json() for s in spans))
+
+    def test_request_status_maps_to_azure_monitor_result_code(self):
+        app = self.app()
+        exporter = InMemorySpanExporter()
+        app.state.telemetry.provider.add_span_processor(SimpleSpanProcessor(exporter))
+
+        @app.get("/test-denied")
+        async def denied():
+            return JSONResponse(status_code=403, content={"detail": "Forbidden."})
+
+        with TestClient(app) as client:
+            response = client.get(
+                f"/test-denied?ignored={CANARY}",
+                headers={"X-Ignored-Secret": CANARY},
+            )
+
+        self.assertEqual(response.status_code, 403)
+        span = next(
+            span
+            for span in exporter.get_finished_spans()
+            if span.name == "http.request"
+            and span.attributes.get("blueprint.request.id") == response.headers["X-Correlation-ID"]
+        )
+        self.assertEqual(span.attributes["http.request.method"], "GET")
+        self.assertEqual(span.attributes["http.response.status_code"], 403)
+
+        envelope = _convert_span_to_envelope(span)
+        self.assertEqual(envelope.data.base_type, "RequestData")
+        self.assertEqual(envelope.data.base_data.response_code, "403")
+        self.assertFalse(envelope.data.base_data.success)
+        self.assertEqual(envelope.data.base_data.name, "http.request")
+        self.assertNotIn(CANARY, str(envelope))
+
+    def test_end_to_end_correlation_usage_retries_and_business_outcomes_are_distinct(self):
+        telemetry = Telemetry(
+            agent_version="agent-1.2.3",
+            deployment_revision="revision-abc123",
+        )
+        self.addCleanup(telemetry.shutdown)
+        exporter = InMemorySpanExporter()
+        telemetry.provider.add_span_processor(SimpleSpanProcessor(exporter))
+        request_id = "10000000-0000-4000-8000-000000000001"
+        case_id = UUID("20000000-0000-4000-8000-000000000002")
+        with self.assertLogs("blueprint.telemetry", level="INFO") as logs:
+            with telemetry.request_scope(request_id):
+                telemetry.bind_case(case_id)
+                with telemetry.operation("http.request"):
+                    with telemetry.operation("foundry.invoke"):
+                        with telemetry.operation(
+                            "model.invoke",
+                            model_provider="azure-ai-foundry",
+                            model="configured-deployment",
+                        ) as model:
+                            model.record_retry("transient")
+                            model.record_model_usage(
+                                provider="azure-ai-foundry",
+                                model="configured-deployment",
+                                input_tokens=12,
+                                output_tokens=7,
+                                cached_tokens=3,
+                            )
+                        with telemetry.operation("tool.execute", tool="order.read"):
+                            pass
+                        with telemetry.operation("workflow.resume") as workflow:
+                            workflow.set_business_outcome("approved")
+                            with telemetry.operation("database.read"):
+                                pass
+
+        records = [json.loads(line.split(":", 2)[2]) for line in logs.output]
+        correlated = [
+            record
+            for record in records
+            if record.get("event") in {"operation", "model.usage", "retry"}
+        ]
+        self.assertTrue(correlated)
+        self.assertTrue(
+            all(
+                record["request_id"] == request_id
+                and record["case_id"] == str(case_id)
+                and record["agent_version"] == "agent-1.2.3"
+                and record["deployment_revision"] == "revision-abc123"
+                for record in correlated
+            )
+        )
+        usage = next(record for record in records if record["event"] == "model.usage")
+        self.assertEqual(
+            (usage["input_tokens"], usage["output_tokens"], usage["cached_tokens"]),
+            (12, 7, 3),
+        )
+        retry = next(record for record in records if record["event"] == "retry")
+        self.assertEqual((retry["reason"], retry["retry_count"]), ("transient", 1))
+        workflow = next(
+            record for record in records if record.get("operation") == "workflow.resume"
+        )
+        self.assertEqual(workflow["business_outcome"], "approved")
+        self.assertEqual(workflow["technical_status"], "succeeded")
+        operations = {
+            record["operation"] for record in records if record.get("event") == "operation"
+        }
+        self.assertEqual(
+            operations,
+            {
+                "http.request",
+                "foundry.invoke",
+                "model.invoke",
+                "tool.execute",
+                "workflow.resume",
+                "database.read",
+            },
+        )
+        spans = exporter.get_finished_spans()
+        trace_ids = {span.context.trace_id for span in spans}
+        self.assertEqual(len(trace_ids), 1)
+        self.assertTrue(
+            all(
+                span.attributes["blueprint.request.id"] == request_id
+                and span.attributes["blueprint.case.id"] == str(case_id)
+                and span.attributes["blueprint.agent.version"] == "agent-1.2.3"
+                and span.attributes["blueprint.deployment.revision"] == "revision-abc123"
+                for span in spans
+            )
+        )
+        project_root = Path(__file__).resolve().parents[2]
+        schema_path = project_root / "verification" / "contracts" / "telemetry-event.schema.json"
+        if not schema_path.is_file():
+            schema_path = (
+                Path(__file__).resolve().parents[5] / "contracts" / "telemetry-event.schema.json"
+            )
+        schema = json.loads(schema_path.read_text(encoding="utf-8"))
+        validator = Draft202012Validator(schema)
+        for record in correlated:
+            self.assertFalse(
+                list(validator.iter_errors(record)),
+                record,
+            )
+        self.assertNotIn(CANARY, json.dumps(records) + "".join(span.to_json() for span in spans))
 
     def test_cors_preflight_allows_traceparent_and_exposes_correlation_id(self):
         origin = "https://client.example"
@@ -176,7 +363,11 @@ class TelemetryTests(unittest.TestCase):
         self.assertNotIn("*", allowed_headers)
         self.assertEqual(response.status_code, 204)
         self.assertEqual(response.headers["access-control-allow-origin"], origin)
-        self.assertEqual(response.headers["access-control-expose-headers"], "X-Correlation-ID")
+        self.assertEqual(
+            response.headers["access-control-expose-headers"],
+            "X-Correlation-ID, traceparent",
+        )
+        self.assertNotIn("traceparent", response.headers)
         self.assertTrue(response.headers["X-Correlation-ID"])
 
     def test_bad_trace_context_and_export_failures_are_safe(self):
@@ -219,7 +410,7 @@ class TelemetryTests(unittest.TestCase):
         self.assertIn('"event":"telemetry.metric_export"', str(logs.output))
         self.assertNotIn(CANARY, str(logs.output))
 
-    def test_maf_auto_instrumentation_stays_disabled_and_manual_spans_remain_safe(self):
+    def test_maf_and_manual_spans_share_global_provider_without_sensitive_content(self):
         script = textwrap.dedent(
             """
             import asyncio
@@ -257,14 +448,14 @@ class TelemetryTests(unittest.TestCase):
 
             class Passthrough(Executor):
                 def __init__(self, *, fail=False):
-                    super().__init__(id=TOOL_CANARY)
+                    super().__init__(id="passthrough")
                     self.fail = fail
 
                 @handler
                 async def run(self, value: str, ctx: WorkflowContext) -> None:
                     if self.fail:
                         raise RuntimeError(FAILURE_CANARY)
-                    await ctx.yield_output(TOOL_CANARY)
+                    await ctx.yield_output("safe-output")
 
             with TemporaryDirectory() as directory:
                 settings = Settings(
@@ -289,7 +480,8 @@ class TelemetryTests(unittest.TestCase):
                 )
                 first_telemetry = app.state.telemetry
                 second_telemetry = second_app.state.telemetry
-                assert first_telemetry.provider is not second_telemetry.provider
+                assert first_telemetry.provider is global_trace_provider
+                assert second_telemetry.provider is global_trace_provider
                 assert trace.get_tracer_provider() is global_trace_provider
                 assert metrics.get_meter_provider() is global_meter_provider
 
@@ -319,12 +511,12 @@ class TelemetryTests(unittest.TestCase):
                     assert failure_response.status_code == 500
 
                 normal_workflow = WorkflowBuilder(
-                    name="normal-" + TOOL_CANARY,
+                    name="normal-workflow",
                     start_executor=Passthrough(),
                 ).build()
                 asyncio.run(normal_workflow.run(PROMPT_CANARY))
                 failure_workflow = WorkflowBuilder(
-                    name="failure-" + TOOL_CANARY,
+                    name="failure-workflow",
                     start_executor=Passthrough(fail=True),
                 ).build()
                 failure_observed = False
@@ -335,12 +527,10 @@ class TelemetryTests(unittest.TestCase):
                 assert failure_observed, "The failing workflow did not preserve its failure."
 
                 spans = manual_exporter.get_finished_spans()
-                assert [span.name for span in spans] == [
-                    "http.request",
-                    "http.request",
-                ]
-                assert all(span.instrumentation_scope.name == "blueprint.manual" for span in spans)
-                assert all(not span.events for span in spans)
+                names = [span.name for span in spans]
+                assert names.count("http.request") == 2, names
+                assert sum(name.startswith("invoke_workflow") for name in names) == 2, names
+                assert names.count("executor.process passthrough") == 2, names
                 assert all(
                     not any(
                         canary in span.to_json()
@@ -354,7 +544,10 @@ class TelemetryTests(unittest.TestCase):
                     for span in spans
                 )
                 global_spans = global_trace_exporter.get_finished_spans()
-                assert not global_spans, [
+                assert "http.request" in {span.name for span in global_spans}
+                assert any(
+                    span.name.startswith("invoke_workflow") for span in global_spans
+                ), [
                     (
                         span.name,
                         span.instrumentation_scope.name,
@@ -372,6 +565,21 @@ class TelemetryTests(unittest.TestCase):
                     )
                     for span in global_spans
                 ]
+                assert "executor.process passthrough" in {
+                    span.name for span in global_spans
+                }
+                assert all(
+                    not any(
+                        canary in span.to_json()
+                        for canary in (
+                            PROMPT_CANARY,
+                            TOOL_CANARY,
+                            IDENTITY_CANARY,
+                            FAILURE_CANARY,
+                        )
+                    )
+                    for span in global_spans
+                )
                 global_metrics = global_metrics_reader.get_metrics_data()
                 assert global_metrics is None or not global_metrics.resource_metrics
                 assert trace.get_tracer_provider() is global_trace_provider
@@ -654,6 +862,57 @@ class TelemetryTests(unittest.TestCase):
                 self.assertNotIn(CANARY, str(caught.exception))
                 self.assertTrue(caught.exception.__suppress_context__)
 
+    def test_initialization_failure_does_not_shutdown_preexisting_global_provider(self):
+        provider = TracerProvider()
+        provider.shutdown = Mock()
+        trace_exporter = Mock()
+        metric_exporter = fake_metric_exporter()
+        with (
+            patch(
+                "app.infrastructure.telemetry.trace.get_tracer_provider",
+                return_value=provider,
+            ),
+            patch.object(provider, "get_tracer", side_effect=RuntimeError(CANARY)),
+            self.assertRaisesRegex(
+                RuntimeError, "^Azure Monitor telemetry initialization failed[.]$"
+            ),
+        ):
+            Telemetry(
+                "azure-monitor",
+                "configured",
+                exporter=trace_exporter,
+                metric_exporter=metric_exporter,
+            )
+        provider.shutdown.assert_not_called()
+        trace_exporter.shutdown.assert_called_once()
+        metric_exporter.shutdown.assert_called_once()
+
+    def test_azure_trace_processor_is_deduplicated_by_destination(self):
+        provider = TracerProvider()
+        trace_exporter = Mock()
+        trace_exporter.force_flush.return_value = True
+        trace_exporter.export.return_value = SpanExportResult.SUCCESS
+        with (
+            patch(
+                "app.infrastructure.telemetry.trace.get_tracer_provider",
+                return_value=provider,
+            ),
+            patch(
+                "azure.monitor.opentelemetry.exporter.AzureMonitorTraceExporter",
+                return_value=trace_exporter,
+            ) as trace_factory,
+            patch(
+                "azure.monitor.opentelemetry.exporter.AzureMonitorMetricExporter",
+                side_effect=lambda **_: fake_metric_exporter(),
+            ),
+        ):
+            first = Telemetry("azure-monitor", "configured")
+            second = Telemetry("azure-monitor", "configured")
+            first.shutdown()
+            second.shutdown()
+        provider.shutdown()
+        trace_factory.assert_called_once()
+
     def test_dependency_exception_payload_is_not_recorded(self):
         telemetry = Telemetry()
         exporter = InMemorySpanExporter()
@@ -664,6 +923,7 @@ class TelemetryTests(unittest.TestCase):
                     raise RuntimeError(CANARY)
         spans = exporter.get_finished_spans()
         self.assertEqual(spans[0].status.status_code, StatusCode.ERROR)
+        self.assertEqual(spans[0].attributes["error.type"], "RuntimeError")
         self.assertFalse(spans[0].events)
         self.assertNotIn(CANARY, str(logs.output) + spans[0].to_json())
         telemetry.shutdown()
@@ -696,10 +956,54 @@ class TelemetryTests(unittest.TestCase):
                 obo.exchange(AuthenticatedRequest(None, CANARY), ("api://example/read",))
         spans = exporter.get_finished_spans()
         self.assertEqual(
-            {s.name for s in spans}, {"database.connect", "database.read", "identity.obo"}
+            {s.name for s in spans},
+            {"database.connection.open", "database.read", "identity.obo"},
         )
+        self.assertTrue(all(s.name != "database.connect" for s in spans))
+        connection = next(s for s in spans if s.name == "database.connection.open")
+        self.assertEqual(connection.attributes["blueprint.database.connection.reason"], "initial")
+        self.assertEqual(connection.attributes["error.type"], "RuntimeError")
         self.assertNotIn(CANARY, str(logs.output) + "".join(s.to_json() for s in spans))
         self.assertTrue(all(not s.events for s in spans))
+        telemetry.shutdown()
+
+    def test_pool_timeout_is_visible_without_normal_borrow_spans(self):
+        class Connection:
+            closed = False
+
+            def commit(self):
+                pass
+
+            def rollback(self):
+                pass
+
+            def close(self):
+                self.closed = True
+
+        telemetry = Telemetry()
+        exporter = InMemorySpanExporter()
+        telemetry.provider.add_span_processor(SimpleSpanProcessor(exporter))
+        store = PostgresStore(
+            "postgresql://localhost/test",
+            pool_min_size=1,
+            pool_max_size=1,
+            pool_timeout_seconds=0.01,
+        )
+        store.telemetry = telemetry
+        store._connector.connect = Mock(side_effect=lambda **_: Connection())
+        with store.connect():
+            with self.assertRaises(TimeoutError):
+                with store.connect():
+                    self.fail("A second checkout exceeded the pool maximum.")
+        spans = exporter.get_finished_spans()
+        self.assertEqual(
+            [span.name for span in spans],
+            ["database.connection.open", "database.pool.checkout"],
+        )
+        checkout = spans[-1]
+        self.assertEqual(checkout.status.status_code, StatusCode.ERROR)
+        self.assertEqual(checkout.attributes["error.type"], "TimeoutError")
+        self.assertFalse(checkout.events)
         telemetry.shutdown()
 
     def test_sdk_error_logging_is_not_forwarded(self):

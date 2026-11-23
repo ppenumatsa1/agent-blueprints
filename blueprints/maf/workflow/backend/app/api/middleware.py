@@ -14,7 +14,8 @@ def install_request_middleware(app: FastAPI, telemetry: Telemetry | None = None)
     @app.middleware("http")
     async def safe_errors(request: Request, call_next):
         request_id = str(uuid4())
-        if telemetry is None:
+        response_traceparent = None
+        if telemetry is None or request.url.path == "/healthz":
             try:
                 response = await call_next(request)
             except Exception as exc:
@@ -23,21 +24,29 @@ def install_request_middleware(app: FastAPI, telemetry: Telemetry | None = None)
                     status_code=500, content={"detail": "Internal server error."}
                 )
         else:
-            with telemetry.operation(
-                "http.request",
-                kind=SpanKind.SERVER,
-                parent=telemetry.parent_from_headers(request.headers),
-                correlation_id=request_id,
-            ) as span:
-                try:
-                    response = await call_next(request)
-                except Exception as exc:
-                    logger.error("Request %s failed (%s).", request_id, type(exc).__name__)
-                    response = JSONResponse(
-                        status_code=500, content={"detail": "Internal server error."}
-                    )
-                span.set_attribute("http.response.status_code", response.status_code)
-                if response.status_code >= 500:
-                    span.set_status(Status(StatusCode.ERROR))
+            with telemetry.request_scope(request_id):
+                with telemetry.operation(
+                    "http.request",
+                    kind=SpanKind.SERVER,
+                    parent=telemetry.parent_from_headers(request.headers),
+                ) as span:
+                    span.set_attribute("http.request.method", request.method)
+                    try:
+                        response = await call_next(request)
+                    except Exception as exc:
+                        logger.error("Request %s failed (%s).", request_id, type(exc).__name__)
+                        response = JSONResponse(
+                            status_code=500, content={"detail": "Internal server error."}
+                        )
+                    telemetry.bind_case(request.path_params.get("case_id"))
+                    case_id = telemetry.correlation_fields().get("case_id")
+                    if case_id is not None:
+                        span.set_attribute("blueprint.case.id", case_id)
+                    span.set_attribute("http.response.status_code", response.status_code)
+                    if response.status_code >= 500:
+                        span.set_status(Status(StatusCode.ERROR))
+                    response_traceparent = span.traceparent()
         response.headers["X-Correlation-ID"] = request_id
+        if response_traceparent is not None:
+            response.headers["traceparent"] = response_traceparent
         return response

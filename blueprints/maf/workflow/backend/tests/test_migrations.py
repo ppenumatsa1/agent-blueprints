@@ -14,6 +14,7 @@ from alembic import command
 from alembic.config import Config
 from alembic.util.exc import CommandError
 from psycopg import sql
+from psycopg.rows import dict_row
 from sqlalchemy import create_engine
 
 from app.infrastructure.migrations import ROOT, SchemaDriftError, upgrade, validate
@@ -260,14 +261,27 @@ class MigrationTests(unittest.TestCase):
         self.addCleanup(cleanup_role)
         original_connect = psycopg.connect
 
-        def read_only_connect(dsn):
-            connection = original_connect(dsn, autocommit=True)
+        def read_only_connect(dsn, *, row_factory=None):
+            if row_factory is None:
+                connection = original_connect(dsn, autocommit=True)
+                expected_privileges = (False, False)
+            else:
+                self.assertIs(row_factory, dict_row)
+                connection = original_connect(
+                    dsn,
+                    autocommit=True,
+                    row_factory=row_factory,
+                )
+                expected_privileges = {
+                    "has_database_privilege": False,
+                    "has_schema_privilege": False,
+                }
             connection.execute(sql.SQL("SET ROLE {}").format(sql.Identifier(role)))
             privileges = connection.execute(
                 "SELECT has_database_privilege(current_user, current_database(), 'CREATE'), "
                 "has_schema_privilege(current_user, current_schema(), 'CREATE')"
             ).fetchone()
-            self.assertEqual(privileges, (False, False))
+            self.assertEqual(privileges, expected_privileges)
             connection.autocommit = False
             return connection
 
