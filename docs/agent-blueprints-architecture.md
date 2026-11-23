@@ -75,6 +75,20 @@ and invoke the packaged Azure CLI Python module so the `&sslrootcert=system`
 suffix cannot be reinterpreted by `cmd.exe`; this changes orchestration only
 and does not weaken database TLS or identity boundaries.
 
+Infrastructure and application rollout are also separated by an immutable
+image guard. Subscription Bicep has no placeholder image defaults: callers
+must provide both images. The guarded orchestrator reuses an existing
+digest-pinned template, permits the bootstrap placeholder only before any
+immutable revision exists, and refuses a placeholder template when immutable
+application history proves that a live workload has already been deployed.
+
+The hosted process relies on AgentServer's supported constructor-time
+observability initialization. Application and MAF construction is lazy, so the
+single Azure Monitor provider and supported HTTP instrumentation exist before
+native MAF objects are created. Raw message capture remains disabled; durable
+resume creates a new trace with an explicit link rather than fabricating a
+cross-boundary parent.
+
 ## Open architecture and verification gaps
 
 The engineering foundation is not a deployment-readiness claim. Open work

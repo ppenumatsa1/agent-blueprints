@@ -25,6 +25,12 @@
     },
     "hostedWorkflowEndpoint": {
       "value": "${HOSTED_WORKFLOW_ENDPOINT}"
+    },
+    "apiImage": {
+      "value": "${AZURE_API_IMAGE}"
+    },
+    "webImage": {
+      "value": "${AZURE_WEB_IMAGE}"
     }
   }
 }

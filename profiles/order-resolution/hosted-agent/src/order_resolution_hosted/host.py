@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 from typing import Any
 from uuid import UUID
 
@@ -27,6 +28,7 @@ _INSTRUMENTATION_OPTIONS = {
     "httpx": {"enabled": True},
     "urllib": {"enabled": True},
 }
+_CHECKPOINT_TYPES = ("app.order_resolution.workflow:OrderResolutionDecision",)
 
 
 def _configure_host_observability(
@@ -113,20 +115,38 @@ async def parse_turn(
     return WorkflowTurn(input=workflow_input)
 
 
-def create_responses_server(application: HostedApplication) -> ResponsesHostServer:
+def create_responses_server(
+    application: HostedApplication | None = None,
+) -> ResponsesHostServer:
     os.environ.update(_PRIVACY_ENVIRONMENT)
+    application_lock = threading.Lock()
+
+    def resolve_application() -> HostedApplication:
+        nonlocal application
+        if application is None:
+            with application_lock:
+                if application is None:
+                    application = load_application()
+        return application
 
     async def parse_response(request: Any) -> WorkflowTurn[Any]:
-        return await parse_turn(application, request)
+        return await parse_turn(resolve_application(), request)
 
     def build_workflow(request: Any) -> Any:
-        return application.build_workflow(_caller(request), _conversation(request))
+        return resolve_application().build_workflow(
+            _caller(request),
+            _conversation(request),
+        )
 
     return ResponsesHostServer(
         workflow=build_workflow,
         parse_response=parse_response,
         checkpoint_store_provider=CheckpointStoreProvider(
-            allowed_checkpoint_types=list(application.checkpoint_types),
+            allowed_checkpoint_types=list(
+                application.checkpoint_types
+                if application is not None
+                else _CHECKPOINT_TYPES
+            ),
         ),
         options=ResponsesServerOptions(resilient_background=True),
         configure_observability=_configure_host_observability,
@@ -134,4 +154,4 @@ def create_responses_server(application: HostedApplication) -> ResponsesHostServ
 
 
 def run() -> None:
-    create_responses_server(load_application()).run()
+    create_responses_server().run()

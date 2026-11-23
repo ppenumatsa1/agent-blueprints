@@ -14,6 +14,7 @@ from order_resolution_hosted.host import (
     _conversation,
     _start_case,
     parse_turn,
+    run,
 )
 
 
@@ -52,6 +53,37 @@ class FakeRequest:
 
 
 class ProtocolTests(unittest.TestCase):
+    def test_runtime_defers_maf_construction_until_after_agentserver_setup(self):
+        server = SimpleNamespace(run=lambda: None)
+        with (
+            patch(
+                "order_resolution_hosted.host.ResponsesHostServer",
+                return_value=server,
+            ) as responses_host,
+            patch("order_resolution_hosted.host.load_application") as load,
+        ):
+            run()
+            responses_host.assert_called_once()
+            load.assert_not_called()
+
+            workflow = responses_host.call_args.kwargs["workflow"]
+            application = SimpleNamespace(
+                build_workflow=lambda caller, conversation: (caller, conversation)
+            )
+            load.return_value = application
+            request = SimpleNamespace(
+                scope=SimpleNamespace(
+                    user_id="user",
+                    session_id="session",
+                    call_id="call",
+                ),
+                conversation_id="conversation",
+            )
+            caller, conversation = workflow(request)
+        self.assertEqual(caller.user_id, "user")
+        self.assertEqual(conversation, "conversation")
+        load.assert_called_once_with()
+
     def test_host_observability_uses_supported_builtins_with_privacy_disabled(self):
         order = []
         with (

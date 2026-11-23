@@ -28,8 +28,8 @@ param acceptanceMode bool
 param minReplicas int
 param maxReplicas int
 
-param apiImage string = 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
-param webImage string = 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
+param apiImage string
+param webImage string
 
 var secretEnvironment = [
   for secret in apiSecretReferences: {

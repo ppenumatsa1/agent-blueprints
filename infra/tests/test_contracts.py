@@ -311,6 +311,33 @@ class InfrastructureContractTests(unittest.TestCase):
             2,
         )
         self.assertIn(
+            "function Get-ContainerAppDeploymentImages",
+            scripts["deploy.ps1"],
+        )
+        self.assertIn(
+            "Existing $service application has immutable revisions but its deployment template is the placeholder image.",
+            scripts["deploy.ps1"],
+        )
+        self.assertIn(
+            "Existing $service application image must use an immutable sha256 digest.",
+            scripts["deploy.ps1"],
+        )
+        self.assertIn("apiImage = @{ value = $deploymentImages.api }", scripts["deploy.ps1"])
+        self.assertIn("webImage = @{ value = $deploymentImages.web }", scripts["deploy.ps1"])
+        container_apps = (ROOT / "infra" / "modules" / "container-apps.bicep").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("param apiImage string", container_apps)
+        self.assertIn("param webImage string", container_apps)
+        self.assertNotIn(
+            "param apiImage string = 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'",
+            container_apps,
+        )
+        self.assertNotIn(
+            "param webImage string = 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'",
+            container_apps,
+        )
+        self.assertIn(
             "networkRuleSetDefaultAction: 'Allow'",
             (ROOT / "infra" / "modules" / "registry.bicep").read_text(
                 encoding="utf-8"
@@ -553,12 +580,14 @@ class InfrastructureContractTests(unittest.TestCase):
             {
                 "apiEntraClientId",
                 "apiEntraAppIdUri",
+                "apiImage",
                 "environmentName",
                 "hostedWorkflowEndpoint",
                 "location",
                 "postgresAdministratorObjectId",
                 "postgresAdministratorPrincipalName",
                 "spaEntraClientId",
+                "webImage",
             },
         )
         for item in parameters.values():

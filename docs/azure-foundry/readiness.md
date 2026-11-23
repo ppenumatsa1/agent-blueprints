@@ -334,3 +334,20 @@ while preserving the `verify-full` URL and normal CLI behavior on other
 platforms. The direct entry point reports Azure CLI `2.93.0`, and all 17
 infrastructure validation tests pass. Live deployment and correlation proof
 remain unverified until exact-head CI passes and the rollout is rerun.
+
+The later full ARM replay demonstrated that the prior optional Container Apps
+image defaults were unsafe for an existing environment: ARM created
+placeholder latest revisions and single-revision routing followed them. Bicep
+now requires explicit API and web images. The deployment orchestrator carries
+forward existing immutable digests, allows a placeholder only before immutable
+history exists, and fails closed when placeholder state conflicts with an
+existing immutable revision. This guard has local Bicep and contract evidence
+only; provider what-if and deployment proof remain required.
+
+Pinned hosted dependencies also confirm the built-in observability surfaces:
+AgentServer accepts the App Insights connection, privacy flag, and HTTP
+instrumentation options; native MAF accepts sensitive-data/message-event
+disablement and forced registration. Runtime loading is deferred until that
+global provider is initialized. HITL restart links and the strict
+App Insights/Foundry verifier remain privacy-safe and do not invent model/token
+spans for deterministic paths.

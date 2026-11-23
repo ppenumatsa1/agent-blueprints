@@ -1030,6 +1030,22 @@ use normal `az` resolution elsewhere. Contract validation requires both API
 updates to use this path; the TLS query string is unchanged. Exact-head CI and
 live deployment evidence remain required before this correction is complete.
 
+Infrastructure redeployment must never infer an application image. The Bicep
+entry point now requires explicit API and web images, and the guarded
+orchestrator resolves existing applications before ARM deployment. Existing
+images must be digest-pinned; a placeholder is allowed only when no immutable
+revision exists. If ARM previously replaced a live template with the
+placeholder while immutable revisions remain, deployment stops and requires
+guarded application restoration instead of moving traffic again.
+
+Hosted startup now preserves the supported AgentServer lifecycle order:
+privacy settings are applied, AgentServer configures the Azure Monitor global
+provider and HTTP instrumentation, native MAF instrumentation is enabled on
+that provider, and only then is the application/MAF graph loaded lazily.
+Durable waits retain only W3C trace/span identifiers and resume with an
+explicit link. The strict verifier does not require model or token spans when
+the deterministic path does not invoke a model.
+
 The release manifest cannot waive or authorize production checks; production
 requires the baseline-pinned trust validator, signed result attestations, and
 scoped, unexpired risk decisions, while critical/security-critical blocking

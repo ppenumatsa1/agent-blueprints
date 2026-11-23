@@ -64,6 +64,81 @@ function Invoke-AzureCliDirect {
     }
 }
 
+function Get-ContainerAppDeploymentImages {
+    param(
+        [Parameter(Mandatory)]
+        [string]$SubscriptionId,
+        [Parameter(Mandatory)]
+        [string]$ResourceGroupName
+    )
+    $placeholder = 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
+    $images = @{
+        api = $placeholder
+        web = $placeholder
+    }
+    $groupExists = az group exists `
+        --subscription $SubscriptionId `
+        --name $ResourceGroupName `
+        --output tsv `
+        --only-show-errors
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Unable to determine whether the deployment resource group exists.'
+    }
+    if ($groupExists.Trim() -cne 'true') {
+        return $images
+    }
+    $appsJson = az containerapp list `
+        --subscription $SubscriptionId `
+        --resource-group $ResourceGroupName `
+        --output json `
+        --only-show-errors
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Unable to inspect existing Container Apps before deployment.'
+    }
+    $apps = @($appsJson | ConvertFrom-Json)
+    foreach ($service in @('api', 'web')) {
+        $matches = @(
+            $apps |
+                Where-Object { $_.tags.'azd-service-name' -ceq $service }
+        )
+        if ($matches.Count -gt 1) {
+            throw "Multiple Container Apps claim the $service deployment service."
+        }
+        if ($matches.Count -eq 0) {
+            continue
+        }
+        $image = $matches[0].properties.template.containers[0].image
+        if ($image -ceq $placeholder) {
+            $revisionsJson = az containerapp revision list `
+                --subscription $SubscriptionId `
+                --resource-group $ResourceGroupName `
+                --name $matches[0].name `
+                --output json `
+                --only-show-errors
+            if ($LASTEXITCODE -ne 0) {
+                throw "Unable to inspect existing $service revisions."
+            }
+            $immutableRevisions = @(
+                $revisionsJson |
+                    ConvertFrom-Json |
+                    Where-Object {
+                        $_.properties.template.containers[0].image -cmatch `
+                            '@sha256:[0-9a-f]{64}$'
+                    }
+            )
+            if ($immutableRevisions.Count -gt 0) {
+                throw "Existing $service application has immutable revisions but its deployment template is the placeholder image. Restore the guarded application revision before infrastructure deployment."
+            }
+            continue
+        }
+        if ($image -cnotmatch '@sha256:[0-9a-f]{64}$') {
+            throw "Existing $service application image must use an immutable sha256 digest."
+        }
+        $images[$service] = $image
+    }
+    return $images
+}
+
 if (-not $Apply) {
     throw 'Deployment is disabled by default. Re-run with -Apply after validation and approval.'
 }
@@ -198,6 +273,10 @@ try {
         -ExpectedUser $ExpectedUser `
         -Location $Location
 
+    $deploymentImages = Get-ContainerAppDeploymentImages `
+        -SubscriptionId $SubscriptionId `
+        -ResourceGroupName $ResourceGroupName
+
     $entraJson = & "$PSScriptRoot\configure-entra.ps1" `
         -Apply `
         -DeploymentMode AzureCli `
@@ -228,6 +307,8 @@ try {
             agentVersion = @{ value = 'unpublished' }
             deploymentRevision = @{ value = $sourceRevision }
             acceptanceMode = @{ value = [bool]$EnableAcceptanceControls }
+            apiImage = @{ value = $deploymentImages.api }
+            webImage = @{ value = $deploymentImages.web }
         }
     }
     $parameters | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $parameterFile

@@ -112,6 +112,14 @@ param deploymentRevision string = 'infrastructure-unbound'
 @description('Enable bounded, role-protected synthetic acceptance controls.')
 param acceptanceMode bool = false
 
+@description('Explicit API image. Existing deployments must pass the current immutable digest.')
+@minLength(1)
+param apiImage string
+
+@description('Explicit web image. Existing deployments must pass the current immutable digest.')
+@minLength(1)
+param webImage string
+
 var cleanEnvironmentName = take(toLower(replace(environmentName, '-', '')), 8)
 var suffix = take(uniqueString(subscription().id, resourceGroupName), 6)
 var prefix = 'ab${cleanEnvironmentName}${suffix}'
@@ -240,6 +248,8 @@ module containerApps './modules/container-apps.bicep' = {
     acceptanceMode: acceptanceMode
     minReplicas: appMinReplicas
     maxReplicas: appMaxReplicas
+    apiImage: apiImage
+    webImage: webImage
   }
 }
 
