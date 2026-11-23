@@ -325,3 +325,12 @@ runtime import remains covered in the locked generated-project job. The full
 environment. These are implementation results only; exact-head CI, immutable
 Azure deployment, one accepted App Insights/Foundry trace tree, restart-link
 evidence, and the remaining hosted acceptance gates are still required.
+
+The next authorized rollout built its immutable API image but failed before
+the API revision update because Windows `az.cmd` treated the
+`&sslrootcert=system` database URL suffix as shell syntax. Deployment now uses
+Azure CLI's packaged Python entry point for the two API updates on Windows,
+while preserving the `verify-full` URL and normal CLI behavior on other
+platforms. The direct entry point reports Azure CLI `2.93.0`, and all 17
+infrastructure validation tests pass. Live deployment and correlation proof
+remain unverified until exact-head CI passes and the rollout is rerun.

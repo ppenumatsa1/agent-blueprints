@@ -1021,6 +1021,15 @@ environment; it does not remove the temporary public rule, change database
 roles, skip application health checks, or claim that controlled replacement
 egress is complete.
 
+The subsequent immutable application rollout built the API image but failed
+closed at its first API update. On Windows, Azure CLI was reached through
+`az.cmd`, which interpreted the `&sslrootcert=system` portion of the
+TLS-preserving `DATABASE_URL` as a command separator. The API update calls now
+invoke the Azure CLI packaged Python module directly on Windows and continue to
+use normal `az` resolution elsewhere. Contract validation requires both API
+updates to use this path; the TLS query string is unchanged. Exact-head CI and
+live deployment evidence remain required before this correction is complete.
+
 The release manifest cannot waive or authorize production checks; production
 requires the baseline-pinned trust validator, signed result attestations, and
 scoped, unexpired risk decisions, while critical/security-critical blocking

@@ -44,6 +44,26 @@ param(
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\common.ps1"
 
+function Invoke-AzureCliDirect {
+    param(
+        [Parameter(Mandatory)]
+        [string[]]$Arguments
+    )
+    $command = Get-Command az -ErrorAction Stop
+    if ($IsWindows -and $command.Source.EndsWith('.cmd')) {
+        $python = [System.IO.Path]::GetFullPath(
+            (Join-Path (Split-Path -Parent $command.Source) '..\python.exe')
+        )
+        & $python -IBm azure.cli @Arguments
+    }
+    else {
+        & $command.Source @Arguments
+    }
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Azure CLI command failed.'
+    }
+}
+
 if (-not $Apply) {
     throw 'Deployment is disabled by default. Re-run with -Apply after validation and approval.'
 }
@@ -357,14 +377,20 @@ try {
         "HOSTED_SERVICE_PRINCIPAL_ID=$($entra.apiServicePrincipalObjectId)"
         'HOSTED_SERVICE_APP_ROLE=Hosted.Workflow.Invoke'
     )
-    az containerapp update `
-        --subscription $SubscriptionId `
-        --resource-group $resourceGroup `
-        --name $apiName `
-        --image $apiImage `
-        --set-env-vars $bootstrapApiEnvironment `
-        --only-show-errors | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw 'Generated API bootstrap deployment failed.' }
+    $bootstrapUpdateArguments = @(
+        'containerapp', 'update',
+        '--subscription', $SubscriptionId,
+        '--resource-group', $resourceGroup,
+        '--name', $apiName,
+        '--image', $apiImage,
+        '--set-env-vars'
+    ) + $bootstrapApiEnvironment + @('--only-show-errors')
+    try {
+        Invoke-AzureCliDirect -Arguments $bootstrapUpdateArguments | Out-Null
+    }
+    catch {
+        throw 'Generated API bootstrap deployment failed.'
+    }
     try {
         $bootstrapHealth = Invoke-WebRequest `
             -Uri "https://$apiFqdn/healthz" `
@@ -560,21 +586,28 @@ try {
         }
     }
 
-    az containerapp update `
-        --subscription $SubscriptionId `
-        --resource-group $resourceGroup `
-        --name $apiName `
-        --image $apiImage `
-        --set-env-vars @(
-            $apiEnvironment
-            "AGENT_VERSION=$($publishRecord.agent_version)"
-            "HOSTED_WORKFLOW_ENDPOINT=$HostedWorkflowEndpoint"
-            "HOSTED_CONVERSATION_ENDPOINT=$HostedConversationEndpoint"
-            "HOSTED_SERVICE_PRINCIPAL_ID=$($publishRecord.identity_principal_id)"
-            "HOSTED_SERVICE_APP_ROLE=$($hostedEntra.hostedServiceRoleValue)"
-        ) `
-        --only-show-errors | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw 'Generated API final deployment failed.' }
+    $finalApiEnvironment = @(
+        $apiEnvironment
+        "AGENT_VERSION=$($publishRecord.agent_version)"
+        "HOSTED_WORKFLOW_ENDPOINT=$HostedWorkflowEndpoint"
+        "HOSTED_CONVERSATION_ENDPOINT=$HostedConversationEndpoint"
+        "HOSTED_SERVICE_PRINCIPAL_ID=$($publishRecord.identity_principal_id)"
+        "HOSTED_SERVICE_APP_ROLE=$($hostedEntra.hostedServiceRoleValue)"
+    )
+    $finalUpdateArguments = @(
+        'containerapp', 'update',
+        '--subscription', $SubscriptionId,
+        '--resource-group', $resourceGroup,
+        '--name', $apiName,
+        '--image', $apiImage,
+        '--set-env-vars'
+    ) + $finalApiEnvironment + @('--only-show-errors')
+    try {
+        Invoke-AzureCliDirect -Arguments $finalUpdateArguments | Out-Null
+    }
+    catch {
+        throw 'Generated API final deployment failed.'
+    }
 
     $patchedNginx = $nginxSource.Replace(
         'proxy_pass http://api:8000;',

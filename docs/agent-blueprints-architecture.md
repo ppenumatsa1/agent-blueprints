@@ -69,6 +69,12 @@ represented by the durable `hosted_workflow_finished` audit event; acceptance
 normalization counts that event as the single terminal outcome while leaving
 Foundry checkpoints external and PostgreSQL business state independent.
 
+Deployment preserves the PostgreSQL `verify-full` connection string as one
+opaque Azure CLI argument. On Windows, API updates bypass the `az.cmd` wrapper
+and invoke the packaged Azure CLI Python module so the `&sslrootcert=system`
+suffix cannot be reinterpreted by `cmd.exe`; this changes orchestration only
+and does not weaken database TLS or identity boundaries.
+
 ## Open architecture and verification gaps
 
 The engineering foundation is not a deployment-readiness claim. Open work
