@@ -1,5 +1,22 @@
 # Phased implementation plan
 
+## Local Azure/Foundry integration checkpoint
+
+**Completed locally, not deployed.** The C -> A -> B -> D integration from
+`886b628fdea02f9089c385b4ed0fc46d90f375e8` preserves native MAF checkpoints,
+Foundry-managed hosted state, and API-owned PostgreSQL business persistence.
+The [integration acceptance table](master-checklist.md#local-azurefoundry-integration-acceptance)
+records exact owner heads, targeted and full-suite evidence, disclosed skips,
+and remaining cloud/production limitations.
+
+The final canonical image includes C's system-CA discovery correction and B's
+no-deployment-override contract. Real PostgreSQL 17 verifies normal hosted
+startup plus wrong-hostname and untrusted-CA refusal, without a trust bypass.
+Fresh generated backend, hosted, verification, and canonical-image checks pass.
+Next: review the retained local integration, then obtain explicit publication
+and cloud-verification authorization. Green local tests do not authorize a
+push, deployment, release, or production-risk acceptance.
+
 ## Phase 0: foundation
 
 The [foundation PR](https://github.com/ppenumatsa1/agent-blueprints/pull/1)

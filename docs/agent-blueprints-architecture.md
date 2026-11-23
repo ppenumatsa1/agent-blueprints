@@ -8,6 +8,26 @@ contracts and documented engineering patterns where they have demonstrated
 value; do not hide MAF, LangGraph, or a harness behind a universal runtime.
 Generated projects must not import this repository at runtime.
 
+## Locally integrated Azure/Foundry boundary
+
+The [local integration acceptance](master-checklist.md#local-azurefoundry-integration-acceptance)
+preserves three distinct stores: native MAF local checkpoints,
+Foundry-managed hosted workflow state, and PostgreSQL business state.
+Hosted execution calls the protected API with its service identity; only the
+API identity accesses PostgreSQL. Opaque platform session/user/call context
+does not grant human authority. Authenticated API prebinding and durable
+decision intent remain required, including authorized terminal replay without
+new Responses dispatch. There is no private SDK monkeypatch, invented hosted
+checkpoint ID, shared runtime dependency, or public Foundry-to-database route.
+
+The canonical API image owns its system-CA path through `SSL_CERT_FILE`.
+Deployment cannot override that trust contract. A disposable PostgreSQL 17
+fixture proves normal hosted application startup with `verify-full` and system
+trust, and rejection of both hostname mismatch and an untrusted CA. This
+proves local composition and TLS enforcement, not Azure identity issuance,
+live Foundry checkpoint/recovery behavior, or production readiness.
+The preserved original architecture HTML is not revised by this integration.
+
 ## Open architecture and verification gaps
 
 The engineering foundation is not a deployment-readiness claim. Open work

@@ -24,6 +24,42 @@ merged into current `main` at
 base for the #39 evaluation follow-on. Green CI is not blueprint completion,
 release readiness, or Azure deployment approval.
 
+## Local Azure/Foundry integration acceptance
+
+**Status: Completed for local integration; cloud and production unverified.**
+The integration starts at exact main
+`886b628fdea02f9089c385b4ed0fc46d90f375e8`. Accepted sources are
+A `708a4185abe149526c606477de02cd57c5d90a9c` (#45),
+C `722fc4e32937df4bd94678ec12380cac2a7c84df` (#48; runtime TLS fix
+`509fb0b20c80fa8e436de4ac782f618c47f38bd3`),
+B `5abad5977c04297f7154443b0ed8c28ed5d3b870` (#47), and
+D `9336176459cf38c367c8956849ceac32ffa98cbc` (#46).
+Their exact-head owner CI is green. Runtime integration revision
+`920a339777e23be85c34402afb7fb4322ca26e02` supplies the following
+local evidence; the later C follow-up changes only documentation.
+
+| Acceptance criterion | Scoped local evidence |
+| --- | --- |
+| Native MAF and separate hosted/business persistence | Source backend 124 pass; fresh generated backend 169 pass, one explicit real-provider opt-in skip; hosted 41 and publisher 9 pass |
+| Authenticated human prebinding, terminal replay, one effect, null hosted checkpoint columns | Isolated PostgreSQL 17 authority/composed-wire suite 13 pass; terminal retries do not redispatch Responses |
+| Exact business contract and generated independence | Generated verification 61 pass without skips, including both actual adapters and all ORS-001..009; root 87 pass with two disclosed adapter-not-selected skips |
+| Canonical protected API image and system trust | Backend-only production image/import/composition guard passes; normal hosted `app.main` Docker command/lifespan reaches health `204` and protected `401`; actual PostgreSQL TLS confirmed; wrong hostname and untrusted CA rejected |
+| Local stack, frontend, infrastructure, and evidence boundaries | Compose API/web/PostgreSQL healthy; source/generated UI 9/10 pass, builds/CSP pass, Chromium render passes; infrastructure 17 plus base 9 pass and Bicep compilation/lint pass; generated Ruff 87 files pass; evidence keeps cloud/production unverified and release blocked |
+
+Builds use supported credentialless HTTPS `PYTHON_PACKAGE_INDEX` and
+`NPM_REGISTRY` overrides without disabling TLS, hashes, or lockfile integrity.
+Synthetic certificate trust is confined to disposable test containers;
+deployment must not override image-owned `SSL_CERT_FILE`. Existing test
+connection ResourceWarnings and the Vite chunk-size warning remain disclosed,
+not waived production checks. Harness import-path/database setup failures were
+corrected before the final complete suites passed; no tests were removed.
+
+**Next action:** retain the local integration for review. No integration push,
+PR, merge, or Azure mutation has been performed. Live hosted execution,
+managed-identity token issuance, real-model evaluation, authenticated browser
+evidence, and independent production authorization still require separately
+authorized verification. The original architecture HTML remains unchanged.
+
 ## Azure/Foundry Workstream C
 
 **Status: In Progress.** The cloud application increment adds an SDK-free
