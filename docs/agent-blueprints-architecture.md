@@ -38,6 +38,64 @@ encodes its normalized business outcomes and keeps framework/runtime execution
 assertions distinct. It is not this blueprint's business implementation;
 order-adjustment remains an independent legacy fixture.
 
+## Azure/Foundry Workstream B
+
+The prepared Azure topology preserves the application/runtime boundaries:
+
+```text
+Public React Container App
+  -> Entra-protected public FastAPI Container App
+  -> Foundry project and explicit model deployment
+
+FastAPI -> PostgreSQL Flexible Server: business state and approval/effect data
+Foundry Hosted Agent -> framework-owned hosted execution/checkpoints
+All services -> workspace-based Application Insights and Log Analytics
+```
+
+East US 2 is the selected single region. Public networking is deliberate for
+this milestone, with TLS, API platform authentication, managed identities,
+least-privilege roles, Key Vault references, and exact-IP PostgreSQL firewall
+configuration. No VNet, private endpoint, private DNS, or private runner is
+included. A failure of deployment-specific capacity in East US 2 stops the
+deployment; it does not authorize an implicit cross-region topology.
+
+The infrastructure exposes typed deployment outputs to the independent
+runtime, application, and evidence workstreams; it does not add a shared
+runtime. The supported Azure CLI route generates a new independent Order
+Resolution project, publishes its Agent A hosted source, and builds its Agent C
+API/frontend contexts. It never deploys the source blueprint. The generated
+Agent A's generator owns a byte-identical API-side Responses client/bridge copy
+inside the backend context; B validates rather than creates that boundary.
+Hosted source remains separately publishable, and the API does not import the
+full hosted runtime or rely on a sibling `PYTHONPATH`.
+The generated frontend's Compose upstream is replaced only in the temporary
+generated copy with the exact API HTTPS FQDN. Exact deployment, trace,
+evaluation, and browser
+evidence remains with Agent D. Conversation state, hosted framework
+checkpoints, PostgreSQL business state, and human approval remain separate.
+
+The deployment plan is `Ready for Validation`, not deployed or production
+ready. The current azd account and tenant differ from Azure CLI. Azure CLI mode
+reports that mismatch while validating the active authorized Azure context;
+explicit azd mode still fails closed. Cloud configuration requires hosted
+workflow mode, managed-identity PostgreSQL with TLS verification, an explicit
+adapter endpoint, and agent-scoped API access. `BLUEPRINT_APPLICATION`,
+`CHECKPOINT_ROOT`, and local workflow hosting are excluded.
+Hosted publication is staged after the protected API business-state boundary
+is deployed. The platform identity receives only a dedicated API application
+role before active readiness polling; it receives no PostgreSQL URL, role, or
+firewall access. Only API Container App outbound IPs are allowlisted. Agent
+Consumer assignment uses the official exact agent scope derived from validated
+project output and the fixed publisher name; parent or another-agent scopes are
+rejected.
+The hosted application role establishes service identity only. Human authority
+remains server-bound to the exact principal/case, server-selected conversation,
+and channel before any Responses dispatch. Foundry user/session/call values are
+opaque platform correlation and continuity, not human authority; the API bridge
+sends no caller-selected session or actor metadata.
+See the
+[infrastructure evidence and operator contract](azure-foundry/infrastructure.md).
+
 ## MAF modularity foundation and target
 
 The local blueprint and its generated copy now have sibling `backend` and

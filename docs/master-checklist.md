@@ -30,6 +30,60 @@ directly onto current `main` without replaying #37. Its new exact-head
 validation is required; earlier stacked-branch CI does not validate this
 baseline.
 
+## Azure/Foundry Workstream B
+
+**Status: In Progress - ready for independent validation, not deployed.**
+
+Starting from exact main
+`886b628fdea02f9089c385b4ed0fc46d90f375e8`, Workstream B adds the
+[deployment plan](../.azure/deployment-plan.md), infrastructure-only azd
+descriptor, modular public-network Bicep, Azure CLI deployment orchestration,
+infrastructure contract
+tests, and the [operator evidence](azure-foundry/infrastructure.md). East US 2
+is selected without a split-region design for `gpt-4.1-mini`
+`2025-04-14` on `GlobalStandard` capacity 10. Read-only evidence found enough
+model quota/capacity and dependent-service quota. Azure CLI mode validates the
+authorized active context and reports the unrelated azd mismatch without
+blocking; explicit azd mode still fails closed.
+
+Acceptance evidence: Bicep build/lint and 17 infrastructure contracts pass; the
+root suite passes 68 tests with two expected adapter-selection skips; all new
+PowerShell/Python files parse. No Azure resource, RBAC assignment, database
+principal, migration, deployment, rollback, or teardown was executed.
+Deployment generates an independent Order Resolution project, requires the
+Agent A/C hosted and managed-identity interfaces, patches only the generated
+nginx upstream to the exact API FQDN, and prohibits the source blueprint,
+synthetic application selector, local workflow host, and file checkpoints.
+The protected API state boundary and API-only PostgreSQL access are established
+before publication. The pending hosted identity receives only a dedicated API
+application role before the same journaled version is required active; hosted
+code receives no direct database access. Agent Consumer assignment additionally
+uses only the official exact agent scope derived from validated project output
+and the fixed publisher agent name; wider or another-agent scopes fail closed.
+The hosted app role authenticates service identity only; API-owned exact
+human principal/case authority bound to the server-selected conversation and
+channel must exist before Responses dispatch and cannot be inferred from the
+hosted token. Foundry user/session/call values are opaque platform correlation,
+not human authority; no caller-selected session or actor metadata is sent.
+Exact final A `708a4185` plus final C `722fc4e3` (all-six CI run
+`45087843018`) generation produced
+byte-identical owned files, built/imported the canonical no-dev backend, and
+passed nonconnecting wire composition. The integration coordinator
+independently reports default Docker CMD/app lifespan passed against isolated
+PostgreSQL 17 with inherited image CA setting, verified TLS, health `204`, and
+protected `401`; hostname and trust negatives failed closed. B did not rerun
+that suite. The exact generated web target also passed unchanged `npm ci`,
+production Vite build, and CSP verification through the credentialless HTTPS
+npm proxy. C's TLS code parent `509fb0b2` owns the canonical image
+`SSL_CERT_FILE`; B deploy contracts
+prohibit overriding the image default. Canonical packaging evidence is
+complete.
+
+**Next action:** independently validate the exact PR revision, supply the
+deployment-specific hosted endpoint/agent-name/administrator/journal values,
+review Azure CLI provider what-if, and approve resource
+inventory, cost, identity, and public-network controls before deployment.
+
 ## Reconciled engineering backlog
 
 The foundation and the integrated review do not establish blueprint

@@ -77,6 +77,76 @@ and release/deployment remains blocked.
 **Milestone decision:** READY for the local MAF software-factory milestone;
 NOT READY for production, release, or deployment.
 
+## Azure/Foundry Workstream B
+
+Workstream B prepares, but does not execute, the Azure deployment path. Its
+source of truth is [`.azure/deployment-plan.md`](../.azure/deployment-plan.md),
+with the detailed inventory, regional evidence, cost assumptions, role matrix,
+operations, and cross-workstream outputs in
+[`docs/azure-foundry/infrastructure.md`](azure-foundry/infrastructure.md).
+
+The selected single region is East US 2. The model contract is
+`gpt-4.1-mini` version `2025-04-14`, `GlobalStandard`, capacity 10. The
+subscription and platform checks found sufficient capacity, but Standard
+`gpt-4.1-mini` quota is exhausted and is rejected. East US and Central US are
+reviewed fallbacks only; failure in East US 2 stops the deployment and
+requires a complete fallback-region recheck rather than silent resource
+splitting.
+
+The implementation provides modular Foundry/model, identity/RBAC,
+observability, ACR, Container Apps, Key Vault, and PostgreSQL Bicep;
+infrastructure-only root azd metadata; guarded Azure CLI preflight, what-if,
+generated-application deploy, database configuration,
+migration, health, rollback, and teardown scripts; and non-deploying contract
+tests. Deployment instantiates a new independent Order Resolution project,
+publishes its Agent A hosted source without ACR, and builds only its generated
+Agent C API/frontend contexts in ACR.
+
+Deployment-time Entra automation idempotently creates or reuses the authorized
+single-tenant API/SPA registrations, exposes only the three workflow scopes,
+defines user/approver roles, and creates no secret or test user. Live app
+deployment fails closed when any generated Agent A/C interface is absent. The
+cloud route requires hosted mode, managed-identity PostgreSQL with TLS
+verification, an explicit hosted adapter endpoint and fixed agent name, and an
+exact temporary-copy nginx upstream replacement. It prohibits source-blueprint
+runtime paths, local workflow hosting, synthetic application selection, and
+file checkpoints. The API UAMI is the sole database runtime principal. Hosted publication occurs
+after the protected API state boundary is deployed, captures the authoritative
+pending identity, assigns only a dedicated API application role, then requires
+the same journaled version active without another create. Foundry Agent
+Consumer scope is derived only from the validated project resource ID and the
+same fixed publisher agent name; no scope input or project/subscription fallback
+is permitted. The hosted app role is service authentication only; exact
+API-owned human principal/case authority bound to the server-selected
+conversation and channel must precede Responses dispatch. Foundry
+user/session/call values remain opaque platform correlation rather than human
+authority; the bridge does not send caller-selected session or actor metadata.
+
+**Acceptance evidence:** exact base verified; read-only Azure discovery
+completed; Bicep build/lint and 17 infrastructure contracts pass; 68 root tests
+pass with two expected adapter-selection skips; script syntax checks pass.
+Exact final A `708a4185` plus final C `722fc4e3` (all-six CI run
+`45087843018`) generation produced
+byte-identical owned files, built the canonical no-dev backend, imported the
+bridge, and passed nonconnecting composition. The integration coordinator
+independently reports default Docker CMD/app lifespan passed against isolated
+PostgreSQL 17 with inherited image CA setting, verified TLS, health `204`, and
+protected `401`; hostname and trust negatives failed closed. B did not rerun
+that suite. The exact generated web image also built with
+credentialless HTTPS npm proxy, unchanged `npm ci`, production Vite build, and
+CSP verification. C's TLS code parent `509fb0b2` owns the canonical image
+`SSL_CERT_FILE`; B deploy contracts
+prohibit overriding the image default. Canonical packaging evidence is
+complete. Live Azure composition is not proven.
+The current Azure CLI identity matches the authorized target, but azd is a
+different account and tenant. Azure CLI mode reports that mismatch without
+blocking; explicit azd mode still fails closed. No Azure mutation or deployment
+has occurred.
+
+**Next action:** independent validation on the draft PR, then an approved
+Azure CLI provider what-if with exact deployment inputs. Deployment remains
+outside this PR.
+
 Specification Studio has not yet produced an artifact, so the proposed
 handoff is not an end-to-end compatibility claim. Phase 0 does not implement
 the validator or an agent template, integrate Specification Studio, deploy
