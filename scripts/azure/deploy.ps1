@@ -34,6 +34,7 @@ param(
     [string]$HostedPublishJournal,
     [Parameter(Mandatory)]
     [string]$OutputsFile,
+    [Parameter(Mandatory)]
     [string]$WorkingRoot,
     [string]$ResourceGroupName = 'rg-agent-blueprints-ors-foundry-e2e',
     [string]$DeploymentName = 'agent-blueprints-foundry'
@@ -97,11 +98,16 @@ $sourceRevision = (git -C $root rev-parse HEAD).Trim()
 if ($LASTEXITCODE -ne 0 -or $sourceRevision -cnotmatch '^[0-9a-f]{40}$') {
     throw 'Unable to resolve the exact source revision for deployment.'
 }
-$workingParent = if ($WorkingRoot) {
-    [System.IO.Path]::GetFullPath($WorkingRoot)
-}
-else {
-    Join-Path $root '.azure\deployment-work'
+$workingParent = [System.IO.Path]::GetFullPath($WorkingRoot)
+$rootPrefix = $root.TrimEnd(
+    [System.IO.Path]::DirectorySeparatorChar,
+    [System.IO.Path]::AltDirectorySeparatorChar
+) + [System.IO.Path]::DirectorySeparatorChar
+if (
+    $workingParent.Equals($root, [System.StringComparison]::OrdinalIgnoreCase) -or
+    $workingParent.StartsWith($rootPrefix, [System.StringComparison]::OrdinalIgnoreCase)
+) {
+    throw 'WorkingRoot must be outside the blueprint repository.'
 }
 New-Item -ItemType Directory -Path $workingParent -Force | Out-Null
 $temporaryRoot = Join-Path $workingParent (

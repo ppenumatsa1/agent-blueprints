@@ -1004,6 +1004,13 @@ Azure CLI identity, subscription, tenant, user, and region. The unsupported
 parameter is removed, an infrastructure contract prevents its return, and the
 live read-only preflight passes without changing the configured identities.
 
+The first exact-head deploy attempt then stopped before preflight or mutation
+because the repository-local working-root default contradicted the generator's
+independence guard. Deployment now requires an explicit working root and
+rejects the repository or any descendant immediately. The authorized retry
+uses the session evidence directory, which is outside the source tree and not
+an operating-system temporary directory.
+
 The release manifest cannot waive or authorize production checks; production
 requires the baseline-pinned trust validator, signed result attestations, and
 scoped, unexpired risk decisions, while critical/security-critical blocking

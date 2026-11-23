@@ -703,6 +703,9 @@ revision. Implementation evidence cannot establish Azure runtime readiness.
 Deployment preflight accepts only identity, subscription, tenant, user, and
 region inputs; directory object IDs remain scoped to the later Entra
 configuration operation instead of broadening the preflight contract.
+Generated deployment work is required to live outside the blueprint repository
+so the independent-project guard remains meaningful; callers supply a durable
+evidence root rather than falling back to an operating-system temporary path.
 Production authorization remains solely with the baseline-pinned trust
 validator, signed result attestations, and scoped, unexpired risk decisions;
 self-authored review files cannot waive critical or security-critical gates.

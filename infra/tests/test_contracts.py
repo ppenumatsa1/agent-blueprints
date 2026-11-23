@@ -274,6 +274,14 @@ class InfrastructureContractTests(unittest.TestCase):
         )
         self.assertIn("deployment-operator", scripts["common.ps1"])
         self.assertIn("configure-entra.ps1", scripts["deploy.ps1"])
+        self.assertRegex(
+            scripts["deploy.ps1"],
+            r"\[Parameter\(Mandatory\)\]\s*\[string\]\$WorkingRoot",
+        )
+        self.assertIn(
+            "WorkingRoot must be outside the blueprint repository.",
+            scripts["deploy.ps1"],
+        )
         preflight = re.search(
             r'& "\$PSScriptRoot\\preflight\.ps1"(?P<arguments>.*?)\n\s*\$entraJson',
             scripts["deploy.ps1"],
@@ -437,7 +445,8 @@ class InfrastructureContractTests(unittest.TestCase):
         self.assertIn("properties.ConnectionString", deploy)
         self.assertIn("APPLICATIONINSIGHTS_RESOURCE_ID", deploy)
         self.assertNotIn("[System.IO.Path]::GetTempPath()", deploy)
-        self.assertIn("'.azure\\deployment-work'", deploy)
+        self.assertNotIn("'.azure\\deployment-work'", deploy)
+        self.assertIn("WorkingRoot must be outside the blueprint repository.", deploy)
         self.assertNotIn("$env:DATABASE_URL =", publisher_environment)
         self.assertNotIn("$env:DATABASE_AUTH_MODE =", publisher_environment)
         self.assertNotIn("$env:PGSSLROOTCERT =", publisher_environment)
