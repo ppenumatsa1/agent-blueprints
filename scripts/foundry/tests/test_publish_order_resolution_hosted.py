@@ -30,6 +30,8 @@ def runtime_environment(**changes):
             "InstrumentationKey=00000000-0000-0000-0000-000000000000;"
             "IngestionEndpoint=https://monitor.example.test/"
         ),
+        "SOURCE_REVISION": "a" * 40,
+        "DEPLOYMENT_REVISION": "a" * 40,
         "ORDER_RESOLUTION_API_ENDPOINT": (
             "https://api.example.test/internal/order-resolution/hosted"
         ),
@@ -533,6 +535,8 @@ class PublisherTests(unittest.TestCase):
             runtime_environment(ORDER_RESOLUTION_API_SCOPE="https://api.example.test"),
             runtime_environment(ORDER_RESOLUTION_API_TIMEOUT_SECONDS="0"),
             runtime_environment(ORDER_RESOLUTION_API_TIMEOUT_SECONDS="not-a-number"),
+            runtime_environment(SOURCE_REVISION="not safe"),
+            runtime_environment(DEPLOYMENT_REVISION="x" * 129),
         ):
             with self.subTest(invalid=invalid):
                 with self.assertRaises(ValueError):

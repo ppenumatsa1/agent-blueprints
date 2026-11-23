@@ -491,6 +491,11 @@ class InfrastructureContractTests(unittest.TestCase):
             "$env:APPLICATIONINSIGHTS_CONNECTION_STRING",
             publisher_environment,
         )
+        self.assertIn("$env:SOURCE_REVISION = $sourceRevision", publisher_environment)
+        self.assertIn(
+            "$env:DEPLOYMENT_REVISION = $sourceRevision",
+            publisher_environment,
+        )
         self.assertIn("HOSTED_AGENT_VERSION=$($publishRecord.agent_version)", deploy)
         self.assertIn("AZURE_HOSTED_APPINSIGHTS_ROLE_ASSIGNMENT_ID", deploy)
         container_apps = (

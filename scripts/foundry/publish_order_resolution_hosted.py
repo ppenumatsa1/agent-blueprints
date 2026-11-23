@@ -29,6 +29,8 @@ REQUIRED_RUNTIME_ENVIRONMENT = (
     "FOUNDRY_PROJECT_ENDPOINT",
     "AZURE_AI_MODEL_DEPLOYMENT_NAME",
     "APPLICATIONINSIGHTS_CONNECTION_STRING",
+    "SOURCE_REVISION",
+    "DEPLOYMENT_REVISION",
     "ORDER_RESOLUTION_API_ENDPOINT",
     "ORDER_RESOLUTION_API_SCOPE",
     "ORDER_RESOLUTION_API_TIMEOUT_SECONDS",
@@ -143,6 +145,17 @@ def hosted_runtime_environment(source: Mapping[str, str]) -> dict[str, str]:
         if not isinstance(value, str) or not value.strip() or len(value) > 4096:
             raise ValueError(f"{name} is required and bounded.")
         environment[name] = value.strip()
+    for name in ("SOURCE_REVISION", "DEPLOYMENT_REVISION"):
+        revision = environment[name]
+        if (
+            len(revision) > 128
+            or not revision.isascii()
+            or any(
+                not (character.isalnum() or character in "._:-")
+                for character in revision
+            )
+        ):
+            raise ValueError(f"{name} must be a privacy-safe identifier.")
     project = urlsplit(environment["FOUNDRY_PROJECT_ENDPOINT"])
     if (
         project.scheme != "https"

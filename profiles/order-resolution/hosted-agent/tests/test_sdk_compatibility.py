@@ -20,8 +20,13 @@ from azure.ai.agentserver.core import (
     configure_observability,
 )
 from azure.ai.agentserver.core._tracing import _setup_distro_export
+from azure.ai.agentserver.responses import ResponsesServerOptions
 from azure.ai.agentserver.responses.hosting._endpoint_handler import (
     _flush_spans_for_mode,
+)
+from azure.ai.agentserver.responses.hosting._observability import (
+    CreateSpanHook,
+    start_create_span,
 )
 from azure.ai.projects.models import (
     CodeConfiguration,
@@ -30,6 +35,7 @@ from azure.ai.projects.models import (
 )
 from azure.ai.projects.operations import AgentsOperations
 from order_resolution_hosted.model import create_chat_client
+from order_resolution_hosted.observability import InvokeAgentSpanHook
 
 
 class SdkCompatibilityTests(unittest.TestCase):
@@ -77,6 +83,10 @@ class SdkCompatibilityTests(unittest.TestCase):
             "force",
         ):
             self.assertIn(parameter, inspect.signature(enable_instrumentation).parameters)
+        self.assertIn(
+            "create_span_hook",
+            inspect.signature(ResponsesServerOptions).parameters,
+        )
         for member in ("get_input_items", "get_input_text", "get_workflow_responses"):
             self.assertTrue(inspect.iscoroutinefunction(getattr(HostedResponseRequest, member)))
         self.assertIn("responses", inspect.signature(WorkflowTurn).parameters)
@@ -105,6 +115,37 @@ class SdkCompatibilityTests(unittest.TestCase):
         )
         self.assertEqual(definition.code_configuration.runtime, "python_3_13")
         self.assertEqual(definition.protocol_versions[0].version, "2.0.0")
+
+    def test_supported_create_span_hook_lifecycle_is_app_supplied(self):
+        hook = InvokeAgentSpanHook({})
+        self.assertIsInstance(hook, CreateSpanHook)
+        self.assertIsNone(ResponsesServerOptions().create_span_hook)
+        options = ResponsesServerOptions(create_span_hook=hook)
+        self.assertIs(options.create_span_hook, hook)
+        with (
+            patch.object(hook, "on_span_start") as start,
+            patch.object(hook, "on_span_end") as end,
+        ):
+            span = start_create_span(
+                "create_response",
+                {"gen_ai.operation.name": "invoke_agent"},
+                hook=hook,
+            )
+            span.set_tag("gen_ai.agent.version", "5")
+            span.end()
+            span.end()
+        start.assert_called_once_with(
+            "create_response",
+            {"gen_ai.operation.name": "invoke_agent"},
+        )
+        end.assert_called_once_with(
+            "create_response",
+            {
+                "gen_ai.operation.name": "invoke_agent",
+                "gen_ai.agent.version": "5",
+            },
+            None,
+        )
 
     def test_supported_async_flush_waits_for_export_without_blocking_event_loop(self):
         with (

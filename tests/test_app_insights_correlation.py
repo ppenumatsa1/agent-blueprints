@@ -241,17 +241,21 @@ class AppInsightsCorrelationTests(unittest.TestCase):
 
         def span_rows(item):
             root = {
-                "table_name": "AppRequests",
+                "table_name": "AppDependencies",
                 "trace_id": item["trace_id"],
                 "span_id": "1" * 16,
-                "parent_id": "3" * 16,
-                "span_name": "POST /responses",
+                "parent_id": "8" * 16,
+                "span_name": "invoke_agent",
                 "role_name": "order-resolution",
                 "operation_name": "invoke_agent",
                 "conversation_id": "conversation-1",
                 "agent_name": "order-resolution",
                 "agent_version": "2",
                 "foundry_marker": "True",
+                "deployment_revision": "deployment-123",
+                "anchor_type": "app-owned-invoke-agent",
+                "anchor_source": "azure.ai.agentserver.responses.create_span_hook",
+                "remote_parent": "true",
                 "workflow_stage": "",
                 "link_trace_id": "",
                 "link_span_id": "",
@@ -260,7 +264,7 @@ class AppInsightsCorrelationTests(unittest.TestCase):
             api = {
                 **root,
                 "span_id": "2" * 16,
-                "parent_id": "",
+                "parent_id": "9" * 16,
                 "span_name": "http.request",
                 "role_name": "agent-blueprints.maf-workflow",
                 "operation_name": "",
@@ -268,6 +272,10 @@ class AppInsightsCorrelationTests(unittest.TestCase):
                 "agent_name": "",
                 "agent_version": "",
                 "foundry_marker": "",
+                "deployment_revision": "",
+                "anchor_type": "",
+                "anchor_source": "",
+                "remote_parent": "",
             }
             dependency = {
                 **root,
@@ -327,6 +335,75 @@ class AppInsightsCorrelationTests(unittest.TestCase):
             )
         self.assertEqual(artifact["outcome"], "passed")
         self.assertEqual(len(artifact["validated_hosted_traces"]), 2)
+        self.assertEqual(
+            {item["root_kind"] for item in artifact["validated_hosted_traces"]},
+            {"app-owned-hook"},
+        )
+        self.assertEqual(
+            {item["graph_mode"] for item in artifact["validated_hosted_traces"]},
+            {"platform-parent-gap"},
+        )
+        self.assertEqual(
+            {
+                item["external_parent_count"]
+                for item in artifact["validated_hosted_traces"]
+            },
+            {2},
+        )
+
+        invalid_rows = span_rows(start) + span_rows(resume)
+        variants = {
+            "missing marker": [
+                {
+                    **row,
+                    "anchor_type": (
+                        "" if row["span_name"] == "invoke_agent" else row["anchor_type"]
+                    ),
+                }
+                for row in invalid_rows
+            ],
+            "duplicate anchor": invalid_rows
+            + [
+                {
+                    **span_rows(start)[2],
+                    "span_id": "a" * 16,
+                }
+            ],
+            "arbitrary hosted orphan": invalid_rows
+            + [
+                {
+                    **span_rows(start)[3],
+                    "span_id": "b" * 16,
+                    "parent_id": "c" * 16,
+                    "span_name": "unexpected.hosted.orphan",
+                }
+            ],
+        }
+        for label, rows in variants.items():
+            with (
+                self.subTest(label=label),
+                patch(
+                    "scripts.verify_app_insights_correlation.subprocess.run",
+                    side_effect=(
+                        exact,
+                        Mock(
+                            returncode=0,
+                            stdout=json.dumps(rows),
+                            stderr="",
+                        ),
+                    ),
+                ),
+                self.assertRaises(RuntimeError),
+            ):
+                verify(
+                    self.evidence,
+                    "workspace-id",
+                    self.output,
+                    source_revision="source-123",
+                    deployment_revision="deployment-123",
+                    environment="synthetic-azure",
+                    foundry_evidence=self.foundry,
+                )
 
     def test_hosted_trace_never_passes_without_foundry_evidence(self):
         value = json.loads(self.evidence.read_text(encoding="utf-8"))

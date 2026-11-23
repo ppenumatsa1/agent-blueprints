@@ -1103,6 +1103,32 @@ Durable waits retain only W3C trace/span identifiers and resume with an
 explicit link. The strict verifier does not require model or token spans when
 the deterministic path does not invoke a model.
 
+The version-4 live proof then isolated the remaining root defect. Managed
+identity export succeeded with zero Azure Monitor errors and produced 100
+hosted dependencies plus 193 hosted logs, but 83 hosted spans shared a missing
+remote parent and no enriched `invoke_agent` root appeared after repeated
+ingestion polls. Pinned AgentServer core intentionally attaches incoming W3C
+context without creating a SERVER span; Responses `CreateSpan` invokes no
+OpenTelemetry API unless the public `ResponsesServerOptions.create_span_hook`
+is supplied. Sampling, provider order, processing, flush and indexing were
+therefore excluded.
+
+The smallest supported correction supplies that hook and nothing parallel to
+the native pipeline. It creates one privacy-safe application-owned INTERNAL
+`invoke_agent` anchor under the remote platform context, makes it current for
+native/business children, records only allowlisted identifiers plus
+source/deployment revision, and ends before request-awaited flush. It records
+ERROR and exception type without exception text. The verifier now requires the
+exact hook marker, validates API and hosted subgraphs independently across the
+documented platform-parent gap, and rejects duplicate roots, missing markers,
+unexpected roles, and arbitrary hosted orphans. The external reference
+`maf-monorepo` revision `45430753c5f3e75716ea3822d2b2b52fbb4f1c34` likewise
+uses an application-owned handler span rather than a package-generated root;
+it was inspected only as behavioral evidence. Local evidence is 103 root tests
+with two disclosed skips, 53 generated hosted-agent tests, nine publisher
+tests, nine infrastructure contracts, Ruff, and PowerShell parsing. Exact-head
+CI, immutable deployment, and one live correlated trace remain required.
+
 The release manifest cannot waive or authorize production checks; production
 requires the baseline-pinned trust validator, signed result attestations, and
 scoped, unexpired risk decisions, while critical/security-critical blocking

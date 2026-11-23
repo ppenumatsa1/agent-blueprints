@@ -16,6 +16,7 @@ from order_resolution_hosted.host import (
     parse_turn,
     run,
 )
+from order_resolution_hosted.observability import InvokeAgentSpanHook
 
 
 class FakeApplication:
@@ -65,6 +66,9 @@ class ProtocolTests(unittest.TestCase):
             run()
             responses_host.assert_called_once()
             load.assert_not_called()
+            options = responses_host.call_args.kwargs["options"]
+            self.assertTrue(options.resilient_background)
+            self.assertIsInstance(options.create_span_hook, InvokeAgentSpanHook)
 
             workflow = responses_host.call_args.kwargs["workflow"]
             application = SimpleNamespace(

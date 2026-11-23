@@ -242,6 +242,9 @@ or configuration fails closed before an SDK create. Publishing requires
 
 - `FOUNDRY_PROJECT_ENDPOINT`;
 - `AZURE_AI_MODEL_DEPLOYMENT_NAME`;
+- `APPLICATIONINSIGHTS_CONNECTION_STRING`;
+- `SOURCE_REVISION`;
+- `DEPLOYMENT_REVISION`;
 - `ORDER_RESOLUTION_API_ENDPOINT`;
 - `ORDER_RESOLUTION_API_SCOPE`;
 - `ORDER_RESOLUTION_API_TIMEOUT_SECONDS`.
@@ -265,6 +268,36 @@ local authentication. The deployment orchestrator assigns the resulting
 hosted-version identity `Monitoring Metrics Publisher`
 (`3913510d-42f4-4e42-8a64-420c390055eb`) at the exact component resource ID
 only; the publisher itself still performs no RBAC mutation.
+
+AgentServer Responses `2.4.0` exposes `ResponsesServerOptions.create_span_hook`
+as its supported create-lifecycle extension point, but defaults it to `None`.
+The pinned core `TraceContextMiddleware` extracts and attaches incoming W3C
+context without creating a SERVER span, and the Responses package's
+`CreateSpan` is only a hook dispatcher. The version-4 proof confirmed this
+boundary: 100 hosted dependencies and 193 hosted logs exported without
+authentication or exporter errors, while 83 hosted spans referenced one
+non-indexed remote platform parent and no `invoke_agent` root was emitted.
+
+The host therefore supplies a minimal application-owned hook. It resolves the
+already-configured global tracer at request time, starts one INTERNAL
+`invoke_agent` anchor under the attached remote W3C parent, makes it current for
+native MAF and business spans, and ends it before AgentServer's supported async
+flush. A `ContextVar` isolates concurrent requests. Only an explicit metadata
+allowlist is copied; prompts, messages, tool arguments/results, payloads, and
+exception messages are excluded. Failures record only `error.type` and ERROR
+status. The span is marked `app-owned-invoke-agent` with the public hook source
+and remote-parent fact so the verifier can distinguish the unavoidable
+platform gap from arbitrary orphaned telemetry. `SOURCE_REVISION` and
+`DEPLOYMENT_REVISION` are privacy-safe, publication-bound hosted inputs.
+
+This customization does not recreate native MAF spans or replace the provider,
+exporter, propagation, instrumentation, enrichment, sampling, or flush
+pipeline. As read-only behavioral evidence, `ppenumatsa1/maf-monorepo`
+revision `45430753c5f3e75716ea3822d2b2b52fbb4f1c34` also creates its own
+handler-level Responses invocation span; it does not demonstrate a
+package-generated root and no code was copied from it. The public option is
+documented in the
+[Microsoft Learn `ResponsesServerOptions` API](https://learn.microsoft.com/python/api/azure-ai-agentserver-responses/azure.ai.agentserver.responses.responsesserveroptions).
 
 The project endpoint in the runtime environment must match the publication
 target. Every allowlisted value is injected into the public
@@ -319,11 +352,13 @@ ID for the hosted version, so callers must not invent one.
 | Malformed successful create acknowledgment | Verified locally | Malformed 2xx JSON becomes `unknown` without response-body evidence and cannot be replayed |
 | Publication target/configuration identity | Verified locally | Digest covers project endpoint/ID, agent, archive, runtime, entry point, protocol, model and hosted configuration; conflicting reuse fails |
 | Model response quality and catalog availability | Unverified | Model name is injected; no model was deployed or invoked |
-| Telemetry export and hosted trace correlation | Unverified | Requires deployed Application Insights integration |
+| Telemetry export and hosted trace correlation | Remediation implemented locally; live gate failed/unverified | Version 4 proved Entra-authenticated export, W3C trace continuity, native/business spans and zero raw-content rows, but the pinned platform emitted no hosted root. The supported create-span hook bridge and verifier are locally tested; immutable redeployment and live proof remain required. |
 
 ## Local validation evidence
 
-- 41 generated hosted-runtime tests passed, including absent and mismatched
+- 53 generated hosted-runtime tests passed, including the supported hook
+  lifecycle, remote-parent and child graph, concurrent request isolation,
+  privacy allowlist, error status, and end-before-flush behavior, plus absent and mismatched
   pre-established owner/reviewer binding refusal, platform-session conflict
   rejection, API-workload/human identity separation, and API bridge
   conversation/prebind/dispatch ordering. The added bridge regression proves an

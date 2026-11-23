@@ -164,12 +164,18 @@ def _trace_query(expected, started_at):
         "agent_name=tostring(Properties['gen_ai.agent.name']), "
         "agent_version=tostring(Properties['gen_ai.agent.version']), "
         "foundry_marker=tostring(Properties['microsoft.foundry']), "
+        "deployment_revision="
+        "tostring(Properties['blueprint.deployment.revision']), "
+        "anchor_type=tostring(Properties['blueprint.trace.anchor.type']), "
+        "anchor_source=tostring(Properties['blueprint.trace.anchor.source']), "
+        "remote_parent=tostring(Properties['blueprint.trace.parent.remote']), "
         "workflow_stage=tostring(Properties['blueprint.workflow.stage']), "
         "link_trace_id=tolower(tostring(Properties['blueprint.trace.link.trace_id'])), "
         "link_span_id=tolower(tostring(Properties['blueprint.trace.link.span_id'])), "
         f"raw_content=iff({raw_expression}, 1, 0) "
         "| project table_name, trace_id, span_id, parent_id, span_name, role_name, "
         "operation_name, conversation_id, agent_name, agent_version, foundry_marker, "
+        "deployment_revision, anchor_type, anchor_source, remote_parent, "
         "workflow_stage, link_trace_id, link_span_id, raw_content "
         "| order by trace_id asc, span_id asc"
     )
@@ -235,6 +241,25 @@ def _validate_trace_rows(expected, rows, foundry_trace_ids):
         ]
         if not roots:
             raise RuntimeError("The trace has no enriched hosted invoke_agent root.")
+        if len(roots) != 1:
+            raise RuntimeError(
+                "The trace has multiple enriched hosted invoke_agent roots."
+            )
+        hosted_root = roots[0]
+        if hosted_root.get("deployment_revision") != item["deployment_revision"]:
+            raise RuntimeError(
+                "The hosted invoke_agent root has stale deployment metadata."
+            )
+        if (
+            hosted_root.get("anchor_type") != "app-owned-invoke-agent"
+            or hosted_root.get("anchor_source")
+            != "azure.ai.agentserver.responses.create_span_hook"
+            or str(hosted_root.get("remote_parent", "")).casefold() != "true"
+        ):
+            raise RuntimeError(
+                "The app-owned hosted root lacks the required platform-gap marker."
+            )
+        root_kind = "app-owned-hook"
         names = {str(row.get("span_name", "")) for row in trace_rows}
         required = {
             "invoke_workflow",
@@ -252,43 +277,73 @@ def _validate_trace_rows(expected, rows, foundry_trace_ids):
         ids = {str(row["span_id"]).lower() for row in span_rows}
         if len(ids) != len(span_rows):
             raise RuntimeError("The trace contains duplicate span identifiers.")
-        external_parents = {
-            str(row.get("parent_id", "")).lower()
-            for row in span_rows
-            if row.get("parent_id") and str(row.get("parent_id")).lower() not in ids
-        }
-        if len(external_parents) > 1:
-            raise RuntimeError("The trace contains an invalid orphaned parent chain.")
-        roots = [
-            row
-            for row in span_rows
-            if not row.get("parent_id") or str(row.get("parent_id")).lower() not in ids
-        ]
-        if len(roots) != 1:
-            raise RuntimeError("The trace must have one connected root.")
-        children = {}
-        for row in span_rows:
-            children.setdefault(str(row.get("parent_id", "")).lower(), []).append(
-                str(row["span_id"]).lower()
-            )
-        visited = set()
-        pending = [str(roots[0]["span_id"]).lower()]
-        while pending:
-            span_id = pending.pop()
-            if span_id in visited:
-                continue
-            visited.add(span_id)
-            pending.extend(children.get(span_id, ()))
-        if visited != ids:
-            raise RuntimeError("The trace contains disconnected span trees.")
+        api_role = "agent-blueprints.maf-workflow"
+        hosted_role = item["hosted_agent_name"]
         roles = {str(row.get("role_name", "")) for row in trace_rows}
-        if (
-            "agent-blueprints.maf-workflow" not in roles
-            or item["hosted_agent_name"] not in roles
-        ):
+        if api_role not in roles or hosted_role not in roles:
             raise RuntimeError(
                 "The trace does not cover both API and hosted service roles."
             )
+        unexpected = [
+            row
+            for row in span_rows
+            if row.get("role_name") not in {api_role, hosted_role}
+        ]
+        if unexpected:
+            raise RuntimeError("The trace contains spans from an unexpected role.")
+
+        def validate_subgraph(role_rows, required_root_id, label):
+            role_ids = {str(row["span_id"]).lower() for row in role_rows}
+            roots = [
+                row
+                for row in role_rows
+                if not row.get("parent_id")
+                or str(row.get("parent_id")).lower() not in role_ids
+            ]
+            if len(roots) != 1:
+                raise RuntimeError(f"The {label} trace must have one connected root.")
+            root_id = str(roots[0]["span_id"]).lower()
+            if required_root_id is not None and root_id != required_root_id:
+                raise RuntimeError(f"The {label} root is not the invoke_agent span.")
+            children = {}
+            for row in role_rows:
+                children.setdefault(
+                    str(row.get("parent_id", "")).lower(),
+                    [],
+                ).append(str(row["span_id"]).lower())
+            visited = set()
+            pending = [root_id]
+            while pending:
+                span_id = pending.pop()
+                if span_id in visited:
+                    continue
+                visited.add(span_id)
+                pending.extend(children.get(span_id, ()))
+            if visited != role_ids:
+                raise RuntimeError(f"The {label} trace contains disconnected spans.")
+            external_parent = str(roots[0].get("parent_id", "")).lower()
+            return external_parent if external_parent not in role_ids else ""
+
+        api_rows = [row for row in span_rows if row.get("role_name") == api_role]
+        hosted_rows = [row for row in span_rows if row.get("role_name") == hosted_role]
+        if not api_rows or not hosted_rows:
+            raise RuntimeError("The trace lacks a required service span graph.")
+        api_external_parent = validate_subgraph(api_rows, None, "API")
+        hosted_external_parent = validate_subgraph(
+            hosted_rows,
+            str(hosted_root["span_id"]).lower(),
+            "hosted",
+        )
+        if not hosted_external_parent:
+            raise RuntimeError(
+                "The hosted invoke_agent root lacks its propagated platform parent."
+            )
+        graph_mode = (
+            "platform-parent-gap"
+            if hosted_external_parent
+            not in {str(row["span_id"]).lower() for row in api_rows}
+            else "connected"
+        )
         key = (item["case_id"], item["conversation_id"])
         if item["hosted_phase"] == "resume":
             restart = next(
@@ -314,8 +369,19 @@ def _validate_trace_rows(expected, rows, foundry_trace_ids):
                 "case_id": item["case_id"],
                 "conversation_id": item["conversation_id"],
                 "hosted_phase": item["hosted_phase"],
+                "root_kind": root_kind,
+                "graph_mode": graph_mode,
+                "external_parent_count": len(
+                    {
+                        parent
+                        for parent in (
+                            api_external_parent,
+                            hosted_external_parent,
+                        )
+                        if parent
+                    }
+                ),
                 "span_count": len(span_rows),
-                "external_parent_count": len(external_parents),
             }
         )
     return validated

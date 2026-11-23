@@ -574,6 +574,8 @@ try {
         'ORDER_RESOLUTION_API_SCOPE'
         'ORDER_RESOLUTION_API_TIMEOUT_SECONDS'
         'APPLICATIONINSIGHTS_CONNECTION_STRING'
+        'SOURCE_REVISION'
+        'DEPLOYMENT_REVISION'
         'DATABASE_URL'
         'PGSSLROOTCERT'
         'ORDER_RESOLUTION_HOSTED_IDENTITY_BINDINGS'
@@ -602,6 +604,8 @@ try {
         $env:ORDER_RESOLUTION_API_TIMEOUT_SECONDS = '30'
         $env:APPLICATIONINSIGHTS_CONNECTION_STRING =
             $applicationInsightsConnectionString
+        $env:SOURCE_REVISION = $sourceRevision
+        $env:DEPLOYMENT_REVISION = $sourceRevision
         $pendingPublishRecord = Assert-HostedPublishRecord `
             -Record (Invoke-HostedPublisher)
 

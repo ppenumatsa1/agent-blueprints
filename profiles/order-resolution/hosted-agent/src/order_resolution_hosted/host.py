@@ -16,6 +16,7 @@ from azure.ai.agentserver.core import configure_observability as configure_agent
 from azure.ai.agentserver.responses import ResponsesServerOptions
 
 from .application import CallerContext, HostedApplication, load_application
+from .observability import InvokeAgentSpanHook
 
 
 _PRIVACY_ENVIRONMENT = {
@@ -148,7 +149,10 @@ def create_responses_server(
                 else _CHECKPOINT_TYPES
             ),
         ),
-        options=ResponsesServerOptions(resilient_background=True),
+        options=ResponsesServerOptions(
+            create_span_hook=InvokeAgentSpanHook(),
+            resilient_background=True,
+        ),
         configure_observability=_configure_host_observability,
     )
 
