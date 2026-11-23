@@ -227,8 +227,8 @@ function Add-PostgresOperatorFirewallRule {
     az postgres flexible-server firewall-rule create `
         --subscription $SubscriptionId `
         --resource-group $ResourceGroup `
-        --name $ServerName `
-        --rule-name 'deployment-operator' `
+        --server-name $ServerName `
+        --name 'deployment-operator' `
         --start-ip-address $OperatorIp `
         --end-ip-address $OperatorIp `
         --only-show-errors | Out-Null
@@ -249,7 +249,7 @@ function Remove-PostgresOperatorFirewallRule {
     $rule = az postgres flexible-server firewall-rule list `
         --subscription $SubscriptionId `
         --resource-group $ResourceGroup `
-        --name $ServerName `
+        --server-name $ServerName `
         --query "[?name == 'deployment-operator'].name | [0]" `
         --output tsv
     if ($LASTEXITCODE -ne 0) {
@@ -259,8 +259,8 @@ function Remove-PostgresOperatorFirewallRule {
         az postgres flexible-server firewall-rule delete `
             --subscription $SubscriptionId `
             --resource-group $ResourceGroup `
-            --name $ServerName `
-            --rule-name 'deployment-operator' `
+            --server-name $ServerName `
+            --name 'deployment-operator' `
             --yes `
             --only-show-errors | Out-Null
         if ($LASTEXITCODE -ne 0) {

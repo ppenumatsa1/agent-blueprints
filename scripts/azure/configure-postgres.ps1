@@ -56,8 +56,8 @@ foreach ($ruleName in $desiredRules.Keys) {
     az postgres flexible-server firewall-rule create `
         --subscription $subscriptionId `
         --resource-group $resourceGroup `
-        --name $postgresName `
-        --rule-name $ruleName `
+        --server-name $postgresName `
+        --name $ruleName `
         --start-ip-address $address `
         --end-ip-address $address `
         --only-show-errors | Out-Null
@@ -68,7 +68,7 @@ $managedRules = @(
     az postgres flexible-server firewall-rule list `
         --subscription $subscriptionId `
         --resource-group $resourceGroup `
-        --name $postgresName `
+        --server-name $postgresName `
         --query "[].name" `
         --output tsv
 )
@@ -86,8 +86,8 @@ foreach ($ruleName in $managedRules) {
         az postgres flexible-server firewall-rule delete `
             --subscription $subscriptionId `
             --resource-group $resourceGroup `
-            --name $postgresName `
-            --rule-name $ruleName `
+            --server-name $postgresName `
+            --name $ruleName `
             --yes `
             --only-show-errors | Out-Null
         if ($LASTEXITCODE -ne 0) {

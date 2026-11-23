@@ -205,6 +205,12 @@ values file was reread. Deployment output names are now normalized to uppercase
 before persistence. No migration, image build, hosted publication, or
 application activation ran before this fail-closed stop.
 
+The normalized retry then exposed Azure CLI's current Flexible Server firewall
+argument contract: server selection uses `--server-name` and rule selection
+uses `--name`. The configuration and temporary operator-rule helpers now use
+that contract. The failure occurred before any firewall rule, migration, image
+build, hosted publication, or application activation.
+
 ## Deployment gate
 
 The current Azure CLI identity matches the authorized context. Azure CLI mode

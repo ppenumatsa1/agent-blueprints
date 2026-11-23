@@ -255,6 +255,10 @@ class InfrastructureContractTests(unittest.TestCase):
         self.assertIn("azd mode must stop", scripts["preflight.py"])
         self.assertIn('("agentsV2", "responses")', scripts["preflight.py"])
         self.assertIn("firewall-rule delete", scripts["configure-postgres.ps1"])
+        self.assertIn("--server-name $postgresName", scripts["configure-postgres.ps1"])
+        self.assertNotIn("--rule-name", scripts["configure-postgres.ps1"])
+        self.assertIn("--server-name $ServerName", scripts["common.ps1"])
+        self.assertNotIn("--rule-name", scripts["common.ps1"])
         self.assertIn("az containerapp show", scripts["configure-postgres.ps1"])
         self.assertIn(
             "pgaadauth_create_principal_with_oid",
