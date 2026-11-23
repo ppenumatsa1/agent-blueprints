@@ -54,7 +54,10 @@ migrations, became healthy, and returned root `200`, health `204`, and
 protected API `401`. The canonical backend image also exports
 `SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt` so bundled libpq/OpenSSL
 discovers the same readable system bundle selected by
-`PGSSLROOTCERT=system`; `verify-full` remains mandatory. The
+`PGSSLROOTCERT=system`; `verify-full` remains mandatory. An isolated
+PostgreSQL 17 image proof passed normal `app.main` startup and reported TLS in
+`pg_stat_ssl`; a trusted certificate for the wrong hostname and an untrusted
+CA both failed certificate verification. The
 [application security contract](azure-foundry/application-security.md)
 records the identity matrix, Agent A interface, Agent B outputs, OBO decision,
 and recovery behavior. Draft PR [#48](https://github.com/ppenumatsa1/agent-blueprints/pull/48)

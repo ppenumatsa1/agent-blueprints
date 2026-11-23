@@ -258,6 +258,16 @@ journal without a second `/responses` call; unauthorized and conflicting
 retries fail. It also covers all ORS-001..009 scenarios,
 frontend tests/build, and generated-project independence.
 
+The canonical generated API image was also exercised with its normal Docker
+command and actual application lifespan against isolated PostgreSQL 17 using
+`verify-full&sslrootcert=system`. The container inherited `SSL_CERT_FILE` from
+the image, startup reached health `204`, the protected API returned `401`, and
+`pg_stat_ssl` confirmed TLS. With the same image, a certificate signed by the
+trusted test CA but presented for the wrong hostname failed with a hostname
+mismatch, and a correct-host certificate signed by an untrusted CA failed
+certificate verification. The fixture changed only test trust material; it did
+not weaken TLS or represent Azure deployment evidence.
+
 Live-only checks remain unverified: API UAMI token issuance, `Foundry Agent
 Consumer`, the exact caller identity exposed to AgentServer, Agent A
 status/result adaptation, hosted API app-role issuance, Azure PostgreSQL
