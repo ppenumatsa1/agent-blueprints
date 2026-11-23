@@ -56,9 +56,7 @@ async def submit(
     body: Submission,
     actor: Annotated[AuthenticatedRequest, Depends(current_identity)],
     service: Annotated[WorkflowService, Depends(workflow_service)],
-    idempotency_key: Annotated[
-        str, Header(alias="Idempotency-Key", min_length=1, max_length=128)
-    ],
+    idempotency_key: Annotated[str, Header(alias="Idempotency-Key", min_length=1, max_length=128)],
 ) -> CaseOutput:
     case = await service.submit(
         actor.principal, str(body.reviewer_id), body.payload, idempotency_key
@@ -76,10 +74,7 @@ def activity(
 ) -> ActivityOutput:
     page = service.activity(actor.principal, case_id, cursor=cursor, limit=limit)
     return ActivityOutput(
-        items=[
-            {"type": item.event_type, "created_at": item.created_at}
-            for item in page.items
-        ],
+        items=[{"type": item.event_type, "created_at": item.created_at} for item in page.items],
         next_cursor=page.next_cursor,
     )
 
