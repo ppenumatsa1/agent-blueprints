@@ -18,12 +18,17 @@ checkpoint is a human approval.
 ## Authorized history and activity
 
 The generic history API uses the existing PostgreSQL `wf_cases` fields for
-tenant, owner, assigned reviewer, status, decision, and timestamps. Its SQL
-filters tenant and `(owner_id = caller OR reviewer_id = caller)` before
-status filtering, descending `(created_at, id)` keyset pagination, and a
-maximum 100-row page. It returns no counts or payload/identity/checkpoint
-columns. Cursors carry the last authorized sort position, are versioned, and
-are bound to the selected status filter.
+tenant, owner, assigned reviewer, status, decision, and timestamps. Fixed SQL
+predicates filter tenant and `(owner_id = caller OR reviewer_id = caller)`
+before status filtering and bounded candidate batches; they are only a
+coarse prefilter, not the complete application authorization policy. The
+service applies the configured `AccessPolicy.authorize_read` to each complete
+candidate before adding it to the public page. It continues stable descending
+`(created_at, id)` keyset scans until it has an additional authorized record
+or exhausts the candidates. Public pages remain capped at 100 rows, contain no
+counts or payload/identity/checkpoint fields, and only expose a versioned,
+status-bound cursor from the last returned authorized record when another
+authorized record exists. Policy input is never converted into SQL.
 
 Per-record activity reads only committed `wf_audit` rows, repeats the same
 tenant/owner/reviewer predicate in SQL, and filters to a fixed event allowlist

@@ -18,6 +18,7 @@ from app.domain.models import Principal
 from app.domain.policy import CaseAccessPolicy, JsonObjectRules
 from app.infrastructure.migrations import upgrade
 from app.infrastructure.store import PostgresStore
+from app.usecases.history import decode_history_cursor
 from app.usecases.service import WorkflowService
 from app.workflows.host import LocalWorkflowHost
 from app.workflows.workflow import create_workflow
@@ -244,6 +245,72 @@ class WorkflowIntegrationTests(unittest.IsolatedAsyncioTestCase):
                 cursor=None,
                 limit=10,
             )
+
+    async def test_history_honors_stricter_read_policy_before_pagination(self):
+        tenant = f"history-policy-tenant-{uuid4()}"
+        owner = Principal(
+            tenant, f"history-policy-owner-{uuid4()}", frozenset({"workflow.read"}), frozenset()
+        )
+        reviewer_id = f"history-policy-reviewer-{uuid4()}"
+        reviewer = Principal(tenant, reviewer_id, frozenset({"workflow.read"}), frozenset())
+        cases = [
+            self.store.create(owner, reviewer_id, {"value": index}, str(uuid4()), "digest")
+            for index in range(4)
+        ]
+        timestamps = (
+            "2026-01-04T00:00:00+00:00",
+            "2026-01-03T00:00:00+00:00",
+            "2026-01-02T00:00:00+00:00",
+            "2026-01-01T00:00:00+00:00",
+        )
+        with self.store.connect() as connection:
+            for case, created_at in zip(cases, timestamps, strict=True):
+                connection.execute(
+                    "UPDATE wf_cases SET created_at = %s WHERE id = %s",
+                    (created_at, case.id),
+                )
+
+        class StricterPolicy(CaseAccessPolicy):
+            def __init__(self, denied_ids):
+                self.denied_ids = denied_ids
+
+            def authorize_read(self, actor, case):
+                super().authorize_read(actor, case)
+                if case.id in self.denied_ids:
+                    raise AccessDenied("Record access is not authorized.")
+
+        denied_ids = {cases[0].id, cases[2].id}
+        service = WorkflowService(
+            self.store, self.host, self.service.rules, StricterPolicy(denied_ids)
+        )
+        with self.assertRaises(AccessDenied):
+            service.read(owner, cases[0].id)
+        with self.assertRaises(AccessDenied):
+            service.read(reviewer, cases[0].id)
+
+        first_page = service.history(owner, status=None, cursor=None, limit=1)
+        self.assertEqual([item.id for item in first_page.items], [cases[1].id])
+        self.assertIsNotNone(first_page.next_cursor)
+        self.assertEqual(
+            decode_history_cursor(first_page.next_cursor, None).row_id,
+            cases[1].id,
+        )
+        reviewer_page = service.history(reviewer, status=None, cursor=None, limit=1)
+        self.assertEqual([item.id for item in reviewer_page.items], [cases[1].id])
+        self.assertEqual(
+            decode_history_cursor(reviewer_page.next_cursor, None).row_id,
+            cases[1].id,
+        )
+        second_page = service.history(owner, status=None, cursor=first_page.next_cursor, limit=1)
+        self.assertEqual([item.id for item in second_page.items], [cases[3].id])
+        self.assertIsNone(second_page.next_cursor)
+
+        deny_all = WorkflowService(
+            self.store, self.host, self.service.rules, StricterPolicy({case.id for case in cases})
+        )
+        denied_page = deny_all.history(owner, status=None, cursor=None, limit=1)
+        self.assertEqual(denied_page.items, ())
+        self.assertIsNone(denied_page.next_cursor)
 
     async def test_history_cursor_order_is_stable_and_status_bound(self):
         tenant = f"history-tenant-{uuid4()}"

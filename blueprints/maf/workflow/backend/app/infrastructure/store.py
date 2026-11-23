@@ -8,9 +8,9 @@ from app.config import Settings
 from app.domain.errors import ActionError, Conflict, NotFound
 from app.domain.models import (
     Case,
-    CaseHistory,
     Decision,
     DurableActivity,
+    HistoryCandidate,
     Principal,
     TransactionalAction,
 )
@@ -182,7 +182,7 @@ class PostgresStore:
         status: str | None,
         cursor: CursorPosition | None,
         limit: int,
-    ) -> tuple[list[CaseHistory], bool]:
+    ) -> tuple[list[HistoryCandidate], bool]:
         conditions = [
             "c.tenant_id = %s",
             "(c.owner_id = %s OR c.reviewer_id = %s)",
@@ -195,7 +195,7 @@ class PostgresStore:
             conditions.append("(c.created_at, c.id) < (%s, %s)")
             parameters.extend((cursor.created_at, cursor.row_id))
         query = f"""
-            SELECT c.id, c.status, d.decision, c.created_at, c.updated_at
+            SELECT c.*, d.decision
             FROM wf_cases AS c
             LEFT JOIN wf_decisions AS d ON d.case_id = c.id
             WHERE {" AND ".join(conditions)}
@@ -207,10 +207,8 @@ class PostgresStore:
             rows = connection.execute(query, parameters).fetchall()
         has_more = len(rows) > limit
         entries = [
-            CaseHistory(
-                id=row["id"],
-                status=row["status"],
-                decision=row["decision"],
+            HistoryCandidate(
+                case=_case(row),
                 created_at=row["created_at"],
                 updated_at=row["updated_at"],
             )

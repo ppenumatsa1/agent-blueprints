@@ -52,6 +52,7 @@ export function HistorySidebar({
     setItems([]);
     setCursor(null);
     setLoading(true);
+    setLoadingMore(false);
     setError(false);
     setLoadedStatus(status);
     void client.listHistory({

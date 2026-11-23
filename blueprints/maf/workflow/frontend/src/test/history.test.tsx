@@ -15,10 +15,13 @@ const historyPage = (items: WorkflowHistoryPage["items"], next_cursor: string | 
   items,
   next_cursor,
 });
-const activityPage = (type: WorkflowActivityPage["items"][number]["type"]): WorkflowActivityPage => ({
+const activityPage = (
+  type: WorkflowActivityPage["items"][number]["type"],
+  next_cursor: string | null = null,
+): WorkflowActivityPage => ({
   schema_version: "workflow-activity/1",
   items: [{ type, created_at: "2026-01-02T03:04:05+00:00" }],
-  next_cursor: null,
+  next_cursor,
 });
 
 function client(overrides: Partial<WorkflowClient> = {}): WorkflowClient {
@@ -85,6 +88,35 @@ describe("workflow history sidebar", () => {
     expect(await screen.findByRole("button", { name: new RegExp(secondId) })).toBeVisible();
   });
 
+  it("resets load-more state when the status filter changes during pagination", async () => {
+    let finishStalePage!: (page: WorkflowHistoryPage) => void;
+    const listHistory = vi.fn()
+      .mockResolvedValueOnce(historyPage([historyRecord(firstId)], "initial-cursor"))
+      .mockImplementationOnce(
+        () => new Promise<WorkflowHistoryPage>((resolve) => { finishStalePage = resolve; }),
+      )
+      .mockResolvedValueOnce(historyPage([historyRecord(secondId)], "new-filter-cursor"));
+    const { container } = render(
+      <HistorySidebar
+        profile={defaultWorkflowStudioProfile}
+        client={client({ listHistory })}
+        selectedId={null}
+        onSelect={vi.fn()}
+      />,
+    );
+    await screen.findByRole("button", { name: new RegExp(firstId) });
+    await userEvent.click(screen.getByRole("button", { name: "Load more history" }));
+    expect(screen.getByRole("button", { name: "Loading history..." })).toBeDisabled();
+    await userEvent.selectOptions(screen.getByLabelText("Filter by status"), "pending");
+    await screen.findByRole("button", { name: new RegExp(secondId) });
+    expect(screen.getByRole("button", { name: "Load more history" })).toBeEnabled();
+    await waitFor(() => expect(container.querySelector("aside")).toHaveAttribute("aria-busy", "false"));
+
+    finishStalePage(historyPage([historyRecord(firstId)]));
+    await waitFor(() => expect(container.querySelector("aside")).toHaveAttribute("aria-busy", "false"));
+    expect(screen.getByRole("button", { name: "Load more history" })).toBeEnabled();
+  });
+
   it("exposes a safe error state and has no accessibility violations", async () => {
     const api = client({ listHistory: vi.fn().mockRejectedValue(new Error("private canary")) });
     const { container } = render(
@@ -127,6 +159,39 @@ describe("workflow activity timeline", () => {
     expect(await screen.findByText("Decision recorded")).toBeVisible();
     finishOld(activityPage("action_failed"));
     await waitFor(() => expect(screen.queryByText("Action failed")).not.toBeInTheDocument());
+  });
+
+  it("resets load-more state when the selected case changes during pagination", async () => {
+    let finishStalePage!: (page: WorkflowActivityPage) => void;
+    const api = client({
+      activity: vi.fn()
+        .mockReturnValueOnce(Promise.resolve(activityPage("created", "initial-cursor")))
+        .mockReturnValueOnce(
+          new Promise<WorkflowActivityPage>((resolve) => { finishStalePage = resolve; }),
+        )
+        .mockReturnValueOnce(Promise.resolve(activityPage("decision_recorded", "case-cursor"))),
+    });
+    const { container, rerender } = render(
+      <ActivityTimeline caseId={firstId} client={api} profile={defaultWorkflowStudioProfile} />,
+    );
+    await screen.findByText("Workflow created");
+    await userEvent.click(screen.getByRole("button", { name: "Load more history" }));
+    expect(screen.getByRole("button", { name: "Loading history..." })).toBeDisabled();
+    rerender(
+      <ActivityTimeline caseId={secondId} client={api} profile={defaultWorkflowStudioProfile} />,
+    );
+    await screen.findByText("Decision recorded");
+    expect(screen.getByRole("button", { name: "Load more history" })).toBeEnabled();
+    await waitFor(() =>
+      expect(container.querySelector(".activity-timeline")).toHaveAttribute("aria-busy", "false"),
+    );
+
+    finishStalePage(activityPage("action_failed"));
+    await waitFor(() =>
+      expect(container.querySelector(".activity-timeline")).toHaveAttribute("aria-busy", "false"),
+    );
+    expect(screen.queryByText("Action failed")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Load more history" })).toBeEnabled();
   });
 
   it("shows loading, empty, refresh, and safe error states", async () => {

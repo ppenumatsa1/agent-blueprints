@@ -34,6 +34,13 @@ class Case:
 
 
 @dataclass(frozen=True)
+class HistoryCandidate:
+    case: Case
+    created_at: datetime
+    updated_at: datetime
+
+
+@dataclass(frozen=True)
 class CaseHistory:
     id: UUID
     status: str
@@ -76,7 +83,7 @@ class StateRepository(Protocol):
 
     def list_history(
         self, actor: Principal, status: str | None, cursor: Any, limit: int
-    ) -> tuple[list[CaseHistory], bool]: ...
+    ) -> tuple[list[HistoryCandidate], bool]: ...
 
     def list_activity(
         self, actor: Principal, case_id: UUID, cursor: Any, limit: int

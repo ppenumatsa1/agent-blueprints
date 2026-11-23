@@ -29,6 +29,7 @@ export function ActivityTimeline({ caseId, client, profile, refreshKey = 0 }: Ac
     setItems([]);
     setCursor(null);
     setLoading(true);
+    setLoadingMore(false);
     setError(false);
     setLoadedCaseId(caseId);
     void client.activity(caseId, { limit: pageSize }).then((page) => {

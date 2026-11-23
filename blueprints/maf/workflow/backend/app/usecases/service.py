@@ -9,6 +9,7 @@ from app.domain.models import (
     AccessPolicy,
     BusinessRules,
     Case,
+    CaseHistory,
     Decision,
     Principal,
     StateRepository,
@@ -16,12 +17,15 @@ from app.domain.models import (
 )
 from app.usecases.history import (
     ActivityPage,
+    CursorPosition,
     HistoryPage,
     activity_page,
     decode_activity_cursor,
     decode_history_cursor,
     history_page,
 )
+
+HISTORY_CANDIDATE_BATCH_SIZE = 100
 
 
 class WorkflowService:
@@ -84,8 +88,36 @@ class WorkflowService:
         ):
             raise InvalidInput("The history status is invalid.")
         position = decode_history_cursor(cursor, status)
-        items, has_more = self.store.list_history(actor, status, position, limit)
-        return history_page(items, has_more, status)
+        candidate_cursor = position
+        items: list[CaseHistory] = []
+        has_more = False
+        while len(items) <= limit:
+            candidates, candidate_has_more = self.store.list_history(
+                actor, status, candidate_cursor, HISTORY_CANDIDATE_BATCH_SIZE
+            )
+            if not candidates:
+                break
+            for candidate in candidates:
+                candidate_cursor = CursorPosition(candidate.created_at, candidate.case.id)
+                try:
+                    self.policy.authorize_read(actor, candidate.case)
+                except AccessDenied:
+                    continue
+                items.append(
+                    CaseHistory(
+                        id=candidate.case.id,
+                        status=candidate.case.status,
+                        decision=candidate.case.decision,
+                        created_at=candidate.created_at,
+                        updated_at=candidate.updated_at,
+                    )
+                )
+                if len(items) > limit:
+                    has_more = True
+                    break
+            if has_more or not candidate_has_more:
+                break
+        return history_page(items[:limit], has_more, status)
 
     def activity(
         self,

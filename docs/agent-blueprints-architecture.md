@@ -330,9 +330,11 @@ MSAL token acquisition, delegated scopes, API paths, server-authoritative
 record authorization, reviewer UUID validation, secure idempotency reuse,
 approval/rejection, and recovery remain outside profile control. UX Layer 2
 adds versioned generic history and activity projections over the existing
-`wf_cases` and `wf_audit` tables. List SQL constrains tenant, owner, and
-assigned reviewer before pagination; activity repeats record authorization
-and maps only committed allowlisted event names. Both projections omit
+`wf_cases` and `wf_audit` tables. Fixed list SQL constrains tenant, owner, and
+assigned reviewer for candidate selection; the configured application read
+policy is then applied to each complete candidate before public pagination
+and cursor metadata are derived. Activity repeats record authorization and
+maps only committed allowlisted event names. Both projections omit
 payloads, actor IDs, request/checkpoint IDs, and model/tool content. The
 profile-driven sidebar and timeline use the same delegated read client and
 discard stale responses. Evidence, manual tests, AG-UI, and CopilotKit remain

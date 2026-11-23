@@ -36,15 +36,20 @@ layers separate.
 
 ## UX stack Layer 2: authorized history and activity
 
-**Implemented locally; draft PR and exact-head CI are pending.** This
-increment is a distinct draft PR stacked directly above PR #50's
+**Implemented locally; draft PR #51 is open and the authorization/pagination
+correction is locally verified; exact-head CI is pending.** This increment is a
+distinct draft PR stacked directly above PR #50's
 `ppenumatsa1-ux-layer-1-studio-shell` branch. It reuses the PostgreSQL
 `wf_cases` owner/reviewer/tenant fields and committed `wf_audit` events; it
 does not add a competing business-state store or inspect MAF checkpoint
 contents. Case history uses bounded keyset pagination and optional status
-filtering, with authorization predicates applied in SQL before `ORDER BY` and
-`LIMIT`. Record activity first follows the existing case-read policy and
-repeats the same SQL authorization predicate. Responses omit payloads, actor
+filtering. Fixed SQL tenant/owner/reviewer predicates scope candidates; the
+configured `AccessPolicy.authorize_read` is then applied to complete internal
+records before public pagination is calculated. Candidate batches are fixed
+and bounded, only an additional authorized record yields a next cursor, and no
+application policy input is translated into SQL. Record activity first follows
+the configured case-read policy and repeats the same SQL authorization
+predicate. Responses omit payloads, actor
 identifiers, request/checkpoint identifiers, prompts, model output, and tool
 content. Only explicitly mapped audit event names are returned; unknown and
 Order Resolution-specific audit rows are not exposed by the generic endpoint.
@@ -57,16 +62,20 @@ unchanged. No migration is needed because the required generic tables and
 columns already exist in the immutable baseline. No cloud changes, streaming,
 evidence, manual-test, AG-UI, or CopilotKit work is included.
 
-Local evidence: four focused PostgreSQL authorization/privacy/status/cursor/
-event tests pass, as do all 133 source backend tests and all 133 generated base
-backend tests. Generated base and Order Resolution verification suites pass
-52 and 61 tests; generated Order Resolution hosted-agent tests pass 63 tests.
-Base and profiled frontend builds pass, with 19 and 21 tests, respectively;
-the separate history and studio production-browser tests pass in both
-generated projects and at source. The required isolated repository suite
-passes 105 tests. PR #49's existing local/live E2E files are unchanged
-byte-for-byte against the parent. Vite continues to report a >500 kB bundle
-warning.
+Local evidence for this correction: four focused PostgreSQL authorization/
+privacy/status/cursor/event tests and all 134 source backend tests pass. The
+stricter-policy regression denies owner- and reviewer-accessible cases and
+verifies that items, cursors, and empty-page metadata include only
+policy-authorized records.
+Frontend unit/axe tests pass (21), as do the production build, CSP check, and
+the source history/studio production-browser specs. Deferred frontend tests
+verify that new history-filter and activity-case generations clear stale
+load-more state. The required isolated repository suite passes 105 tests with
+two documented adapter-selection skips. Prior generated base/Order Resolution
+verification suites passed 52 and 61 tests, and generated Order Resolution
+hosted-agent tests passed 63; exact-head generated CI for this correction is
+pending. PR #49's existing local/live E2E files remain unchanged byte-for-byte
+against the parent. Vite continues to report a >500 kB bundle warning.
 
 The generated Order Resolution backend suite ran 190 tests, with two explicit
 skips (Agent A source opt-in and real-provider evaluation opt-in) and one
@@ -76,9 +85,9 @@ telemetry projection without `http_status`, while the current client includes
 it. The history/activity tests pass. Do not suppress or relabel this failure;
 exact-head CI remains pending and this gap must be included in the draft PR.
 No Azure state, streaming, evidence, manual-test, AG-UI, or CopilotKit work is
-included. **Next action:** push and open the dependent draft PR against PR
-#50's branch, then report its CI and this inherited test failure. Do not merge
-or enable auto-merge.
+included. **Next action:** push the correction to PR #51, then report exact-head
+CI and the inherited generated Order Resolution test failure. Do not merge or
+enable auto-merge.
 
 ## Local Azure/Foundry integration checkpoint
 
