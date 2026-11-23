@@ -9,7 +9,6 @@ import json
 import os
 import shutil
 import sys
-import tempfile
 import time
 import zipfile
 from dataclasses import asdict, dataclass, replace
@@ -89,8 +88,9 @@ def build_source_archive(project_root: Path, output: Path) -> str:
         if not required.exists():
             raise ValueError(f"Generated hosted source is missing: {required}")
     output.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory() as temporary:
-        staging = Path(temporary)
+    staging = output.parent / f".publish-staging-{uuid4().hex}"
+    staging.mkdir()
+    try:
         shutil.copy2(hosted / "main.py", staging / "main.py")
         shutil.copy2(hosted / "requirements.txt", staging / "requirements.txt")
         _copy_tree(
@@ -106,6 +106,8 @@ def build_source_archive(project_root: Path, output: Path) -> str:
                     info.compress_type = zipfile.ZIP_DEFLATED
                     info.external_attr = 0o644 << 16
                     archive.writestr(info, path.read_bytes())
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
     return hashlib.sha256(output.read_bytes()).hexdigest()
 
 
