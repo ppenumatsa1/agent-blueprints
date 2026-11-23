@@ -38,6 +38,9 @@ PRIVACY_RUNTIME_ENVIRONMENT = {
     "ENABLE_MESSAGE_EVENTS": "false",
     "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT": "false",
 }
+OBSERVABILITY_RUNTIME_ENVIRONMENT = {
+    "AGENTSERVER_FLUSH_MODE": "async",
+}
 
 
 @dataclass(frozen=True)
@@ -176,6 +179,7 @@ def hosted_runtime_environment(source: Mapping[str, str]) -> dict[str, str]:
         raise ValueError("ORDER_RESOLUTION_API_TIMEOUT_SECONDS must be in (0, 300].")
     environment["PYTHONNOUSERSITE"] = PYTHON_NO_USER_SITE
     environment.update(PRIVACY_RUNTIME_ENVIRONMENT)
+    environment.update(OBSERVABILITY_RUNTIME_ENVIRONMENT)
     return environment
 
 

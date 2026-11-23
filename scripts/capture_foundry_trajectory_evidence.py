@@ -19,10 +19,10 @@ def _single_line(value):
 
 
 def _query(trace_ids, started_at):
-    expected = json.dumps(trace_ids, separators=(",", ":"))
+    expected = ",".join(_quoted(trace_id) for trace_id in trace_ids)
     return _single_line(
         f"""
-        let expected = dynamic({expected});
+        let expected = dynamic([{expected}]);
         AppRequests
         | where TimeGenerated between (datetime({_quoted(started_at)}) .. now())
         | extend trace_id=tolower(tostring(OperationId)), properties=Properties

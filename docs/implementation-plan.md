@@ -983,6 +983,42 @@ metadata, no raw content, and matching Foundry trajectory trace IDs. Generated
 hosted compatibility and privacy tests pass locally; exact-head CI and live
 App Insights/Foundry evidence are still required before this gate can pass.
 
+The first hosted-version-2 trace proof isolated a request-finalization defect,
+not a provider or propagation defect. Synthetic case
+`c22d740f-0983-4d1f-b2c1-e7470aafe9f1` reached pending HITL under trace
+`125933bf44624f04af77bb285814b53a`. Application Insights contained 37 rows:
+five API requests and 32 dependencies, all under the API role. The five API
+callbacks retained that OperationId but referenced absent hosted ParentIds.
+There was no hosted role, enriched `invoke_agent`, native workflow span, or
+business-stage span, and the raw-content count remained zero. A corrected
+read-only Foundry query also returned zero hosted roots, so query parsing was
+not the cause.
+
+Official and pinned API evidence agrees on the smallest remedy. OpenTelemetry
+documents W3C Trace Context plus library instrumentation for automatic
+propagation. Azure Monitor recommends initializing its distro before work is
+handled and not initializing parallel distros. MAF documents process-wide
+providers configured once, application-owned provider setup followed by
+`enable_instrumentation()`, and sensitive capture disabled by default.
+AgentServer Responses `2.4.0` documents `background` as the default flush mode,
+warns that it requires a platform drain window, and supports `async` to await
+export off the event loop. The pinned implementation exposes exactly that
+behavior. Therefore the publisher now forces
+`AGENTSERVER_FLUSH_MODE=async`; it does not add an exporter, provider, sampler,
+manual MAF span recreation, or synthetic model call.
+
+Built-in behavior remains responsible for the global provider, Azure Monitor
+export, resource metadata, native MAF spans, W3C propagation, HTTPX/urllib/Azure
+SDK instrumentation, and request-awaited flush. Custom code remains limited to
+privacy-safe application business-stage anchors and an explicit durable HITL
+trace link, because OpenTelemetry cannot preserve an active parent context
+across a serialized approval boundary. The separate Windows helper correction
+uses KQL single-quoted trace IDs so `az.cmd` does not strip JSON quotes. Its
+read-only live parse check exits zero; it still finds zero pre-fix hosted roots,
+as expected. Validation passes 103 root tests with two disclosed adapter skips,
+47 generated hosted tests, and Ruff. Exact-head CI, a new immutable hosted
+version, and live connected trace evidence remain required.
+
 The first exact-head remediation run exposed a generated local-host regression
 rather than an exporter failure: the workflow now persisted its deterministic
 conversation ID, while `OrderResolutionWorkflowHost` still accepted only the

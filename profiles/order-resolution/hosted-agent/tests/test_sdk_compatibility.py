@@ -1,8 +1,9 @@
+import asyncio
 import inspect
 import os
 import unittest
 from importlib.metadata import version
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from agent_framework.observability import enable_instrumentation
 from agent_framework_foundry_hosting import (
@@ -17,6 +18,9 @@ from azure.ai.agentserver.core import (
     AgentServerHost,
     FoundryAgentRequestContext,
     configure_observability,
+)
+from azure.ai.agentserver.responses.hosting._endpoint_handler import (
+    _flush_spans_for_mode,
 )
 from azure.ai.projects.models import (
     CodeConfiguration,
@@ -100,6 +104,20 @@ class SdkCompatibilityTests(unittest.TestCase):
         )
         self.assertEqual(definition.code_configuration.runtime, "python_3_13")
         self.assertEqual(definition.protocol_versions[0].version, "2.0.0")
+
+    def test_supported_async_flush_waits_for_export_without_blocking_event_loop(self):
+        with (
+            patch(
+                "azure.ai.agentserver.responses.hosting._endpoint_handler.flush_spans_async",
+                new_callable=AsyncMock,
+            ) as flush_async,
+            patch(
+                "azure.ai.agentserver.responses.hosting._endpoint_handler.schedule_flush_spans"
+            ) as schedule_background,
+        ):
+            asyncio.run(_flush_spans_for_mode("async"))
+        flush_async.assert_awaited_once_with()
+        schedule_background.assert_not_called()
 
     def test_platform_scope_rejects_conflicting_caller_session(self):
         config = AgentConfig(

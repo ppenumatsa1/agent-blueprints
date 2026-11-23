@@ -714,6 +714,16 @@ Application Insights verification requires a connected OperationId/ParentId
 tree, conversation continuity, deployment metadata, restart links, privacy
 checks, and matching Foundry trajectory trace IDs.
 
+Hosted request finalization uses AgentServer's supported awaited async flush.
+The default background flush is not sufficient for a hosted sandbox that can
+suspend immediately after returning a response: a live version-2 trace retained
+W3C identifiers in downstream API callbacks while every hosted parent span was
+absent. Publication therefore fixes `AGENTSERVER_FLUSH_MODE=async` rather than
+adding another provider, exporter, telemetry framework, or manually recreated
+MAF spans. This preserves one process-wide pipeline and native semantic spans;
+the only application-owned spans are bounded business anchors and the only
+durable-boundary relationship is an explicit OpenTelemetry link.
+
 Release evidence is a separate architecture layer, not runtime state. Its
 manifest is diagnostic and non-authorizing: it validates immutable files and
 divides readiness into implementation, Azure runtime, and production

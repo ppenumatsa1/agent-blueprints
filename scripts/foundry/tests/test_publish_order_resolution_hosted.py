@@ -485,17 +485,26 @@ class PublisherTests(unittest.TestCase):
                 DATABASE_AUTH_MODE="managed-identity",
                 DATABASE_TLS_MODE="verify-full",
                 PGSSLROOTCERT="/must/not/publish.pem",
+                AGENTSERVER_FLUSH_MODE="background",
             )
         )
         self.assertEqual(
             set(environment),
             set(publisher.REQUIRED_RUNTIME_ENVIRONMENT)
             | set(publisher.PRIVACY_RUNTIME_ENVIRONMENT)
+            | set(publisher.OBSERVABILITY_RUNTIME_ENVIRONMENT)
             | {"PYTHONNOUSERSITE"},
         )
         self.assertEqual(
             {name: environment[name] for name in publisher.PRIVACY_RUNTIME_ENVIRONMENT},
             publisher.PRIVACY_RUNTIME_ENVIRONMENT,
+        )
+        self.assertEqual(
+            {
+                name: environment[name]
+                for name in publisher.OBSERVABILITY_RUNTIME_ENVIRONMENT
+            },
+            {"AGENTSERVER_FLUSH_MODE": "async"},
         )
         self.assertFalse(
             {

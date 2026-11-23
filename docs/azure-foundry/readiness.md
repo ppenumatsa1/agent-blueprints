@@ -268,6 +268,60 @@ Azure runtime remains `unverified`. Production remains `blocked` until
 independent security, cost, and scoped human risk-acceptance evidence is
 attached to the same source and deployment revisions.
 
+## Hosted trace failure and code correction — 2026-11-23
+
+The first live trace against `order-resolution:2` failed the correlation gate
+without weakening it. Synthetic case
+`c22d740f-0983-4d1f-b2c1-e7470aafe9f1`, request
+`26e9a217-bdb4-45c3-b110-a132c690babb`, conversation
+`conv_02f50f07ef1fd40b00wQ49AZRhYG1nBMtu2muc75uEXWXflRBJ`, and trace
+`125933bf44624f04af77bb285814b53a` reached pending HITL with no effect.
+The full trace had 37 rows: five API request spans and 32 dependencies. All
+rows used the API role. The five hosted-to-API callbacks preserved the original
+OperationId but named ParentIds that were absent from ingestion. No hosted
+role, `invoke_agent`, native workflow span, or business-stage span existed.
+The observed rows contained no raw message-content fields.
+
+The evidence distinguishes the failure modes:
+
+| Candidate | Result |
+| --- | --- |
+| Missing exporter/provider | Rejected by pinned-runtime provider inspection: one global provider had Azure Monitor batch export and native MAF instrumentation. |
+| Wrong App Insights target or runtime environment | Rejected by active version inspection: hosted version 2 used the shared connection and privacy flags false. |
+| Sampling | Rejected: AgentServer uses full sampling when no alternate sampler is configured. |
+| W3C propagation | Rejected: API callbacks retained the hosted start OperationId. |
+| Query/indexing only | Rejected: corrected read-only KQL parsed successfully and still returned zero hosted roots. |
+| Request flush | Confirmed: AgentServer Responses defaults to background flush, and its supported documentation warns final spans can be lost when no post-response drain window exists. |
+
+The code correction is built-ins-first. Publication forces supported
+`AGENTSERVER_FLUSH_MODE=async`, which awaits `force_flush` off the event loop
+before request completion. Existing AgentServer setup still owns the single
+global provider, Azure Monitor exporter/resource, Azure SDK/HTTPX/urllib
+instrumentation, W3C propagation, and sampling. Native MAF instrumentation
+remains enabled on that provider with sensitive and message capture false.
+No parallel exporter, manual MAF span recreation, or artificial model call was
+added. Application-owned business anchors and the explicit HITL restart link
+remain the only custom telemetry because no built-in can infer business stages
+or preserve an active parent across a serialized approval wait.
+
+The official references checked for this correction are the
+[AgentServer Responses telemetry-flushing contract](https://learn.microsoft.com/python/api/overview/azure/ai-agentserver-responses-readme?view=azure-python),
+[MAF observability guidance](https://learn.microsoft.com/agent-framework/agents/observability),
+[Azure Monitor OpenTelemetry initialization guidance](https://learn.microsoft.com/azure/azure-monitor/app/opentelemetry-enable?tabs=python),
+and [OpenTelemetry Python W3C propagation guidance](https://opentelemetry.io/docs/languages/python/propagation/).
+The pinned compatibility test additionally verifies that Responses `2.4.0`
+dispatches `async` mode through its awaited `flush_spans_async` path and does
+not schedule background flushing.
+
+The Foundry trajectory helper separately changed its trace-ID KQL literals from
+JSON double quotes to KQL single quotes. A Windows `az.cmd` read-only query now
+exits zero and returns the expected zero pre-fix hosted roots instead of
+`SYN0002`. Local validation passes 103 root tests with two disclosed adapter
+selection skips, 47 generated hosted tests, and Ruff. Live correlation remains
+`failed` for version 2 and post-fix ingestion remains `unverified` until a new
+immutable hosted version is published and one safe synthetic trace passes in
+both Application Insights and Foundry.
+
 ## Live acceptance attempt — 2026-11-23
 
 Exact source `c63b48afa4179a3d92c286aeb6ae339e16ece275` passed all seven CI

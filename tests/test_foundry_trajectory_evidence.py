@@ -92,7 +92,14 @@ class FoundryTrajectoryEvidenceTests(unittest.TestCase):
         )
         command = run.call_args.args[0]
         self.assertEqual(command[0], "az.cmd")
-        self.assertIn("invoke_agent", command[command.index("--analytics-query") + 1])
+        query = command[command.index("--analytics-query") + 1]
+        self.assertIn("invoke_agent", query)
+        self.assertIn(
+            "dynamic(['1234567890abcdef1234567890abcdef',"
+            "'2234567890abcdef1234567890abcdef'])",
+            query,
+        )
+        self.assertNotIn('dynamic(["', query)
 
     def test_missing_foundry_root_never_produces_passing_evidence(self):
         with (
