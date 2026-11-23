@@ -505,6 +505,18 @@ class InstantiationTests(unittest.TestCase):
                 "BLUEPRINT_APPLICATION: ${BLUEPRINT_APPLICATION:-app.order_resolution.application:build_application}",
                 compose,
             )
+            generated_main = (
+                target / "backend" / "app" / "main.py"
+            ).read_text(encoding="utf-8")
+            self.assertIn(
+                "from .order_resolution.application import build_application",
+                generated_main,
+            )
+            self.assertIn(
+                "app = create_app(settings, build_application())",
+                generated_main,
+            )
+            self.assertNotIn("BLUEPRINT_APPLICATION", generated_main)
             self.assertNotIn(str(ROOT), compose)
 
             environment = os.environ.copy()
