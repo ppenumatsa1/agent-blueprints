@@ -75,7 +75,10 @@ def case_control(
     workflow: Annotated[WorkflowService, Depends(workflow_service)],
 ) -> dict[str, object]:
     store, faults = _authorized(actor, workflow, deployment_revision)
-    binding = store.acceptance_binding(case_id)
+    try:
+        binding = store.acceptance_binding(case_id)
+    except NotFound:
+        binding = {"conversation_id": None, "session_id": None}
     return {
         "case_id": str(case_id),
         "conversation_id": binding["conversation_id"],

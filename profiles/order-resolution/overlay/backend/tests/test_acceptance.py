@@ -2,9 +2,9 @@ import unittest
 from pathlib import Path
 from uuid import UUID
 
-from app.api.routes.acceptance import _authorized
+from app.api.routes.acceptance import _authorized, case_control
 from app.config import Settings
-from app.domain.errors import AccessDenied
+from app.domain.errors import AccessDenied, NotFound
 from app.domain.models import Case, Principal
 from app.infrastructure.identity import AuthenticatedRequest
 from app.order_resolution.acceptance import AcceptanceFaults
@@ -155,6 +155,39 @@ class AcceptanceFaultTests(unittest.TestCase):
         self.assertEqual(snapshot["proposal"]["amount"], "7.90")
         self.assertEqual(snapshot["proposal"]["currency"], "USD")
         self.assertEqual(snapshot["counts"]["effects"], 1)
+
+    def test_case_control_supports_fail_closed_cases_without_hosted_binding(self):
+        store = object.__new__(OrderResolutionStore)
+        store.acceptance_faults = AcceptanceFaults(
+            enabled=True,
+            deployment_revision=REVISION,
+        )
+
+        def missing_binding(_case_id):
+            raise NotFound("The hosted platform binding is not available.")
+
+        store.acceptance_binding = missing_binding
+        store.acceptance_snapshot = lambda _case_id: {
+            "status": "failed",
+            "counts": {"effects": 0},
+        }
+        service = object.__new__(OrderResolutionService)
+        service.store = store
+        operator = AuthenticatedRequest(
+            Principal(
+                "tenant",
+                "operator",
+                frozenset({"workflow.read"}),
+                frozenset({"Acceptance.Operator"}),
+            ),
+            "token",
+        )
+
+        result = case_control(CASE_ID, REVISION, operator, service)
+
+        self.assertIsNone(result["conversation_id"])
+        self.assertIsNone(result["platform_session_id"])
+        self.assertEqual(result["snapshot"]["status"], "failed")
 
 
 if __name__ == "__main__":
