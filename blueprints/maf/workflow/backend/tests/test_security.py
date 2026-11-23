@@ -415,9 +415,7 @@ class ApiSecurityTests(unittest.TestCase):
             ):
                 self.assertNotIn(private_value, public_output)
 
-            stranger = self.tokens.token(
-                subject=STRANGER, scopes="workflow.read", roles=[]
-            )
+            stranger = self.tokens.token(subject=STRANGER, scopes="workflow.read", roles=[])
             hidden = client.get("/api/cases", headers=self.headers(stranger))
             self.assertEqual(hidden.status_code, 200)
             self.assertEqual(hidden.json()["items"], [])

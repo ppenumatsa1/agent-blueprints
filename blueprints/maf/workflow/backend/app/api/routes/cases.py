@@ -73,10 +73,7 @@ def activity(
 ) -> ActivityOutput:
     page = service.activity(actor.principal, case_id, cursor=cursor, limit=limit)
     return ActivityOutput(
-        items=[
-            {"type": item.event_type, "created_at": item.created_at}
-            for item in page.items
-        ],
+        items=[{"type": item.event_type, "created_at": item.created_at} for item in page.items],
         next_cursor=page.next_cursor,
     )
 

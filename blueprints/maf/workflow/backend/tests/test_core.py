@@ -175,7 +175,9 @@ class WorkflowIntegrationTests(unittest.IsolatedAsyncioTestCase):
         own_second = self.store.create(
             owner, other_reviewer_id, {"private": "PAYLOAD-CANARY"}, str(uuid4()), "digest"
         )
-        assigned = self.store.create(second_owner, reviewer_id, {"value": 1}, str(uuid4()), "digest")
+        assigned = self.store.create(
+            second_owner, reviewer_id, {"value": 1}, str(uuid4()), "digest"
+        )
         hidden = self.store.create(
             Principal(tenant, f"hidden-owner-{uuid4()}", owner.scopes, frozenset()),
             f"hidden-reviewer-{uuid4()}",
@@ -208,24 +210,31 @@ class WorkflowIntegrationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([item.id for item in second_page.items], [own_first.id])
         self.assertIsNone(second_page.next_cursor)
         self.assertEqual(
-            [item.id for item in self.service.history(
-                reviewer, status=None, cursor=None, limit=10
-            ).items],
+            [
+                item.id
+                for item in self.service.history(reviewer, status=None, cursor=None, limit=10).items
+            ],
             [assigned.id],
         )
         self.assertEqual(
-            [item.id for item in self.service.history(
-                tenant_owner, status=None, cursor=None, limit=10
-            ).items],
+            [
+                item.id
+                for item in self.service.history(
+                    tenant_owner, status=None, cursor=None, limit=10
+                ).items
+            ],
             [other_tenant_case.id],
         )
         self.assertEqual(
             self.service.history(stranger, status=None, cursor=None, limit=10).items, ()
         )
         self.assertEqual(
-            [item.id for item in self.service.history(
-                owner, status="pending", cursor=None, limit=10
-            ).items],
+            [
+                item.id
+                for item in self.service.history(
+                    owner, status="pending", cursor=None, limit=10
+                ).items
+            ],
             [own_first.id],
         )
         with self.assertRaises(AccessDenied):
@@ -238,9 +247,13 @@ class WorkflowIntegrationTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_history_cursor_order_is_stable_and_status_bound(self):
         tenant = f"history-tenant-{uuid4()}"
-        owner = Principal(tenant, f"history-owner-{uuid4()}", frozenset({"workflow.read"}), frozenset())
+        owner = Principal(
+            tenant, f"history-owner-{uuid4()}", frozenset({"workflow.read"}), frozenset()
+        )
         ids = [
-            self.store.create(owner, f"reviewer-{index}", {"value": index}, str(uuid4()), "digest").id
+            self.store.create(
+                owner, f"reviewer-{index}", {"value": index}, str(uuid4()), "digest"
+            ).id
             for index in range(3)
         ]
         fixed_time = "2026-01-01T00:00:00+00:00"
@@ -252,34 +265,40 @@ class WorkflowIntegrationTests(unittest.IsolatedAsyncioTestCase):
 
         page = self.service.history(owner, status=None, cursor=None, limit=1)
         repeated = self.service.history(owner, status=None, cursor=None, limit=1)
-        next_page = self.service.history(
-            owner, status=None, cursor=page.next_cursor, limit=1
-        )
+        next_page = self.service.history(owner, status=None, cursor=page.next_cursor, limit=1)
         self.assertEqual(page.items, repeated.items)
         self.assertNotEqual(page.items[0].id, next_page.items[0].id)
         self.assertEqual(len({page.items[0].id, next_page.items[0].id}), 2)
         with self.assertRaises(InvalidInput):
             self.service.history(owner, status="pending", cursor=page.next_cursor, limit=1)
-        oversized_activity_cursor = base64.urlsafe_b64encode(
-            json.dumps(
-                {
-                    "version": 1,
-                    "kind": "activity",
-                    "created_at": fixed_time,
-                    "id": str(2**63),
-                    "status": None,
-                },
-                separators=(",", ":"),
-            ).encode()
-        ).decode().rstrip("=")
+        oversized_activity_cursor = (
+            base64.urlsafe_b64encode(
+                json.dumps(
+                    {
+                        "version": 1,
+                        "kind": "activity",
+                        "created_at": fixed_time,
+                        "id": str(2**63),
+                        "status": None,
+                    },
+                    separators=(",", ":"),
+                ).encode()
+            )
+            .decode()
+            .rstrip("=")
+        )
         with self.assertRaises(InvalidInput):
             self.service.activity(owner, ids[0], cursor=oversized_activity_cursor, limit=1)
 
     async def test_activity_maps_allowlisted_audit_events_without_private_fields(self):
         tenant = f"activity-tenant-{uuid4()}"
-        owner = Principal(tenant, f"activity-owner-{uuid4()}", frozenset({"workflow.read"}), frozenset())
+        owner = Principal(
+            tenant, f"activity-owner-{uuid4()}", frozenset({"workflow.read"}), frozenset()
+        )
         reviewer = f"activity-reviewer-{uuid4()}"
-        case = self.store.create(owner, reviewer, {"private": "PAYLOAD-CANARY"}, str(uuid4()), "digest")
+        case = self.store.create(
+            owner, reviewer, {"private": "PAYLOAD-CANARY"}, str(uuid4()), "digest"
+        )
         with self.store.connect() as connection:
             connection.execute(
                 """
@@ -315,9 +334,7 @@ class WorkflowIntegrationTests(unittest.IsolatedAsyncioTestCase):
 
         first_page = self.service.activity(owner, case.id, cursor=None, limit=1)
         repeated = self.service.activity(owner, case.id, cursor=None, limit=1)
-        remaining = self.service.activity(
-            owner, case.id, cursor=first_page.next_cursor, limit=20
-        )
+        remaining = self.service.activity(owner, case.id, cursor=first_page.next_cursor, limit=20)
         self.assertEqual(first_page.items, repeated.items)
         self.assertEqual(first_page.items[0].event_type, "workflow_failed")
         events = [item.event_type for item in first_page.items + remaining.items]
