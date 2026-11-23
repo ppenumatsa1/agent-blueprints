@@ -241,7 +241,7 @@ class LiveClient:
                 "action": proposal["action"],
                 "destination_id": proposal["destination_id"],
                 "handle": handle or record["decision_handle"],
-                "channel": "api",
+                "channel": "foundry-responses",
             },
             case_id=record["id"],
             request_id=record["decision_handle"],

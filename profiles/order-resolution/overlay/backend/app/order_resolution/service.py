@@ -162,7 +162,11 @@ class OrderResolutionService(WorkflowService):
             channel=channel,
         )
         if self.hosted_mode:
-            await self.host.resume(case_id, actor, decision_command)
+            try:
+                await self.host.resume(case_id, actor, decision_command)
+            except (AccessDenied, PermissionError) as exc:
+                self.store.audit_authorization_denial(case_id, actor.subject)
+                raise AccessDenied("Decision is not authorized.") from exc
         else:
             self.record_bound_decision(
                 actor,

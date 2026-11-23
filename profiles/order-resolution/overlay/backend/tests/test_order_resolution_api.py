@@ -683,6 +683,7 @@ class OrderResolutionApiTests(unittest.TestCase):
                     channel=HOSTED_CHANNEL,
                 )
             )
+        self.assertEqual(self.durability_counts(case_id)["denials"], 1)
         restarted_read = restart_client.post(
             f"{base}/read",
             headers=headers,
