@@ -184,6 +184,48 @@ class CloudConfigurationTests(unittest.TestCase):
                     self.fail("A second borrower exceeded the pool maximum.")
         pool.close()
 
+    def test_pool_reports_only_physical_open_replacement_and_checkout_failure(self):
+        class Connection:
+            def __init__(self):
+                self.closed = False
+
+            def commit(self):
+                pass
+
+            def rollback(self):
+                pass
+
+            def close(self):
+                self.closed = True
+
+        reasons = []
+        failures = []
+
+        def open_connection(reason):
+            reasons.append(reason)
+            return Connection()
+
+        pool = BoundedConnectionPool(
+            Connection,
+            min_size=1,
+            max_size=1,
+            timeout_seconds=0.01,
+            max_lifetime_seconds=60,
+            open_connection=open_connection,
+            checkout_failure=failures.append,
+        )
+        with pool.connection() as first:
+            with self.assertRaisesRegex(TimeoutError, "pool is exhausted"):
+                with pool.connection():
+                    self.fail("A second borrower exceeded the pool maximum.")
+        first.closed = True
+        with pool.connection():
+            pass
+        self.assertEqual(reasons, ["initial", "replacement"])
+        self.assertEqual(len(failures), 1)
+        self.assertIsInstance(failures[0], TimeoutError)
+        pool.close()
+
     def test_hosted_composition_fails_closed_without_agent_a_adapter(self):
         components = SimpleNamespace(
             action=object(),

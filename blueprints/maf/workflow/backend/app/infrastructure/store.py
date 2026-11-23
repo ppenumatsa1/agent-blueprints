@@ -86,6 +86,8 @@ class PostgresStore:
             max_size=pool_max_size,
             timeout_seconds=pool_timeout_seconds,
             max_lifetime_seconds=connection_max_lifetime_seconds,
+            open_connection=self._open_connection,
+            checkout_failure=self._record_checkout_failure,
         )
         self.telemetry = None
 
@@ -113,9 +115,21 @@ class PostgresStore:
             token_provider=token_provider,
         )
 
-    @instrumented("database.connect")
     def connect(self):
         return self._pool.connection()
+
+    def _open_connection(self, reason: str):
+        if self.telemetry is None:
+            return self._connector.connect()
+        with self.telemetry.operation("database.connection.open") as operation:
+            operation.set_attribute("blueprint.database.connection.reason", reason)
+            return self._connector.connect()
+
+    def _record_checkout_failure(self, error: BaseException) -> None:
+        if self.telemetry is None:
+            return
+        with self.telemetry.operation("database.pool.checkout") as operation:
+            operation.fail(error)
 
     def initialize(self) -> None:
         from app.infrastructure.migrations import validate
@@ -127,6 +141,7 @@ class PostgresStore:
             )
         else:
             validate(self._dsn)
+        self._pool.open()
 
     def close(self) -> None:
         self._pool.close()

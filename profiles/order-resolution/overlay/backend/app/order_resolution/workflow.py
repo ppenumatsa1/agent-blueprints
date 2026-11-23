@@ -13,7 +13,11 @@ from agent_framework import (
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.domain.models import StateRepository, TransactionalAction
-from app.order_resolution.observability import workflow_stage_span
+from app.order_resolution.observability import (
+    workflow_business_stage,
+    workflow_marker_span,
+    workflow_stage_span,
+)
 from app.workflows.workflow import WORKFLOW_NAME
 
 
@@ -63,24 +67,46 @@ class OrderResolutionExecutor(Executor):
             conversation_id=conversation_id,
         ):
             case = self._store.get(case_id)
-            if case.payload["proposal"]["approval_required"]:
-                request_id = message.get("request_id")
-                if request_id is not None and (not request_id.strip() or len(request_id) > 256):
-                    raise ValueError("The hosted request identity is invalid.")
-                request_data = {
-                    "case_id": str(case_id),
-                    "conversation_id": conversation_id,
-                }
-                trace_link = message.get("trace_link")
-                if isinstance(trace_link, dict):
-                    request_data["trace_link"] = trace_link
-                await ctx.request_info(
-                    request_data=request_data,
-                    response_type=OrderResolutionDecision,
-                    request_id=request_id,
-                )
-                return
-            self._store.apply_automatic(case_id, self._action)
+            approval_required = case.payload["proposal"]["approval_required"]
+            with workflow_business_stage(
+                "approval",
+                case_id=case_id,
+                conversation_id=conversation_id,
+                outcome="pending" if approval_required else "automatic",
+                approval_required=approval_required,
+            ):
+                if approval_required:
+                    request_id = message.get("request_id")
+                    if request_id is not None and (
+                        not request_id.strip() or len(request_id) > 256
+                    ):
+                        raise ValueError("The hosted request identity is invalid.")
+                    request_data = {
+                        "case_id": str(case_id),
+                        "conversation_id": conversation_id,
+                    }
+                    trace_link = message.get("trace_link")
+                    if isinstance(trace_link, dict):
+                        request_data["trace_link"] = trace_link
+                    with workflow_marker_span(
+                        "hitl_waiting",
+                        case_id=case_id,
+                        conversation_id=conversation_id,
+                        outcome="pending",
+                    ):
+                        await ctx.request_info(
+                            request_data=request_data,
+                            response_type=OrderResolutionDecision,
+                            request_id=request_id,
+                        )
+                    return
+            with workflow_business_stage(
+                "effect",
+                case_id=case_id,
+                conversation_id=conversation_id,
+                outcome="automatic",
+            ):
+                self._store.apply_automatic(case_id, self._action)
             await ctx.yield_output({"case_id": str(case_id), "decision": "automatic"})
 
     @response_handler
@@ -102,7 +128,20 @@ class OrderResolutionExecutor(Executor):
             conversation_id=conversation_id,
             trace_link=original_request.get("trace_link"),
         ):
-            self._store.apply_once(case_id, response.approved, self._action)
+            with workflow_marker_span(
+                "hitl_resume",
+                case_id=case_id,
+                conversation_id=conversation_id,
+                outcome=response.decision,
+            ):
+                with workflow_business_stage(
+                    "effect",
+                    case_id=case_id,
+                    conversation_id=conversation_id,
+                    outcome=response.decision,
+                    proposal_version=response.proposal_version,
+                ):
+                    self._store.apply_once(case_id, response.approved, self._action)
             await ctx.yield_output(
                 {
                     "case_id": str(case_id),

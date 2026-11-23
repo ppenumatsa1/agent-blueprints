@@ -58,7 +58,8 @@ _OPERATIONS = frozenset(
         "workflow.resume",
         "model.invoke",
         "tool.execute",
-        "database.connect",
+        "database.connection.open",
+        "database.pool.checkout",
         "database.read",
         "database.create",
         "database.decision",
@@ -74,6 +75,7 @@ _RETRY_REASONS = frozenset({"transient", "timeout", "conflict", "interrupted", "
 _HTTP_METHODS = frozenset(
     {"CONNECT", "DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT", "TRACE"}
 )
+_DATABASE_CONNECTION_REASONS = frozenset({"initial", "growth", "replacement"})
 _SPAN_ATTRIBUTES = frozenset(
     {
         "http.request.method",
@@ -87,6 +89,7 @@ _SPAN_ATTRIBUTES = frozenset(
         "blueprint.model.provider",
         "blueprint.model.name",
         "blueprint.tool.name",
+        "blueprint.database.connection.reason",
         "blueprint.retry.count",
         "gen_ai.usage.input_tokens",
         "gen_ai.usage.output_tokens",
@@ -284,6 +287,8 @@ class _Operation:
         }:
             value = _uuid_text(value)
             valid = value is not None
+        elif name == "blueprint.database.connection.reason":
+            valid = value in _DATABASE_CONNECTION_REASONS
         elif name in {
             "blueprint.agent.version",
             "blueprint.deployment.revision",
@@ -313,6 +318,16 @@ class _Operation:
                 self.span.set_attribute(name, value)
             except Exception:
                 _instrumentation_failure()
+
+    def fail(self, error):
+        error_type = _safe_identifier(type(error).__name__) or "Error"
+        if self.span is not None:
+            try:
+                self.span.set_attribute("error.type", error_type)
+            except Exception:
+                _instrumentation_failure()
+        self.set_technical_status("failed")
+        self.set_status(Status(StatusCode.ERROR))
 
     def traceparent(self):
         if self.span is None:
@@ -694,13 +709,9 @@ class Telemetry:
         outcome = "success"
         try:
             yield operation
-        except BaseException:
+        except BaseException as exc:
             outcome = "error"
-            operation.set_technical_status("failed")
-            try:
-                operation.set_status(Status(StatusCode.ERROR))
-            except Exception:
-                _instrumentation_failure()
+            operation.fail(exc)
             raise
         finally:
             try:

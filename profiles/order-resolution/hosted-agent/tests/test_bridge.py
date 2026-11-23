@@ -1,6 +1,6 @@
 import unittest
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from uuid import uuid4
 
 from app.domain.models import Principal
@@ -54,6 +54,12 @@ class FakeAuthority:
 
 
 class BridgeTests(unittest.IsolatedAsyncioTestCase):
+    def test_initialize_prewarms_the_app_owned_foundry_credential(self):
+        responses = Mock()
+        host = ResponsesWorkflowHost(responses, Mock())
+        host.initialize()
+        responses.prewarm.assert_called_once_with()
+
     def setUp(self):
         self.case_id = uuid4()
         self.owner = Principal(

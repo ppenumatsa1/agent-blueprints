@@ -26,7 +26,11 @@ _PRIVACY_ENVIRONMENT = {
 }
 _INSTRUMENTATION_OPTIONS = {
     "azure_sdk": {"enabled": True},
+    "fastapi": {
+        "excluded_urls": r"^https?://[^/?#]+/healthz$",
+    },
     "httpx": {"enabled": True},
+    "openai_agents": {"enabled": False},
     "urllib": {"enabled": True},
 }
 _CHECKPOINT_TYPES = ("app.order_resolution.workflow:OrderResolutionDecision",)
@@ -120,7 +124,8 @@ def create_responses_server(
     application: HostedApplication | None = None,
 ) -> ResponsesHostServer:
     os.environ.update(_PRIVACY_ENVIRONMENT)
-    application_lock = threading.Lock()
+    application_lock = threading.RLock()
+    application_prepared = False
 
     def resolve_application() -> HostedApplication:
         nonlocal application
@@ -129,6 +134,27 @@ def create_responses_server(
                 if application is None:
                     application = load_application()
         return application
+
+    def configure_observability(
+        *,
+        connection_string: str | None = None,
+        log_level: str | None = None,
+        enable_sensitive_data: bool = False,
+    ) -> None:
+        nonlocal application_prepared
+        _configure_host_observability(
+            connection_string=connection_string,
+            log_level=log_level,
+            enable_sensitive_data=enable_sensitive_data,
+        )
+        with application_lock:
+            if application_prepared:
+                return
+            resolved = resolve_application()
+            prewarm = getattr(resolved, "prewarm", None)
+            if callable(prewarm):
+                prewarm()
+            application_prepared = True
 
     async def parse_response(request: Any) -> WorkflowTurn[Any]:
         return await parse_turn(resolve_application(), request)
@@ -153,7 +179,7 @@ def create_responses_server(
             create_span_hook=InvokeAgentSpanHook(),
             resilient_background=True,
         ),
-        configure_observability=_configure_host_observability,
+        configure_observability=configure_observability,
     )
 
 

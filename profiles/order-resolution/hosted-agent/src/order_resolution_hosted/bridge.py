@@ -106,6 +106,9 @@ class ResponsesWorkflowHost:
         self._responses = responses
         self._authority_bindings = authority_bindings
 
+    def initialize(self) -> None:
+        self._responses.prewarm()
+
     async def start(self, case_id: UUID, actor: Any) -> None:
         _require_authenticated_actor(actor)
         binding = await asyncio.to_thread(

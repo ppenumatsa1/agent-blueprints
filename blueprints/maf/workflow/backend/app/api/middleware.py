@@ -15,7 +15,7 @@ def install_request_middleware(app: FastAPI, telemetry: Telemetry | None = None)
     async def safe_errors(request: Request, call_next):
         request_id = str(uuid4())
         response_traceparent = None
-        if telemetry is None:
+        if telemetry is None or request.url.path == "/healthz":
             try:
                 response = await call_next(request)
             except Exception as exc:

@@ -12,15 +12,19 @@ from urllib.request import Request, urlopen
 
 from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 
+from .credentials import application_credential, application_credential_prewarm
+
 
 FOUNDRY_SCOPE = "https://ai.azure.com/.default"
 _propagator = TraceContextTextMapPropagator()
 
 
 def DefaultAzureCredential(*args: Any, **kwargs: Any) -> Any:
-    from azure.identity import DefaultAzureCredential as credential_type
+    if args or kwargs:
+        from azure.identity import DefaultAzureCredential as credential_type
 
-    return credential_type(*args, **kwargs)
+        return credential_type(*args, **kwargs)
+    return application_credential()
 
 
 class OperationStatus(str, Enum):
@@ -102,6 +106,10 @@ class TokenProvider:
         token = self._credential.get_token(FOUNDRY_SCOPE)
         return f"Bearer {token.token}"
 
+    def prewarm(self) -> None:
+        with application_credential_prewarm("foundry"):
+            self._credential.get_token(FOUNDRY_SCOPE)
+
 
 class _JsonResponse:
     def __init__(self, status_code: int, body: bytes) -> None:
@@ -181,6 +189,9 @@ class ResponsesClient:
         self._token_provider = token_provider or TokenProvider()
         self._timeout_seconds = timeout_seconds
         self._post = post or _post_json
+
+    def prewarm(self) -> None:
+        self._token_provider.prewarm()
 
     @staticmethod
     def _validated_endpoint(endpoint: str, label: str) -> str:

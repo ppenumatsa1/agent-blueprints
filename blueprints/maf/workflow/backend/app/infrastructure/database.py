@@ -90,8 +90,12 @@ class BoundedConnectionPool:
         max_size: int,
         timeout_seconds: float,
         max_lifetime_seconds: float,
+        open_connection: Callable[[str], psycopg.Connection] | None = None,
+        checkout_failure: Callable[[BaseException], None] | None = None,
     ):
         self._factory = factory
+        self._open_connection = open_connection
+        self._checkout_failure = checkout_failure
         self._min_size = min_size
         self._timeout = timeout_seconds
         self._max_lifetime = max_lifetime_seconds
@@ -100,6 +104,11 @@ class BoundedConnectionPool:
         self._opened = False
         self._closed = False
         self._lock = threading.Lock()
+
+    def _create(self, reason: str) -> psycopg.Connection:
+        if self._open_connection is not None:
+            return self._open_connection(reason)
+        return self._factory()
 
     def open(self) -> None:
         with self._lock:
@@ -110,7 +119,7 @@ class BoundedConnectionPool:
             created = []
             try:
                 for _ in range(self._min_size):
-                    created.append((self._factory(), time.monotonic()))
+                    created.append((self._create("initial"), time.monotonic()))
             except BaseException:
                 for connection, _ in created:
                     connection.close()
@@ -122,15 +131,18 @@ class BoundedConnectionPool:
     def _borrow(self) -> tuple[psycopg.Connection, float]:
         self.open()
         if not self._borrowers.acquire(timeout=self._timeout):
-            raise TimeoutError("The PostgreSQL connection pool is exhausted.")
+            error = TimeoutError("The PostgreSQL connection pool is exhausted.")
+            if self._checkout_failure is not None:
+                self._checkout_failure(error)
+            raise error
         try:
             try:
                 connection, created_at = self._available.get_nowait()
             except queue.Empty:
-                return self._factory(), time.monotonic()
+                return self._create("growth"), time.monotonic()
             if connection.closed or time.monotonic() - created_at >= self._max_lifetime:
                 connection.close()
-                return self._factory(), time.monotonic()
+                return self._create("replacement"), time.monotonic()
             return connection, created_at
         except BaseException:
             self._borrowers.release()

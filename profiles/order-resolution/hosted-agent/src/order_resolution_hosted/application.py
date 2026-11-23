@@ -102,6 +102,8 @@ class HostedApplication(Protocol):
         value: Any,
     ) -> Any: ...
 
+    def prewarm(self) -> None: ...
+
 
 class HostedBusinessStore(Protocol):
     """Application-owned business lifecycle correlated to hosted workflow state."""
@@ -161,14 +163,30 @@ class _HostedWorkflowStore:
         return self._bound("owner").get(case_id)
 
     def apply_automatic(self, case_id: UUID, action: Any) -> None:
+        from app.order_resolution.observability import workflow_business_stage
+
         store = self._bound("owner")
         store.apply_automatic(case_id, action)
-        store.finish_hosted(case_id)
+        with workflow_business_stage(
+            "persistence",
+            case_id=case_id,
+            conversation_id=self._conversation_id,
+            outcome="automatic",
+        ):
+            store.finish_hosted(case_id)
 
     def apply_once(self, case_id: UUID, approved: bool, action: Any) -> None:
+        from app.order_resolution.observability import workflow_business_stage
+
         store = self._bound("reviewer")
         store.apply_once(case_id, approved, action)
-        store.finish_hosted(case_id)
+        with workflow_business_stage(
+            "persistence",
+            case_id=case_id,
+            conversation_id=self._conversation_id,
+            outcome="approved" if approved else "rejected",
+        ):
+            store.finish_hosted(case_id)
 
 
 def _bound_store(
@@ -246,6 +264,11 @@ class GeneratedOrderResolutionApplication:
     def checkpoint_types(self) -> tuple[str, ...]:
         return ("app.order_resolution.workflow:OrderResolutionDecision",)
 
+    def prewarm(self) -> None:
+        prewarm = getattr(self._store, "prewarm", None)
+        if callable(prewarm):
+            prewarm()
+
     def build_workflow(self, caller: CallerContext, conversation_id: str) -> Any:
         if not conversation_id:
             raise PermissionError("A Foundry conversation binding is required.")
@@ -261,22 +284,40 @@ class GeneratedOrderResolutionApplication:
         conversation_id: str,
         case_id: UUID,
     ) -> dict[str, Any]:
-        from app.order_resolution.observability import capture_trace_link
-
-        principal = _require_application_principal(
-            self._identity_bindings.resolve_start_principal(
-                case_id=case_id,
-                caller=caller,
-                conversation_id=conversation_id,
-            )
+        from app.order_resolution.observability import (
+            capture_trace_link,
+            workflow_business_stage,
         )
-        store = _bound_store(self._store, caller, conversation_id, "owner")
-        case = store.get(case_id)
-        self._policy.authorize_read(principal, case)
-        approval_required = case.payload["proposal"]["approval_required"]
-        allowed_statuses = ("created", "pending") if approval_required else ("created",)
-        if case.status not in allowed_statuses:
-            raise ValueError("The case is not eligible for a new hosted workflow run.")
+
+        with workflow_business_stage(
+            "authorization",
+            case_id=case_id,
+            conversation_id=conversation_id,
+        ):
+            principal = _require_application_principal(
+                self._identity_bindings.resolve_start_principal(
+                    case_id=case_id,
+                    caller=caller,
+                    conversation_id=conversation_id,
+                )
+            )
+            store = _bound_store(self._store, caller, conversation_id, "owner")
+            case = store.get(case_id)
+            self._policy.authorize_read(principal, case)
+        with workflow_business_stage(
+            "policy",
+            case_id=case_id,
+            conversation_id=conversation_id,
+        ):
+            proposal_payload = case.payload.get("proposal")
+            if not isinstance(proposal_payload, dict):
+                raise ValueError("The case does not contain an authoritative proposal.")
+            approval_required = proposal_payload.get("approval_required")
+            if not isinstance(approval_required, bool):
+                raise ValueError("The proposal approval requirement is invalid.")
+            allowed_statuses = ("created", "pending") if approval_required else ("created",)
+            if case.status not in allowed_statuses:
+                raise ValueError("The case is not eligible for a new hosted workflow run.")
         workflow_input: dict[str, Any] = {
             "case_id": str(case_id),
             "conversation_id": conversation_id,
@@ -284,25 +325,31 @@ class GeneratedOrderResolutionApplication:
         trace_link = capture_trace_link()
         if trace_link is not None:
             workflow_input["trace_link"] = trace_link
-        if approval_required:
-            request_id = _approval_request_id(case_id, caller, conversation_id)
-            proposal = store.prepare_hosted_approval(
-                case_id,
-                request_id,
-                channel=FOUNDRY_RESPONSES_CHANNEL,
-            )
-            expected_digest = hashlib.sha256(request_id.encode("utf-8")).hexdigest()
-            if (
-                not hmac.compare_digest(
-                    getattr(proposal, "decision_handle_digest", "") or "",
-                    expected_digest,
+        with workflow_business_stage(
+            "proposal",
+            case_id=case_id,
+            conversation_id=conversation_id,
+            approval_required=approval_required,
+        ):
+            if approval_required:
+                request_id = _approval_request_id(case_id, caller, conversation_id)
+                proposal = store.prepare_hosted_approval(
+                    case_id,
+                    request_id,
+                    channel=FOUNDRY_RESPONSES_CHANNEL,
                 )
-                or getattr(proposal, "decision_channel", None) != FOUNDRY_RESPONSES_CHANNEL
-            ):
-                raise RuntimeError(
-                    "The hosted business store did not bind the native request identity."
-                )
-            workflow_input["request_id"] = request_id
+                expected_digest = hashlib.sha256(request_id.encode("utf-8")).hexdigest()
+                if (
+                    not hmac.compare_digest(
+                        getattr(proposal, "decision_handle_digest", "") or "",
+                        expected_digest,
+                    )
+                    or getattr(proposal, "decision_channel", None) != FOUNDRY_RESPONSES_CHANNEL
+                ):
+                    raise RuntimeError(
+                        "The hosted business store did not bind the native request identity."
+                    )
+                workflow_input["request_id"] = request_id
         return workflow_input
 
     def authorize_resume(
@@ -319,6 +366,7 @@ class GeneratedOrderResolutionApplication:
             record_decision,
         )
         from app.order_resolution.workflow import OrderResolutionDecision
+        from app.order_resolution.observability import workflow_business_stage
 
         response = (
             value
@@ -336,17 +384,23 @@ class GeneratedOrderResolutionApplication:
         ):
             raise PermissionError("The workflow resume binding does not match this conversation.")
 
-        principal = _require_application_principal(
-            self._identity_bindings.authorize_resume(
-                case_id=response.case_id,
-                caller=caller,
-                conversation_id=conversation_id,
-                channel=response.channel,
+        with workflow_business_stage(
+            "authorization",
+            case_id=response.case_id,
+            conversation_id=conversation_id,
+            outcome=response.decision,
+        ):
+            principal = _require_application_principal(
+                self._identity_bindings.authorize_resume(
+                    case_id=response.case_id,
+                    caller=caller,
+                    conversation_id=conversation_id,
+                    channel=response.channel,
+                )
             )
-        )
-        store = _bound_store(self._store, caller, conversation_id, "reviewer")
-        case = store.get(response.case_id)
-        self._policy.authorize_decision(principal, case)
+            store = _bound_store(self._store, caller, conversation_id, "reviewer")
+            case = store.get(response.case_id)
+            self._policy.authorize_decision(principal, case)
         command = DecisionCommand(
             case_id=str(response.case_id),
             proposal_version=response.proposal_version,
@@ -357,18 +411,25 @@ class GeneratedOrderResolutionApplication:
             scope="workflow.approve",
             channel=response.channel,
         )
-        record_hosted_decision = getattr(store, "record_hosted_decision", None)
-        if callable(record_hosted_decision):
-            decision = record_hosted_decision(command)
-            _validate_hosted_decision(decision, command, principal)
-        else:
-            record_decision(
-                _HostedDecisionStore(store),
-                store.get_current_proposal(str(response.case_id)),
-                Actor(principal.tenant_id, principal.subject, principal.scopes, principal.roles),
-                command,
-                now=datetime.now(timezone.utc),
-            )
+        with workflow_business_stage(
+            "approval",
+            case_id=response.case_id,
+            conversation_id=conversation_id,
+            outcome=response.decision,
+            proposal_version=response.proposal_version,
+        ):
+            record_hosted_decision = getattr(store, "record_hosted_decision", None)
+            if callable(record_hosted_decision):
+                decision = record_hosted_decision(command)
+                _validate_hosted_decision(decision, command, principal)
+            else:
+                record_decision(
+                    _HostedDecisionStore(store),
+                    store.get_current_proposal(str(response.case_id)),
+                    Actor(principal.tenant_id, principal.subject, principal.scopes, principal.roles),
+                    command,
+                    now=datetime.now(timezone.utc),
+                )
         return response
 
 

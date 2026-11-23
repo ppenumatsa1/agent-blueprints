@@ -2,7 +2,7 @@ import asyncio
 import json
 import unittest
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from uuid import uuid4
 
 from order_resolution_hosted.application import CallerContext
@@ -12,6 +12,7 @@ from order_resolution_hosted.host import (
     _caller,
     _configure_host_observability,
     _conversation,
+    create_responses_server,
     _start_case,
     parse_turn,
     run,
@@ -118,6 +119,18 @@ class ProtocolTests(unittest.TestCase):
         )
         self.assertEqual(order, ["configure", "enable"])
         self.assertEqual(
+            _INSTRUMENTATION_OPTIONS,
+            {
+                "azure_sdk": {"enabled": True},
+                "fastapi": {
+                    "excluded_urls": r"^https?://[^/?#]+/healthz$",
+                },
+                "httpx": {"enabled": True},
+                "openai_agents": {"enabled": False},
+                "urllib": {"enabled": True},
+            },
+        )
+        self.assertEqual(
             _PRIVACY_ENVIRONMENT,
             {
                 "ENABLE_SENSITIVE_DATA": "false",
@@ -125,6 +138,21 @@ class ProtocolTests(unittest.TestCase):
                 "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT": "false",
             },
         )
+
+    def test_agentserver_setup_prewarms_application_once_outside_request_handlers(self):
+        application = SimpleNamespace(
+            checkpoint_types=(),
+            prewarm=Mock(),
+            build_workflow=lambda *_: object(),
+        )
+        with patch("order_resolution_hosted.host.ResponsesHostServer") as server_type:
+            create_responses_server(application)
+        configure = server_type.call_args.kwargs["configure_observability"]
+        with patch("order_resolution_hosted.host._configure_host_observability") as builtins:
+            configure(connection_string="configured")
+            configure(connection_string="configured")
+        self.assertEqual(builtins.call_count, 2)
+        application.prewarm.assert_called_once_with()
 
     def test_requires_trusted_caller_and_conversation_binding(self):
         request = SimpleNamespace(

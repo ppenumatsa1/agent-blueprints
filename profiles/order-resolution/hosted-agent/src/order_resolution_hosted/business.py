@@ -12,9 +12,9 @@ from urllib.parse import urlsplit
 from uuid import UUID
 
 import httpx
-from azure.identity import DefaultAzureCredential
 
 from .application import CallerContext
+from .credentials import application_credential, application_credential_prewarm
 
 
 PrincipalKind = Literal["owner", "reviewer"]
@@ -36,11 +36,15 @@ class ApiTokenProvider:
         ):
             raise ValueError("The internal API scope must use api://.../.default.")
         self._scope = scope
-        self._credential = credential or DefaultAzureCredential()
+        self._credential = credential or application_credential()
 
     def authorization_header(self) -> str:
         token = self._credential.get_token(self._scope)
         return f"Bearer {token.token}"
+
+    def prewarm(self) -> None:
+        with application_credential_prewarm("internal-api"):
+            self._credential.get_token(self._scope)
 
 
 def _encoded(value: Any) -> Any:
@@ -151,6 +155,9 @@ class HttpHostedBusinessStore:
         self._request = request or httpx.request
         self._unknown_operations: set[str] = set()
         self._lock = threading.RLock()
+
+    def prewarm(self) -> None:
+        self._token_provider.prewarm()
 
     @classmethod
     def from_environment(cls) -> "HttpHostedBusinessStore":
@@ -412,18 +419,26 @@ class _BoundBusinessStore:
         *,
         channel: str,
     ) -> Any:
-        return self._api._proposal(
-            self._api._request_json(
-                "POST",
-                f"/cases/{case_id}/approvals/prepare",
-                payload={
-                    **self._binding(),
-                    "channel": channel,
-                    "request_id": candidate_request_id,
-                },
-                operation_id=f"case:{case_id}:approval:{candidate_request_id}",
+        from app.order_resolution.observability import workflow_marker_span
+
+        with workflow_marker_span(
+            "resolution_submit",
+            case_id=case_id,
+            conversation_id=self._conversation_id,
+            outcome="pending",
+        ):
+            return self._api._proposal(
+                self._api._request_json(
+                    "POST",
+                    f"/cases/{case_id}/approvals/prepare",
+                    payload={
+                        **self._binding(),
+                        "channel": channel,
+                        "request_id": candidate_request_id,
+                    },
+                    operation_id=f"case:{case_id}:approval:{candidate_request_id}",
+                )
             )
-        )
 
     def get_current_proposal(self, case_id: str) -> Any:
         value = UUID(case_id)
@@ -439,25 +454,33 @@ class _BoundBusinessStore:
         )
 
     def record_hosted_decision(self, command: Any) -> Any:
+        from app.order_resolution.observability import workflow_marker_span
+
         case_id = UUID(command.case_id)
-        return self._api._decision(
-            self._api._request_json(
-                "POST",
-                f"/cases/{case_id}/decisions/claim",
-                payload={
-                    **self._binding(),
-                    "proposal_version": command.proposal_version,
-                    "action": command.action,
-                    "destination_id": command.destination_id,
-                    "handle": command.handle,
-                    "decision": _encoded(command.decision),
-                },
-                operation_id=(
-                    f"case:{case_id}:decision:{command.proposal_version}:"
-                    f"{_encoded(command.decision)}"
-                ),
+        outcome = _encoded(command.decision)
+        with workflow_marker_span(
+            "resolution_submit",
+            case_id=case_id,
+            conversation_id=self._conversation_id,
+            outcome=outcome,
+        ):
+            return self._api._decision(
+                self._api._request_json(
+                    "POST",
+                    f"/cases/{case_id}/decisions/claim",
+                    payload={
+                        **self._binding(),
+                        "proposal_version": command.proposal_version,
+                        "action": command.action,
+                        "destination_id": command.destination_id,
+                        "handle": command.handle,
+                        "decision": outcome,
+                    },
+                    operation_id=(
+                        f"case:{case_id}:decision:{command.proposal_version}:{outcome}"
+                    ),
+                )
             )
-        )
 
     def claim_hosted_decision(self, _decision: Any) -> Any:
         raise RuntimeError("HTTP decisions must be claimed from the bound command.")
@@ -471,30 +494,46 @@ class _BoundBusinessStore:
         self._apply(case_id)
 
     def _apply(self, case_id: UUID) -> None:
+        from app.order_resolution.observability import workflow_marker_span
+
         assert self._outcome is not None
-        self._api._case(
-            self._api._request_json(
-                "POST",
-                f"/cases/{case_id}/effects/apply",
-                payload={
-                    **self._binding(),
-                    "mode": self._outcome,
-                },
-                operation_id=f"case:{case_id}:action:{self._outcome}",
+        with workflow_marker_span(
+            "resolution_submit",
+            case_id=case_id,
+            conversation_id=self._conversation_id,
+            outcome=self._outcome,
+        ):
+            self._api._case(
+                self._api._request_json(
+                    "POST",
+                    f"/cases/{case_id}/effects/apply",
+                    payload={
+                        **self._binding(),
+                        "mode": self._outcome,
+                    },
+                    operation_id=f"case:{case_id}:action:{self._outcome}",
+                )
             )
-        )
 
     def finish_hosted(self, case_id: UUID) -> None:
+        from app.order_resolution.observability import workflow_marker_span
+
         if self._outcome is None:
             raise RuntimeError("The hosted action must be applied before completion.")
-        self._api._case(
-            self._api._request_json(
-                "POST",
-                f"/cases/{case_id}/finish",
-                payload={
-                    **self._binding(),
-                    "mode": self._outcome,
-                },
-                operation_id=f"case:{case_id}:completion:{self._outcome}",
+        with workflow_marker_span(
+            "resolution_submit",
+            case_id=case_id,
+            conversation_id=self._conversation_id,
+            outcome=self._outcome,
+        ):
+            self._api._case(
+                self._api._request_json(
+                    "POST",
+                    f"/cases/{case_id}/finish",
+                    payload={
+                        **self._binding(),
+                        "mode": self._outcome,
+                    },
+                    operation_id=f"case:{case_id}:completion:{self._outcome}",
+                )
             )
-        )

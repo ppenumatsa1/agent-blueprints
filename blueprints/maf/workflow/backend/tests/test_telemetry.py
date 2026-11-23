@@ -74,6 +74,10 @@ class TelemetryTests(unittest.TestCase):
         async def fail():
             raise RuntimeError(CANARY)
 
+        @app.get("/nested/healthz")
+        async def nested_health():
+            return {"ok": True}
+
         trace_id = "1234567890abcdef1234567890abcdef"
         with self.assertLogs("blueprint.telemetry", level="INFO") as logs:
             with TestClient(app) as client:
@@ -111,6 +115,20 @@ class TelemetryTests(unittest.TestCase):
                     },
                 )
                 self.assertEqual(unsampled.status_code, 204)
+                sampled_health = client.get(
+                    "/healthz",
+                    headers={
+                        "traceparent": f"00-{trace_id}-1234567890abcdef-01",
+                    },
+                )
+                self.assertEqual(sampled_health.status_code, 204)
+                nested_health = client.get(
+                    "/nested/healthz",
+                    headers={
+                        "traceparent": f"00-{trace_id}-1234567890abcdef-01",
+                    },
+                )
+                self.assertEqual(nested_health.status_code, 200)
                 unsampled_error = client.get(
                     "/test-error",
                     headers={
@@ -144,7 +162,21 @@ class TelemetryTests(unittest.TestCase):
             for span in exporter.get_finished_spans()
             if span.name in {"http.request", "workflow.resume"}
         ]
-        self.assertEqual(len(spans), 4)
+        self.assertEqual(len(spans), 5)
+        self.assertFalse(
+            any(
+                span.attributes.get("blueprint.request.id")
+                == sampled_health.headers["X-Correlation-ID"]
+                for span in spans
+            )
+        )
+        self.assertTrue(
+            any(
+                span.attributes.get("blueprint.request.id")
+                == nested_health.headers["X-Correlation-ID"]
+                for span in spans
+            )
+        )
         error = next(s for s in spans if s.status.status_code == StatusCode.ERROR)
         self.assertFalse(error.events)
         child = next(s for s in spans if s.name == "workflow.resume")
@@ -335,10 +367,7 @@ class TelemetryTests(unittest.TestCase):
             response.headers["access-control-expose-headers"],
             "X-Correlation-ID, traceparent",
         )
-        self.assertRegex(
-            response.headers["traceparent"],
-            r"^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$",
-        )
+        self.assertNotIn("traceparent", response.headers)
         self.assertTrue(response.headers["X-Correlation-ID"])
 
     def test_bad_trace_context_and_export_failures_are_safe(self):
@@ -894,6 +923,7 @@ class TelemetryTests(unittest.TestCase):
                     raise RuntimeError(CANARY)
         spans = exporter.get_finished_spans()
         self.assertEqual(spans[0].status.status_code, StatusCode.ERROR)
+        self.assertEqual(spans[0].attributes["error.type"], "RuntimeError")
         self.assertFalse(spans[0].events)
         self.assertNotIn(CANARY, str(logs.output) + spans[0].to_json())
         telemetry.shutdown()
@@ -926,10 +956,54 @@ class TelemetryTests(unittest.TestCase):
                 obo.exchange(AuthenticatedRequest(None, CANARY), ("api://example/read",))
         spans = exporter.get_finished_spans()
         self.assertEqual(
-            {s.name for s in spans}, {"database.connect", "database.read", "identity.obo"}
+            {s.name for s in spans},
+            {"database.connection.open", "database.read", "identity.obo"},
         )
+        self.assertTrue(all(s.name != "database.connect" for s in spans))
+        connection = next(s for s in spans if s.name == "database.connection.open")
+        self.assertEqual(connection.attributes["blueprint.database.connection.reason"], "initial")
+        self.assertEqual(connection.attributes["error.type"], "RuntimeError")
         self.assertNotIn(CANARY, str(logs.output) + "".join(s.to_json() for s in spans))
         self.assertTrue(all(not s.events for s in spans))
+        telemetry.shutdown()
+
+    def test_pool_timeout_is_visible_without_normal_borrow_spans(self):
+        class Connection:
+            closed = False
+
+            def commit(self):
+                pass
+
+            def rollback(self):
+                pass
+
+            def close(self):
+                self.closed = True
+
+        telemetry = Telemetry()
+        exporter = InMemorySpanExporter()
+        telemetry.provider.add_span_processor(SimpleSpanProcessor(exporter))
+        store = PostgresStore(
+            "postgresql://localhost/test",
+            pool_min_size=1,
+            pool_max_size=1,
+            pool_timeout_seconds=0.01,
+        )
+        store.telemetry = telemetry
+        store._connector.connect = Mock(side_effect=lambda **_: Connection())
+        with store.connect():
+            with self.assertRaises(TimeoutError):
+                with store.connect():
+                    self.fail("A second checkout exceeded the pool maximum.")
+        spans = exporter.get_finished_spans()
+        self.assertEqual(
+            [span.name for span in spans],
+            ["database.connection.open", "database.pool.checkout"],
+        )
+        checkout = spans[-1]
+        self.assertEqual(checkout.status.status_code, StatusCode.ERROR)
+        self.assertEqual(checkout.attributes["error.type"], "TimeoutError")
+        self.assertFalse(checkout.events)
         telemetry.shutdown()
 
     def test_sdk_error_logging_is_not_forwarded(self):

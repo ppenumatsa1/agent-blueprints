@@ -5,6 +5,10 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 from uuid import uuid4
 
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
 from app.domain.models import Case, Principal
 from app.domain.policy import CaseAccessPolicy
 from app.order_resolution.durability import DecisionRecord, Proposal
@@ -361,6 +365,67 @@ class ApplicationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.store.finished, 1)
         self.assertTrue(self.store.case.execution_complete)
         self.assertIsNone(self.store.case.checkpoint_id)
+
+    async def test_hosted_path_emits_stable_deterministic_business_trajectory(self):
+        provider = TracerProvider()
+        exporter = InMemorySpanExporter()
+        provider.add_span_processor(SimpleSpanProcessor(exporter))
+        tracer = provider.get_tracer("test")
+        try:
+            application = GeneratedOrderResolutionApplication(
+                store=self.store,
+                action=object(),
+                policy=CaseAccessPolicy(),
+                identity_bindings=self.bindings,
+                workflow_factory=build_order_resolution_workflow,
+            )
+            with patch(
+                "app.order_resolution.observability.trace.get_tracer",
+                return_value=tracer,
+            ):
+                started = application.authorize_start(
+                    self.caller,
+                    "conversation-1",
+                    self.case_id,
+                )
+                workflow = application.build_workflow(self.caller, "conversation-1")
+                async for _ in workflow.run(started, stream=True):
+                    pass
+                response = self.decision(handle=started["request_id"])
+                application.authorize_resume(
+                    self.caller,
+                    "conversation-1",
+                    started["request_id"],
+                    response,
+                )
+                async for _ in workflow.run(
+                    responses={started["request_id"]: response},
+                    stream=True,
+                ):
+                    pass
+            names = [span.name for span in exporter.get_finished_spans()]
+            for expected in (
+                "workflow.run",
+                "workflow.stage.authorization.succeeded",
+                "workflow.stage.policy.succeeded",
+                "workflow.stage.proposal.succeeded",
+                "workflow.stage.approval.succeeded",
+                "workflow.stage.persistence.succeeded",
+                "workflow.stage.effect.succeeded",
+                "workflow.hitl_waiting",
+                "workflow.hitl_resume",
+            ):
+                self.assertIn(expected, names)
+            self.assertTrue(
+                all(
+                    "payload" not in span.attributes
+                    and "message" not in span.attributes
+                    and "tool.arguments" not in span.attributes
+                    for span in exporter.get_finished_spans()
+                )
+            )
+        finally:
+            provider.shutdown()
 
     def test_rejects_cross_channel_and_cross_conversation_resume(self):
         for response, conversation in (

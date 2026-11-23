@@ -3,7 +3,11 @@ import unittest
 from types import SimpleNamespace
 
 from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from opentelemetry.trace import SpanKind
+from opentelemetry.trace import StatusCode
+from unittest.mock import patch
 
 from order_resolution_hosted.client import (
     AmbiguousCreate,
@@ -85,6 +89,82 @@ class ClientTests(unittest.TestCase):
         self.assertTrue(payload["background"])
         self.assertNotIn("agent_session_id", payload)
         self.assertEqual(payload["metadata"], {"operation_id": "start-1"})
+
+    def test_prewarm_populates_only_the_foundry_scope_without_sending_a_request(self):
+        provider = TracerProvider()
+        exporter = InMemorySpanExporter()
+        provider.add_span_processor(SimpleSpanProcessor(exporter))
+        tracer = provider.get_tracer("test")
+
+        class TracedCredential(FakeCredential):
+            def get_token(self, scope):
+                with tracer.start_as_current_span("GET /msi/token", kind=SpanKind.CLIENT):
+                    return super().get_token(scope)
+
+        requests = []
+        credential = TracedCredential()
+        client = ResponsesClient(
+            "https://example.test/agents/order/endpoint/responses?api-version=v1",
+            self.journal,
+            token_provider=TokenProvider(credential),
+            post=lambda *args, **kwargs: requests.append((args, kwargs)),
+        )
+        try:
+            with patch(
+                "order_resolution_hosted.credentials.trace.get_tracer",
+                return_value=tracer,
+            ):
+                client.prewarm()
+            spans = {span.name: span for span in exporter.get_finished_spans()}
+            boundary = spans["application.credentials.prewarm"]
+            token = spans["GET /msi/token"]
+            self.assertEqual(credential.scopes, ["https://ai.azure.com/.default"])
+            self.assertEqual(requests, [])
+            self.assertEqual(token.parent.span_id, boundary.context.span_id)
+            self.assertEqual(
+                boundary.attributes["blueprint.credential.owner"],
+                "application",
+            )
+            self.assertEqual(
+                boundary.attributes["blueprint.credential.audience"],
+                "foundry",
+            )
+        finally:
+            provider.shutdown()
+
+    def test_prewarm_failure_is_visible_without_exception_content(self):
+        provider = TracerProvider()
+        exporter = InMemorySpanExporter()
+        provider.add_span_processor(SimpleSpanProcessor(exporter))
+
+        class FailingCredential:
+            @staticmethod
+            def get_token(_scope):
+                raise RuntimeError("private credential detail")
+
+        client = ResponsesClient(
+            "https://example.test/agents/order/endpoint/responses?api-version=v1",
+            self.journal,
+            token_provider=TokenProvider(FailingCredential()),
+            post=lambda *_args, **_kwargs: None,
+        )
+        try:
+            with (
+                patch(
+                    "order_resolution_hosted.credentials.trace.get_tracer",
+                    return_value=provider.get_tracer("test"),
+                ),
+                self.assertRaisesRegex(RuntimeError, "private credential detail"),
+            ):
+                client.prewarm()
+            span = exporter.get_finished_spans()[-1]
+            self.assertEqual(span.name, "application.credentials.prewarm")
+            self.assertEqual(span.status.status_code, StatusCode.ERROR)
+            self.assertEqual(span.attributes["error.type"], "RuntimeError")
+            self.assertFalse(span.events)
+            self.assertNotIn("private credential detail", span.to_json())
+        finally:
+            provider.shutdown()
 
     def test_current_w3c_context_is_injected_without_sensitive_headers(self):
         requests = []

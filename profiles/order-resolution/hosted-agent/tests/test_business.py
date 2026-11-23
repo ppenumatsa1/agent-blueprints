@@ -5,6 +5,10 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import httpx
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+from unittest.mock import patch
 
 from app.domain.models import Case
 from app.order_resolution.durability import (
@@ -153,6 +157,34 @@ class BusinessStoreTests(unittest.TestCase):
             ApiTokenProvider("api://order-resolution-api/.default", self.credential),
             request=request or self.response,
         )
+
+    def test_prewarm_uses_only_the_configured_internal_api_scope(self):
+        store = self.store()
+        store.prewarm()
+        self.assertEqual(self.credential.scopes, ["api://order-resolution-api/.default"])
+        self.assertEqual(self.calls, [])
+
+    def test_write_submission_span_is_stable_and_payload_free(self):
+        provider = TracerProvider()
+        exporter = InMemorySpanExporter()
+        provider.add_span_processor(SimpleSpanProcessor(exporter))
+        try:
+            bound = self.store().for_binding(self.caller, "conversation", "owner")
+            with patch(
+                "app.order_resolution.observability.trace.get_tracer",
+                return_value=provider.get_tracer("test"),
+            ):
+                bound.prepare_hosted_approval(
+                    self.case_id,
+                    "approval-request",
+                    channel="foundry-responses",
+                )
+            span = exporter.get_finished_spans()[-1]
+            self.assertEqual(span.name, "workflow.resolution_submit")
+            self.assertEqual(span.attributes["blueprint.workflow.status"], "succeeded")
+            self.assertNotIn("approval-request", span.to_json())
+        finally:
+            provider.shutdown()
 
     def test_https_wire_uses_managed_identity_and_bound_flat_contract(self):
         store = self.store()

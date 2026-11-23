@@ -15,7 +15,12 @@ from opentelemetry.trace import (
     TraceState,
 )
 
-from app.order_resolution.observability import capture_trace_link, workflow_stage_span
+from app.order_resolution.observability import (
+    capture_trace_link,
+    workflow_business_stage,
+    workflow_marker_span,
+    workflow_stage_span,
+)
 from order_resolution_hosted.observability import InvokeAgentSpanHook
 
 
@@ -224,17 +229,22 @@ class ObservabilityTests(unittest.TestCase):
             ):
                 pass
 
+        spans = self.exporter.get_finished_spans()
         span = next(
             item
-            for item in self.exporter.get_finished_spans()
+            for item in spans
             if item.name == "order_resolution.workflow.resume"
         )
+        run = next(item for item in spans if item.name == "workflow.run")
         self.assertEqual(span.context.trace_id, resume_trace_id)
         self.assertNotEqual(span.context.trace_id, start_trace_id)
-        self.assertEqual(span.parent.span_id, resume_root.get_span_context().span_id)
+        self.assertEqual(span.parent.span_id, run.context.span_id)
+        self.assertEqual(run.parent.span_id, resume_root.get_span_context().span_id)
         self.assertEqual(len(span.links), 1)
+        self.assertEqual(len(run.links), 1)
         self.assertEqual(span.links[0].context.trace_id, start_trace_id)
         self.assertEqual(span.links[0].context.span_id, start_span_id)
+        self.assertEqual(run.links[0].context.trace_id, start_trace_id)
         self.assertTrue(span.attributes["blueprint.trace.restart"])
         self.assertEqual(
             span.attributes["blueprint.trace.link.trace_id"],
@@ -256,6 +266,69 @@ class ObservabilityTests(unittest.TestCase):
         span = self.exporter.get_finished_spans()[-1]
         self.assertFalse(span.links)
         self.assertNotIn("private-content", span.to_json())
+
+    def test_business_stage_names_status_and_attributes_are_bounded(self):
+        with patch(
+            "app.order_resolution.observability.trace.get_tracer",
+            return_value=self.tracer,
+        ):
+            with workflow_business_stage(
+                "proposal",
+                case_id=self.case_id,
+                conversation_id="conversation-1",
+                outcome="pending",
+                approval_required=True,
+                proposal_version=1,
+            ):
+                pass
+            with self.assertRaisesRegex(RuntimeError, "private payload"):
+                with workflow_business_stage(
+                    "effect",
+                    case_id=self.case_id,
+                    conversation_id="conversation-1",
+                    outcome="approved",
+                ):
+                    raise RuntimeError("private payload")
+
+        spans = {item.name: item for item in self.exporter.get_finished_spans()}
+        proposal = spans["workflow.stage.proposal.succeeded"]
+        failed = spans["workflow.stage.effect.failed"]
+        self.assertEqual(proposal.attributes["blueprint.workflow.status"], "succeeded")
+        self.assertTrue(proposal.attributes["blueprint.workflow.approval_required"])
+        self.assertEqual(proposal.attributes["blueprint.proposal.version"], 1)
+        self.assertEqual(failed.status.status_code, StatusCode.ERROR)
+        self.assertEqual(failed.attributes["error.type"], "RuntimeError")
+        self.assertFalse(failed.events)
+        self.assertNotIn("private payload", failed.to_json())
+        for invalid in ("private-stage", "", "authorization.failed"):
+            with self.subTest(stage=invalid), self.assertRaises(ValueError):
+                with workflow_business_stage(
+                    invalid,
+                    case_id=self.case_id,
+                    conversation_id="conversation-1",
+                ):
+                    pass
+
+    def test_hitl_marker_preserves_durable_link_without_content(self):
+        with self.tracer.start_as_current_span("start") as start:
+            captured = capture_trace_link()
+            trace_id = start.get_span_context().trace_id
+        with patch(
+            "app.order_resolution.observability.trace.get_tracer",
+            return_value=self.tracer,
+        ):
+            with workflow_marker_span(
+                "hitl_resume",
+                case_id=self.case_id,
+                conversation_id="conversation-1",
+                trace_link=captured,
+                outcome="approved",
+            ):
+                pass
+        span = self.exporter.get_finished_spans()[-1]
+        self.assertEqual(span.name, "workflow.hitl_resume")
+        self.assertEqual(span.links[0].context.trace_id, trace_id)
+        self.assertEqual(span.attributes["blueprint.workflow.outcome"], "approved")
 
 
 if __name__ == "__main__":

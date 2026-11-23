@@ -26,6 +26,9 @@ def create_lifespan(
         try:
             store.initialize()
             components.initialize(store)
+            initializer = getattr(type(host), "initialize", None)
+            if callable(initializer):
+                initializer(host)
             recoverable = store.recoverable() if recover_workflows else ()
             for case_id, status in recoverable:
                 try:

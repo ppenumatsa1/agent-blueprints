@@ -1,7 +1,12 @@
 import os
 
 from agent_framework_foundry import FoundryChatClient
-from azure.identity import DefaultAzureCredential
+
+from .credentials import application_credential
+
+
+def DefaultAzureCredential():
+    return application_credential()
 
 
 def create_chat_client() -> FoundryChatClient:
