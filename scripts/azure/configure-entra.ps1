@@ -439,7 +439,9 @@ $configuredHostedServiceRoles = @(
 )
 $configuredPreauthorization = @(
     $apiApplication.api.preAuthorizedApplications |
-        Where-Object { $_.appId -cin @($spaApplication.appId) + $operatorClientIds }
+        Where-Object {
+            $_.appId -cin (@($spaApplication.appId) + $operatorClientIds)
+        }
 )
 $configuredAccess = @(
     $spaApplication.requiredResourceAccess |
@@ -447,12 +449,15 @@ $configuredAccess = @(
 )
 $requiredScopeIds = @($scopes.id | Sort-Object)
 $configuredClientIds = @($configuredPreauthorization.appId | Sort-Object)
-$requiredClientIds = @(@($spaApplication.appId) + $operatorClientIds | Sort-Object -Unique)
+$requiredClientIds = @(
+    (@($spaApplication.appId) + $operatorClientIds) | Sort-Object -Unique
+)
 $configuredClientsHaveScopes = @(
     $configuredPreauthorization |
         Where-Object {
-            @($_.delegatedPermissionIds | Sort-Object) -join ',' -ne
-                $requiredScopeIds -join ','
+            [bool](Compare-Object `
+                $requiredScopeIds `
+                @($_.delegatedPermissionIds | Sort-Object))
         }
 ).Count -eq 0
 $configuredResourceScopeIds = @(
@@ -461,20 +466,22 @@ $configuredResourceScopeIds = @(
         ForEach-Object { [string]$_.id } |
         Sort-Object
 )
+$configuredScopeValues = @($configuredScopes.value | Sort-Object)
+$requiredScopeValues = @($scopeDefinitions.value | Sort-Object)
+$configuredRoleValues = @($configuredRoles.value | Sort-Object)
+$requiredRoleValues = @($roleDefinitions.value | Sort-Object)
 
 $valid = (
     $apiApplication.signInAudience -ceq 'AzureADMyOrg' -and
     $spaApplication.signInAudience -ceq 'AzureADMyOrg' -and
     $resolvedApiAppIdUri -in @($apiApplication.identifierUris) -and
-    @($configuredScopes.value | Sort-Object) -join ',' -eq
-        @($scopeDefinitions.value | Sort-Object) -join ',' -and
-    @($configuredRoles.value | Sort-Object) -join ',' -eq
-        @($roleDefinitions.value | Sort-Object) -join ',' -and
+        -not (Compare-Object $requiredScopeValues $configuredScopeValues) -and
+        -not (Compare-Object $requiredRoleValues $configuredRoleValues) -and
     $configuredHostedServiceRoles.Count -eq 1 -and
     @($redirectUris | Where-Object { $_ -notin @($spaApplication.spa.redirectUris) }).Count -eq 0 -and
-    $requiredClientIds -join ',' -eq $configuredClientIds -join ',' -and
+        -not (Compare-Object $requiredClientIds $configuredClientIds) -and
     $configuredClientsHaveScopes -and
-    $requiredScopeIds -join ',' -eq $configuredResourceScopeIds -join ','
+        -not (Compare-Object $requiredScopeIds $configuredResourceScopeIds)
 )
 if (-not $valid) {
     throw 'Entra application validation failed.'
