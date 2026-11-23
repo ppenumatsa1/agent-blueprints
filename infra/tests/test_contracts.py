@@ -269,6 +269,7 @@ class InfrastructureContractTests(unittest.TestCase):
         self.assertIn("Assert-GeneratedOrderResolutionProject", scripts["deploy.ps1"])
         self.assertIn("publish_order_resolution_hosted.py", combined)
         self.assertIn("az deployment sub create", scripts["deploy.ps1"])
+        self.assertIn("$name.ToUpperInvariant()", scripts["deploy.ps1"])
         self.assertIn("az acr build", scripts["deploy.ps1"])
         self.assertIn(
             "networkRuleSetDefaultAction: 'Allow'",

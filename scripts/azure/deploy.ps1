@@ -216,7 +216,7 @@ try {
     $deploymentOutputs = $deploymentJson | ConvertFrom-Json -AsHashtable
     $values = @{}
     foreach ($name in $deploymentOutputs.Keys) {
-        $values[$name] = $deploymentOutputs[$name].value
+        $values[$name.ToUpperInvariant()] = $deploymentOutputs[$name].value
     }
     $values['AZURE_SUBSCRIPTION_ID'] = $SubscriptionId
     $values['AZURE_TENANT_ID'] = $TenantId

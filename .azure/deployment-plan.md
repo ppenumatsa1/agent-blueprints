@@ -199,6 +199,12 @@ configuration, database, and optional firewall resources. This is deployment
 ordering only; it does not change authentication, TLS, firewall, or runtime
 ownership.
 
+The serialized retry provisioned the complete resource graph, then the
+post-deployment gate rejected ARM's noncanonical output-key casing when the
+values file was reread. Deployment output names are now normalized to uppercase
+before persistence. No migration, image build, hosted publication, or
+application activation ran before this fail-closed stop.
+
 ## Deployment gate
 
 The current Azure CLI identity matches the authorized context. Azure CLI mode
