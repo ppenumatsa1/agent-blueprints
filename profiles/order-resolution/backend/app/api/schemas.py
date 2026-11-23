@@ -36,7 +36,9 @@ class CaseOutput(BaseModel):
     failure_code: str | None
 
 
-CaseStatus = Literal["created", "pending", "approved", "rejected", "completed", "failed"]
+CaseStatus = Literal[
+    "created", "pending", "approved", "rejected", "completed", "failed"
+]
 ActivityType = Literal[
     "created",
     "review_requested",
@@ -91,7 +93,9 @@ def case_output(case: Case) -> CaseOutput:
         decision=case.decision or "pending",
         payload=case.payload,
         decision_handle=(
-            case.request_id if case.status == "pending" and case.decision is None else None
+            case.request_id
+            if case.status == "pending" and case.decision is None
+            else None
         ),
         execution_complete=case.execution_complete,
         failure_code=case.failure_code,

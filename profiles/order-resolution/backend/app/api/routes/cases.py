@@ -56,7 +56,9 @@ async def submit(
     body: Submission,
     actor: Annotated[AuthenticatedRequest, Depends(current_identity)],
     service: Annotated[WorkflowService, Depends(workflow_service)],
-    idempotency_key: Annotated[str, Header(alias="Idempotency-Key", min_length=1, max_length=128)],
+    idempotency_key: Annotated[
+        str, Header(alias="Idempotency-Key", min_length=1, max_length=128)
+    ],
 ) -> CaseOutput:
     case = await service.submit(
         actor.principal, str(body.reviewer_id), body.payload, idempotency_key
