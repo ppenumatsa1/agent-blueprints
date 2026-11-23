@@ -42,8 +42,15 @@ for operator-side psycopg while preserving system trust in the Linux runtime.
 The broad temporary rule `temporary-e2e-public-remove-after-e2e`
 (`0.0.0.0`-`255.255.255.255`) must be removed after E2E and replaced by actual
 API outbound addresses plus the current operator address if still needed.
-Next: deploy the real API image without changing these database contracts,
-verify API-UAMI token connectivity from that revision, complete E2E, and
+The generated startup correction at
+`2ef516107b47f57ea266021b2651ca13b235bd3e` and frontend upstream-TLS SNI
+correction at `9d5a66315f223cb424b70a20679cd6d950f47ffb` are deployed as the
+sole healthy API and web revisions. ACR runs `ch5` and `cha` produced immutable
+digests; live checks prove API health `204`, unauthenticated protection `401`,
+web root `200`, proxied web health `204`, and successful API-UAMI
+`database.connect`. The API retains the active hosted identity/version binding,
+and no business action was executed. Next: preserve exact deployment evidence,
+complete only separately authorized hosted/browser/evaluation checks, and
 restrict the firewall. These checks do not authorize merge, release, or
 production-risk acceptance.
 

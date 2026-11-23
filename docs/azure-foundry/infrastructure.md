@@ -405,18 +405,25 @@ least-privilege API UAMI database principal. During authorized E2E only,
 `0.0.0.0`-`255.255.255.255`; it must be removed after E2E and replaced by the
 actual API outbound addresses plus the operator address only if needed.
 
-Still not verified: the real API revision's managed-identity database login,
-Container Apps image deployment, Hosted Agent creation/invocation, restore,
-telemetry ingestion, browser execution, evaluation quality, rollback in Azure,
-teardown, or production readiness. The current API revision is the Azure
-sample placeholder. Hosted code has no direct PostgreSQL connectivity by
-design.
+The authorized deployment now verifies immutable generated API and frontend
+images in Container Apps. The sole active API revision uses its UAMI for a
+successful PostgreSQL `database.connect`, returns `/healthz` `204`, and rejects
+an unauthenticated protected request with `401`. The sole active frontend
+revision returns root `200` and proxies `/healthz` as `204`. The generated
+Azure nginx patch enables upstream TLS SNI before each HTTPS proxy pass; the
+deployment contract prevents regression. Hosted code still has no direct
+PostgreSQL connectivity by design.
+
+Still not verified: a real hosted business invocation, restore, telemetry
+ingestion, authenticated browser execution, evaluation quality, rollback in
+Azure, teardown, or production readiness. No business action was executed.
 
 The deployment route never targets the source blueprint. It instantiates an
 independent Order Resolution project, validates the generated hosted/app
 interfaces, patches only the temporary generated nginx upstream to the exact
-API HTTPS FQDN, and builds those generated contexts. Cloud configuration is
-hosted-only and omits local file checkpoint and synthetic application settings.
+API HTTPS FQDN with TLS SNI enabled, and builds those generated contexts. Cloud
+configuration is hosted-only and omits local file checkpoint and synthetic
+application settings.
 
 ## Cleanup ownership
 

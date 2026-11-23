@@ -26,8 +26,8 @@ release readiness, or Azure deployment approval.
 
 ## Local Azure/Foundry integration acceptance
 
-**Status: Completed for local integration; Azure database partially verified;
-hosted and production unverified.**
+**Status: Completed for local integration; Azure API/web runtime and database
+connectivity verified; hosted business execution and production unverified.**
 The integration starts at exact main
 `886b628fdea02f9089c385b4ed0fc46d90f375e8`. Accepted sources are
 A `708a4185abe149526c606477de02cd57c5d90a9c` (#45),
@@ -57,25 +57,23 @@ connection ResourceWarnings and the Vite chunk-size warning remain disclosed,
 not waived production checks. Harness import-path/database setup failures were
 corrected before the final complete suites passed; no tests were removed.
 
-**Next action:** draft PR #49 publishes exact integration head
-`007f9bc0136c0d0e42bb22c4d45fd9a7f799cfb4`; CI run `45090269313` passed all
-seven jobs. Azure validation then passed live identity/quota/provider checks,
-subscription policy review, provider-backed validation, and a what-if with 21
-creates and no modifications or deletions. Proceed through the guarded
-deployment workflow. The live PostgreSQL server is `Ready` with Entra-only
-authentication, password authentication disabled, `verify-full` TLS 1.3,
-platform revision `0001`, and all ten Order Resolution tables. The API UAMI
-database principal is mapped to the expected object as a non-admin role with
-connect/schema-use/table-DML/sequence privileges and no schema-create or
-elevated role attributes. The temporary broad E2E firewall rule
-`temporary-e2e-public-remove-after-e2e` must be removed after E2E and replaced
-by actual API outbound addresses plus the operator address only if still
-needed. The active API revision is still a placeholder, so runtime
-managed-identity token connectivity remains unverified. Exact-head CI and the
-real API deployment remain required. Live hosted execution,
-real-model evaluation, authenticated browser evidence, and independent
-production authorization remain unverified. The original architecture HTML
-remains unchanged.
+**Next action:** draft PR #49 now includes the generated startup correction at
+`2ef516107b47f57ea266021b2651ca13b235bd3e` and the frontend upstream-TLS SNI
+correction at `9d5a66315f223cb424b70a20679cd6d950f47ffb`. ACR runs `ch5` and
+`cha` produced immutable API and web digests. The sole active revisions
+`aborsfoundpv2n45-api--final-2ef5161` and
+`aborsfoundpv2n45-web--final-9d5a663` are healthy. Live checks returned API
+`/healthz` `204`, unauthenticated `/api/cases` `401`, web root `200`, and
+proxied web `/healthz` `204`; API startup logs record successful
+managed-identity `database.connect`. The final API binds the active hosted
+identity and `Hosted.Workflow.Invoke`, while prohibited local runtime settings
+remain absent. No business action was invoked. Preserve this exact revision,
+image, endpoint, configuration, and log evidence; then complete only the
+separately authorized hosted/browser/evaluation checks. Remove the temporary
+broad E2E firewall rule after E2E and replace it with actual API outbound
+addresses plus the operator address only if still needed. Production
+authorization remains unverified. The original architecture HTML remains
+unchanged.
 
 ## Azure/Foundry Workstream C
 
