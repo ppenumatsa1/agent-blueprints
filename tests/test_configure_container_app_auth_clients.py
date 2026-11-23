@@ -1,6 +1,7 @@
 import importlib.util
 import unittest
 from pathlib import Path
+from subprocess import CompletedProcess
 from unittest.mock import patch
 
 
@@ -15,6 +16,16 @@ SPEC.loader.exec_module(module)
 
 
 class ConfigureContainerAppAuthClientsTests(unittest.TestCase):
+    def test_run_resolves_the_platform_azure_cli_launcher(self):
+        completed = CompletedProcess([], 0, stdout='{"properties": {}}', stderr="")
+        with (
+            patch.object(module.shutil, "which", return_value=r"C:\tools\az.cmd"),
+            patch.object(module.subprocess, "run", return_value=completed) as run,
+        ):
+            module._run(["--method", "get", "--url", "https://management.example.test"])
+
+        self.assertEqual(run.call_args.args[0][0], r"C:\tools\az.cmd")
+
     def test_configure_preserves_auth_and_sets_exact_clients(self):
         current = {
             "properties": {

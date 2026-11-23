@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import shutil
 import subprocess
 import sys
 
@@ -21,7 +22,10 @@ class AuthConfigurationError(RuntimeError):
 
 
 def _run(arguments: list[str], *, body: dict | None = None) -> dict:
-    command = ["az", "rest", *arguments, "--output", "json", "--only-show-errors"]
+    az = shutil.which("az")
+    if az is None:
+        raise AuthConfigurationError("Azure CLI is unavailable.")
+    command = [az, "rest", *arguments, "--output", "json", "--only-show-errors"]
     if body is not None:
         command.extend(["--body", json.dumps(body, separators=(",", ":"))])
     result = subprocess.run(
