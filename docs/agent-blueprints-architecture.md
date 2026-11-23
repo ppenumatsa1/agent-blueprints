@@ -89,6 +89,44 @@ native MAF objects are created. Raw message capture remains disabled; durable
 resume creates a new trace with an explicit link rather than fabricating a
 cross-boundary parent.
 
+### Accepted version-9 runtime boundary
+
+The immutable rollout from
+`a302e939810283bce47867b8fa088374f3d204ad`, validated by all seven jobs in
+CI run `45275635199`, establishes the deployed runtime boundary without
+collapsing its stores or identities. Active hosted `order-resolution:9` owns
+Foundry execution and checkpoints. API revision
+`aborsfoundpv2n45-api--a302e939` owns authorization and PostgreSQL business
+state and uses only its managed identity for a `verify-full` TLS 1.3 database
+connection. The unchanged web revision remains a separate public client. The
+API and web image digests, hosted archive/publication digests, exact-scoped
+roles, version binding, health, and protected `401` boundary are retained in
+the deployment evidence; 32/32 deployment checks passed.
+
+The two-case version-9 signal comparison passed 16/16 checks while preserving
+the same architecture. The automatic trace completed with one database-only
+synthetic effect and no real or external effect. The approval-required trace
+stopped durably at `workflow.hitl_waiting` with no decision or effect and was
+not resumed. Stable `workflow.run`, authorization, policy, proposal, approval,
+effect, persistence, resolution-submit, and HITL-wait stages now describe the
+business trajectory without raw content. Normal pooled borrows no longer emit
+`database.connect`; physical connection creation and failure visibility remain.
+Foundry, MSI, Azure SDK, and HTTP dependencies remain visible. Both trace
+graphs resolve internally except for the expected external caller and
+AgentServer platform-parent boundaries.
+
+Network hardening remains a separate operational boundary. PostgreSQL public
+network access is still enabled. Retained read-only evidence records the broad
+temporary E2E rule, five existing single-address Container Apps rules, and 407
+advertised environment outbound addresses. The repository's supported
+migration tooling creates and removes a temporary exact-IP operator rule, but
+that operator path and a sufficient API allowlist have not been jointly
+validated with the broad rule absent. Firewall hardening is therefore
+deferred, not silently treated as complete. No firewall or network mutation
+was made. Human resume remains separately blocked until a distinct delegated
+reviewer can prove approval and the durable trace link without weakening
+authorization.
+
 ## Open architecture and verification gaps
 
 The engineering foundation is not a deployment-readiness claim. Open work

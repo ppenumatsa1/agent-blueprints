@@ -447,3 +447,74 @@ all three modules from one package and composes `ResponsesWorkflowHost`.
 These results repair local readiness evidence only. Bind the correction to a
 green exact-head run before a later immutable deployment; no workflow,
 firewall, or cloud acceptance state changed in this correction.
+
+## Immutable deployment and bounded signal comparison
+
+Exact source `a302e939810283bce47867b8fa088374f3d204ad` passed all seven
+PR #49 jobs in
+[run 45275635199](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/45275635199).
+The authorized deployment verification then passed 32/32 checks:
+
+- active hosted agent `order-resolution:9`, archive SHA-256
+  `84a18cc7a233e252b06fcd869ac53a6c881e7355ab82a0957ec6c43b2992c595`,
+  and publication digest
+  `781e882933dc02a0edce61356a6502d430ce20e80ed0b39e60e17e5029f025e7`;
+- API revision `aborsfoundpv2n45-api--a302e939`, 100 percent traffic, image
+  `sha256:6991536d9cf23efd9bdf1b21a94d1c9bddaa245a151d4b709a13235905eebf79`;
+- unchanged web revision `aborsfoundpv2n45-web--0000002`, image
+  `sha256:f8a43d68c38707a61ab60b673401427d0c7266d1ebb3dde04a602c07bf3a9ce7`;
+- API health `204`, protected unauthenticated request `401`, web root `200`,
+  and web health `204`; and
+- API managed-identity PostgreSQL login as `aborsfoundpv2n45-api-id` to
+  `workflow` with `sslmode=verify-full`, system trust, and TLS 1.3.
+
+The bounded signal phase submitted exactly two synthetic requests and did not
+approve, reject, resume, replay, or execute a consequential business action.
+
+| Path | Correlation | Durable result |
+| --- | --- | --- |
+| Automatic | Case `169a5177-543c-4d06-ac61-314252a2c39f`; trace `d4d3af124c8d4aee8b240bad2af0a78f`; conversation `conv_0cb297e218b263c400UeoYAKXKCW0TATnyGh76BkynLJm4rb5u`; request `7b2c0ebe-acd2-4b12-b0b1-83abb7078a93` | Completed with one PostgreSQL synthetic effect and zero real or external effects. |
+| Pending HITL | Case `4b368d22-7335-4ac0-8917-9ee4f7cd63a1`; trace `2c64659b9cbc467488d53e67e972b7fc`; conversation `conv_098da7ddb17139e3008wVAOWPvXojs08YCNLcZ78fY9DCAocn4`; request `d4a44261-4fd9-4fc2-86e0-f89e5e3d5f6c` | Remains pending with zero decisions, claims, effects, terminal events, or resume attempts. |
+
+The comparison passed 16/16 checks:
+
+| Signal | Version 7 | Version 9 | Result |
+| --- | ---: | ---: | --- |
+| Total spans | 276 | 243 | 33 fewer while retaining required dependencies |
+| API spans | 74 | 26 | 48 fewer |
+| Hosted spans | 202 | 217 | 15 additional deterministic business stages |
+| Pooled-borrow `database.connect` | 52 | 0 | Target met; physical open/create visibility retained |
+| MSI token spans | 54 | 52 | Warm reduction without hiding refresh/failure dependencies |
+| Foundry data-plane dependencies | 128 | 128 | Unchanged |
+| Optional A365/OpenAI Agents startup exceptions | 2 | 0 | Target met |
+
+Both graphs have only the expected external caller and non-exported
+AgentServer platform-parent boundaries. All correlated HTTP requests had
+successful result semantics. Exact hosted version and deployment revision
+binding passed. Exporter failures, raw-content rows, payload markers, and
+optional startup exceptions were zero. Privacy-safe deterministic stages
+include `workflow.run`, authorization, policy, proposal, approval, effect,
+persistence, `workflow.resolution_submit`, and `workflow.hitl_waiting` as
+applicable to each path.
+
+Machine-readable evidence is retained as
+`deployment-observability-signal-a302e939/deployment-verification-summary.json`,
+`signal-comparison-a302e939-v9-20261123T222235Z/signal-comparison.json`, and
+`signal-comparison-a302e939-v9-20261123T222235Z/signal-comparison-summary.json`.
+
+Two blockers remain explicit:
+
+1. A distinct delegated reviewer is still required for HITL resume and the
+   durable start-to-resume trace-link proof. Workload identity or single-user
+   substitution is prohibited.
+2. PostgreSQL firewall hardening is deferred. Retained read-only evidence
+   records public network access, the broad
+   `temporary-e2e-public-remove-after-e2e` rule, five narrow Container Apps
+   rules, 407 advertised outbound addresses, and a temporary exact-IP
+   `deployment-operator` migration path. The broad rule must remain until both
+   API and operator/migration connectivity are validated without it.
+
+No runtime code, cloud resource, RBAC, workflow, firewall, or network state was
+changed by this documentation reconciliation. PR #49 remains draft, open, and
+unmerged. Production authorization remains blocked and cannot be inferred
+from these diagnostic artifacts.

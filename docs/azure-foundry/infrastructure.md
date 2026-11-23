@@ -415,17 +415,23 @@ Azure nginx patch enables upstream TLS SNI before each HTTPS proxy pass; the
 deployment contract prevents regression. Hosted code still has no direct
 PostgreSQL connectivity by design.
 
-The temporary PostgreSQL public rule remains the only firewall rule. The
-Container App currently reports 407 possible outbound addresses, so deleting
-the broad rule without first installing and validating a replacement path
-would break API database connectivity. Replace it with a controlled egress
-design or reviewed exact rules before removal; do not treat successful
-managed-identity authentication as a network firewall substitute.
+Retained deployment evidence records six PostgreSQL firewall rules: the broad
+`temporary-e2e-public-remove-after-e2e` rule and five existing single-address
+`container-apps-*` rules. The Container Apps environment advertises 407
+possible outbound addresses, so the five narrow rules are not accepted as a
+complete runtime replacement. Repository migration tooling can create and
+remove a temporary exact-IP `deployment-operator` rule, but that path and the
+API allowlist have not been jointly validated with the broad rule absent.
+Firewall hardening is deferred; no firewall or network mutation was made.
+Do not treat successful managed-identity authentication as a network firewall
+substitute.
 
-Still not verified: a real hosted business invocation, restore, exact
-telemetry correlation, authenticated browser execution, evaluation quality,
-rollback in Azure, teardown, or production readiness. No business action was
-executed.
+The version-9 bounded signal comparison now verifies two real hosted synthetic
+invocations and exact privacy-safe telemetry correlation. It does not verify a
+distinct-reviewer HITL resume, authenticated dual-user browser execution,
+evaluation quality, the complete failure/recovery matrix, rollback in Azure,
+teardown, or production readiness. One database-only synthetic effect was
+recorded; no real or external business effect was executed.
 
 The deployment route never targets the source blueprint. It instantiates an
 independent Order Resolution project, validates the generated hosted/app

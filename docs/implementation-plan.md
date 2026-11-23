@@ -70,6 +70,59 @@ backend-only image import/composition regression. No Azure, Foundry, RBAC,
 traffic, workflow, database, or firewall mutation is claimed. Resume deployment
 only from a green exact-head run in a separately authorized phase.
 
+## Immutable version-9 deployment and signal checkpoint
+
+Exact source `a302e939810283bce47867b8fa088374f3d204ad` passed all seven PR
+#49 jobs in
+[run 45275635199](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/45275635199).
+The authorized immutable rollout then passed 32/32 deployment checks. Hosted
+`order-resolution:9` is active with source and deployment revision
+`a302e939...`; its archive SHA-256 is
+`84a18cc7a233e252b06fcd869ac53a6c881e7355ab82a0957ec6c43b2992c595`
+and publication digest is
+`781e882933dc02a0edce61356a6502d430ce20e80ed0b39e60e17e5029f025e7`.
+API revision `aborsfoundpv2n45-api--a302e939` receives 100 percent traffic
+from image digest
+`sha256:6991536d9cf23efd9bdf1b21a94d1c9bddaa245a151d4b709a13235905eebf79`.
+The unchanged web revision `aborsfoundpv2n45-web--0000002` remains on
+`sha256:f8a43d68c38707a61ab60b673401427d0c7266d1ebb3dde04a602c07bf3a9ce7`.
+API health is `204`, unauthenticated protection is `401`, web root is `200`,
+and web health is `204`. The API managed identity connected as
+`aborsfoundpv2n45-api-id` to database `workflow` with
+`sslmode=verify-full`, system trust, and TLS 1.3.
+
+The bounded live signal comparison passed 16/16 checks using exactly two
+synthetic cases. Case `169a5177-543c-4d06-ac61-314252a2c39f`, trace
+`d4d3af124c8d4aee8b240bad2af0a78f`, completed with one synthetic
+PostgreSQL effect and zero real or external effects. Case
+`4b368d22-7335-4ac0-8917-9ee4f7cd63a1`, trace
+`2c64659b9cbc467488d53e67e972b7fc`, remains durably pending HITL with
+zero decisions, claims, effects, terminal events, or resume attempts.
+Compared with version 7, total/API/hosted spans changed
+`276/74/202 -> 243/26/217`; pooled-borrow `database.connect` spans changed
+`52 -> 0`, MSI token spans `54 -> 52`, Foundry dependencies remained `128`,
+and optional A365 startup exceptions changed `2 -> 0`. Physical database
+open/create evidence, platform dependencies, graph integrity, HTTP result
+semantics, exact version binding, and deterministic privacy-safe workflow
+stages remained observable. Exporter failures, raw-content rows, and payload
+markers were zero.
+
+Retained machine-readable evidence is under
+`deployment-observability-signal-a302e939/deployment-verification-summary.json`
+and
+`signal-comparison-a302e939-v9-20261123T222235Z/signal-comparison.json`
+with its concise `signal-comparison-summary.json`.
+
+Two next actions remain explicit. First, use a distinct delegated reviewer for
+the pending HITL resume and durable trace-link proof; do not substitute a
+workload identity or relax reviewer authorization. Second, defer PostgreSQL
+firewall hardening until both API and operator/migration paths can be validated
+without the broad rule. Read-only evidence currently records the broad rule,
+five narrow Container Apps rules, 407 advertised outbound addresses, public
+network access, and the repository's temporary exact-IP `deployment-operator`
+path. No firewall/network mutation occurred. These results do not authorize
+production, merge, or removal of PR #49's draft status.
+
 ## Phase 0: foundation
 
 The [foundation PR](https://github.com/ppenumatsa1/agent-blueprints/pull/1)

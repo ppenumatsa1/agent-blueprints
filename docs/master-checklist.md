@@ -89,6 +89,43 @@ new cloud acceptance. Deployment may resume only from a green exact-head run
 and in a separately authorized immutable rollout that replaces the failed
 revision.
 
+## Immutable deployment and signal checkpoint
+
+**Status: Azure runtime deployment and the bounded version-9 signal comparison
+passed; production release remains blocked.** Exact source
+`a302e939810283bce47867b8fa088374f3d204ad` passed all seven PR #49 jobs in
+[run 45275635199](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/45275635199).
+The separately authorized rollout published active hosted
+`order-resolution:9` and API revision
+`aborsfoundpv2n45-api--a302e939`. The API image is pinned to
+`sha256:6991536d9cf23efd9bdf1b21a94d1c9bddaa245a151d4b709a13235905eebf79`;
+the unchanged web revision `aborsfoundpv2n45-web--0000002` remains pinned to
+`sha256:f8a43d68c38707a61ab60b673401427d0c7266d1ebb3dde04a602c07bf3a9ce7`.
+Deployment verification passed 32/32 checks: API health `204`, protected
+unauthenticated request `401`, web root `200`, web health `204`, and API-UAMI
+PostgreSQL login with `sslmode=verify-full`, TLS 1.3, and system trust.
+
+The bounded comparison invoked exactly two synthetic cases. The automatic case
+completed with one PostgreSQL synthetic effect and zero real or external
+effects. The second case remains durably pending HITL with no decision, claim,
+effect, terminal event, approval, rejection, or resume. Version-9 evidence
+passed 16/16 checks: spans changed from 276 to 243, API spans from 74 to 26,
+hosted spans from 202 to 217, pooled-borrow `database.connect` spans from 52
+to zero, MSI token spans from 54 to 52, and Foundry data-plane dependencies
+remained 128. Physical database-open visibility remained, stable privacy-safe
+workflow stages were present, and exporter failures, optional A365 startup
+exceptions, raw-content rows, and payload markers were all zero.
+
+**Unresolved next actions:** obtain a distinct delegated reviewer and execute
+the authorized HITL resume/link proof without weakening reviewer separation.
+PostgreSQL firewall hardening is deferred. Retained read-only evidence shows
+the broad `temporary-e2e-public-remove-after-e2e` rule plus five narrow
+Container Apps rules, while the environment advertises 407 possible outbound
+addresses. The repository supports a temporary exact-IP operator rule in
+`scripts/azure/migrate.ps1`, but no replacement API and operator path has been
+validated with the broad rule absent. No firewall or network change was made.
+PR #49 remains draft, open, and unmerged.
+
 ## Azure/Foundry Workstream C
 
 **Status: In Progress.** The cloud application increment adds an SDK-free
@@ -295,7 +332,7 @@ above; none marks Phase 1 or deployment complete.
 
 | Capability | Status | Acceptance criteria | Evidence | Next action |
 | --- | --- | --- | --- | --- |
-| Privacy-safe end-to-end correlation | Start trace passed; resume separately blocked | Correlate API, Foundry, native MAF workflow, and deterministic business stages with request/case/trace/conversation/agent/deployment identifiers; require model/token spans only when the real path invokes a model; exclude content and secrets. | Version-5 trace `9ff606620c4a4d728da127c531ffef40` passed the strengthened verifier on exact revision `acf2911b76b470d5b7254d97ba2b6934f5444ddb`: one app-owned hook root, 138 spans (101 hosted, 37 API), 136 resolved parent edges, two expected distributed boundaries, exact Foundry/project/session/conversation/case/version metadata, zero exporter errors, exceptions, raw content or synthetic payload leakage, and zero effects while pending. | Preserve this start proof; obtain the assigned reviewer credential and verify resume plus the explicit durable trace link without weakening authorization. |
+| Privacy-safe end-to-end correlation | Version-9 automatic and pending traces passed; resume separately blocked | Correlate API, Foundry, native MAF workflow, and deterministic business stages with request/case/trace/conversation/agent/deployment identifiers; require model/token spans only when the real path invokes a model; exclude content and secrets. | Exact source `a302e939...`, hosted `order-resolution:9`, and API revision `a302e939` passed the 16/16 signal comparison. The two traces contain 243 spans: 26 API and 217 hosted. Pooled-borrow `database.connect` is zero, physical database visibility remains, Foundry dependencies remain 128, and exporter failures, optional startup exceptions, raw content, and payload markers are zero. Internal edges resolve with only the two expected platform boundaries. | Preserve the automatic and pending proofs; obtain the distinct reviewer credential and verify resume plus the explicit durable trace link without weakening authorization. |
 | Real-provider evaluation and browser E2E | Implemented locally; externally blocked live | Run real-provider evaluation only when explicitly configured, never synthesize provider success, and run actual local/live Chromium automation with revision-bound evidence. | The live runner enforces distinct delegated owner and reviewer object IDs. Only the owner/operator identity is currently available; no provider or authenticated dual-user Chromium pass is claimed. | Supply a second delegated Entra user with `workflow.read workflow.approve` and `Workflow.Approver`, consented for the API, plus an authenticated browser state. |
 | Hosted failure injection and ORS | Partially passed; remaining cases blocked | Observe ORS-001–009 and all bounded synthetic failure/recovery cases without hidden retry or duplicate effects; preserve unknown outcomes until authoritative reconciliation. | Live Azure passed ORS-001, ORS-004, ORS-006, ORS-007, every ORS-008 variant, and the ORS-009 owner authorization negative (HTTP 403, pending, one denial, no effect). Successful hosted cases exposed a normalization defect because `hosted_workflow_finished` was not counted as terminal; the corrected query and hosted idempotency regression require one terminal event. ORS-002, ORS-003, ORS-005, approval/rejection, and decision/restart crash windows remain blocked by the missing distinct reviewer. | Deploy the exact fix, rerun ORS-001/004 terminal checks, then execute the reviewer-dependent matrix when the delegated prerequisite exists. |
-| Independent release readiness | Blocked | Preserve immutable implementation/Azure runtime evidence as `passed`, `failed`, `blocked`, or `unverified`; bind cloud evidence to exact source/deployment revisions; keep the release manifest diagnostic and non-authorizing. | A full infrastructure replay exposed that optional Bicep image defaults could create placeholder latest revisions and move single-revision traffic away from healthy immutable applications. Image parameters are now required; the deployment script preserves existing digest-pinned images, permits placeholders only before any immutable revision exists, and fails closed if a placeholder template coexists with immutable history. Bicep and all 17 infrastructure contracts pass locally. No deployment of this guard is yet claimed. | Obtain green exact-head CI, run a provider what-if proving the immutable images remain unchanged, then use the bounded app/hosted deployment path; retain the PostgreSQL public rule until replacement egress is validated and do not merge PR #49. |
+| Independent release readiness | Blocked for production | Preserve immutable implementation/Azure runtime evidence as `passed`, `failed`, `blocked`, or `unverified`; bind cloud evidence to exact source/deployment revisions; keep the release manifest diagnostic and non-authorizing. | Exact-head CI run `45275635199` passed all seven jobs. Deployment verification passed 32/32 checks for hosted version 9, API revision `a302e939`, immutable image digests, health/auth boundaries, and managed-identity PostgreSQL TLS. The bounded signal comparison passed 16/16 checks. These diagnostics do not authorize production. | Obtain distinct-reviewer HITL resume/link evidence, retain the broad PostgreSQL rule until a validated replacement API and operator path exists, and do not merge PR #49. |
