@@ -99,6 +99,19 @@ param runtimeConnectionName string = 'runtime-postgres'
 @minLength(9)
 param hostedWorkflowEndpoint string
 
+@description('Hosted agent version exposed in privacy-safe telemetry.')
+@minLength(1)
+@maxLength(128)
+param agentVersion string = 'unpublished'
+
+@description('Immutable source/deployment revision exposed in privacy-safe telemetry.')
+@minLength(1)
+@maxLength(128)
+param deploymentRevision string = 'infrastructure-unbound'
+
+@description('Enable bounded, role-protected synthetic acceptance controls.')
+param acceptanceMode bool = false
+
 var cleanEnvironmentName = take(toLower(replace(environmentName, '-', '')), 8)
 var suffix = take(uniqueString(subscription().id, resourceGroupName), 6)
 var prefix = 'ab${cleanEnvironmentName}${suffix}'
@@ -222,6 +235,9 @@ module containerApps './modules/container-apps.bicep' = {
     postgresHost: postgres.outputs.fqdn
     postgresDatabaseName: postgres.outputs.databaseName
     hostedWorkflowEndpoint: hostedWorkflowEndpoint
+    agentVersion: agentVersion
+    deploymentRevision: deploymentRevision
+    acceptanceMode: acceptanceMode
     minReplicas: appMinReplicas
     maxReplicas: appMaxReplicas
   }
@@ -271,3 +287,6 @@ output AZURE_KEY_VAULT_NAME string = secrets.outputs.name
 output APPLICATIONINSIGHTS_RESOURCE_ID string = observability.outputs.applicationInsightsResourceId
 output LOG_ANALYTICS_WORKSPACE_ID string = observability.outputs.workspaceResourceId
 output FOUNDRY_RUNTIME_CONNECTION_NAME string = createRuntimeConnection ? runtimeConnectionName : ''
+output AGENT_VERSION string = agentVersion
+output DEPLOYMENT_REVISION string = deploymentRevision
+output ACCEPTANCE_MODE string = string(acceptanceMode)

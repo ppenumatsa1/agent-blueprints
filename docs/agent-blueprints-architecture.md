@@ -41,6 +41,24 @@ revision correlation. These are explicit blocked/failed evidence boundaries,
 not reasons to collapse Foundry state, business state, authentication, or
 approval into a shared runtime.
 
+The remediation preserves those boundaries. Telemetry now binds the active
+hosted agent version and immutable deployment revision and exposes only
+privacy-safe W3C correlation identifiers. Synthetic fault controls are a
+separate, default-disabled acceptance surface requiring delegated
+`Acceptance.Operator`, an exact revision match, and hosted mode. They can
+inject a PostgreSQL transient or one-shot hosted decision/effect
+acknowledgement loss, but cannot create a refund or shipment outside the
+existing synthetic destination. Because the controls are process-local,
+live fault execution must pin the API to one replica; restart scenarios rely
+only on durable business/hosted state after the process-local control is gone.
+
+Positive approval and rejection evidence requires two distinct delegated
+Entra users: an owner with `workflow.write` and a reviewer with
+`workflow.approve` plus `Workflow.Approver`. The operator role does not weaken
+owner/reviewer separation, and workload identities cannot substitute for a
+human delegated token. Missing second-user credentials therefore remain an
+external blocked prerequisite rather than an authorization bypass.
+
 ## Open architecture and verification gaps
 
 The engineering foundation is not a deployment-readiness claim. Open work

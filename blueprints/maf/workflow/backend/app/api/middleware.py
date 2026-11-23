@@ -14,6 +14,7 @@ def install_request_middleware(app: FastAPI, telemetry: Telemetry | None = None)
     @app.middleware("http")
     async def safe_errors(request: Request, call_next):
         request_id = str(uuid4())
+        response_traceparent = None
         if telemetry is None:
             try:
                 response = await call_next(request)
@@ -39,5 +40,8 @@ def install_request_middleware(app: FastAPI, telemetry: Telemetry | None = None)
                     span.set_attribute("http.response.status_code", response.status_code)
                     if response.status_code >= 500:
                         span.set_status(Status(StatusCode.ERROR))
+                    response_traceparent = span.traceparent()
         response.headers["X-Correlation-ID"] = request_id
+        if response_traceparent is not None:
+            response.headers["traceparent"] = response_traceparent
         return response

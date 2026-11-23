@@ -22,6 +22,9 @@ param modelDeploymentName string
 param postgresHost string
 param postgresDatabaseName string
 param hostedWorkflowEndpoint string
+param agentVersion string
+param deploymentRevision string
+param acceptanceMode bool
 param minReplicas int
 param maxReplicas int
 
@@ -122,6 +125,14 @@ resource api 'Microsoft.App/containerApps@2025-07-01' = {
               secretRef: 'applicationinsights-connection-string'
             }
             {
+              name: 'AGENT_VERSION'
+              value: agentVersion
+            }
+            {
+              name: 'ACCEPTANCE_MODE'
+              value: string(acceptanceMode)
+            }
+            {
               name: 'AZURE_AI_MODEL_DEPLOYMENT_NAME'
               value: modelDeploymentName
             }
@@ -172,6 +183,10 @@ resource api 'Microsoft.App/containerApps@2025-07-01' = {
             {
               name: 'DATABASE_TLS_MODE'
               value: 'verify-full'
+            }
+            {
+              name: 'DEPLOYMENT_REVISION'
+              value: deploymentRevision
             }
             {
               name: 'AZURE_POSTGRESQL_DATABASE'

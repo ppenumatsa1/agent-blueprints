@@ -56,7 +56,7 @@ def create_api_app(
                 "Idempotency-Key",
                 "traceparent",
             ],
-            expose_headers=["X-Correlation-ID"],
+            expose_headers=["X-Correlation-ID", "traceparent"],
         )
 
     install_request_middleware(app, telemetry)

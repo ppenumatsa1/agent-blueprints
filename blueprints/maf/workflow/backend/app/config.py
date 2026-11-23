@@ -78,6 +78,7 @@ class Settings:
     applicationinsights_connection_string: str | None = field(default=None, repr=False)
     agent_version: str = "0.1.0"
     deployment_revision: str = "local-unversioned"
+    acceptance_mode: bool = False
 
     def __post_init__(self) -> None:
         try:
@@ -211,6 +212,8 @@ class Settings:
                 or not all(character.isalnum() or character in "._:/-" for character in value)
             ):
                 raise ValueError(f"{name} must be a privacy-safe identifier.")
+        if self.acceptance_mode and self.host_mode != "hosted":
+            raise ValueError("Acceptance controls may be enabled only in hosted mode.")
         for value in self.cors_origins:
             _origin(value)
         if self.obo_enabled and (not self.obo_client_secret or not self.obo_allowed_scopes):
@@ -246,6 +249,9 @@ class Settings:
         enabled = os.environ.get("OBO_ENABLED", "false").lower()
         if enabled not in ("true", "false"):
             raise ValueError("OBO_ENABLED must be true or false.")
+        acceptance_mode = os.environ.get("ACCEPTANCE_MODE", "false").lower()
+        if acceptance_mode not in ("true", "false"):
+            raise ValueError("ACCEPTANCE_MODE must be true or false.")
         host_mode = os.environ.get("WORKFLOW_HOST", "")
         if not host_mode:
             raise ValueError("WORKFLOW_HOST must explicitly select local or hosted.")
@@ -304,4 +310,5 @@ class Settings:
             or None,
             agent_version=os.environ.get("AGENT_VERSION", "0.1.0"),
             deployment_revision=os.environ.get("DEPLOYMENT_REVISION", "local-unversioned"),
+            acceptance_mode=acceptance_mode == "true",
         )

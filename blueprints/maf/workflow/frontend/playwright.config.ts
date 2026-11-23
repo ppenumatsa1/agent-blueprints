@@ -18,7 +18,6 @@ export default defineConfig({
   use: {
     ...devices["Desktop Chrome"],
     baseURL,
-    storageState: live ? process.env.E2E_STORAGE_STATE : undefined,
     trace: live ? "off" : "retain-on-failure",
     screenshot: live ? "off" : "only-on-failure",
     video: live ? "off" : "retain-on-failure",

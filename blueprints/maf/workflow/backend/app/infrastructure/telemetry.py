@@ -145,7 +145,10 @@ def instrumented(name):
                 self.telemetry.bind_case(_case_id_from((*args, *kwargs.values())))
                 with self.telemetry.operation(name) as operation:
                     result = await func(self, *args, **kwargs)
-                    self.telemetry.bind_case(_case_id_from((result,)))
+                    result_case_id = _case_id_from((result,))
+                    self.telemetry.bind_case(result_case_id)
+                    if result_case_id is not None:
+                        operation.set_attribute("blueprint.case.id", result_case_id)
                     operation.capture_result(result)
                     return result
 
@@ -158,7 +161,10 @@ def instrumented(name):
             self.telemetry.bind_case(_case_id_from((*args, *kwargs.values())))
             with self.telemetry.operation(name) as operation:
                 result = func(self, *args, **kwargs)
-                self.telemetry.bind_case(_case_id_from((result,)))
+                result_case_id = _case_id_from((result,))
+                self.telemetry.bind_case(result_case_id)
+                if result_case_id is not None:
+                    operation.set_attribute("blueprint.case.id", result_case_id)
                 operation.capture_result(result)
                 return result
 
@@ -293,6 +299,19 @@ class _Operation:
                 self.span.set_attribute(name, value)
             except Exception:
                 _instrumentation_failure()
+
+    def traceparent(self):
+        if self.span is None:
+            return None
+        try:
+            context = self.span.get_span_context()
+            if not context.is_valid:
+                return None
+            flags = int(context.trace_flags)
+            return f"00-{context.trace_id:032x}-{context.span_id:016x}-{flags:02x}"
+        except Exception:
+            _instrumentation_failure()
+            return None
 
     def set_status(self, status):
         try:

@@ -68,13 +68,14 @@ class VerificationWorkflowTests(unittest.TestCase):
             workflow,
         )
         self.assertEqual(workflow.count("id-token: write"), 1)
-        self.assertIn("E2E_SESSION_STORAGE_JSON", workflow)
+        self.assertIn("E2E_OWNER_SESSION_STORAGE_JSON", workflow)
+        self.assertIn("E2E_REVIEWER_SESSION_STORAGE_JSON", workflow)
         self.assertIn("E2E_EXPECTED_TENANT_ID", workflow)
         self.assertIn("MAF_REAL_RESULT_FACTORY", workflow)
         self.assertIn("MAF_REAL_AUTH_FILE", workflow)
         self.assertLess(
             workflow.index("npm ci --no-audit --no-fund"),
-            workflow.index("E2E_STORAGE_STATE_JSON"),
+            workflow.index("E2E_OWNER_STORAGE_STATE_JSON"),
         )
         self.assertLess(
             workflow.index(

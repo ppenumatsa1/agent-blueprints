@@ -205,6 +205,9 @@ def _idempotent(
         "acknowledged",
         operation_id,
     )
+    faults = getattr(store, "acceptance_faults", None)
+    if faults is not None and faults.consume_ack_fault(case_id, operation_label):
+        raise HostedWorkflowError("Synthetic acceptance acknowledgment loss.")
     return result
 
 
@@ -251,13 +254,18 @@ def bind_start(
     service: Annotated[WorkflowService, Depends(workflow_service)],
 ) -> PrincipalOutput:
     store = _store(service)
-    return _principal(
-        store.resolve_hosted_start_principal(
-            case_id,
-            conversation_id=body.conversation_id,
-            channel=body.channel,
-        )
+    principal = store.resolve_hosted_start_principal(
+        case_id,
+        conversation_id=body.conversation_id,
+        channel=body.channel,
     )
+    store.record_hosted_platform_binding(
+        case_id,
+        conversation_id=body.conversation_id,
+        caller_id=body.platform_user_id,
+        session_id=body.platform_session_id,
+    )
+    return _principal(principal)
 
 
 @router.post("/cases/{case_id}/bindings/resume", response_model=PrincipalOutput)
@@ -268,13 +276,18 @@ def bind_resume(
     service: Annotated[WorkflowService, Depends(workflow_service)],
 ) -> PrincipalOutput:
     store = _store(service)
-    return _principal(
-        store.authorize_hosted_resume(
-            case_id,
-            conversation_id=body.conversation_id,
-            channel=body.channel,
-        )
+    principal = store.authorize_hosted_resume(
+        case_id,
+        conversation_id=body.conversation_id,
+        channel=body.channel,
     )
+    store.record_hosted_platform_binding(
+        case_id,
+        conversation_id=body.conversation_id,
+        caller_id=body.platform_user_id,
+        session_id=body.platform_session_id,
+    )
+    return _principal(principal)
 
 
 @router.post("/cases/{case_id}/read", response_model=HostedCaseOutput)

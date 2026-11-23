@@ -11,7 +11,11 @@ param(
     [string]$SpaDisplayName = 'agent-blueprints-order-resolution-spa',
     [string]$ApiAppIdUri,
     [string]$FrontendRedirectUri,
-    [string]$HostedServicePrincipalObjectId
+    [string]$HostedServicePrincipalObjectId,
+    [string]$OperatorObjectId,
+    [string[]]$OperatorClientApplicationIds = @(
+        '04b07795-8ddb-461a-bbee-02f9e1bf7b46'
+    )
 )
 
 $ErrorActionPreference = 'Stop'
@@ -240,6 +244,17 @@ if ($LASTEXITCODE -ne 0 -or $activeTenant -cne $TenantId) {
 
 $apiApplication = Ensure-Application -DisplayName $ApiDisplayName
 $spaApplication = Ensure-Application -DisplayName $SpaDisplayName
+$operatorClientIds = @(
+    $OperatorClientApplicationIds |
+        ForEach-Object {
+            $clientId = [guid]::Empty
+            if (-not [guid]::TryParse($_, [ref]$clientId)) {
+                throw 'OperatorClientApplicationIds must contain Entra application GUIDs.'
+            }
+            $clientId.ToString()
+        } |
+        Sort-Object -Unique
+)
 $resolvedApiAppIdUri = if ($ApiAppIdUri) { $ApiAppIdUri } else { "api://$($apiApplication.appId)" }
 if ($resolvedApiAppIdUri -cne "api://$($apiApplication.appId)") {
     throw 'ApiAppIdUri must use the API application client ID.'
@@ -308,6 +323,12 @@ $roleDefinitions = @(
         allowedMemberTypes = @('User')
     }
     @{
+        value = 'Acceptance.Operator'
+        displayName = 'Acceptance operator'
+        description = 'Run bounded synthetic acceptance controls in an explicitly enabled environment.'
+        allowedMemberTypes = @('User')
+    }
+    @{
         value = 'Hosted.Workflow.Invoke'
         displayName = 'Hosted workflow service'
         description = 'Use internal hosted-workflow business-state operations.'
@@ -367,9 +388,11 @@ if ($Apply) {
             requestedAccessTokenVersion = 2
             oauth2PermissionScopes = $scopes
             preAuthorizedApplications = @(
-                @{
-                    appId = $spaApplication.appId
-                    delegatedPermissionIds = $scopeIds
+                foreach ($clientId in @($spaApplication.appId) + $operatorClientIds) {
+                    @{
+                        appId = $clientId
+                        delegatedPermissionIds = $scopeIds
+                    }
                 }
             )
         }
@@ -416,17 +439,22 @@ $configuredHostedServiceRoles = @(
 )
 $configuredPreauthorization = @(
     $apiApplication.api.preAuthorizedApplications |
-        Where-Object { $_.appId -ceq $spaApplication.appId }
+        Where-Object { $_.appId -cin @($spaApplication.appId) + $operatorClientIds }
 )
 $configuredAccess = @(
     $spaApplication.requiredResourceAccess |
         Where-Object { $_.resourceAppId -ceq $apiApplication.appId }
 )
 $requiredScopeIds = @($scopes.id | Sort-Object)
-$configuredScopeIds = @(
-    $configuredPreauthorization.delegatedPermissionIds |
-        Sort-Object
-)
+$configuredClientIds = @($configuredPreauthorization.appId | Sort-Object)
+$requiredClientIds = @(@($spaApplication.appId) + $operatorClientIds | Sort-Object -Unique)
+$configuredClientsHaveScopes = @(
+    $configuredPreauthorization |
+        Where-Object {
+            @($_.delegatedPermissionIds | Sort-Object) -join ',' -ne
+                $requiredScopeIds -join ','
+        }
+).Count -eq 0
 $configuredResourceScopeIds = @(
     $configuredAccess.resourceAccess |
         Where-Object { $_.type -ceq 'Scope' } |
@@ -444,7 +472,8 @@ $valid = (
         @($roleDefinitions.value | Sort-Object) -join ',' -and
     $configuredHostedServiceRoles.Count -eq 1 -and
     @($redirectUris | Where-Object { $_ -notin @($spaApplication.spa.redirectUris) }).Count -eq 0 -and
-    $requiredScopeIds -join ',' -eq $configuredScopeIds -join ',' -and
+    $requiredClientIds -join ',' -eq $configuredClientIds -join ',' -and
+    $configuredClientsHaveScopes -and
     $requiredScopeIds -join ',' -eq $configuredResourceScopeIds -join ','
 )
 if (-not $valid) {
@@ -514,6 +543,60 @@ if ($HostedServicePrincipalObjectId) {
     }
 }
 
+$operatorAssignments = @()
+if ($OperatorObjectId) {
+    $operatorGuid = [guid]::Empty
+    if (-not [guid]::TryParse($OperatorObjectId, [ref]$operatorGuid)) {
+        throw 'OperatorObjectId must be one Entra object GUID.'
+    }
+    $operatorRoles = @(
+        $configuredRoles |
+            Where-Object { $_.value -cin @('Workflow.Approver', 'Acceptance.Operator') }
+    )
+    if ($operatorRoles.Count -ne 2) {
+        throw 'The operator app roles are not configured exactly once.'
+    }
+    $assignedPayload = az rest `
+        --method get `
+        --url "https://graph.microsoft.com/v1.0/servicePrincipals/$($apiServicePrincipal.id)/appRoleAssignedTo" `
+        --output json `
+        --only-show-errors
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Unable to inspect operator API app-role assignments.'
+    }
+    $assigned = @((($assignedPayload | ConvertFrom-Json).value))
+    foreach ($role in $operatorRoles) {
+        $matches = @(
+            $assigned |
+                Where-Object {
+                    $_.principalId -ceq $OperatorObjectId -and
+                    $_.appRoleId -ceq $role.id
+                }
+        )
+        if ($matches.Count -gt 1) {
+            throw "Duplicate operator app-role assignments exist for $($role.value)."
+        }
+        if ($matches.Count -eq 0) {
+            if (-not $Apply) {
+                throw "Operator app-role assignment is not configured for $($role.value)."
+            }
+            $matches = @(
+                Invoke-GraphPost `
+                    -Url "https://graph.microsoft.com/v1.0/servicePrincipals/$($apiServicePrincipal.id)/appRoleAssignedTo" `
+                    -Body @{
+                        principalId = $OperatorObjectId
+                        resourceId = $apiServicePrincipal.id
+                        appRoleId = $role.id
+                    }
+            )
+        }
+        $operatorAssignments += [ordered]@{
+            role = $role.value
+            assignmentId = $matches[0].id
+        }
+    }
+}
+
 [ordered]@{
     status = 'passed'
     mutationPerformed = [bool]$Apply
@@ -522,10 +605,13 @@ if ($HostedServicePrincipalObjectId) {
     apiAppIdUri = $resolvedApiAppIdUri
     apiServicePrincipalObjectId = $apiServicePrincipal.id
     spaClientId = $spaApplication.appId
+    preAuthorizedClientApplicationIds = $requiredClientIds
     redirectUris = $redirectUris
     delegatedScopes = @($scopeDefinitions.value)
     appRoles = @($roleDefinitions.value)
     hostedServiceAppRoleId = $hostedServiceRole.id
     hostedServiceRoleValue = $hostedServiceRole.value
     hostedServiceAssignmentId = $hostedServiceAssignment.id
+    operatorObjectId = $OperatorObjectId
+    operatorAssignments = $operatorAssignments
 } | ConvertTo-Json -Depth 5

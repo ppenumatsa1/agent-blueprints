@@ -281,7 +281,14 @@ class TelemetryTests(unittest.TestCase):
         self.assertNotIn("*", allowed_headers)
         self.assertEqual(response.status_code, 204)
         self.assertEqual(response.headers["access-control-allow-origin"], origin)
-        self.assertEqual(response.headers["access-control-expose-headers"], "X-Correlation-ID")
+        self.assertEqual(
+            response.headers["access-control-expose-headers"],
+            "X-Correlation-ID, traceparent",
+        )
+        self.assertRegex(
+            response.headers["traceparent"],
+            r"^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$",
+        )
         self.assertTrue(response.headers["X-Correlation-ID"])
 
     def test_bad_trace_context_and_export_failures_are_safe(self):

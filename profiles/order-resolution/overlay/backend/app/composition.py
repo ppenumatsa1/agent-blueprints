@@ -5,6 +5,7 @@ from fastapi import FastAPI
 
 from app.api.app import create_api_app
 from app.api.routes.hosted_service import router as hosted_service_router
+from app.api.routes.acceptance import router as acceptance_router
 from app.application import ApplicationComponents
 from app.config import Settings
 from app.domain.errors import HostedWorkflowError
@@ -16,6 +17,7 @@ from app.infrastructure.telemetry import Telemetry
 from app.lifecycle import create_lifespan
 from app.order_resolution.host import OrderResolutionWorkflowHost
 from app.order_resolution.action import RecordOrderResolutionAction
+from app.order_resolution.acceptance import AcceptanceFaults
 from app.order_resolution.hosted_authority import PostgresHostedAuthorityBindings
 from app.order_resolution.hosted_journal import PostgresOperationJournal
 from app.order_resolution.persistence import OrderResolutionStore
@@ -68,8 +70,15 @@ def create_app(
     telemetry = Telemetry(
         settings.telemetry_mode,
         settings.applicationinsights_connection_string,
+        agent_version=settings.agent_version,
+        deployment_revision=settings.deployment_revision,
     )
     try:
+        if isinstance(repository, OrderResolutionStore):
+            repository.acceptance_faults = AcceptanceFaults(
+                enabled=settings.acceptance_mode,
+                deployment_revision=settings.deployment_revision,
+            )
         action = (
             components.action.bind(repository)
             if order_resolution and isinstance(components.action, RecordOrderResolutionAction)
@@ -122,7 +131,7 @@ def create_app(
             OnBehalfOf(settings, telemetry=telemetry),
             lifespan,
             telemetry,
-            additional_routers=(hosted_service_router,),
+            additional_routers=(hosted_service_router, acceptance_router),
         )
     except BaseException:
         telemetry.shutdown()

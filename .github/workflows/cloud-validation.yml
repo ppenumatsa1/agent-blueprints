@@ -204,25 +204,29 @@ jobs:
           npx playwright install --with-deps chromium
       - name: Restore explicit authenticated browser state
         env:
-          E2E_STORAGE_STATE_JSON: ${{ secrets.E2E_STORAGE_STATE_JSON }}
-          E2E_SESSION_STORAGE_JSON: ${{ secrets.E2E_SESSION_STORAGE_JSON }}
+          E2E_OWNER_STORAGE_STATE_JSON: ${{ secrets.E2E_OWNER_STORAGE_STATE_JSON }}
+          E2E_OWNER_SESSION_STORAGE_JSON: ${{ secrets.E2E_OWNER_SESSION_STORAGE_JSON }}
+          E2E_REVIEWER_STORAGE_STATE_JSON: ${{ secrets.E2E_REVIEWER_STORAGE_STATE_JSON }}
+          E2E_REVIEWER_SESSION_STORAGE_JSON: ${{ secrets.E2E_REVIEWER_SESSION_STORAGE_JSON }}
         run: |
           mkdir -p "$GITHUB_WORKSPACE/evidence/browser"
-          printf '%s' "$E2E_STORAGE_STATE_JSON" \
-            > "$RUNNER_TEMP/e2e-storage-state.json"
-          printf '%s' "$E2E_SESSION_STORAGE_JSON" \
-            > "$RUNNER_TEMP/e2e-session-storage.json"
-          chmod 600 "$RUNNER_TEMP/e2e-storage-state.json"
-          chmod 600 "$RUNNER_TEMP/e2e-session-storage.json"
+          printf '%s' "$E2E_OWNER_STORAGE_STATE_JSON" > "$RUNNER_TEMP/e2e-owner-storage.json"
+          printf '%s' "$E2E_OWNER_SESSION_STORAGE_JSON" > "$RUNNER_TEMP/e2e-owner-session.json"
+          printf '%s' "$E2E_REVIEWER_STORAGE_STATE_JSON" > "$RUNNER_TEMP/e2e-reviewer-storage.json"
+          printf '%s' "$E2E_REVIEWER_SESSION_STORAGE_JSON" > "$RUNNER_TEMP/e2e-reviewer-session.json"
+          chmod 600 "$RUNNER_TEMP"/e2e-*.json
       - name: Run authenticated live browser E2E
         env:
           E2E_LIVE: "true"
           E2E_BASE_URL: ${{ inputs.base_url }}
-          E2E_STORAGE_STATE: ${{ runner.temp }}/e2e-storage-state.json
-          E2E_SESSION_STORAGE: ${{ runner.temp }}/e2e-session-storage.json
+          E2E_OWNER_STORAGE_STATE: ${{ runner.temp }}/e2e-owner-storage.json
+          E2E_OWNER_SESSION_STORAGE: ${{ runner.temp }}/e2e-owner-session.json
+          E2E_REVIEWER_STORAGE_STATE: ${{ runner.temp }}/e2e-reviewer-storage.json
+          E2E_REVIEWER_SESSION_STORAGE: ${{ runner.temp }}/e2e-reviewer-session.json
           E2E_EXPECTED_TENANT_ID: ${{ vars.E2E_ENTRA_TENANT_ID }}
           E2E_EXPECTED_SPA_CLIENT_ID: ${{ vars.E2E_ENTRA_SPA_CLIENT_ID }}
           E2E_EXPECTED_API_APP_ID_URI: ${{ vars.E2E_ENTRA_API_APP_ID_URI }}
+          E2E_OWNER_ID: ${{ vars.E2E_OWNER_ID }}
           E2E_REVIEWER_ID: ${{ vars.E2E_REVIEWER_ID }}
           E2E_PAYLOAD_JSON: ${{ vars.E2E_PAYLOAD_JSON }}
           E2E_EVIDENCE_FILE: ${{ github.workspace }}/evidence/browser/live-browser-evidence.json
@@ -235,8 +239,7 @@ jobs:
       - name: Remove authenticated browser state
         if: always()
         run: |
-          rm -f "$RUNNER_TEMP/e2e-storage-state.json"
-          rm -f "$RUNNER_TEMP/e2e-session-storage.json"
+          rm -f "$RUNNER_TEMP"/e2e-*.json
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: workstream-d-browser

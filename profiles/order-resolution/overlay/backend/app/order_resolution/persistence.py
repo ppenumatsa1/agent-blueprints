@@ -117,6 +117,13 @@ def _effect(row) -> EffectLedgerRecord:
 class OrderResolutionStore(PostgresStore):
     """PostgreSQL business state correlated with, but separate from, MAF checkpoints."""
 
+    acceptance_faults = None
+
+    def connect(self):
+        if self.acceptance_faults is not None and self.acceptance_faults.postgres_transient():
+            raise RuntimeError("Injected synthetic PostgreSQL transient failure.")
+        return super().connect()
+
     def create(
         self,
         actor: Principal,
@@ -604,6 +611,125 @@ class OrderResolutionStore(PostgresStore):
             ) == (conversation_id, HOSTED_CHANNEL) and current == requested:
                 return
             raise Conflict("The hosted owner binding cannot change identity.")
+
+    def record_hosted_platform_binding(
+        self,
+        case_id: UUID,
+        *,
+        conversation_id: str,
+        caller_id: str,
+        session_id: str,
+    ) -> None:
+        conversation_id = self._hosted_value(conversation_id, "Hosted conversation identity")
+        caller_id = self._hosted_value(caller_id, "Hosted caller identity")
+        session_id = self._hosted_value(session_id, "Hosted session identity")
+        with self.connect() as connection:
+            row = connection.execute(
+                """
+                SELECT conversation_id, caller_id, session_id
+                FROM order_resolution_hosted_bindings
+                WHERE case_id = %s FOR UPDATE
+                """,
+                (case_id,),
+            ).fetchone()
+            if row is None or row["conversation_id"] != conversation_id:
+                raise AccessDenied("The hosted platform binding is not authorized.")
+            if row["caller_id"] not in (None, caller_id) or row["session_id"] not in (
+                None,
+                session_id,
+            ):
+                raise Conflict("The hosted platform binding cannot change identity.")
+            connection.execute(
+                """
+                UPDATE order_resolution_hosted_bindings
+                SET caller_id = %s, session_id = %s, updated_at = now()
+                WHERE case_id = %s
+                """,
+                (caller_id, session_id, case_id),
+            )
+
+    def acceptance_binding(self, case_id: UUID) -> dict[str, str]:
+        with self.connect() as connection:
+            row = connection.execute(
+                """
+                SELECT conversation_id, session_id
+                FROM order_resolution_hosted_bindings
+                WHERE case_id = %s
+                """,
+                (case_id,),
+            ).fetchone()
+        if row is None or not row["session_id"]:
+            raise NotFound("The hosted platform binding is not available.")
+        return {
+            "conversation_id": row["conversation_id"],
+            "session_id": row["session_id"],
+        }
+
+    def acceptance_snapshot(self, case_id: UUID) -> dict[str, object]:
+        case = self.get(case_id)
+        try:
+            proposal = self.get_current_proposal(str(case_id))
+        except NotFound:
+            proposal = None
+        with self.connect() as connection:
+            counts = connection.execute(
+                """
+                SELECT
+                    (SELECT count(*) FROM order_resolution_decisions
+                     WHERE case_id = %s AND decision = 'approved') AS approved,
+                    (SELECT count(*) FROM order_resolution_decisions
+                     WHERE case_id = %s AND decision = 'rejected') AS rejected,
+                    (SELECT count(*) FROM order_resolution_effects
+                     WHERE case_id = %s) AS claims,
+                    (SELECT count(*)
+                     FROM order_resolution_synthetic_effects s
+                     JOIN order_resolution_effects e ON e.effect_key = s.effect_key
+                     WHERE e.case_id = %s) AS effects,
+                    (SELECT count(*) FROM wf_audit
+                     WHERE case_id = %s
+                       AND event IN ('workflow_finished', 'resolution_failed')) AS terminal,
+                    (SELECT count(*) FROM order_resolution_audit
+                     WHERE case_id = %s AND event = 'decision_denied') AS denials
+                """,
+                (case_id, case_id, case_id, case_id, case_id, case_id),
+            ).fetchone()
+            actions = connection.execute(
+                """
+                SELECT action, amount::text, currency
+                FROM order_resolution_actions
+                WHERE case_id = %s
+                ORDER BY created_at
+                """,
+                (case_id,),
+            ).fetchall()
+        return {
+            "status": case.status,
+            "decision": case.decision,
+            "proposal": (
+                {
+                    "version": proposal.proposal_version,
+                    "action": proposal.action,
+                    "destination_id": proposal.destination_id,
+                    "approval_required": proposal.approval_required,
+                    "amount": str(proposal.amount) if proposal.amount is not None else None,
+                    "currency": proposal.currency,
+                }
+                if proposal is not None
+                else None
+            ),
+            "counts": {name: int(counts[name]) for name in counts.keys()},
+            "verified_actions": [
+                {
+                    "type": row["action"],
+                    **(
+                        {"amount": row["amount"], "currency": row["currency"]}
+                        if row["amount"] is not None
+                        else {"quantity": 1}
+                    ),
+                }
+                for row in actions
+            ],
+        }
 
     def bind_hosted_resume_authority(
         self,

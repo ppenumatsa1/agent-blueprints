@@ -18,6 +18,8 @@ param(
     [string]$PostgresAdministratorPrincipalName,
     [ValidateSet('Group', 'ServicePrincipal', 'User')]
     [string]$PostgresAdministratorPrincipalType = 'Group',
+    [string]$OperatorObjectId,
+    [switch]$EnableAcceptanceControls,
     [Parameter(Mandatory)]
     [string]$HostedWorkflowEndpoint,
     [Parameter(Mandatory)]
@@ -90,6 +92,10 @@ if ($HostedWorkflowEndpoint -cne $HostedResponsesEndpoint) {
     throw 'HostedWorkflowEndpoint and HostedResponsesEndpoint must identify the same Responses endpoint.'
 }
 $root = (Resolve-Path "$PSScriptRoot\..\..").Path
+$sourceRevision = (git -C $root rev-parse HEAD).Trim()
+if ($LASTEXITCODE -ne 0 -or $sourceRevision -cnotmatch '^[0-9a-f]{40}$') {
+    throw 'Unable to resolve the exact source revision for deployment.'
+}
 $temporaryRoot = Join-Path ([System.IO.Path]::GetTempPath()) (
     "agent-blueprints-order-resolution-{0}" -f [guid]::NewGuid().ToString('N')
 )
@@ -155,7 +161,8 @@ try {
         -SubscriptionId $SubscriptionId `
         -TenantId $TenantId `
         -ExpectedUser $ExpectedUser `
-        -Location $Location
+        -Location $Location `
+        -OperatorObjectId $OperatorObjectId
 
     $entraJson = & "$PSScriptRoot\configure-entra.ps1" `
         -Apply `
@@ -184,6 +191,9 @@ try {
                 value = $PostgresAdministratorPrincipalType
             }
             hostedWorkflowEndpoint = @{ value = $HostedWorkflowEndpoint }
+            agentVersion = @{ value = 'unpublished' }
+            deploymentRevision = @{ value = $sourceRevision }
+            acceptanceMode = @{ value = [bool]$EnableAcceptanceControls }
         }
     }
     $parameters | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $parameterFile
@@ -223,6 +233,8 @@ try {
     $values['AZURE_EXPECTED_USER'] = $ExpectedUser
     $values['AZURE_LOCATION'] = $Location
     $values['AZURE_ENV_NAME'] = $EnvironmentName
+    $values['SOURCE_REVISION'] = $sourceRevision
+    $values['DEPLOYMENT_REVISION'] = $sourceRevision
     $values['HOSTED_WORKFLOW_ENDPOINT'] = $HostedWorkflowEndpoint
     $values['AZURE_API_ENTRA_SERVICE_PRINCIPAL_ID'] =
         $entra.apiServicePrincipalObjectId
@@ -247,7 +259,8 @@ try {
         -TenantId $TenantId `
         -ExpectedUser $ExpectedUser `
         -Location $Location `
-        -FrontendRedirectUri "https://$(Get-RequiredValue $values 'AZURE_WEB_FQDN')" | Out-Null
+        -FrontendRedirectUri "https://$(Get-RequiredValue $values 'AZURE_WEB_FQDN')" `
+        -OperatorObjectId $OperatorObjectId | Out-Null
 
     & "$PSScriptRoot\configure-postgres.ps1" `
         -Apply `
@@ -308,6 +321,8 @@ try {
     $apiFqdn = Get-RequiredValue $values 'AZURE_API_FQDN'
     $apiEnvironment = @(
         'WORKFLOW_HOST=hosted',
+        "DEPLOYMENT_REVISION=$sourceRevision",
+        "ACCEPTANCE_MODE=$($EnableAcceptanceControls.ToString().ToLowerInvariant())",
         'HOSTED_WORKFLOW_SCOPE=https://ai.azure.com/.default',
         "API_MANAGED_IDENTITY_CLIENT_ID=$(Get-RequiredValue $values 'AZURE_API_IDENTITY_CLIENT_ID')",
         "DATABASE_URL=$apiDatabaseUrl",
@@ -319,6 +334,7 @@ try {
     )
     $bootstrapApiEnvironment = @(
         $apiEnvironment
+        'AGENT_VERSION=unpublished'
         "HOSTED_WORKFLOW_ENDPOINT=$HostedWorkflowEndpoint"
         "HOSTED_CONVERSATION_ENDPOINT=$HostedConversationEndpoint"
         "HOSTED_SERVICE_PRINCIPAL_ID=$($entra.apiServicePrincipalObjectId)"
@@ -469,6 +485,7 @@ try {
             -ExpectedUser $ExpectedUser `
             -Location $Location `
             -FrontendRedirectUri "https://$(Get-RequiredValue $values 'AZURE_WEB_FQDN')" `
+            -OperatorObjectId $OperatorObjectId `
             -HostedServicePrincipalObjectId $pendingPublishRecord.identity_principal_id
         $hostedEntra = $hostedEntraJson | ConvertFrom-Json
 
@@ -494,6 +511,7 @@ try {
         --image $apiImage `
         --set-env-vars @(
             $apiEnvironment
+            "AGENT_VERSION=$($publishRecord.agent_version)"
             "HOSTED_WORKFLOW_ENDPOINT=$HostedWorkflowEndpoint"
             "HOSTED_CONVERSATION_ENDPOINT=$HostedConversationEndpoint"
             "HOSTED_SERVICE_PRINCIPAL_ID=$($publishRecord.identity_principal_id)"
@@ -547,6 +565,9 @@ try {
     $values['AZURE_WEB_IMAGE'] = $webImage
     $values['AZURE_HOSTED_AGENT_NAME'] = $HostedAgentName
     $values['AZURE_HOSTED_AGENT_VERSION'] = $publishRecord.agent_version
+    $values['AGENT_VERSION'] = $publishRecord.agent_version
+    $values['ACCEPTANCE_MODE'] =
+        $EnableAcceptanceControls.ToString().ToLowerInvariant()
     $values['AZURE_HOSTED_AGENT_VERSION_ID'] = $publishRecord.agent_version_id
     $values['AZURE_HOSTED_AGENT_GUID'] = $publishRecord.agent_guid
     $values['AZURE_HOSTED_AGENT_PRINCIPAL_ID'] = $publishRecord.identity_principal_id
@@ -560,6 +581,8 @@ try {
         $hostedEntra.hostedServiceAssignmentId
     $values['AZURE_HOSTED_API_APP_ROLE_ID'] = $hostedEntra.hostedServiceAppRoleId
     $values['AZURE_HOSTED_API_APP_ROLE_VALUE'] = $hostedEntra.hostedServiceRoleValue
+    $values['AZURE_ACCEPTANCE_OPERATOR_OBJECT_ID'] = $OperatorObjectId
+    $values['AZURE_ACCEPTANCE_OPERATOR_ASSIGNMENTS'] = @($hostedEntra.operatorAssignments)
     $values['ORDER_RESOLUTION_API_ENDPOINT'] = $orderResolutionApiEndpoint
     $values['ORDER_RESOLUTION_API_SCOPE'] = $orderResolutionApiScope
     $values['HOSTED_WORKFLOW_ENDPOINT'] = $HostedWorkflowEndpoint

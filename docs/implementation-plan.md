@@ -927,6 +927,21 @@ failed. Next action: deploy exact runtime revision metadata, publish the
 deployment artifact, and supply reviewed short-lived authentication and live
 adapters before rerunning. Credential-free CI remains implementation evidence
 only.
+
+The PR #49 remediation now passes exact agent/deployment metadata into the
+profile telemetry pipeline, returns a W3C `traceparent`, and reconstructs the
+normalized deployment contract from acknowledged Azure state. Entra
+configuration preauthorizes the Azure CLI public client and defines explicit
+`Workflow.Approver` and `Acceptance.Operator` assignments. Bounded synthetic
+acceptance controls are disabled by default, require the operator role, and
+are bound to the exact hosted deployment revision. The live failure adapter,
+ORS-001–009 result factory, Foundry model evaluator, and Chromium test all
+require distinct delegated owner and reviewer identities; no application
+identity or single-user bypass is permitted. Local evidence is 93 root tests,
+11 focused generated tests with one explicit provider opt-in skip, locked Ruff,
+Bicep build, frontend build, 9 frontend unit tests, and Playwright discovery.
+Live outcomes remain unverified until the exact committed revision is deployed
+and two short-lived delegated identities are available.
 The release manifest cannot waive or authorize production checks; production
 requires the baseline-pinned trust validator, signed result attestations, and
 scoped, unexpired risk decisions, while critical/security-critical blocking
