@@ -136,6 +136,10 @@ pull-request merge checkout is not accepted as exact-source evidence: its
 artifact revision would differ from the deployment source and the release
 evidence builder must reject it.
 
+The deployment health verifier requires the public health endpoint to return
+exactly `204` and an unauthenticated protected API request to return exactly
+`401`; `200` health or `403` unauthenticated responses do not pass.
+
 Example:
 
 ```powershell

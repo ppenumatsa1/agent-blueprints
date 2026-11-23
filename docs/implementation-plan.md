@@ -23,7 +23,9 @@ before recording `SOURCE_REVISION`; a fresh exact-head run and artifact check
 are required before cloud validation. The telemetry verifier also now resolves
 the deployment-emitted Log Analytics ARM resource ID to the customer/workspace
 query GUID instead of passing an unsupported ARM path to `az monitor
-log-analytics query`. Live Azure preflight, subscription policy review,
+log-analytics query`. The cloud health verifier now also enforces exact
+`/healthz` `204` and unauthenticated protected API `401` responses rather than
+accepting broader success/authorization status sets. Live Azure preflight, subscription policy review,
 provider validation, and provider-backed what-if passed with 21 creates and no
 modifications or deletions, so `.azure/deployment-plan.md` is `Validated`.
 The first corrected apply created the PostgreSQL server but exposed concurrent

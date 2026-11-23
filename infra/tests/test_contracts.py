@@ -322,6 +322,16 @@ class InfrastructureContractTests(unittest.TestCase):
             'environment.get("DATABASE_AUTH_MODE") != "managed-identity"',
             scripts["health-check.py"],
         )
+        self.assertIn(
+            'request_status(f"https://{api[\'fqdn\']}/healthz", {204})',
+            scripts["health-check.py"],
+        )
+        self.assertIn(
+            'request_status(f"https://{api[\'fqdn\']}/api/cases", {401})',
+            scripts["health-check.py"],
+        )
+        self.assertNotIn("{200, 204}", scripts["health-check.py"])
+        self.assertNotIn("{401, 403}", scripts["health-check.py"])
         self.assertIn("Assert-PublicIpv4 -Address $address", scripts["configure-postgres.ps1"])
         self.assertNotIn("hosted-agent-", scripts["configure-postgres.ps1"])
         self.assertNotIn("AdditionalPrincipal", scripts["configure-postgres.ps1"])

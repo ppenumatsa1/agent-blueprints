@@ -264,8 +264,8 @@ def main() -> int:
         api = verify_container_app(subscription, resource_group, api_name)
         web = verify_container_app(subscription, resource_group, web_name)
         verify_api_runtime(subscription, resource_group, api_name, values)
-        request_status(f"https://{api['fqdn']}/healthz", {200, 204})
-        request_status(f"https://{api['fqdn']}/api/cases", {401, 403})
+        request_status(f"https://{api['fqdn']}/healthz", {204})
+        request_status(f"https://{api['fqdn']}/api/cases", {401})
         request_status(f"https://{web['fqdn']}/", {200})
 
         project_url = (
