@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -187,8 +188,11 @@ def reconcile(
 
 
 def _az_json(arguments: list[str]) -> object:
+    az = shutil.which("az")
+    if az is None:
+        raise ReconciliationError("Azure CLI is unavailable.")
     result = subprocess.run(
-        ["az", *arguments, "--output", "json", "--only-show-errors"],
+        [az, *arguments, "--output", "json", "--only-show-errors"],
         capture_output=True,
         text=True,
         check=False,

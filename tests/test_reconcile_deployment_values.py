@@ -1,6 +1,8 @@
 import importlib.util
 import unittest
 from pathlib import Path
+from subprocess import CompletedProcess
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -145,6 +147,15 @@ class ReconcileDeploymentValuesTests(unittest.TestCase):
                 "order-resolution",
                 "responses",
             )
+
+    def test_azure_reads_use_the_platform_cli_launcher(self):
+        completed = CompletedProcess([], 0, stdout="{}", stderr="")
+        with (
+            patch.object(module.shutil, "which", return_value=r"C:\tools\az.cmd"),
+            patch.object(module.subprocess, "run", return_value=completed) as run,
+        ):
+            self.assertEqual(module._az_json(["group", "show"]), {})
+        self.assertEqual(run.call_args.args[0][0], r"C:\tools\az.cmd")
 
 
 if __name__ == "__main__":

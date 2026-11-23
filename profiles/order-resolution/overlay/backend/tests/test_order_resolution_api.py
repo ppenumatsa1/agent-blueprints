@@ -759,6 +759,10 @@ class OrderResolutionApiTests(unittest.TestCase):
         self.assertEqual((rejected.status, rejected.execution_complete), ("rejected", True))
         self.assertIsNone(rejected.checkpoint_id)
         self.assertIsNone(rejected.terminal_checkpoint_id)
+        self.assertEqual(
+            restarted.acceptance_snapshot(rejected_case.id)["counts"]["terminal"],
+            1,
+        )
         components = build_application()
 
         class RejectedReplayAuthorityHost:
@@ -811,6 +815,10 @@ class OrderResolutionApiTests(unittest.TestCase):
         self.assertEqual((automatic.status, automatic.execution_complete), ("completed", True))
         self.assertIsNone(automatic.checkpoint_id)
         self.assertIsNone(automatic.terminal_checkpoint_id)
+        self.assertEqual(
+            restarted.acceptance_snapshot(automatic_case.id)["counts"]["terminal"],
+            1,
+        )
 
     def test_hosted_service_effect_modes_preserve_rejection_and_automatic_outcomes(
         self,

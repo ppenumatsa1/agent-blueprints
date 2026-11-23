@@ -685,7 +685,11 @@ class OrderResolutionStore(PostgresStore):
                      WHERE e.case_id = %s) AS effects,
                     (SELECT count(*) FROM wf_audit
                      WHERE case_id = %s
-                       AND event IN ('workflow_finished', 'resolution_failed')) AS terminal,
+                       AND event IN (
+                           'workflow_finished',
+                           'hosted_workflow_finished',
+                           'resolution_failed'
+                       )) AS terminal,
                     (SELECT count(*) FROM order_resolution_audit
                      WHERE case_id = %s AND event = 'decision_denied') AS denials
                 """,

@@ -9,6 +9,12 @@ from scripts.verify_app_insights_correlation import verify
 
 class AppInsightsCorrelationTests(unittest.TestCase):
     def setUp(self):
+        self.which = patch(
+            "scripts.verify_app_insights_correlation.shutil.which",
+            return_value="az",
+        )
+        self.which.start()
+        self.addCleanup(self.which.stop)
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
@@ -65,7 +71,8 @@ class AppInsightsCorrelationTests(unittest.TestCase):
         self.assertEqual(artifact["outcome"], "passed")
         query = run.call_args.args[0]
         self.assertIn("AppRequests", query[-3])
-        self.assertIn('Properties["blueprint.request.id"]', query[-3])
+        self.assertIn("Properties['blueprint.request.id']", query[-3])
+        self.assertIn("'10000000-0000-4000-8000-000000000001'", query[-3])
         self.assertNotIn("message", query[-3].lower())
 
     def test_missing_pair_or_correlated_exception_never_passes(self):
@@ -132,6 +139,27 @@ class AppInsightsCorrelationTests(unittest.TestCase):
             query_command[query_command.index("--workspace") + 1],
             "customer-id",
         )
+
+    def test_platform_azure_cli_launcher_is_used(self):
+        with (
+            patch(
+                "scripts.verify_app_insights_correlation.shutil.which",
+                return_value=r"C:\tools\az.cmd",
+            ),
+            patch(
+                "scripts.verify_app_insights_correlation.subprocess.run",
+                return_value=self.result(),
+            ) as run,
+        ):
+            verify(
+                self.evidence,
+                "workspace-id",
+                self.output,
+                source_revision="source-123",
+                deployment_revision="deployment-123",
+                environment="synthetic-azure",
+            )
+        self.assertEqual(run.call_args.args[0][0], r"C:\tools\az.cmd")
 
     def test_revision_mismatch_stops_before_query(self):
         with (

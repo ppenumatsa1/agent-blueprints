@@ -942,6 +942,31 @@ identity or single-user bypass is permitted. Local evidence is 93 root tests,
 Bicep build, frontend build, 9 frontend unit tests, and Playwright discovery.
 Live outcomes remain unverified until the exact committed revision is deployed
 and two short-lived delegated identities are available.
+
+The subsequent authorized synthetic run established partial live evidence
+without weakening that identity boundary. ORS-001, ORS-004, ORS-006, ORS-007,
+all ORS-008 variants, and the ORS-009 owner authorization negative executed on
+Azure. The formal App Insights verifier corroborated one exact
+request/case/trace pair for hosted agent version `1` and deployment
+`00f96360051daf8a505db221f95d6206c61b3746` with 16 telemetry rows and no
+correlated exception. Deployment reconciliation independently recovered the
+immutable API/web revisions and digests, acknowledged `order-resolution:1`,
+and exact-agent RBAC scope.
+
+Two acceptance-only defects were found and corrected: Windows Azure CLI
+launchers and multiline/double-quoted KQL were not portable through `az.cmd`,
+and the acceptance snapshot omitted `hosted_workflow_finished` from its
+terminal-event count. Root validation now passes 99 tests with two disclosed
+adapter-selection skips, and the generated hosted completion/idempotency
+regression passes against isolated PostgreSQL. Live terminal normalization
+must still be verified after deployment. ORS-002, ORS-003, ORS-005, positive
+approval/rejection, reviewer-dependent crash windows, provider evaluation, and
+authenticated dual-user Chromium remain externally blocked until a second
+delegated Entra user has `workflow.read workflow.approve`,
+`Workflow.Approver`, API consent, and an authenticated browser state. The
+temporary PostgreSQL public rule remains required until a validated replacement
+egress/firewall path is active.
+
 The release manifest cannot waive or authorize production checks; production
 requires the baseline-pinned trust validator, signed result attestations, and
 scoped, unexpired risk decisions, while critical/security-critical blocking

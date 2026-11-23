@@ -59,6 +59,16 @@ owner/reviewer separation, and workload identities cannot substitute for a
 human delegated token. Missing second-user credentials therefore remain an
 external blocked prerequisite rather than an authorization bypass.
 
+Live remediation confirmed that privacy-safe correlation and deployment
+normalization do not require a shared runtime or broader identity. App Insights
+corroborated an exact HTTP request ID, business case ID, W3C trace ID, hosted
+agent version, and deployment revision without prompt or identity content.
+Azure reconciliation independently bound the active immutable API/web images,
+hosted `order-resolution:1`, and exact-agent RBAC scope. Hosted completion is
+represented by the durable `hosted_workflow_finished` audit event; acceptance
+normalization counts that event as the single terminal outcome while leaving
+Foundry checkpoints external and PostgreSQL business state independent.
+
 ## Open architecture and verification gaps
 
 The engineering foundation is not a deployment-readiness claim. Open work

@@ -2,12 +2,20 @@
 
 import argparse
 import json
+import shutil
 import subprocess
 import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import UUID
+
+
+def _azure_cli():
+    executable = shutil.which("az")
+    if executable is None:
+        raise RuntimeError("Azure CLI is unavailable.")
+    return executable
 
 
 def _read(path):
@@ -56,47 +64,51 @@ def _expected_pairs(evidence):
 
 
 def _quoted(value):
-    return json.dumps(value, ensure_ascii=True)
+    escaped = (
+        str(value)
+        .replace("\\", "\\\\")
+        .replace("'", "\\'")
+        .replace("\r", "\\r")
+        .replace("\n", "\\n")
+        .replace("\t", "\\t")
+    )
+    return f"'{escaped}'"
 
 
 def _query(expected, started_at):
-    datatable = ",\n".join(
-        "("
-        + ",".join(
-            _quoted(item[field])
-            for field in (
-                "request_id",
-                "case_id",
-                "trace_id",
-                "agent_version",
-                "deployment_revision",
-            )
-        )
-        + ")"
-        for item in expected
+    fields = (
+        "request_id",
+        "case_id",
+        "trace_id",
+        "agent_version",
+        "deployment_revision",
     )
-    return f"""
-let expected = datatable(
-    request_id:string,
-    case_id:string,
-    trace_id:string,
-    agent_version:string,
-    deployment_revision:string
-)[
-{datatable}
-];
-union withsource=table_name AppRequests, AppDependencies, AppTraces, AppExceptions
-| where TimeGenerated between (datetime({_quoted(started_at)}) .. now())
-| extend request_id=tostring(Properties["blueprint.request.id"])
-| extend case_id=tostring(Properties["blueprint.case.id"])
-| extend trace_id=tolower(OperationId)
-| extend agent_version=tostring(Properties["blueprint.agent.version"])
-| extend deployment_revision=tostring(Properties["blueprint.deployment.revision"])
-| join kind=inner expected on request_id, case_id, trace_id, agent_version, deployment_revision
-| summarize telemetry_count=count(), exception_count=countif(table_name == "AppExceptions")
-    by request_id, case_id, trace_id, agent_version, deployment_revision
-| order by request_id asc
-""".strip()
+    datatable = ",".join(
+        _quoted(item[field])
+        for item in expected
+        for field in fields
+    )
+    return (
+        "let expected=datatable("
+        "request_id:string,case_id:string,trace_id:string,"
+        "agent_version:string,deployment_revision:string"
+        f")[{datatable}]; "
+        "union withsource=table_name "
+        "AppRequests, AppDependencies, AppTraces, AppExceptions "
+        f"| where TimeGenerated between (datetime({_quoted(started_at)}) .. now()) "
+        "| extend request_id=tostring(Properties['blueprint.request.id']) "
+        "| extend case_id=tostring(Properties['blueprint.case.id']) "
+        "| extend trace_id=tolower(OperationId) "
+        "| extend agent_version=tostring(Properties['blueprint.agent.version']) "
+        "| extend deployment_revision="
+        "tostring(Properties['blueprint.deployment.revision']) "
+        "| join kind=inner expected on "
+        "request_id, case_id, trace_id, agent_version, deployment_revision "
+        "| summarize telemetry_count=count(), "
+        "exception_count=countif(table_name == 'AppExceptions') by "
+        "request_id, case_id, trace_id, agent_version, deployment_revision "
+        "| order by request_id asc"
+    )
 
 
 def _query_workspace(workspace):
@@ -104,7 +116,7 @@ def _query_workspace(workspace):
         return workspace
     resolved = subprocess.run(
         [
-            "az",
+            _azure_cli(),
             "monitor",
             "log-analytics",
             "workspace",
@@ -153,7 +165,7 @@ def verify(
     for attempt in range(1, attempts + 1):
         completed = subprocess.run(
             [
-                "az",
+                _azure_cli(),
                 "monitor",
                 "log-analytics",
                 "query",
