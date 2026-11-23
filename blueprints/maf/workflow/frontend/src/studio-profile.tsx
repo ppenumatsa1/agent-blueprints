@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import type { DecisionBinding, WorkflowCase } from "./api";
+import type { ActivityType, DecisionBinding, WorkflowCase } from "./api";
 
 export type StudioCapability = "history" | "liveActivity" | "evidence" | "manualTests" | "agUi" | "copilotKit";
 
@@ -29,6 +29,16 @@ export interface WorkflowStudioProfile {
     open: string;
     approve: string;
     reject: string;
+  };
+  history: {
+    heading: string;
+    activityHeading: string;
+    refresh: string;
+    loadMore: string;
+    loading: string;
+    empty: string;
+    error: string;
+    events: Record<ActivityType, string>;
   };
   capabilities: Record<StudioCapability, boolean>;
   projectPayload(payload: Record<string, unknown>, record: WorkflowCase): PayloadProjection;

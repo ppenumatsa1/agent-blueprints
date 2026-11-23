@@ -1,4 +1,6 @@
 import asyncio
+import base64
+import json
 import os
 import subprocess
 import sys
@@ -11,7 +13,7 @@ from uuid import uuid4
 
 from agent_framework import FileCheckpointStorage
 
-from app.domain.errors import AccessDenied, ActionError, CheckpointError, Conflict
+from app.domain.errors import AccessDenied, ActionError, CheckpointError, Conflict, InvalidInput
 from app.domain.models import Principal
 from app.domain.policy import CaseAccessPolicy, JsonObjectRules
 from app.infrastructure.migrations import upgrade
@@ -154,6 +156,187 @@ class WorkflowIntegrationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(action_count(self.store, second.id), 0)
         self.assertNotEqual(first.checkpoint_id, second.checkpoint_id)
         self.assertNotEqual(first.request_id, second.request_id)
+
+    async def test_history_filters_authorized_records_before_pagination(self):
+        tenant = f"history-tenant-{uuid4()}"
+        owner_id = f"history-owner-{uuid4()}"
+        reviewer_id = f"history-reviewer-{uuid4()}"
+        other_tenant = f"history-tenant-{uuid4()}"
+        owner = Principal(tenant, owner_id, frozenset({"workflow.read"}), frozenset())
+        reviewer = Principal(tenant, reviewer_id, frozenset({"workflow.read"}), frozenset())
+        stranger = Principal(tenant, f"history-stranger-{uuid4()}", owner.scopes, frozenset())
+        second_owner = Principal(tenant, f"history-owner-{uuid4()}", owner.scopes, frozenset())
+        tenant_owner = Principal(other_tenant, owner_id, owner.scopes, frozenset())
+        other_reviewer_id = f"history-reviewer-{uuid4()}"
+
+        own_first = self.store.create(
+            owner, other_reviewer_id, {"private": "PAYLOAD-CANARY"}, str(uuid4()), "digest"
+        )
+        own_second = self.store.create(
+            owner, other_reviewer_id, {"private": "PAYLOAD-CANARY"}, str(uuid4()), "digest"
+        )
+        assigned = self.store.create(second_owner, reviewer_id, {"value": 1}, str(uuid4()), "digest")
+        hidden = self.store.create(
+            Principal(tenant, f"hidden-owner-{uuid4()}", owner.scopes, frozenset()),
+            f"hidden-reviewer-{uuid4()}",
+            {"value": 2},
+            str(uuid4()),
+            "digest",
+        )
+        other_tenant_case = self.store.create(
+            tenant_owner, f"other-reviewer-{uuid4()}", {"value": 3}, str(uuid4()), "digest"
+        )
+        with self.store.connect() as connection:
+            connection.execute(
+                "UPDATE wf_cases SET created_at = now() + interval '1 day' WHERE id = %s",
+                (hidden.id,),
+            )
+            connection.execute(
+                "UPDATE wf_cases SET status = 'pending' WHERE id = %s", (own_first.id,)
+            )
+            connection.execute(
+                "UPDATE wf_cases SET status = 'completed' WHERE id = %s", (own_second.id,)
+            )
+
+        first_page = self.service.history(owner, status=None, cursor=None, limit=1)
+        self.assertEqual(len(first_page.items), 1)
+        self.assertEqual(first_page.items[0].id, own_second.id)
+        self.assertIsNotNone(first_page.next_cursor)
+        second_page = self.service.history(
+            owner, status=None, cursor=first_page.next_cursor, limit=1
+        )
+        self.assertEqual([item.id for item in second_page.items], [own_first.id])
+        self.assertIsNone(second_page.next_cursor)
+        self.assertEqual(
+            [item.id for item in self.service.history(
+                reviewer, status=None, cursor=None, limit=10
+            ).items],
+            [assigned.id],
+        )
+        self.assertEqual(
+            [item.id for item in self.service.history(
+                tenant_owner, status=None, cursor=None, limit=10
+            ).items],
+            [other_tenant_case.id],
+        )
+        self.assertEqual(
+            self.service.history(stranger, status=None, cursor=None, limit=10).items, ()
+        )
+        self.assertEqual(
+            [item.id for item in self.service.history(
+                owner, status="pending", cursor=None, limit=10
+            ).items],
+            [own_first.id],
+        )
+        with self.assertRaises(AccessDenied):
+            self.service.history(
+                Principal(tenant, owner_id, frozenset(), frozenset()),
+                status=None,
+                cursor=None,
+                limit=10,
+            )
+
+    async def test_history_cursor_order_is_stable_and_status_bound(self):
+        tenant = f"history-tenant-{uuid4()}"
+        owner = Principal(tenant, f"history-owner-{uuid4()}", frozenset({"workflow.read"}), frozenset())
+        ids = [
+            self.store.create(owner, f"reviewer-{index}", {"value": index}, str(uuid4()), "digest").id
+            for index in range(3)
+        ]
+        fixed_time = "2026-01-01T00:00:00+00:00"
+        with self.store.connect() as connection:
+            connection.execute(
+                "UPDATE wf_cases SET created_at = %s WHERE id = ANY(%s)",
+                (fixed_time, ids),
+            )
+
+        page = self.service.history(owner, status=None, cursor=None, limit=1)
+        repeated = self.service.history(owner, status=None, cursor=None, limit=1)
+        next_page = self.service.history(
+            owner, status=None, cursor=page.next_cursor, limit=1
+        )
+        self.assertEqual(page.items, repeated.items)
+        self.assertNotEqual(page.items[0].id, next_page.items[0].id)
+        self.assertEqual(len({page.items[0].id, next_page.items[0].id}), 2)
+        with self.assertRaises(InvalidInput):
+            self.service.history(owner, status="pending", cursor=page.next_cursor, limit=1)
+        oversized_activity_cursor = base64.urlsafe_b64encode(
+            json.dumps(
+                {
+                    "version": 1,
+                    "kind": "activity",
+                    "created_at": fixed_time,
+                    "id": str(2**63),
+                    "status": None,
+                },
+                separators=(",", ":"),
+            ).encode()
+        ).decode().rstrip("=")
+        with self.assertRaises(InvalidInput):
+            self.service.activity(owner, ids[0], cursor=oversized_activity_cursor, limit=1)
+
+    async def test_activity_maps_allowlisted_audit_events_without_private_fields(self):
+        tenant = f"activity-tenant-{uuid4()}"
+        owner = Principal(tenant, f"activity-owner-{uuid4()}", frozenset({"workflow.read"}), frozenset())
+        reviewer = f"activity-reviewer-{uuid4()}"
+        case = self.store.create(owner, reviewer, {"private": "PAYLOAD-CANARY"}, str(uuid4()), "digest")
+        with self.store.connect() as connection:
+            connection.execute(
+                """
+                UPDATE wf_cases SET request_id = 'REQUEST-CANARY',
+                    checkpoint_id = 'CHECKPOINT-CANARY',
+                    terminal_checkpoint_id = 'TERMINAL-CANARY'
+                WHERE id = %s
+                """,
+                (case.id,),
+            )
+            connection.execute(
+                "INSERT INTO wf_audit (case_id, event, actor_id) VALUES (%s, %s, %s)",
+                (case.id, "decision_recorded", "ACTOR-CANARY"),
+            )
+            connection.execute(
+                "INSERT INTO wf_audit (case_id, event, actor_id) VALUES (%s, %s, %s)",
+                (case.id, "workflow_finished", "ACTOR-CANARY"),
+            )
+            for event in (
+                "hosted_request_saved",
+                "automatic_action_applied",
+                "hosted_workflow_finished",
+                "resolution_failed",
+            ):
+                connection.execute(
+                    "INSERT INTO wf_audit (case_id, event, actor_id) VALUES (%s, %s, %s)",
+                    (case.id, event, "ACTOR-CANARY"),
+                )
+            connection.execute(
+                "INSERT INTO wf_audit (case_id, event, actor_id) VALUES (%s, %s, %s)",
+                (case.id, "private-event-CANARY", "PRIVATE-EVENT-CONTENT-CANARY"),
+            )
+
+        first_page = self.service.activity(owner, case.id, cursor=None, limit=1)
+        repeated = self.service.activity(owner, case.id, cursor=None, limit=1)
+        remaining = self.service.activity(
+            owner, case.id, cursor=first_page.next_cursor, limit=20
+        )
+        self.assertEqual(first_page.items, repeated.items)
+        self.assertEqual(first_page.items[0].event_type, "workflow_failed")
+        events = [item.event_type for item in first_page.items + remaining.items]
+        self.assertEqual(
+            set(events),
+            {
+                "created",
+                "request_recorded",
+                "decision_recorded",
+                "action_applied",
+                "workflow_finished",
+                "workflow_failed",
+            },
+        )
+        self.assertNotIn("private-event-CANARY", repr(first_page) + repr(remaining))
+        self.assertNotIn("ACTOR-CANARY", repr(first_page) + repr(remaining))
+        self.assertNotIn("CHECKPOINT-CANARY", repr(first_page) + repr(remaining))
+        self.assertNotIn("REQUEST-CANARY", repr(first_page) + repr(remaining))
+        self.assertNotIn("PAYLOAD-CANARY", repr(first_page) + repr(remaining))
 
     async def test_submission_idempotency_rejects_changed_payload(self):
         key = str(uuid4())

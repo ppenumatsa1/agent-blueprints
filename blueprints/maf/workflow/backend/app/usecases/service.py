@@ -4,7 +4,7 @@ import re
 from typing import Any
 from uuid import UUID
 
-from app.domain.errors import InvalidInput
+from app.domain.errors import AccessDenied, InvalidInput
 from app.domain.models import (
     AccessPolicy,
     BusinessRules,
@@ -13,6 +13,14 @@ from app.domain.models import (
     Principal,
     StateRepository,
     WorkflowHost,
+)
+from app.usecases.history import (
+    ActivityPage,
+    HistoryPage,
+    activity_page,
+    decode_activity_cursor,
+    decode_history_cursor,
+    history_page,
 )
 
 
@@ -53,6 +61,46 @@ class WorkflowService:
         case = self.store.get(case_id)
         self.policy.authorize_read(actor, case)
         return case
+
+    def history(
+        self,
+        actor: Principal,
+        *,
+        status: str | None,
+        cursor: str | None,
+        limit: int,
+    ) -> HistoryPage:
+        if "workflow.read" not in actor.scopes:
+            raise AccessDenied("Record access is not authorized.")
+        if not 1 <= limit <= 100:
+            raise InvalidInput("The history page size is invalid.")
+        if status is not None and status not in (
+            "created",
+            "pending",
+            "approved",
+            "rejected",
+            "completed",
+            "failed",
+        ):
+            raise InvalidInput("The history status is invalid.")
+        position = decode_history_cursor(cursor, status)
+        items, has_more = self.store.list_history(actor, status, position, limit)
+        return history_page(items, has_more, status)
+
+    def activity(
+        self,
+        actor: Principal,
+        case_id: UUID,
+        *,
+        cursor: str | None,
+        limit: int,
+    ) -> ActivityPage:
+        self.read(actor, case_id)
+        if not 1 <= limit <= 100:
+            raise InvalidInput("The activity page size is invalid.")
+        position = decode_activity_cursor(cursor)
+        items, has_more = self.store.list_activity(actor, case_id, position, limit)
+        return activity_page(items, has_more)
 
     async def decide(self, actor: Principal, case_id: UUID, decision: Decision) -> Case:
         case = self.store.get(case_id)

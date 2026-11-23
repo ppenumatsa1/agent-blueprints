@@ -19,6 +19,16 @@ const record: WorkflowCase = {
 const client: WorkflowClient = {
   submit: vi.fn().mockResolvedValue(record),
   read: vi.fn().mockResolvedValue(record),
+  listHistory: vi.fn().mockResolvedValue({
+    schema_version: "workflow-history/1",
+    items: [],
+    next_cursor: null,
+  }),
+  activity: vi.fn().mockResolvedValue({
+    schema_version: "workflow-activity/1",
+    items: [],
+    next_cursor: null,
+  }),
   decide: vi.fn().mockResolvedValue(record),
 };
 

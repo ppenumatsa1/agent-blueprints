@@ -1,5 +1,6 @@
 import type { DecisionBinding, WorkflowCase } from "./api";
 import type { PayloadProjection, WorkflowStudioProfile } from "./studio-profile";
+import { defaultWorkflowStudioProfile } from "./default-profile";
 
 type JsonObject = Record<string, unknown>;
 
@@ -68,8 +69,9 @@ export const orderResolutionProfile: WorkflowStudioProfile = {
     approve: "Approve",
     reject: "Reject",
   },
+  history: defaultWorkflowStudioProfile.history,
   capabilities: {
-    history: false,
+    history: true,
     liveActivity: false,
     evidence: false,
     manualTests: false,

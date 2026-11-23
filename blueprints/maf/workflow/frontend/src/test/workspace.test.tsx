@@ -23,6 +23,16 @@ function client(overrides: Partial<WorkflowClient> = {}): WorkflowClient {
   return {
     submit: vi.fn().mockResolvedValue(pending),
     read: vi.fn().mockResolvedValue(pending),
+    listHistory: vi.fn().mockResolvedValue({
+      schema_version: "workflow-history/1" as const,
+      items: [],
+      next_cursor: null,
+    }),
+    activity: vi.fn().mockResolvedValue({
+      schema_version: "workflow-activity/1" as const,
+      items: [],
+      next_cursor: null,
+    }),
     decide: vi.fn().mockResolvedValue({ ...pending, status: "completed", decision: "approved", execution_complete: true }),
     ...overrides,
   };
@@ -122,7 +132,7 @@ describe("workflow workspace", () => {
     await userEvent.click(screen.getByRole("button", { name: "Open" }));
     expect(await screen.findByRole("heading", { name: "Case status: recovering" })).toBeVisible();
     expect(screen.getByText(/recovery or action failed/i)).toBeVisible();
-    expect(screen.getByText("History: Not enabled")).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Workflow history" })).toBeVisible();
     expect(screen.getByText("Live activity: Not enabled")).toBeVisible();
     expect(screen.getByText("Evidence: Not enabled")).toBeVisible();
     expect(screen.getByText("Manual tests: Not enabled")).toBeVisible();

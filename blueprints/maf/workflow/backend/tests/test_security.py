@@ -363,6 +363,90 @@ class ApiSecurityTests(unittest.TestCase):
             self.assertEqual(approved.json()["status"], "completed")
             self.assertEqual(action_count(self.store, UUID(case_id)), 1)
 
+    def test_history_and_activity_are_authorized_versioned_and_private(self):
+        with self.client() as client:
+            response = self.submit(
+                client,
+                payload={
+                    "summary": "PAYLOAD-CANARY",
+                    "request_id": "REQUEST-CANARY",
+                    "checkpoint_id": "CHECKPOINT-CANARY",
+                },
+            )
+            case_id = UUID(response.json()["id"])
+            with self.store.connect() as connection:
+                connection.execute(
+                    """
+                    INSERT INTO wf_audit (case_id, event, actor_id)
+                    VALUES (%s, 'unknown-private-event', 'ACTOR-CANARY')
+                    """,
+                    (case_id,),
+                )
+
+            history = client.get(
+                "/api/cases?status=pending&limit=1",
+                headers=self.headers(self.owner_token),
+            )
+            self.assertEqual(history.status_code, 200, history.text)
+            self.assertEqual(history.json()["schema_version"], "workflow-history/1")
+            self.assertEqual(set(history.json()), {"schema_version", "items", "next_cursor"})
+            self.assertEqual(len(history.json()["items"]), 1)
+            self.assertEqual(
+                set(history.json()["items"][0]),
+                {"id", "status", "decision", "created_at", "updated_at"},
+            )
+            activity = client.get(
+                f"/api/cases/{case_id}/activity",
+                headers=self.headers(self.owner_token),
+            )
+            self.assertEqual(activity.status_code, 200, activity.text)
+            self.assertEqual(activity.json()["schema_version"], "workflow-activity/1")
+            self.assertTrue(
+                all(set(item) == {"type", "created_at"} for item in activity.json()["items"])
+            )
+            self.assertIn("review_requested", {item["type"] for item in activity.json()["items"]})
+            public_output = history.text + activity.text
+            for private_value in (
+                "PAYLOAD-CANARY",
+                "REQUEST-CANARY",
+                "CHECKPOINT-CANARY",
+                "ACTOR-CANARY",
+                "unknown-private-event",
+            ):
+                self.assertNotIn(private_value, public_output)
+
+            stranger = self.tokens.token(
+                subject=STRANGER, scopes="workflow.read", roles=[]
+            )
+            hidden = client.get("/api/cases", headers=self.headers(stranger))
+            self.assertEqual(hidden.status_code, 200)
+            self.assertEqual(hidden.json()["items"], [])
+            self.assertIsNone(hidden.json()["next_cursor"])
+            self.assertEqual(
+                client.get(
+                    f"/api/cases/{case_id}/activity", headers=self.headers(stranger)
+                ).status_code,
+                403,
+            )
+            self.assertEqual(
+                client.get(
+                    "/api/cases?status=unknown", headers=self.headers(self.owner_token)
+                ).status_code,
+                422,
+            )
+            self.assertEqual(
+                client.get(
+                    "/api/cases?limit=101", headers=self.headers(self.owner_token)
+                ).status_code,
+                422,
+            )
+            self.assertEqual(
+                client.get(
+                    "/api/cases?cursor=malformed", headers=self.headers(self.owner_token)
+                ).status_code,
+                422,
+            )
+
     def test_api_rejects_forged_expired_wrong_issuer_audience_and_tenant_tokens(self):
         invalid = (
             self.tokens.token(key=self.tokens.second),

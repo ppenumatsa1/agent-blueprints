@@ -34,6 +34,52 @@ Vite chunk-size warning remains non-blocking and is not relabeled as a pass.
 Next action: obtain exact-head CI on the stacked draft PR and keep later UX
 layers separate.
 
+## UX stack Layer 2: authorized history and activity
+
+**Implemented locally; draft PR and exact-head CI are pending.** This
+increment is a distinct draft PR stacked directly above PR #50's
+`ppenumatsa1-ux-layer-1-studio-shell` branch. It reuses the PostgreSQL
+`wf_cases` owner/reviewer/tenant fields and committed `wf_audit` events; it
+does not add a competing business-state store or inspect MAF checkpoint
+contents. Case history uses bounded keyset pagination and optional status
+filtering, with authorization predicates applied in SQL before `ORDER BY` and
+`LIMIT`. Record activity first follows the existing case-read policy and
+repeats the same SQL authorization predicate. Responses omit payloads, actor
+identifiers, request/checkpoint identifiers, prompts, model output, and tool
+content. Only explicitly mapped audit event names are returned; unknown and
+Order Resolution-specific audit rows are not exposed by the generic endpoint.
+
+The React profile supplies generic history/activity labels and event text. The
+sidebar and timeline use the existing scoped HTTP client, validate the
+versioned response shapes, and discard stale responses when the filter or
+selected case changes. Existing `/api/cases/{id}` and decision behavior remain
+unchanged. No migration is needed because the required generic tables and
+columns already exist in the immutable baseline. No cloud changes, streaming,
+evidence, manual-test, AG-UI, or CopilotKit work is included.
+
+Local evidence: four focused PostgreSQL authorization/privacy/status/cursor/
+event tests pass, as do all 133 source backend tests and all 133 generated base
+backend tests. Generated base and Order Resolution verification suites pass
+52 and 61 tests; generated Order Resolution hosted-agent tests pass 63 tests.
+Base and profiled frontend builds pass, with 19 and 21 tests, respectively;
+the separate history and studio production-browser tests pass in both
+generated projects and at source. The required isolated repository suite
+passes 105 tests. PR #49's existing local/live E2E files are unchanged
+byte-for-byte against the parent. Vite continues to report a >500 kB bundle
+warning.
+
+The generated Order Resolution backend suite ran 190 tests, with two explicit
+skips (Agent A source opt-in and real-provider evaluation opt-in) and one
+pre-existing unrelated failure:
+`test_live_client_uses_response_correlation_id_for_telemetry_pair` expects a
+telemetry projection without `http_status`, while the current client includes
+it. The history/activity tests pass. Do not suppress or relabel this failure;
+exact-head CI remains pending and this gap must be included in the draft PR.
+No Azure state, streaming, evidence, manual-test, AG-UI, or CopilotKit work is
+included. **Next action:** push and open the dependent draft PR against PR
+#50's branch, then report its CI and this inherited test failure. Do not merge
+or enable auto-merge.
+
 ## Local Azure/Foundry integration checkpoint
 
 **Completed locally, validated, and partially provisioned for E2E.** The C -> A -> B -> D integration from

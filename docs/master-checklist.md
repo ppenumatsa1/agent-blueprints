@@ -31,6 +31,27 @@ This layer is frontend-only and depends on the frozen PR #49 snapshot
 history/activity/evidence/manual-test/AG-UI/CopilotKit work in future stacked
 layers. No backend/cloud change or production readiness is claimed.
 
+## UX stack Layer 2 acceptance
+
+**Status: implemented and locally verified; stacked draft PR and exact-head CI
+pending.** This is a separate draft stacked above Layer 1 PR #50
+(`ppenumatsa1-ux-layer-1-studio-shell`), not a merge or deployment.
+
+| Acceptance criterion | Local evidence |
+| --- | --- |
+| PostgreSQL-backed case history | Existing `wf_cases`; tenant plus owner/reviewer SQL authorization precedes status filtering and bounded keyset pagination. Four focused PostgreSQL history/activity/security tests pass; the full source backend suite passes 133 tests. Fresh generated base backend also passes 133 tests. |
+| Durable activity | Committed `wf_audit` only, fixed safe event mapping, unknown events excluded; no payload, actor, request/checkpoint ID, prompt, model output, or tool content. Event mapping/privacy coverage passes; native MAF continuation remains separate. |
+| Contract safety | Versioned API response schemas, bounded page size/cursors, and frontend runtime validation. Existing single-case and decision APIs remain compatible. |
+| Reusable studio UI | Generic profile-driven sidebar and timeline support status filter, refresh, keyset paging, loading/empty/error states, and stale-response suppression; frontend unit tests include axe checks. |
+| Independent generation | Base and Order Resolution outputs pass verification suites (52 and 61 tests), frontend suites (19 and 21 tests), builds, and separate history/studio browser specs. The generated Order Resolution hosted-agent suite passes 63 tests. Its PostgreSQL backend suite ran 190 tests with two explicit skips and one unrelated pre-existing failure in `test_live_client_uses_response_correlation_id_for_telemetry_pair` (telemetry includes an extra `http_status` field). PR #49 `local.spec.ts` and `live.spec.ts` are byte-for-byte unchanged against the parent. |
+| Verification | Repository `python -m unittest discover -s tests -v`: 105 tests pass in the isolated environment with `requirements-dev.txt`; frontend source: 19 tests/build and history/studio browser specs pass; generated frontend suites/builds and both browser specs pass. Vite reports the existing >500 kB chunk warning. Exact-head CI is pending until the draft PR is pushed. |
+
+No evidence, manual-test, streaming, AG-UI, CopilotKit, or optional adapter
+work is included. No Azure resource or firewall change is authorized or
+claimed. **Next action:** push and open the dependent draft PR against PR #50's
+branch, monitor exact-head CI, and disclose the inherited Order Resolution
+telemetry test failure. Do not merge or enable auto-merge.
+
 PR #17 merged into `main` at
 `0c1297cc8e93c62f69d61d0eb3bdabf3c27c683d`, with parents
 `de1cbe4cc3a93f2473a6f8f5f9e063d1ae278fa3` and final #17 head

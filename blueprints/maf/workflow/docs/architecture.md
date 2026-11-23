@@ -15,6 +15,25 @@ coordinates transitions; checkpoint and database writes are not one atomic
 transaction. Recovery reconciles them. Neither a conversation nor a
 checkpoint is a human approval.
 
+## Authorized history and activity
+
+The generic history API uses the existing PostgreSQL `wf_cases` fields for
+tenant, owner, assigned reviewer, status, decision, and timestamps. Its SQL
+filters tenant and `(owner_id = caller OR reviewer_id = caller)` before
+status filtering, descending `(created_at, id)` keyset pagination, and a
+maximum 100-row page. It returns no counts or payload/identity/checkpoint
+columns. Cursors carry the last authorized sort position, are versioned, and
+are bound to the selected status filter.
+
+Per-record activity reads only committed `wf_audit` rows, repeats the same
+tenant/owner/reviewer predicate in SQL, and filters to a fixed event allowlist
+before pagination. Public activity contains only fixed generic event types
+and timestamps. Unknown event names, actor IDs, payloads, request IDs,
+checkpoint IDs, prompts, model responses, and tool contents are not
+projected. Application audit state and native MAF continuation/checkpoint
+state remain separate. Existing single-case reads and decision endpoints
+remain unchanged.
+
 ## Typed MAF extension patterns
 
 Hosted composition is a separate infrastructure adapter, not a second
@@ -225,11 +244,13 @@ asset overrides exist only for isolated generator tests; they do not replace
 the canonical generated assets.
 
 The base frontend includes a generic `WorkflowStudioProfile` with no
-Order Resolution vocabulary. The named overlay replaces that profile with
-application labels, payload projection, and proposal decision binding while
-retaining the same protected API and MSAL client. Optional history, live
-activity, evidence, manual tests, AG-UI, and CopilotKit remain disabled flags;
-later UX layers must be implemented and evidenced separately.
+Order Resolution vocabulary. UX Layer 2 adds reusable profile-owned history
+and activity labels, status-filtered navigation, and a safe timeline over the
+generic API. The named overlay replaces that profile with application labels,
+payload projection, and proposal decision binding while retaining the same
+protected API and MSAL client; its history UI reuses the generic labels and
+does not add order-specific event content. Evidence, manual tests, AG-UI, and
+CopilotKit remain disabled flags and belong to later layers.
 
 The profile keeps framework and application state distinct. Low-risk proposals
 run through a concrete MAF `Executor` and `WorkflowBuilder` to a terminal native
