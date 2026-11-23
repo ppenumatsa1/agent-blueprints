@@ -429,6 +429,8 @@ class InfrastructureContractTests(unittest.TestCase):
         )
         self.assertIn("properties.ConnectionString", deploy)
         self.assertIn("APPLICATIONINSIGHTS_RESOURCE_ID", deploy)
+        self.assertNotIn("[System.IO.Path]::GetTempPath()", deploy)
+        self.assertIn("'.azure\\deployment-work'", deploy)
         self.assertNotIn("$env:DATABASE_URL =", publisher_environment)
         self.assertNotIn("$env:DATABASE_AUTH_MODE =", publisher_environment)
         self.assertNotIn("$env:PGSSLROOTCERT =", publisher_environment)

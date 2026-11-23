@@ -34,6 +34,7 @@ param(
     [string]$HostedPublishJournal,
     [Parameter(Mandatory)]
     [string]$OutputsFile,
+    [string]$WorkingRoot,
     [string]$ResourceGroupName = 'rg-agent-blueprints-ors-foundry-e2e',
     [string]$DeploymentName = 'agent-blueprints-foundry'
 )
@@ -96,7 +97,14 @@ $sourceRevision = (git -C $root rev-parse HEAD).Trim()
 if ($LASTEXITCODE -ne 0 -or $sourceRevision -cnotmatch '^[0-9a-f]{40}$') {
     throw 'Unable to resolve the exact source revision for deployment.'
 }
-$temporaryRoot = Join-Path ([System.IO.Path]::GetTempPath()) (
+$workingParent = if ($WorkingRoot) {
+    [System.IO.Path]::GetFullPath($WorkingRoot)
+}
+else {
+    Join-Path $root '.azure\deployment-work'
+}
+New-Item -ItemType Directory -Path $workingParent -Force | Out-Null
+$temporaryRoot = Join-Path $workingParent (
     "agent-blueprints-order-resolution-{0}" -f [guid]::NewGuid().ToString('N')
 )
 $generatedRoot = Join-Path $temporaryRoot 'generated'
