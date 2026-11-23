@@ -311,6 +311,16 @@ class InfrastructureContractTests(unittest.TestCase):
         self.assertNotIn("AZURE_HOSTED_DATABASE_URL", scripts["deploy.ps1"])
         self.assertIn("Hosted.Workflow.Invoke", scripts["configure-entra.ps1"])
         self.assertIn("appRoleAssignments", scripts["configure-entra.ps1"])
+        self.assertIn("-Encoding utf8NoBOM", scripts["configure-entra.ps1"])
+        self.assertIn('$bodyArgument = "@$bodyPath"', scripts["configure-entra.ps1"])
+        self.assertIn(
+            "Remove-Item -LiteralPath $bodyPath",
+            scripts["configure-entra.ps1"],
+        )
+        self.assertIn(
+            "Microsoft Graph did not publish the configured delegated scopes.",
+            scripts["configure-entra.ps1"],
+        )
         self.assertIn(
             "API bootstrap service principal must not hold the hosted-service role.",
             scripts["configure-entra.ps1"],

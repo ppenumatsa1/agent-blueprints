@@ -80,6 +80,45 @@ function Get-StableId {
     return [guid]::NewGuid().ToString()
 }
 
+function Invoke-GraphJson {
+    param(
+        [Parameter(Mandatory)]
+        [ValidateSet('patch', 'post')]
+        [string]$Method,
+        [Parameter(Mandatory)]
+        [string]$Url,
+        [Parameter(Mandatory)]
+        [hashtable]$Body,
+        [Parameter(Mandatory)]
+        [int]$Depth,
+        [ValidateSet('json', 'none')]
+        [string]$Output = 'none'
+    )
+    $bodyPath = Join-Path ([System.IO.Path]::GetTempPath()) (
+        "agent-blueprints-graph-{0}.json" -f [guid]::NewGuid().ToString('N')
+    )
+    try {
+        $Body |
+            ConvertTo-Json -Depth $Depth -Compress |
+            Set-Content -LiteralPath $bodyPath -Encoding utf8NoBOM
+        $bodyArgument = "@$bodyPath"
+        $result = az rest `
+            --method $Method `
+            --url $Url `
+            --headers 'Content-Type=application/json' `
+            --body $bodyArgument `
+            --output $Output `
+            --only-show-errors
+        if ($LASTEXITCODE -ne 0) {
+            throw "Microsoft Graph $Method failed for $Url."
+        }
+        return $result
+    }
+    finally {
+        Remove-Item -LiteralPath $bodyPath -Force -ErrorAction SilentlyContinue
+    }
+}
+
 function Invoke-GraphPatch {
     param(
         [Parameter(Mandatory)]
@@ -87,15 +126,14 @@ function Invoke-GraphPatch {
         [Parameter(Mandatory)]
         [hashtable]$Body
     )
-    $json = $Body | ConvertTo-Json -Depth 12 -Compress
-    az rest `
-        --method patch `
-        --url "https://graph.microsoft.com/v1.0/applications/$ObjectId" `
-        --headers 'Content-Type=application/json' `
-        --body $json `
-        --output none `
-        --only-show-errors
-    if ($LASTEXITCODE -ne 0) {
+    try {
+        Invoke-GraphJson `
+            -Method patch `
+            -Url "https://graph.microsoft.com/v1.0/applications/$ObjectId" `
+            -Body $Body `
+            -Depth 12
+    }
+    catch {
         throw "Unable to update Entra application object $ObjectId."
     }
 }
@@ -107,15 +145,15 @@ function Invoke-GraphPost {
         [Parameter(Mandatory)]
         [hashtable]$Body
     )
-    $json = $Body | ConvertTo-Json -Depth 8 -Compress
-    $result = az rest `
-        --method post `
-        --url $Url `
-        --headers 'Content-Type=application/json' `
-        --body $json `
-        --output json `
-        --only-show-errors
-    if ($LASTEXITCODE -ne 0) {
+    try {
+        $result = Invoke-GraphJson `
+            -Method post `
+            -Url $Url `
+            -Body $Body `
+            -Depth 8 `
+            -Output json
+    }
+    catch {
         throw "Unable to create Microsoft Graph resource at $Url."
     }
     return $result | ConvertFrom-Json
@@ -297,10 +335,41 @@ if ($Apply) {
         api = @{
             requestedAccessTokenVersion = 2
             oauth2PermissionScopes = $scopes
+            preAuthorizedApplications = @()
+        }
+    }
+    $scopeIds = @($scopes.id | Sort-Object)
+    $publishedScopeIds = @()
+    foreach ($attempt in 1..10) {
+        $apiApplication = Get-ExactApplication -DisplayName $ApiDisplayName
+        $publishedScopeIds = @(
+            $apiApplication.api.oauth2PermissionScopes.id | Sort-Object
+        )
+        if (
+            $publishedScopeIds.Count -eq $scopeIds.Count -and
+            -not (Compare-Object $scopeIds $publishedScopeIds)
+        ) {
+            break
+        }
+        Start-Sleep -Seconds 1
+    }
+    if (
+        $publishedScopeIds.Count -ne $scopeIds.Count -or
+        (Compare-Object $scopeIds $publishedScopeIds)
+    ) {
+        throw 'Microsoft Graph did not publish the configured delegated scopes.'
+    }
+    Invoke-GraphPatch -ObjectId $apiApplication.id -Body @{
+        signInAudience = 'AzureADMyOrg'
+        identifierUris = @($resolvedApiAppIdUri)
+        appRoles = $roles
+        api = @{
+            requestedAccessTokenVersion = 2
+            oauth2PermissionScopes = $scopes
             preAuthorizedApplications = @(
                 @{
                     appId = $spaApplication.appId
-                    delegatedPermissionIds = @($scopes.id)
+                    delegatedPermissionIds = $scopeIds
                 }
             )
         }
