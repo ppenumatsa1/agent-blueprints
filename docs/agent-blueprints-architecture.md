@@ -38,6 +38,68 @@ encodes its normalized business outcomes and keeps framework/runtime execution
 assertions distinct. It is not this blueprint's business implementation;
 order-adjustment remains an independent legacy fixture.
 
+## Azure/Foundry Workstream C
+
+The cloud application architecture keeps framework and identity concerns at
+narrow composition boundaries. `WorkflowHost` remains the use-case port.
+Local mode selects the existing MAF/FileCheckpointStorage host. Hosted mode
+loads Agent A's API-only bridge/client copied into the generated backend; the
+API does not import the sibling hosted runtime or hosting SDK. Without that
+backend-native adapter the API fails closed. No generic `/runs` transport or
+second hosted orchestration path is supplied. Foundry SDK types do not enter
+API, policy, service, or persistence modules.
+
+FastAPI validates and authorizes the end user before hosted dispatch.
+Foundry calls use an explicit `ManagedIdentityCredential` for the configured
+API UAMI; PostgreSQL token acquisition remains constrained to that UAMI. That identity calls Agent A and is the
+sole runtime principal allowed to acquire an Azure PostgreSQL token, but it
+cannot authorize a user action. Agent A's hosted execution identity remains
+separate, owns hosted checkpoint/session state, and calls only the protected
+FastAPI hosted-state API with the fixed `Hosted.Workflow.Invoke` app role. It
+receives no database configuration or role. Order Resolution's synthetic
+downstream identity is application-owned and receives no user, API, or hosted
+credential.
+
+PostgreSQL stores business state plus opaque operation/execution/request
+correlation, never MAF checkpoint bytes. Dispatch is claimed before send.
+The API container installs the Debian CA bundle and exports
+`SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt`; this is a trust-store
+discovery hint for bundled libpq/OpenSSL, not a TLS-policy override.
+`PGSSLROOTCERT=system` and `verify-full` remain the application contract.
+Ambiguous acknowledgments remain unknown and are reconciled by operation ID
+after restart rather than replayed. The native hosted workflow owns action invocation; PostgreSQL verifies and
+projects the idempotent business outcome, preserving the action ledger and
+proposal/action/destination binding. See the
+[security and configuration contract](azure-foundry/application-security.md).
+Hosted approvals use a separate business projection: an opaque request ID,
+case/conversation binding and decision channel are durable, but
+local `checkpoint_id` and `terminal_checkpoint_id` remain null because Foundry
+owns native checkpoint/session state.
+The binding is established only by an authenticated human API command after
+the server selects the conversation. Service-MI binding routes verify that
+existing owner/reviewer authority and cannot manufacture it. Resume persists
+a hashed, expiring, proposal-bound human decision intent before dispatch; only
+an exactly matching hosted callback records the business decision.
+Hosted platform user, session, and call values remain opaque workload
+correlation. They never identify the human principal; changing a platform call
+ID does not change or conflict with an otherwise identical durable business
+operation.
+An identical approved or rejected human command after terminal projection still
+passes through the bridge: C reauthorizes the durable reviewer binding and
+exact intent, then Agent A's journal returns the acknowledged Responses result
+without another network dispatch or effect. Changed principals, conversations,
+channels, or decision commands fail closed.
+The internal base `/api/internal/hosted/v1` exposes only case-bound
+start/resume, read/proposal, approval/decision, effect-projection, and
+completion operations. App-only tenant/issuer/audience/principal/role checks,
+exact binding checks, and durable case-bound idempotency keys protect that
+surface. Agent A's native `ResponsesClient` uses C's narrow
+`PostgresOperationJournal` inside the API process; there is no generic `/runs`
+transport and no hosted-to-PostgreSQL connection.
+The topology is implemented and locally tested, but Azure identity, RBAC,
+networking, managed PostgreSQL, hosted execution, and telemetry remain
+unverified until an authorized integrated deployment.
+
 ## MAF modularity foundation and target
 
 The local blueprint and its generated copy now have sibling `backend` and

@@ -2,12 +2,17 @@ from contextlib import contextmanager
 from typing import Iterator
 from uuid import UUID, uuid4
 
-import psycopg
-from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
+from app.config import Settings
 from app.domain.errors import ActionError, Conflict, NotFound
 from app.domain.models import Case, Decision, Principal, TransactionalAction
+from app.infrastructure.database import (
+    BoundedConnectionPool,
+    DatabaseConnectionOptions,
+    DatabaseConnector,
+    TokenProvider,
+)
 from app.infrastructure.telemetry import instrumented
 
 
@@ -39,20 +44,92 @@ def _case(row: dict) -> Case:
 class PostgresStore:
     """Application records and transactional effects, not MAF checkpoints."""
 
-    def __init__(self, dsn: str):
+    def __init__(
+        self,
+        dsn: str,
+        *,
+        auth_mode: str = "password",
+        password: str | None = None,
+        managed_identity_client_id: str | None = None,
+        tls_mode: str | None = None,
+        tls_root_cert: str | None = None,
+        pool_min_size: int = 1,
+        pool_max_size: int = 8,
+        pool_timeout_seconds: float = 5.0,
+        connection_max_lifetime_seconds: float = 2700.0,
+        token_provider: TokenProvider | None = None,
+    ):
         if not dsn:
             raise ValueError("A PostgreSQL connection string is required.")
         self._dsn = dsn
+        self._connector = DatabaseConnector(
+            DatabaseConnectionOptions(
+                dsn,
+                auth_mode,
+                password,
+                managed_identity_client_id,
+                tls_mode,
+                tls_root_cert,
+            ),
+            token_provider,
+        )
+        self._custom_connection = bool(
+            auth_mode != "password"
+            or password
+            or managed_identity_client_id
+            or tls_mode
+            or tls_root_cert
+        )
+        self._pool = BoundedConnectionPool(
+            self._connector.connect,
+            min_size=pool_min_size,
+            max_size=pool_max_size,
+            timeout_seconds=pool_timeout_seconds,
+            max_lifetime_seconds=connection_max_lifetime_seconds,
+        )
         self.telemetry = None
+
+    @classmethod
+    def from_settings(
+        cls,
+        settings: Settings,
+        *,
+        token_provider: TokenProvider | None = None,
+    ):
+        return cls(
+            settings.database_url,
+            auth_mode=settings.database_auth_mode,
+            password=settings.database_password,
+            managed_identity_client_id=(
+                settings.database_managed_identity_client_id
+                or settings.api_managed_identity_client_id
+            ),
+            tls_mode=settings.database_tls_mode,
+            tls_root_cert=settings.database_tls_root_cert,
+            pool_min_size=settings.database_pool_min_size,
+            pool_max_size=settings.database_pool_max_size,
+            pool_timeout_seconds=settings.database_pool_timeout_seconds,
+            connection_max_lifetime_seconds=(settings.database_connection_max_lifetime_seconds),
+            token_provider=token_provider,
+        )
 
     @instrumented("database.connect")
     def connect(self):
-        return psycopg.connect(self._dsn, row_factory=dict_row)
+        return self._pool.connection()
 
     def initialize(self) -> None:
         from app.infrastructure.migrations import validate
 
-        validate(self._dsn)
+        if self._custom_connection:
+            validate(
+                self._dsn,
+                connect=lambda: self._connector.connect(dict_rows=False),
+            )
+        else:
+            validate(self._dsn)
+
+    def close(self) -> None:
+        self._pool.close()
 
     @instrumented("database.read")
     def get(self, case_id: UUID) -> Case:
@@ -115,10 +192,10 @@ class PostgresStore:
         # database transactions, and PostgreSQL releases it if the worker dies.
         first = int.from_bytes(case_id.bytes[:4], "big", signed=True)
         second = int.from_bytes(case_id.bytes[4:8], "big", signed=True)
-        with psycopg.connect(self._dsn, autocommit=True) as connection:
+        with self.connect() as connection:
             acquired = connection.execute(
-                "SELECT pg_try_advisory_lock(%s, %s)", (first, second)
-            ).fetchone()[0]
+                "SELECT pg_try_advisory_lock(%s, %s) AS acquired", (first, second)
+            ).fetchone()["acquired"]
             if not acquired:
                 raise Conflict("The workflow is already being processed.")
             try:
@@ -256,7 +333,10 @@ class PostgresStore:
             rows = connection.execute(
                 """
                 SELECT id, status FROM wf_cases
-                WHERE NOT execution_complete AND status IN ('created', 'approved', 'rejected', 'completed')
+                WHERE NOT execution_complete AND (
+                    status IN ('created', 'approved', 'rejected', 'completed')
+                    OR (status = 'pending' AND failure_code = 'hosted_outcome_unknown')
+                )
                 ORDER BY created_at, id
                 """
             ).fetchall()

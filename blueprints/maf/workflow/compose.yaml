@@ -20,6 +20,8 @@ services:
         PYTHON_PACKAGE_INDEX: ${PYTHON_PACKAGE_INDEX:-https://pypi.org/simple}
     environment:
       DATABASE_URL: postgresql://blueprint:${POSTGRES_PASSWORD:?Set a URL-safe POSTGRES_PASSWORD}@postgres:5432/blueprint
+      DATABASE_AUTH_MODE: password
+      DATABASE_TLS_MODE: disable
       CHECKPOINT_ROOT: /var/lib/blueprint/checkpoints
       WORKFLOW_HOST: local
       BLUEPRINT_APPLICATION: ${BLUEPRINT_APPLICATION:?Select an application factory}

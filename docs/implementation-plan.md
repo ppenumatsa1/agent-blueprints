@@ -77,6 +77,71 @@ and release/deployment remains blocked.
 **Milestone decision:** READY for the local MAF software-factory milestone;
 NOT READY for production, release, or deployment.
 
+## Azure/Foundry Workstream C
+
+Workstream C composes the generated FastAPI application with either the
+existing native local host or Agent A's API-only native Responses bridge copied
+into the generated backend. The API image does not import the sibling hosted
+runtime or hosting SDK, and hosted composition fails closed when the bridge is
+absent. The
+application owns end-user authentication/authorization and PostgreSQL
+business state; Agent A owns hosted execution identity and checkpoint/session
+state. The API UAMI is the sole PostgreSQL runtime principal and is never
+treated as the user. The hosted identity calls only the protected internal API
+with the fixed `Hosted.Workflow.Invoke` app role and receives no database
+configuration. PostgreSQL-only synthetic effects use a distinct application
+tool identity and retain proposal/action/destination/digest binding.
+
+Implementation acceptance criteria:
+
+- explicit host selection with no local fallback from hosted errors;
+- validated end-user tenant, issuer, audience, subject, scopes/roles,
+  ownership, reviewer authorization, and stale/conflicting decisions;
+- claim-before-send and authoritative status reconciliation for ambiguous
+  hosted acknowledgments, without replay;
+- app-only tenant/issuer/audience/principal/role validation on
+  `/api/internal/hosted/v1`, case-bound conversation/channel checks,
+  and durable idempotency-key conflict detection;
+- authenticated-human start/resume prebinding before Responses dispatch,
+  verification-only service-MI binding routes, and a hashed expiring decision
+  intent that the hosted callback must match before recording a decision;
+- opaque platform user/session/call correlation that cannot grant human
+  authority, with current durable binding reauthorization on every
+  verification request and platform call IDs excluded from business-operation
+  digests;
+- exact post-terminal human decision retries that reauthorize the reviewer,
+  conversation, channel, intent, and command, then return Agent A's recorded
+  Responses result without redispatch or another effect;
+- explicit migrations, startup schema validation, runtime/admin identity
+  separation, TLS verification, bounded pools, and managed-identity or secret
+  authentication;
+- a readable Debian CA bundle plus
+  `SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt` in the canonical and
+  generated API images so bundled libpq/OpenSSL can honor
+  `PGSSLROOTCERT=system` under `verify-full`;
+- unchanged frontend/API and ORS-001..009 contracts, atomic stores and effect
+  ledger, and no duplicate synthetic effects; and
+- local PostgreSQL/native Responses-wire tests plus generated-project and
+  frontend checks.
+
+The Agent A integration additionally uses `HttpHostedBusinessStore` for
+case-bound prepare/claim/effect/finish calls and C's
+`PostgresOperationJournal` beside `ResponsesClient`. These seams persist
+business approval state and opaque correlation only; they never fabricate
+local checkpoint IDs, expose PostgreSQL to the hosted runtime, or store
+Foundry checkpoint bytes. The API-side `PostgresHostedAuthorityBindings`
+adapter never derives user authority from opaque hosted correlation or case
+fields.
+
+Current local evidence satisfies those implementation criteria and is detailed
+in [application security](azure-foundry/application-security.md) and draft PR
+[#48](https://github.com/ppenumatsa1/agent-blueprints/pull/48). OBO is not
+required because no verified user-delegated downstream operation exists.
+Remaining work is integration review, exact-head CI, Agent A contract
+confirmation, Agent B output binding, and live Azure/Foundry/PostgreSQL
+verification. This workstream does not provision, deploy, merge, or close
+production-readiness issues.
+
 Specification Studio has not yet produced an artifact, so the proposed
 handoff is not an end-to-end compatibility claim. Phase 0 does not implement
 the validator or an agent template, integrate Specification Studio, deploy

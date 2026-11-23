@@ -24,6 +24,48 @@ merged into current `main` at
 base for the #39 evaluation follow-on. Green CI is not blueprint completion,
 release readiness, or Azure deployment approval.
 
+## Azure/Foundry Workstream C
+
+**Status: In Progress.** The cloud application increment adds an SDK-free
+hosted-workflow port, explicit `local` versus `hosted` composition, API-UAMI
+caller tokens, Azure PostgreSQL managed-identity/password configuration,
+verified TLS requirements, bounded connections, explicit runtime/migration
+identity separation, and restart reconciliation for ambiguous hosted outcomes.
+The API UAMI is the sole PostgreSQL runtime principal. The hosted identity
+calls the protected `/api/internal/hosted/v1` boundary with the fixed
+`Hosted.Workflow.Invoke` app role and receives no database configuration.
+Durable case/conversation/channel binding, case-bound idempotency, exact
+Agent A operation-journal conversion, and business-only hosted
+pending/decision/effect/completion state leave local checkpoint columns null.
+
+Acceptance evidence is local only: 117 source-backend tests, 117 tests in a
+fresh generated generic backend, 159 tests in a fresh generated Order
+Resolution backend, the ORS-001..009 adapter contract (9/9), 68 root tests
+with two expected unselected-adapter skips, and source/generated frontend
+suites with 9/9 or 10/10 tests plus build/CSP passed. A PostgreSQL 17 and
+loopback HTTP test composes Agent A's live `HttpHostedBusinessStore` and
+`ResponsesClient` with C's exact journal types, covers restart/duplicate
+no-replay with changing opaque platform call IDs, revocation and changed-intent
+negatives, post-terminal approved/rejected command replay through Agent A's
+acknowledged journal without a second Responses dispatch, and one
+decision/effect with null checkpoint fields.
+Fresh generated Compose built through approved package proxies, ran explicit
+migrations, became healthy, and returned root `200`, health `204`, and
+protected API `401`. The canonical backend image also exports
+`SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt` so bundled libpq/OpenSSL
+discovers the same readable system bundle selected by
+`PGSSLROOTCERT=system`; `verify-full` remains mandatory. An isolated
+PostgreSQL 17 image proof passed normal `app.main` startup and reported TLS in
+`pg_stat_ssl`; a trusted certificate for the wrong hostname and an untrusted
+CA both failed certificate verification. The
+[application security contract](azure-foundry/application-security.md)
+records the identity matrix, Agent A interface, Agent B outputs, OBO decision,
+and recovery behavior. Draft PR [#48](https://github.com/ppenumatsa1/agent-blueprints/pull/48)
+contains the Workstream C implementation. Next action: obtain draft-PR review
+and exact-head CI,
+then run the listed live-only checks after integration and authorized
+deployment. No Azure resource or live RBAC/configuration was changed here.
+
 The TCP-readiness correction from [#38](https://github.com/ppenumatsa1/agent-blueprints/issues/38)
 and current MAF-native patterns are in merged #37. PR #39 is being reconciled
 directly onto current `main` without replaying #37. Its new exact-head

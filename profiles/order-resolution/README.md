@@ -31,6 +31,17 @@ audit records, and a synthetic downstream destination. Consequential effect
 identity binds case, proposal version, action, and destination. Native MAF
 continues to own workflow checkpoints.
 
+Hosted generation adds a protected FastAPI service boundary at
+`/api/internal/hosted/v1`. The hosted runtime authenticates with its managed
+identity for the API audience and the fixed `Hosted.Workflow.Invoke` app role,
+then uses case-bound start/resume, read/proposal, approval/decision,
+effect-projection, and completion routes. Opaque hosted
+caller/session/conversation values are bound to authoritative case principals,
+and every mutation requires a durable case-bound idempotency key. The API UAMI
+is the sole PostgreSQL runtime principal; the hosted runtime receives no
+database URL, TLS setting, credential, or role. Foundry owns hosted
+conversation/checkpoint state, so hosted case checkpoint columns remain null.
+
 The profile-root evaluation layer consumes the copied canonical golden cases;
 it does not duplicate them. It runs deterministic business and technical
 comparisons through MAF's native `Evaluator`, `LocalEvaluator`, `@evaluator`,

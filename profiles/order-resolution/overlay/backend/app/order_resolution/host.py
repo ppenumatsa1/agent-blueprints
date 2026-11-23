@@ -1,6 +1,7 @@
 from uuid import UUID
 
 from app.domain.errors import CheckpointError
+from app.domain.models import Principal
 from app.infrastructure.telemetry import instrumented
 from app.order_resolution.persistence import OrderResolutionStore
 from app.workflows.host import LocalWorkflowHost
@@ -23,7 +24,7 @@ class OrderResolutionWorkflowHost(LocalWorkflowHost):
         return requests, outputs
 
     @instrumented("workflow.start")
-    async def start(self, case_id: UUID) -> None:
+    async def start(self, case_id: UUID, actor: Principal | None = None) -> None:
         with self.store.run_lock(case_id):
             case = self.store.get(case_id)
             if case.status != "created":
@@ -79,7 +80,12 @@ class OrderResolutionWorkflowHost(LocalWorkflowHost):
             self.store.finish_automatic(case_id, terminal.checkpoint_id)
 
     @instrumented("workflow.resume")
-    async def resume(self, case_id: UUID) -> None:
+    async def resume(
+        self,
+        case_id: UUID,
+        actor: Principal | None = None,
+        decision_command: object | None = None,
+    ) -> None:
         case = self.store.get(case_id)
         if (
             not case.execution_complete
@@ -87,4 +93,4 @@ class OrderResolutionWorkflowHost(LocalWorkflowHost):
             and case.payload.get("proposal", {}).get("approval_required") is True
         ):
             self.store.bind_decision_handle(case_id, case.request_id)
-        await super().resume(case_id)
+        await super().resume(case_id, actor, decision_command)
