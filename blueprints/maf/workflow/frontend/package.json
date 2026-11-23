@@ -5,9 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
+    "preview": "vite preview",
     "build": "tsc --noEmit && vite build",
     "test": "vitest run",
     "e2e:local": "playwright test e2e/local.spec.ts",
+    "e2e:studio": "playwright test --config playwright.studio.config.ts",
     "e2e:live": "playwright test e2e/live.spec.ts",
     "check-csp": "node scripts/check-csp.mjs"
   },

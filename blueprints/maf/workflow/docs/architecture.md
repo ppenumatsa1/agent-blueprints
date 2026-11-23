@@ -136,10 +136,16 @@ remain blocked by [#32](https://github.com/ppenumatsa1/agent-blueprints/issues/3
    `case_id` and a matching outcome. Keep this contract or supply a suitable
    native MAF host. Preserve per-case authorization, durable decisions,
    locking and crash recovery when replacing state or host adapters.
-3. Compose the UI with `WorkflowWorkspace`, a `WorkflowClient`, and a
-   `renderCase` function; see [workspace.tsx](../frontend/src/workspace.tsx)
-   and [api.ts](../frontend/src/api.ts). Do not put credentials in the
-   browser or treat client-provided identity as authoritative.
+3. Compose the UI with `StudioShell`, a `WorkflowClient`, and a
+   generation-time `WorkflowStudioProfile`; see
+   [studio-shell.tsx](../frontend/src/components/studio-shell.tsx),
+   [studio-profile.tsx](../frontend/src/studio-profile.tsx), and
+   [api.ts](../frontend/src/api.ts). Profiles may supply labels, safe payload
+   projections/rendering, disabled capability flags, and an application-owned
+   decision binding. They cannot change endpoints, token scopes, record
+   authorization, reviewer validation, idempotency, or recovery behavior. Do
+   not put credentials in the browser or treat client-provided identity as
+   authoritative.
 4. A database action and ledger entry can commit together in one PostgreSQL
    transaction; this does not prevent an application callback from making
    remote calls. The callback is arbitrary trusted Python, not a sandbox, and
@@ -217,6 +223,13 @@ verification tree, together with `tests/test_order_resolution_contract.py`.
 The generated runtime does not read those assets or this repository. Explicit
 asset overrides exist only for isolated generator tests; they do not replace
 the canonical generated assets.
+
+The base frontend includes a generic `WorkflowStudioProfile` with no
+Order Resolution vocabulary. The named overlay replaces that profile with
+application labels, payload projection, and proposal decision binding while
+retaining the same protected API and MSAL client. Optional history, live
+activity, evidence, manual tests, AG-UI, and CopilotKit remain disabled flags;
+later UX layers must be implemented and evidenced separately.
 
 The profile keeps framework and application state distinct. Low-risk proposals
 run through a concrete MAF `Executor` and `WorkflowBuilder` to a terminal native

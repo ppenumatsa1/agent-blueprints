@@ -1,5 +1,39 @@
 # Phased implementation plan
 
+## UX stack Layer 1: reusable workflow studio shell
+
+**Implemented locally on a frontend-only branch stacked above draft PR #49;
+exact-head CI remains pending.** Layer 1 introduces a generation-time
+`WorkflowStudioProfile` boundary for generic titles, descriptions, labels,
+capability flags, safe plain-text payload projections, optional React
+rendering, and profile-owned decision binding. The base profile contains no
+order, refund, shipment, or customer vocabulary. `StudioShell`,
+`RequestComposer`, `CaseSummaryPanel`, `ApprovalPanel`, and
+`CaseMetadataPanel` reuse the existing `WorkflowCase` and `WorkflowClient`;
+the protected endpoints, delegated scopes, Entra/MSAL behavior,
+server-authoritative record authorization, UUID validation, secure
+idempotency-key reuse, approve/reject behavior, and visible recovery/failure
+states are unchanged.
+
+History, live activity, evidence, manual tests, AG-UI, and CopilotKit are
+disabled capability flags only. Layer 1 does not add their runtime behavior
+and makes no backend, API, database, Azure, RBAC, network, or firewall change.
+The independently generated application owns the profile, components, tests,
+and production browser configuration without importing `agent-blueprints` or
+the reference repository. Existing PR #49 `local.spec.ts` and `live.spec.ts`
+remain unchanged; a separate production-built signed-out studio-shell spec
+was added.
+
+Local evidence: 12 base Vitest/Testing Library tests including axe checks,
+14 tests in a fresh independent Order Resolution generation, base and
+generated production builds, CSP verification, the unchanged local Chromium
+spec, the new production-build Chromium spec, and the focused independent
+instantiation contract all pass. The required repository suite passes 105
+tests with two documented application-adapter-selection skips. The existing
+Vite chunk-size warning remains non-blocking and is not relabeled as a pass.
+Next action: obtain exact-head CI on the stacked draft PR and keep later UX
+layers separate.
+
 ## Local Azure/Foundry integration checkpoint
 
 **Completed locally, validated, and partially provisioned for E2E.** The C -> A -> B -> D integration from

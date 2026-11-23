@@ -39,15 +39,15 @@ it("clears record data and ignores stale active accounts when the signed-in user
   };
   useMsal.mockReturnValue({ instance, accounts: [first], inProgress: InteractionStatus.None });
   const { rerender } = render(<AuthenticatedApplication config={config} />);
-  await userEvent.type(screen.getByLabelText("Record ID"), id);
+  await userEvent.type(screen.getByLabelText("Case ID"), id);
   await userEvent.click(screen.getByRole("button", { name: "Open" }));
-  expect(await screen.findByText(/Private synthetic record/)).toBeVisible();
+  expect(await screen.findByRole("heading", { name: "Case status: pending" })).toBeVisible();
 
   useMsal.mockReturnValue({ instance, accounts: [second], inProgress: InteractionStatus.None });
   rerender(<AuthenticatedApplication config={config} />);
-  expect(screen.queryByText(/Private synthetic record/)).not.toBeInTheDocument();
-  expect(screen.getByLabelText("Record ID")).toHaveValue("");
-  await userEvent.type(screen.getByLabelText("Record ID"), id);
+  expect(screen.queryByRole("heading", { name: "Case status: pending" })).not.toBeInTheDocument();
+  expect(screen.getByLabelText("Case ID")).toHaveValue("");
+  await userEvent.type(screen.getByLabelText("Case ID"), id);
   await userEvent.click(screen.getByRole("button", { name: "Open" }));
   expect(instance.acquireTokenSilent).toHaveBeenLastCalledWith({ account: second, scopes: ["read"] });
 });

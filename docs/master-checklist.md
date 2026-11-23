@@ -11,6 +11,26 @@ The original [interactive architecture](software-factory.html) is a preserved
 historical source; this checklist records current status. The 2–3 hour
 prototype objective has not yet been measured.
 
+## UX stack Layer 1 acceptance
+
+**Status: implemented locally; stacked draft PR and exact-head CI pending.**
+This layer is frontend-only and depends on the frozen PR #49 snapshot
+`57794230845939471c00fc2e7994815492bc9ada`.
+
+| Acceptance criterion | Scoped evidence |
+| --- | --- |
+| Generic generation-time profile boundary | `WorkflowStudioProfile` owns title, description, labels, disabled capability flags, payload projection/rendering, and optional decision binding; the default profile contains no order/refund/shipment/customer vocabulary |
+| Reusable workflow studio components | `StudioShell`, `RequestComposer`, `CaseSummaryPanel`, `ApprovalPanel`, and `CaseMetadataPanel` adapt the existing `WorkflowCase`/`WorkflowClient` without changing protected endpoints or auth semantics |
+| Security and recovery preservation | Focused tests cover signed-out behavior, submit/open, approve/reject, reviewer UUID validation, idempotency reuse after failure, scoped client behavior, recovery/failure visibility, account isolation, and axe checks |
+| Later layers remain disabled | History, live activity, evidence, manual tests, AG-UI, and CopilotKit render only as `Not enabled`; no later-layer runtime was added |
+| Generated independence and browser boundary | Focused instantiation verifies copied profile/component/test/browser files and rejects source references to `agent-blueprints` or `maf-monorepo`; a new production-build Chromium spec passes while PR #49's existing local/live specs remain byte-unchanged |
+| Local validation | Base frontend 12 tests pass; fresh profiled generation 14 tests pass; base/generated production builds, base CSP, preserved local Chromium, new production-build Chromium, focused instantiation, and the required 105-test repository suite with two documented adapter-selection skips pass without Azure credentials |
+
+**Next action:** open the Layer 1 draft PR against
+`ppenumatsa1-integrate-azure-foundry-fleet`, require exact-head CI, and keep
+history/activity/evidence/manual-test/AG-UI/CopilotKit work in future stacked
+layers. No backend/cloud change or production readiness is claimed.
+
 PR #17 merged into `main` at
 `0c1297cc8e93c62f69d61d0eb3bdabf3c27c683d`, with parents
 `de1cbe4cc3a93f2473a6f8f5f9e063d1ae278fa3` and final #17 head

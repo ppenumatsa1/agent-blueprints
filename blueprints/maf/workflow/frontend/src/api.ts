@@ -12,19 +12,21 @@ export interface WorkflowCase {
   failure_code: string | null;
 }
 
+export interface DecisionBinding {
+  proposal_version: number;
+  action: string;
+  destination_id: string;
+  handle: string;
+  channel: string;
+}
+
 export interface WorkflowClient {
   submit(reviewer: string, payload: Record<string, unknown>, idempotencyKey: string): Promise<WorkflowCase>;
   read(id: string): Promise<WorkflowCase>;
   decide(
     id: string,
     decision: "approved" | "rejected",
-    binding?: {
-      proposal_version: number;
-      action: string;
-      destination_id: string;
-      handle: string;
-      channel: string;
-    },
+    binding?: DecisionBinding,
   ): Promise<WorkflowCase>;
 }
 
@@ -119,13 +121,7 @@ export class HttpWorkflowClient implements WorkflowClient {
   decide(
     id: string,
     decision: "approved" | "rejected",
-    binding?: {
-      proposal_version: number;
-      action: string;
-      destination_id: string;
-      handle: string;
-      channel: string;
-    },
+    binding?: DecisionBinding,
   ): Promise<WorkflowCase> {
     return this.request("approve", `/api/cases/${encodeURIComponent(id)}/decision`, {
       body: { decision, ...binding },

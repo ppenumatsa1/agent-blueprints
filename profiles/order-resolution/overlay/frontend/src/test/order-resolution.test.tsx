@@ -1,8 +1,7 @@
-import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import type { WorkflowCase } from "../api";
-import { OrderResolutionCase } from "../order-resolution";
+import { orderResolutionProfile } from "../order-resolution";
 
 
 describe("order resolution case", () => {
@@ -24,10 +23,42 @@ describe("order resolution case", () => {
       execution_complete: true,
       failure_code: null,
     };
-    render(<OrderResolutionCase record={record} />);
-    expect(screen.getByText("ORDER-HIGH")).toBeVisible();
-    expect(screen.getByText("partial_refund_10")).toBeVisible();
-    expect(screen.getByText("USD 18.50")).toBeVisible();
-    expect(screen.getByText("Escalated after rejection")).toBeVisible();
+    expect(orderResolutionProfile.projectPayload(record.payload, record)).toEqual({
+      summary: "Review partial_refund_10 for ORDER-HIGH.",
+      fields: [
+        { label: "Order", value: "ORDER-HIGH" },
+        { label: "Issue", value: "late_delivery" },
+        { label: "Proposed action", value: "partial_refund_10" },
+        { label: "Proposed amount", value: "USD 18.50" },
+        { label: "Approval required", value: "Yes" },
+        { label: "Outcome", value: "Escalated after rejection" },
+      ],
+    });
+  });
+
+  it("binds an approval decision to the exact proposal and server handle", () => {
+    const record: WorkflowCase = {
+      id: "80000000-0000-4000-8000-000000000008",
+      correlation_id: "80000000-0000-4000-8000-000000000008",
+      status: "pending",
+      decision: "pending",
+      payload: {
+        proposal: {
+          version: 3,
+          action: "manual_review",
+          destination_id: "synthetic-destination",
+        },
+      },
+      decision_handle: "opaque-handle",
+      execution_complete: false,
+      failure_code: null,
+    };
+    expect(orderResolutionProfile.decisionBinding?.(record)).toEqual({
+      proposal_version: 3,
+      action: "manual_review",
+      destination_id: "synthetic-destination",
+      handle: "opaque-handle",
+      channel: "api",
+    });
   });
 });
