@@ -26,17 +26,13 @@ from tests.hosted_failure_runner import (
 ROOT = Path(__file__).resolve().parents[2]
 CONTRACT = json.loads(
     (
-        ROOT
-        / "verification"
-        / "scenarios"
-        / "order-resolution"
-        / "acceptance-contract.json"
+        ROOT / "verification" / "scenarios" / "order-resolution" / "acceptance-contract.json"
     ).read_text(encoding="utf-8")
 )
 GOLDEN_CASES = json.loads(
-    (
-        ROOT / "verification" / "scenarios" / "order-resolution" / "golden-cases.json"
-    ).read_text(encoding="utf-8")
+    (ROOT / "verification" / "scenarios" / "order-resolution" / "golden-cases.json").read_text(
+        encoding="utf-8"
+    )
 )["cases"]
 MODEL_CRITERION = "order-resolution-model-quality"
 
@@ -59,9 +55,7 @@ def _jwt_claims(token: str) -> dict:
     return value
 
 
-def _identity(
-    auth: dict, name: str, *, scopes: set[str], roles: set[str] = frozenset()
-) -> dict:
+def _identity(auth: dict, name: str, *, scopes: set[str], roles: set[str] = frozenset()) -> dict:
     value = auth.get(name)
     if not isinstance(value, dict):
         raise ValueError(f"The live authentication file is missing {name}.")
@@ -76,9 +70,7 @@ def _identity(
     observed_scopes = set(str(claims.get("scp", "")).split())
     observed_roles = set(claims.get("roles", []))
     if not scopes.issubset(observed_scopes) or not roles.issubset(observed_roles):
-        raise ValueError(
-            f"The {name} token does not contain the required authorization."
-        )
+        raise ValueError(f"The {name} token does not contain the required authorization.")
     return {"access_token": token, "object_id": object_id, "claims": claims}
 
 
@@ -139,8 +131,7 @@ class LiveClient:
         if self.owner["object_id"] == self.reviewer["object_id"]:
             raise ValueError("Live owner and reviewer identities must be distinct.")
         tenants = {
-            identity["claims"].get("tid")
-            for identity in (self.owner, self.reviewer, self.operator)
+            identity["claims"].get("tid") for identity in (self.owner, self.reviewer, self.operator)
         }
         if len(tenants) != 1:
             raise ValueError("Live acceptance identities must use one tenant.")
@@ -177,15 +168,11 @@ class LiveClient:
             response = urllib.request.urlopen(request, timeout=90)
             status = response.status
             payload = response.read()
-            response_headers = {
-                name.lower(): value for name, value in response.headers.items()
-            }
+            response_headers = {name.lower(): value for name, value in response.headers.items()}
         except urllib.error.HTTPError as error:
             status = error.code
             payload = error.read()
-            response_headers = {
-                name.lower(): value for name, value in error.headers.items()
-            }
+            response_headers = {name.lower(): value for name, value in error.headers.items()}
         parsed = json.loads(payload) if payload else {}
         returned_trace = response_headers.get("traceparent", "")
         if returned_trace and case_id and request_id:
@@ -280,9 +267,7 @@ class LiveClient:
         )
         status, result, _ = self.request(method, target, self.operator, body=body)
         if status >= 500:
-            raise TransientFailure(
-                "The live acceptance control reported a transient failure."
-            )
+            raise TransientFailure("The live acceptance control reported a transient failure.")
         if status != 200:
             raise RuntimeError(f"Live acceptance control failed with HTTP {status}.")
         return result
@@ -322,9 +307,7 @@ class LiveHostedFailureAdapter:
             idempotency_key=record["idempotency_key"],
             status=status,
             technical_status=technical,
-            business_outcome=status
-            if status in {"pending", "completed", "failed"}
-            else "unknown",
+            business_outcome=status if status in {"pending", "completed", "failed"} else "unknown",
             effect_count=snapshot["counts"]["effects"],
         )
 
@@ -357,9 +340,7 @@ class LiveHostedFailureAdapter:
             )
         result = self._record(case_id)
         if lose_ack:
-            raise UnknownOutcome(
-                "The synthetic client discarded the acknowledged response."
-            )
+            raise UnknownOutcome("The synthetic client discarded the acknowledged response.")
         return result
 
     def lookup(self, idempotency_key: str) -> HostedRecord:
@@ -473,9 +454,7 @@ class LiveHostedFailureAdapter:
 
     def retry(self, case_id: str) -> HostedRecord:
         if case_id in self.unknown:
-            raise ReconciliationRequired(
-                "The unknown effect outcome must be reconciled."
-            )
+            raise ReconciliationRequired("The unknown effect outcome must be reconciled.")
         return self.read(case_id)
 
     def reconcile(self, case_id: str) -> HostedRecord:
@@ -501,16 +480,12 @@ class FoundryModelEvaluator:
         auth = _read_auth(auth_file)
         model = auth.get("model")
         if not isinstance(model, dict):
-            raise ValueError(
-                "The live authentication file is missing model configuration."
-            )
+            raise ValueError("The live authentication file is missing model configuration.")
         self.provider_id = provider_id
         self.model_id = model_id
         self.endpoint = model.get("endpoint")
         self.token = model.get("access_token")
-        if not isinstance(self.endpoint, str) or not self.endpoint.startswith(
-            "https://"
-        ):
+        if not isinstance(self.endpoint, str) or not self.endpoint.startswith("https://"):
             raise ValueError("The model endpoint must be an explicit HTTPS URL.")
         if not isinstance(self.token, str) or not self.token:
             raise ValueError("The model access token is missing.")
@@ -566,9 +541,7 @@ class FoundryModelEvaluator:
                 or not 0 <= score <= 1
             ):
                 raise ValueError("The Foundry evaluator returned an invalid score.")
-            item_passed = score >= float(
-                os.environ.get("MAF_REAL_EVALUATION_MINIMUM_SCORE", "0.8")
-            )
+            item_passed = score >= float(os.environ.get("MAF_REAL_EVALUATION_MINIMUM_SCORE", "0.8"))
             passed += int(item_passed)
             failed += int(not item_passed)
             results.append(
@@ -624,9 +597,7 @@ def _result(snapshot: dict, *, native_pause: bool, extras: dict | None = None) -
     )
     decision = snapshot["decision"]
     if decision is None:
-        decision = (
-            "not_required" if proposal and not proposal["approval_required"] else "none"
-        )
+        decision = "not_required" if proposal and not proposal["approval_required"] else "none"
     if state == "awaiting_approval":
         decision = "pending"
     result = {
@@ -658,9 +629,7 @@ def create_results(
     deployment_revision: str,
 ) -> dict[str, dict]:
     if source_revision != deployment_revision:
-        raise ValueError(
-            "Live provider results require exact source/deployment parity."
-        )
+        raise ValueError("Live provider results require exact source/deployment parity.")
     client = LiveClient(base_url, auth_file, deployment_revision)
     results = {}
     for case in GOLDEN_CASES:
@@ -686,20 +655,15 @@ def create_results(
                 },
                 "technical_execution": {
                     "invalid_variants_checked": [
-                        item["invalid_reason"]
-                        for item in case["input"]["policy_evidence_variants"]
+                        item["invalid_reason"] for item in case["input"]["policy_evidence_variants"]
                     ],
                     "all_variants_failed_explicitly": all(
                         item["status"] == "failed" for item in snapshots
                     ),
                     "native_pause_required": False,
                     "authorized_decision_count": 0,
-                    "action_claim_count": sum(
-                        item["counts"]["claims"] for item in snapshots
-                    ),
-                    "side_effect_count": sum(
-                        item["counts"]["effects"] for item in snapshots
-                    ),
+                    "action_claim_count": sum(item["counts"]["claims"] for item in snapshots),
+                    "side_effect_count": sum(item["counts"]["effects"] for item in snapshots),
                     "terminal_event_count_per_variant": min(
                         item["counts"]["terminal"] for item in snapshots
                     ),
@@ -742,9 +706,7 @@ def create_results(
                     break
                 time.sleep(2)
             else:
-                raise RuntimeError(
-                    "ORS-005 did not reconcile after acknowledgement loss."
-                )
+                raise RuntimeError("ORS-005 did not reconcile after acknowledgement loss.")
         elif case_id == "ORS-009":
             denied = []
             for label, identity in (
