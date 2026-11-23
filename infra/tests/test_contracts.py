@@ -164,6 +164,7 @@ class InfrastructureContractTests(unittest.TestCase):
             self.assertIn(name, api_environment)
         self.assertNotIn("BLUEPRINT_APPLICATION", api_environment)
         self.assertNotIn("CHECKPOINT_ROOT", api_environment)
+        self.assertNotIn("SSL_CERT_FILE", api_environment)
         api_environment_expression = api_app["properties"]["template"]["containers"][0][
             "env"
         ]
@@ -320,6 +321,7 @@ class InfrastructureContractTests(unittest.TestCase):
             "test -r /etc/ssl/certs/ca-certificates.crt",
             scripts["deploy.ps1"],
         )
+        self.assertNotIn("SSL_CERT_FILE=", scripts["deploy.ps1"])
         self.assertIn("proxy_pass http://api:8000;", scripts["deploy.ps1"])
         self.assertNotIn("blueprints\\maf\\workflow", scripts["deploy.ps1"])
         self.assertNotIn("CHECKPOINT_ROOT", scripts["deploy.ps1"])

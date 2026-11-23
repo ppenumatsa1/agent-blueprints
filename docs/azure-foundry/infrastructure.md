@@ -212,7 +212,9 @@ route fails closed until the final revision binds the authoritative principal.
 - PostgreSQL uses hostname verification plus the trusted system CA store
   (`sslmode=verify-full`, `sslrootcert=system`). Local operations require
   PostgreSQL client 17 or later; the generated API image build fails if its
-  system CA bundle is absent.
+  system CA bundle is absent. The canonical image explicitly owns
+  `SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt` for bundled libpq/OpenSSL;
+  Azure Bicep and deployment updates must not override or clear it.
 - The API receives hosted mode, the explicit HTTPS adapter endpoint and scope,
   identity client ID, PostgreSQL managed-identity/TLS settings, Entra, and
   telemetry configuration. It never receives `BLUEPRINT_APPLICATION`,
@@ -370,8 +372,12 @@ Local non-deploying evidence:
   omitted.
   The integration coordinator independently reports 13/13 exact A+C
   PostgreSQL 17 authority/wire tests passed; B did not rerun that suite.
-  Canonical packaging evidence is complete and integration awaits the A/C
-  final handoff.
+  Normal `app.main`/lifespan startup subsequently exposed that bundled libpq
+  requires explicit image-owned
+  `SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt` even with
+  `PGSSLROOTCERT=system`. Agent C owns the Dockerfile correction. B deployment
+  intentionally does not set `SSL_CERT_FILE`, preserving the image default.
+  Exact image evidence must be refreshed against C's corrected immutable head.
   Direct PyPI failed locally with a TLS handshake error; the credentialless
   Microsoft package mirror retained hash/digest verification. Live Azure
   remains unverified.
@@ -388,9 +394,7 @@ Not verified by this workstream: resource provisioning, Azure RBAC writes,
 Container Apps image deployment, Hosted Agent creation/invocation, PostgreSQL
 connectivity/migration/restore, telemetry ingestion, browser execution,
 evaluation quality, rollback in Azure, teardown, or production readiness.
-Hosted code has no direct PostgreSQL connectivity by design; API-backed hosted
-business-state authorization remains unverified until the composed deployment
-is exercised.
+Hosted code has no direct PostgreSQL connectivity by design.
 
 The deployment route never targets the source blueprint. It instantiates an
 independent Order Resolution project, validates the generated hosted/app
