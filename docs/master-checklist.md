@@ -56,11 +56,15 @@ connection ResourceWarnings and the Vite chunk-size warning remain disclosed,
 not waived production checks. Harness import-path/database setup failures were
 corrected before the final complete suites passed; no tests were removed.
 
-**Next action:** retain the local integration for review. No integration push,
-PR, merge, or Azure mutation has been performed. Live hosted execution,
-managed-identity token issuance, real-model evaluation, authenticated browser
-evidence, and independent production authorization still require separately
-authorized verification. The original architecture HTML remains unchanged.
+**Next action:** draft PR #49 publishes exact integration head
+`007f9bc0136c0d0e42bb22c4d45fd9a7f799cfb4`; CI run `45090269313` passed all
+seven jobs. Azure validation then passed live identity/quota/provider checks,
+subscription policy review, provider-backed validation, and a what-if with 21
+creates and no modifications or deletions. Proceed through the guarded
+deployment workflow. Live hosted execution, managed-identity token issuance,
+real-model evaluation, authenticated browser evidence, and independent
+production authorization remain unverified. The original architecture HTML
+remains unchanged.
 
 ## Azure/Foundry Workstream C
 

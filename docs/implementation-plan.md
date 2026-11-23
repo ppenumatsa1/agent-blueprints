@@ -2,7 +2,7 @@
 
 ## Local Azure/Foundry integration checkpoint
 
-**Completed locally, not deployed.** The C -> A -> B -> D integration from
+**Completed locally and validated for deployment, not deployed.** The C -> A -> B -> D integration from
 `886b628fdea02f9089c385b4ed0fc46d90f375e8` preserves native MAF checkpoints,
 Foundry-managed hosted state, and API-owned PostgreSQL business persistence.
 The [integration acceptance table](master-checklist.md#local-azurefoundry-integration-acceptance)
@@ -13,9 +13,13 @@ The final canonical image includes C's system-CA discovery correction and B's
 no-deployment-override contract. Real PostgreSQL 17 verifies normal hosted
 startup plus wrong-hostname and untrusted-CA refusal, without a trust bypass.
 Fresh generated backend, hosted, verification, and canonical-image checks pass.
-Next: review the retained local integration, then obtain explicit publication
-and cloud-verification authorization. Green local tests do not authorize a
-push, deployment, release, or production-risk acceptance.
+Draft PR #49 publishes exact head
+`007f9bc0136c0d0e42bb22c4d45fd9a7f799cfb4`; exact-head CI run `45090269313`
+passed all seven jobs. Live Azure preflight, subscription policy review,
+provider validation, and provider-backed what-if passed with 21 creates and no
+modifications or deletions, so `.azure/deployment-plan.md` is `Validated`.
+Next: execute the guarded deployment and retain immutable live evidence. These
+checks do not authorize merge, release, or production-risk acceptance.
 
 ## Phase 0: foundation
 

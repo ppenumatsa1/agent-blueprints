@@ -156,10 +156,12 @@ evaluation, and browser
 evidence remains with Agent D. Conversation state, hosted framework
 checkpoints, PostgreSQL business state, and human approval remain separate.
 
-The deployment plan is `Ready for Validation`, not deployed or production
-ready. The current azd account and tenant differ from Azure CLI. Azure CLI mode
-reports that mismatch while validating the active authorized Azure context;
-explicit azd mode still fails closed. Cloud configuration requires hosted
+The deployment plan is `Validated`, not deployed or production ready.
+Validation used the active authorized Azure CLI context and passed live
+identity, provider, region, quota, capacity, policy, subscription deployment,
+and what-if checks. The current azd account and tenant still differ from Azure
+CLI; Azure CLI mode reports that mismatch and explicit azd mode fails closed.
+Cloud configuration requires hosted
 workflow mode, managed-identity PostgreSQL with TLS verification, an explicit
 adapter endpoint, and agent-scoped API access. `BLUEPRINT_APPLICATION`,
 `CHECKPOINT_ROOT`, and local workflow hosting are excluded.
