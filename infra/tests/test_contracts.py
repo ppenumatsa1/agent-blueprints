@@ -538,6 +538,10 @@ class InfrastructureContractTests(unittest.TestCase):
             common,
         )
         self.assertIn(
+            "'backend\\order_resolution_hosted\\credentials.py'",
+            common,
+        )
+        self.assertIn(
             "$targetPackage = Join-Path $backend 'order_resolution_hosted'",
             common,
         )
@@ -569,6 +573,7 @@ class InfrastructureContractTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
         self.assertIn("create_app(", smoke)
         self.assertIn("order_resolution_hosted.bridge", smoke)
+        self.assertIn("credentials", smoke)
         self.assertIn("/api/internal/hosted/v1", deploy)
         self.assertIn("HOSTED_SERVICE_PRINCIPAL_ID", deploy)
         self.assertIn(

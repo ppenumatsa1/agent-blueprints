@@ -57,6 +57,20 @@ class InstantiationTests(unittest.TestCase):
         )
         return target, contract, cases, contract_test
 
+    def test_order_resolution_api_bridge_manifest_matches_local_import_graph(self):
+        source = (
+            ROOT
+            / "profiles"
+            / "order-resolution"
+            / "hosted-agent"
+            / "src"
+            / "order_resolution_hosted"
+        )
+        self.assertEqual(
+            instantiator._order_resolution_api_bridge_files(source),
+            ("bridge.py", "client.py", "credentials.py"),
+        )
+
     def test_external_effect_guidance_does_not_treat_outbox_as_deduplication(self):
         workflow = ROOT / "blueprints" / "maf" / "workflow"
         passages = (
@@ -428,6 +442,7 @@ class InstantiationTests(unittest.TestCase):
                 "backend/order_resolution_hosted/__init__.py",
                 "backend/order_resolution_hosted/bridge.py",
                 "backend/order_resolution_hosted/client.py",
+                "backend/order_resolution_hosted/credentials.py",
                 "backend/tests/test_order_resolution.py",
                 "backend/tests/test_order_resolution_api.py",
                 "hosted-agent/main.py",
@@ -448,7 +463,7 @@ class InstantiationTests(unittest.TestCase):
                 "docs/order-resolution.md",
             ):
                 self.assertTrue((target / relative).is_file(), relative)
-            for name in ("bridge.py", "client.py"):
+            for name in instantiator.ORDER_RESOLUTION_API_BRIDGE_MODULES:
                 self.assertEqual(
                     (
                         ROOT

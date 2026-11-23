@@ -1,6 +1,7 @@
 """Copy the MAF workflow blueprint and its independent verification assets."""
 
 import argparse
+import ast
 import shutil
 import sys
 from pathlib import Path
@@ -19,6 +20,12 @@ ORDER_RESOLUTION_CONTRACT = (
 )
 ORDER_RESOLUTION_CASES = ROOT / "scenarios" / "order-resolution" / "golden-cases.json"
 ORDER_RESOLUTION_TEST = ROOT / "tests" / "test_order_resolution_contract.py"
+ORDER_RESOLUTION_API_BRIDGE_ENTRYPOINT = "bridge.py"
+ORDER_RESOLUTION_API_BRIDGE_MODULES: tuple[str, ...] = (
+    "bridge.py",
+    "client.py",
+    "credentials.py",
+)
 IGNORE = shutil.ignore_patterns(
     ".git",
     ".env",
@@ -32,6 +39,53 @@ IGNORE = shutil.ignore_patterns(
     "dist",
     "coverage",
 )
+
+
+def _relative_sibling_modules(path: Path) -> set[str]:
+    modules: set[str] = set()
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ImportFrom) or node.level != 1:
+            continue
+        imported = (
+            (node.module.split(".", 1)[0],)
+            if node.module
+            else tuple(alias.name.split(".", 1)[0] for alias in node.names)
+        )
+        modules.update(f"{name}.py" for name in imported)
+    return modules
+
+
+def _order_resolution_api_bridge_files(source: Path) -> tuple[str, ...]:
+    pending = [ORDER_RESOLUTION_API_BRIDGE_ENTRYPOINT]
+    required: set[str] = set()
+    while pending:
+        name = pending.pop()
+        if name in required:
+            continue
+        path = source / name
+        if not path.is_file():
+            raise ValueError(
+                f"The Order Resolution API bridge source is missing: {name}"
+            )
+        required.add(name)
+        for dependency in _relative_sibling_modules(path):
+            if not (source / dependency).is_file():
+                raise ValueError(
+                    "The Order Resolution API bridge has a missing sibling "
+                    f"dependency: {name} -> {dependency}"
+                )
+            pending.append(dependency)
+
+    manifest = set(ORDER_RESOLUTION_API_BRIDGE_MODULES)
+    if required != manifest:
+        missing = sorted(required - manifest)
+        unrelated = sorted(manifest - required)
+        raise ValueError(
+            "The Order Resolution API bridge manifest does not match its local "
+            f"import graph; missing={missing}, unrelated={unrelated}."
+        )
+    return ORDER_RESOLUTION_API_BRIDGE_MODULES
 
 
 def _order_resolution_asset(
@@ -98,12 +152,8 @@ def _merge_order_resolution_api_bridge(destination: Path) -> None:
     source = ORDER_RESOLUTION_HOSTED_AGENT / "src" / "order_resolution_hosted"
     target = destination / "backend" / "order_resolution_hosted"
     target.mkdir(parents=True, exist_ok=True)
-    for name in ("bridge.py", "client.py"):
+    for name in _order_resolution_api_bridge_files(source):
         path = source / name
-        if not path.is_file():
-            raise ValueError(
-                f"The Order Resolution API bridge source is missing: {name}"
-            )
         shutil.copy2(path, target / name)
     (target / "__init__.py").write_text(
         '"""API-only Responses bridge; the full hosted runtime is packaged separately."""\n',

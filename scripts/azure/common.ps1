@@ -73,6 +73,7 @@ function Assert-GeneratedOrderResolutionProject {
         'backend\order_resolution_hosted\__init__.py',
         'backend\order_resolution_hosted\client.py',
         'backend\order_resolution_hosted\bridge.py',
+        'backend\order_resolution_hosted\credentials.py',
         'frontend\Dockerfile',
         'frontend\nginx.conf',
         'hosted-agent\main.py',
@@ -80,6 +81,7 @@ function Assert-GeneratedOrderResolutionProject {
         'hosted-agent\src\order_resolution_hosted',
         'hosted-agent\src\order_resolution_hosted\client.py',
         'hosted-agent\src\order_resolution_hosted\bridge.py',
+        'hosted-agent\src\order_resolution_hosted\credentials.py',
         'scripts\foundry\publish_order_resolution_hosted.py'
     )) {
         if (-not (Test-Path -LiteralPath (Join-Path $resolved $relative))) {
@@ -101,7 +103,7 @@ function Assert-GeneratedApiImageContext {
     $backend = Join-Path $resolved 'backend'
     $targetPackage = Join-Path $backend 'order_resolution_hosted'
 
-    foreach ($name in @('client.py', 'bridge.py')) {
+    foreach ($name in @('bridge.py', 'client.py', 'credentials.py')) {
         $sourceHash = (
             Get-FileHash `
                 -LiteralPath (Join-Path $sourcePackage $name) `

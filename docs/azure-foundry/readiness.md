@@ -433,3 +433,17 @@ disablement and forced registration. Runtime loading is deferred until that
 global provider is initialized. HITL restart links and the strict
 App Insights/Foundry verifier remain privacy-safe and do not invent model/token
 spans for deterministic paths.
+
+The next deployment reconciliation identified a packaging failure rather than
+a startup-prewarm or identity failure. The failed immutable API image contained
+`order_resolution_hosted.bridge` and `client` but omitted the new local sibling
+`credentials`; importing normal `app.main` therefore raised
+`ModuleNotFoundError` before lifespan startup. The independent-project
+generator now validates an explicit typed API-bridge manifest against the
+transitive relative-import graph and copies exactly `bridge.py`, `client.py`,
+and `credentials.py`. Focused source contracts pass 17 tests, the generated
+PostgreSQL 17 selection passes 164 tests, and the normal generated image imports
+all three modules from one package and composes `ResponsesWorkflowHost`.
+These results repair local readiness evidence only. Bind the correction to a
+green exact-head run before a later immutable deployment; no workflow,
+firewall, or cloud acceptance state changed in this correction.

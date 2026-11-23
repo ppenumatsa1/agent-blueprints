@@ -128,6 +128,14 @@ class OrderResolutionApiTests(unittest.TestCase):
             )
         )
 
+    def test_generated_api_bridge_import_graph_is_complete(self):
+        from order_resolution_hosted import bridge, client, credentials
+
+        package_root = (Path(__file__).resolve().parents[1] / "order_resolution_hosted").resolve()
+        for module in (bridge, client, credentials):
+            with self.subTest(module=module.__name__):
+                self.assertEqual(Path(module.__file__).resolve().parent, package_root)
+
     @staticmethod
     def headers(token: str, key: str | None = None) -> dict[str, str]:
         headers = {"Authorization": f"Bearer {token}"}
@@ -1063,7 +1071,13 @@ class OrderResolutionApiTests(unittest.TestCase):
         package_root = Path(package_temp.name) / "order_resolution_hosted"
         package_root.mkdir()
         (package_root / "__init__.py").write_text("", encoding="utf-8")
-        for module_name in ("application", "business", "client", "bridge"):
+        for module_name in (
+            "application",
+            "business",
+            "client",
+            "credentials",
+            "bridge",
+        ):
             shutil.copy2(source_root / f"{module_name}.py", package_root)
         sys.path.insert(0, package_temp.name)
         importlib.invalidate_caches()
@@ -1072,6 +1086,7 @@ class OrderResolutionApiTests(unittest.TestCase):
             "order_resolution_hosted.application",
             "order_resolution_hosted.business",
             "order_resolution_hosted.client",
+            "order_resolution_hosted.credentials",
             "order_resolution_hosted.bridge",
         ]
         for module_name in loaded_modules:

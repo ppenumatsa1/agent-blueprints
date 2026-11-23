@@ -125,13 +125,17 @@ acquires Foundry tokens only through
 `ManagedIdentityCredential(client_id=settings.api_managed_identity_client_id)`;
 it does not fall back to a developer or ambient credential.
 
-Generation copies only `bridge.py` and `client.py` into the backend build
-context as a lightweight `order_resolution_hosted` package with a non-eager
-initializer. The backend image copies that package directly and does not import
-the sibling hosted-agent source, expand its Docker context to the repository
-root, or install the hosting SDK. The full hosted package initializer is also
-non-eager. Instantiation tests require byte-for-byte API/hosted client and wire
-contract parity plus an import resolved from the backend directory.
+Generation copies the exact transitive API bridge manifest (`bridge.py`,
+`client.py`, and the app-owned `credentials.py` dependency) into the backend
+build context as a lightweight `order_resolution_hosted` package with a
+non-eager initializer. The typed manifest is checked against relative sibling
+imports from the bridge entry point, so generation fails if a dependency is
+missing or an unrelated hosted-runtime module is added. The backend image
+copies that package directly and does not import the sibling hosted-agent
+source, expand its Docker context to the repository root, or install the
+hosting SDK. The full hosted package initializer is also non-eager.
+Instantiation tests require byte-for-byte API/hosted module parity and an
+import resolved from the backend directory.
 
 The API implements the exported `HostedBusinessStore` seam against its
 application-owned PostgreSQL state:
@@ -403,9 +407,15 @@ ID for the hosted version, so callers must not invent one.
   and contained 56 files.
 - A generated backend image built from its normal backend-only context using
   the configured Python package proxy. An in-container import resolved
-  `order_resolution_hosted.bridge` and `order_resolution_hosted.client` from
-  `/app/order_resolution_hosted`, verifying that the API-side package is
-  present without a sibling source path or hosted SDK dependency.
+  `order_resolution_hosted.bridge`, `order_resolution_hosted.client`, and
+  `order_resolution_hosted.credentials` from `/app/order_resolution_hosted`,
+  verifying that the complete API-side import graph is present without a
+  sibling source path or hosted SDK dependency.
+- The packaging-blocker correction passes 17 focused generator/infrastructure
+  contracts, 164 independently generated PostgreSQL 17 tests, and the normal
+  generated backend image build/import/composition smoke. The failed cloud
+  revision is not counted as repaired until exact-head CI and a separately
+  authorized immutable deployment pass.
 - Normal API startup with C's concrete backend-native `WorkflowHost`
   composition is locally verified at the exact C revision above. This does not
   verify a deployed Foundry host, managed identity, RBAC, network, or live

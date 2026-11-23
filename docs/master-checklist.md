@@ -75,6 +75,20 @@ addresses plus the operator address only if still needed. Production
 authorization remains unverified. The original architecture HTML remains
 unchanged.
 
+The later observability rollout exposed an independent generated-image
+packaging blocker before any replacement was created: the API bridge copied
+`bridge.py` and `client.py`, but `client.py` now imports the app-owned
+`credentials.py` module. The generator now owns an explicit typed three-file
+manifest and validates it against the complete transitive relative-import
+graph, rejecting both missing and unrelated sibling modules. Focused generator
+and infrastructure contracts pass 17 tests, the independently generated
+PostgreSQL 17 selection passes 164 tests, and the normal backend-only image
+build imports `bridge`, `client`, and `credentials` from one image package
+before composing `ResponsesWorkflowHost`. This is source/package evidence, not
+new cloud acceptance. Deployment may resume only from a green exact-head run
+and in a separately authorized immutable rollout that replaces the failed
+revision.
+
 ## Azure/Foundry Workstream C
 
 **Status: In Progress.** The cloud application increment adds an SDK-free

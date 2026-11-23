@@ -54,6 +54,22 @@ complete only separately authorized hosted/browser/evaluation checks, and
 restrict the firewall. These checks do not authorize merge, release, or
 production-risk acceptance.
 
+A subsequent observability deployment stopped before replacement after the
+immutable API image failed during module import:
+`order_resolution_hosted.client` required the newly app-owned
+`order_resolution_hosted.credentials` sibling, while the independent-project
+generator still copied only the historical two-file bridge set. The correction
+uses one typed generator manifest for `bridge.py`, `client.py`, and
+`credentials.py`, derives the transitive local relative-import closure from the
+entry point, and fails generation if the manifest omits a dependency or adds an
+unrelated hosted-runtime module. The generated-project contract, deployment
+preflight contract, temporary composed-wire fixture, and in-image smoke now
+share that package boundary. Local evidence is 17 focused source contracts,
+164 independently generated PostgreSQL tests, and a successful normal
+backend-only image import/composition regression. No Azure, Foundry, RBAC,
+traffic, workflow, database, or firewall mutation is claimed. Resume deployment
+only from a green exact-head run in a separately authorized phase.
+
 ## Phase 0: foundation
 
 The [foundation PR](https://github.com/ppenumatsa1/agent-blueprints/pull/1)
