@@ -77,9 +77,7 @@ class OrderResolutionExecutor(Executor):
             ):
                 if approval_required:
                     request_id = message.get("request_id")
-                    if request_id is not None and (
-                        not request_id.strip() or len(request_id) > 256
-                    ):
+                    if request_id is not None and (not request_id.strip() or len(request_id) > 256):
                         raise ValueError("The hosted request identity is invalid.")
                     request_data = {
                         "case_id": str(case_id),
