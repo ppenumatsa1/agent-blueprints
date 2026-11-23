@@ -4,6 +4,13 @@ This document defines the cloud application boundary for the generated MAF
 FastAPI and Order Resolution profile. It does not provision Azure resources,
 grant roles, deploy a hosted agent, or establish live readiness.
 
+The 2026-11-23 live boundary check passed unauthenticated `401` responses for
+protected read, submission, and hosted-state access. Positive delegated user
+authorization remained blocked because Azure CLI token acquisition returned
+`consent_required`, and no short-lived authenticated Playwright state was
+available. No consent grant, app registration, role, or business record was
+changed to bypass that result.
+
 ## Identity and authorization matrix
 
 | Identity | Credential boundary | Authorized purpose | Validation and binding |

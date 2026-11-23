@@ -1,11 +1,13 @@
 # Azure/Foundry Workstream A: native MAF hosting
 
-Status date: 2026-11-22
+Status date: 2026-11-23
 
-This report covers the source and mocked/local compatibility work for the
-generated Order Resolution application's Microsoft Foundry Hosted Agent. It
-does not claim that an agent version was published, an Azure resource was
-created, RBAC was changed, or a live hosted continuation was verified.
+This report covers the source and compatibility work for the generated Order
+Resolution application's Microsoft Foundry Hosted Agent. Version
+`order-resolution:1` is now active with exact-scoped API consumer RBAC and the
+hosted API application role. A human-authorized live continuation is still
+unverified: the 2026-11-23 operator lacked hosted session-create permission
+and delegated API consent, and no reviewed live fault adapter was available.
 
 ## Runtime and state boundary
 

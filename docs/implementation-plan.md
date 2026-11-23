@@ -918,10 +918,15 @@ Acceptance requires:
 The exact commands, GitHub environment inputs, evidence schemas, baseline CI,
 region reference, current blocked/unverified matrix, and dependencies on
 Agents A-C are in the [Workstream D readiness guide](azure-foundry/readiness.md).
-Next action: complete exact-head local/CI validation, then consume the immutable
-deployment and live adapter outputs from Agents A-C. Credential-free CI is
-implementation evidence only; Azure runtime remains unverified until the
-manual live gates produce matching evidence.
+Exact head `c63b48afa4179a3d92c286aeb6ae339e16ece275` passed all seven CI
+jobs in run `45158642321`; the immutable API/web revisions and HTTP boundaries
+also passed. The 2026-11-23 live attempt then preserved the remaining outcomes:
+delegated workflow, provider, failure, ORS-001–009, and authenticated-browser
+gates are blocked; telemetry correlation and normalized deployment evidence
+failed. Next action: deploy exact runtime revision metadata, publish the
+deployment artifact, and supply reviewed short-lived authentication and live
+adapters before rerunning. Credential-free CI remains implementation evidence
+only.
 The release manifest cannot waive or authorize production checks; production
 requires the baseline-pinned trust validator, signed result attestations, and
 scoped, unexpired risk decisions, while critical/security-critical blocking

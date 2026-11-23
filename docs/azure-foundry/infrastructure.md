@@ -414,9 +414,17 @@ Azure nginx patch enables upstream TLS SNI before each HTTPS proxy pass; the
 deployment contract prevents regression. Hosted code still has no direct
 PostgreSQL connectivity by design.
 
-Still not verified: a real hosted business invocation, restore, telemetry
-ingestion, authenticated browser execution, evaluation quality, rollback in
-Azure, teardown, or production readiness. No business action was executed.
+The temporary PostgreSQL public rule remains the only firewall rule. The
+Container App currently reports 407 possible outbound addresses, so deleting
+the broad rule without first installing and validating a replacement path
+would break API database connectivity. Replace it with a controlled egress
+design or reviewed exact rules before removal; do not treat successful
+managed-identity authentication as a network firewall substitute.
+
+Still not verified: a real hosted business invocation, restore, exact
+telemetry correlation, authenticated browser execution, evaluation quality,
+rollback in Azure, teardown, or production readiness. No business action was
+executed.
 
 The deployment route never targets the source blueprint. It instantiates an
 independent Order Resolution project, validates the generated hosted/app

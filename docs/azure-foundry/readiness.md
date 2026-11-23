@@ -258,3 +258,39 @@ Until those outputs are integrated and a live manual workflow completes,
 Azure runtime remains `unverified`. Production remains `blocked` until
 independent security, cost, and scoped human risk-acceptance evidence is
 attached to the same source and deployment revisions.
+
+## Live acceptance attempt — 2026-11-23
+
+Exact source `c63b48afa4179a3d92c286aeb6ae339e16ece275` passed all seven CI
+jobs in run `45158642321`; all 12 downloaded revision-bound implementation
+documents name that exact source. Read-only runtime checks passed for API
+revision `aborsfoundpv2n45-api--final-2ef5161` and web revision
+`aborsfoundpv2n45-web--final-9d5a663`, each healthy, running, digest pinned,
+and receiving 100 percent traffic. The API returned `/healthz` `204`, rejected
+unauthenticated reads and submissions with `401`, and logged a successful
+managed-identity `database.connect`. The web returned root `200` and proxied
+health `204`. Hosted version `order-resolution:1` remained active with the
+documented agent-scoped consumer assignment and `Hosted.Workflow.Invoke`.
+
+The remaining live suite did not pass and was not replaced with fixtures:
+
+- positive synthetic workflow and ORS-001–009 were `blocked` because the
+  operator could not obtain a delegated API token (`consent_required`);
+- direct hosted invocation was `blocked` because the operator identity lacked
+  the agent session-create action;
+- authenticated Chromium was `blocked` because no short-lived Playwright state
+  existed and browser access to the deployed origin was denied;
+- failure injection was `blocked` because no reviewed live adapter or bounded
+  cloud fault-control surface exists;
+- provider evaluation was `blocked` because no reviewed live result/evaluator
+  factories or authentication were configured;
+- exact telemetry correlation `failed`: 13 recent request/dependency rows had
+  zero request/case-correlated rows and reported agent `0.1.0` with deployment
+  `local-unversioned`, not hosted version `1` and an immutable deployment
+  revision; and
+- the normalized deployment-evidence gate `failed` because the retained values
+  file omitted final hosted fields and no deployment-run artifact was
+  available.
+
+No refund, shipment, or other consequential effect was executed. Production
+and merge authorization remain blocked.

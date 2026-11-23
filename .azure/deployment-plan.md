@@ -229,11 +229,22 @@ privileges without schema create or elevated role attributes.
 
 The temporary E2E rule `temporary-e2e-public-remove-after-e2e` currently spans
 `0.0.0.0` through `255.255.255.255`. It is authorized only for the active E2E
-window and must be removed after E2E, then replaced by the actual API Container
-App outbound addresses plus the current operator machine address if operator
-access remains necessary. The current API revision is still the Azure sample
-placeholder, so managed-identity token authentication from the real API
-runtime remains unverified.
+window and must be removed after E2E, then replaced by a controlled egress
+path or the reviewed API Container App outbound addresses plus the current
+operator machine address if operator access remains necessary. It is currently
+the only PostgreSQL firewall rule; deleting it before replacement would break
+the public API-to-database path. The sole active generated API revision now
+logs a successful managed-identity `database.connect`, returns health `204`,
+and rejects unauthenticated protected requests with `401`.
+
+The 2026-11-23 live acceptance attempt passed the immutable API/web runtime
+and HTTP boundaries but did not clear the release gate. Delegated workflow
+authorization, provider evaluation, ORS-001–009, authenticated Chromium, and
+live fault injection were blocked by missing consent/authentication or live
+adapters. Exact telemetry correlation failed because the deployed runtime
+reported agent `0.1.0` and deployment `local-unversioned`; the retained
+normalized values also omitted final hosted fields. These defects must be
+corrected and independently rerun before merge or Azure runtime readiness.
 
 The live migration also exposed two Windows operator defects: PowerShell
 treated `$database?sslmode` as one variable name, and bundled psycopg could not
@@ -326,8 +337,10 @@ CMD/app lifespan passed against isolated PostgreSQL 17 with inherited
 `SSL_CERT_FILE`, `verify-full`, `sslrootcert=system`, and
 `pg_stat_ssl.ssl=true`; health returned `204` and protected API access returned
 `401`. Wrong-hostname and untrusted-CA negatives failed closed. B did not rerun
-that PostgreSQL suite. Canonical packaging evidence is complete; live Azure
-behavior remains unverified.
+that PostgreSQL suite. Canonical packaging evidence is complete. Live image, health,
+authentication, and managed-identity database startup are verified;
+human-authorized hosted workflow, recovery, evaluation, browser, and exact
+telemetry evidence remain blocked or failed as recorded above.
 The exact generated web target was separately built with the credentialless
 HTTPS npm proxy `https://packagefeedproxy.microsoft.io/npm/`; it retained
 `npm ci` and produced content image-manifest digest

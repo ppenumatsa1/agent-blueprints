@@ -28,6 +28,19 @@ proves local composition and TLS enforcement, not Azure identity issuance,
 live Foundry checkpoint/recovery behavior, or production readiness.
 The preserved original architecture HTML is not revised by this integration.
 
+## Live acceptance boundary
+
+The 2026-11-23 acceptance attempt verified the deployed immutable API/web
+revisions, public HTTP boundaries, managed-identity database connection, active
+hosted version, and exact-scoped RBAC. It did not verify a human-authorized
+hosted workflow. Delegated API consent, authenticated browser state, reviewed
+provider/result factories, and bounded live fault controls were unavailable.
+Application Insights also identified the runtime as agent `0.1.0` and
+deployment `local-unversioned`, so its rows cannot satisfy exact hosted
+revision correlation. These are explicit blocked/failed evidence boundaries,
+not reasons to collapse Foundry state, business state, authentication, or
+approval into a shared runtime.
+
 ## Open architecture and verification gaps
 
 The engineering foundation is not a deployment-readiness claim. Open work
