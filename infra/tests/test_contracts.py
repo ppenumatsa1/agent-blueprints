@@ -372,6 +372,7 @@ class InfrastructureContractTests(unittest.TestCase):
         )
         self.assertNotIn("SSL_CERT_FILE=", scripts["deploy.ps1"])
         self.assertIn("proxy_pass http://api:8000;", scripts["deploy.ps1"])
+        self.assertIn("proxy_ssl_server_name on;", scripts["deploy.ps1"])
         self.assertNotIn("blueprints\\maf\\workflow", scripts["deploy.ps1"])
         self.assertNotIn("CHECKPOINT_ROOT", scripts["deploy.ps1"])
         self.assertNotIn("BLUEPRINT_APPLICATION", scripts["deploy.ps1"])

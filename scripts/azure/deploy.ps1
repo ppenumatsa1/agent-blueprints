@@ -504,7 +504,7 @@ try {
 
     $patchedNginx = $nginxSource.Replace(
         'proxy_pass http://api:8000;',
-        "proxy_pass https://$apiFqdn;"
+        "proxy_ssl_server_name on;`n        proxy_pass https://$apiFqdn;"
     )
     Set-Content -LiteralPath $nginxPath -Value $patchedNginx -NoNewline
     Push-Location (Join-Path $generatedRoot 'frontend')
