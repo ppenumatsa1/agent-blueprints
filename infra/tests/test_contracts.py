@@ -274,6 +274,11 @@ class InfrastructureContractTests(unittest.TestCase):
         )
         self.assertIn("deployment-operator", scripts["common.ps1"])
         self.assertIn("configure-entra.ps1", scripts["deploy.ps1"])
+        self.assertIn("[switch]$SkipPostgresConfiguration", scripts["deploy.ps1"])
+        self.assertIn(
+            "if (-not $SkipPostgresConfiguration)",
+            scripts["deploy.ps1"],
+        )
         self.assertRegex(
             scripts["deploy.ps1"],
             r"\[Parameter\(Mandatory\)\]\s*\[string\]\$WorkingRoot",

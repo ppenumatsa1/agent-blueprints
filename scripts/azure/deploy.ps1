@@ -2,6 +2,7 @@
 param(
     [switch]$Apply,
     [switch]$SkipMigration,
+    [switch]$SkipPostgresConfiguration,
     [ValidateSet('AzureCli', 'Azd')]
     [string]$DeploymentMode = 'AzureCli',
     [Parameter(Mandatory)]
@@ -275,11 +276,13 @@ try {
         -FrontendRedirectUri "https://$(Get-RequiredValue $values 'AZURE_WEB_FQDN')" `
         -OperatorObjectId $OperatorObjectId | Out-Null
 
-    & "$PSScriptRoot\configure-postgres.ps1" `
-        -Apply `
-        -DeploymentMode AzureCli `
-        -ValuesFile $OutputsFile `
-        -OperatorIp $OperatorIp
+    if (-not $SkipPostgresConfiguration) {
+        & "$PSScriptRoot\configure-postgres.ps1" `
+            -Apply `
+            -DeploymentMode AzureCli `
+            -ValuesFile $OutputsFile `
+            -OperatorIp $OperatorIp
+    }
     $databaseUser = [uri]::EscapeDataString(
         (Get-RequiredValue $values 'AZURE_API_IDENTITY_NAME')
     )

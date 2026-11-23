@@ -1011,6 +1011,16 @@ rejects the repository or any descendant immediately. The authorized retry
 uses the session evidence directory, which is outside the source tree and not
 an operating-system temporary directory.
 
+The external-root retry completed the provider deployment, then exposed that
+application-only redeployment still replayed the one-time PostgreSQL
+configuration path. The Container Apps environment currently advertises more
+than 400 possible outbound addresses, and serial Flexible Server firewall
+updates cannot be part of each immutable application rollout. Deployment now
+has an explicit `SkipPostgresConfiguration` path for an already configured
+environment; it does not remove the temporary public rule, change database
+roles, skip application health checks, or claim that controlled replacement
+egress is complete.
+
 The release manifest cannot waive or authorize production checks; production
 requires the baseline-pinned trust validator, signed result attestations, and
 scoped, unexpired risk decisions, while critical/security-critical blocking

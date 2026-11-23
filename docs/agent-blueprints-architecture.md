@@ -706,6 +706,10 @@ configuration operation instead of broadening the preflight contract.
 Generated deployment work is required to live outside the blueprint repository
 so the independent-project guard remains meaningful; callers supply a durable
 evidence root rather than falling back to an operating-system temporary path.
+PostgreSQL principal and firewall configuration is a separately selectable
+deployment stage so an immutable application-only rollout does not replay
+one-time database administration; skipping that stage does not relax runtime
+TLS, managed identity, or post-deployment health verification.
 Production authorization remains solely with the baseline-pinned trust
 validator, signed result attestations, and scoped, unexpired risk decisions;
 self-authored review files cannot waive critical or security-critical gates.
