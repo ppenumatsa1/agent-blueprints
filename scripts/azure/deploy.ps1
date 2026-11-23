@@ -315,6 +315,7 @@ try {
             --image "order-resolution-api:$imageTag" `
             --file Dockerfile `
             . `
+            --no-logs `
             --only-show-errors
         if ($LASTEXITCODE -ne 0) { throw 'Generated API image build failed.' }
     }
@@ -591,6 +592,7 @@ try {
             --build-arg "VITE_ENTRA_SPA_CLIENT_ID=$($entra.spaClientId)" `
             --build-arg "VITE_ENTRA_API_APP_ID_URI=$($entra.apiAppIdUri)" `
             . `
+            --no-logs `
             --only-show-errors
         if ($LASTEXITCODE -ne 0) { throw 'Generated frontend image build failed.' }
     }

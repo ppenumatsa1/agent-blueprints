@@ -303,6 +303,7 @@ class InfrastructureContractTests(unittest.TestCase):
         self.assertIn("az deployment sub create", scripts["deploy.ps1"])
         self.assertIn("$name.ToUpperInvariant()", scripts["deploy.ps1"])
         self.assertIn("az acr build", scripts["deploy.ps1"])
+        self.assertEqual(scripts["deploy.ps1"].count("--no-logs"), 2)
         self.assertIn(
             "networkRuleSetDefaultAction: 'Allow'",
             (ROOT / "infra" / "modules" / "registry.bicep").read_text(
