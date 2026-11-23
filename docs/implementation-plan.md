@@ -1126,8 +1126,21 @@ unexpected roles, and arbitrary hosted orphans. The external reference
 uses an application-owned handler span rather than a package-generated root;
 it was inspected only as behavioral evidence. Local evidence is 103 root tests
 with two disclosed skips, 53 generated hosted-agent tests, nine publisher
-tests, nine infrastructure contracts, Ruff, and PowerShell parsing. Exact-head
-CI, immutable deployment, and one live correlated trace remain required.
+tests, nine infrastructure contracts, Ruff, and PowerShell parsing.
+
+The immutable version-5 proof on revision
+`acf2911b76b470d5b7254d97ba2b6934f5444ddb` passed for the safe start path.
+Trace `9ff606620c4a4d728da127c531ffef40` contains one marked app-owned
+`invoke_agent` root, 101 hosted spans and 37 API spans. All 136 emitted parent
+edges resolve; the remaining two parents are the expected external caller and
+non-exported AgentServer platform contexts. Foundry indexes the same root with
+the exact conversation and version 5, while App Insights records the exact
+case, deployment revision, project and session. There are zero correlated
+exceptions, exporter failures, raw-content fields, synthetic payload leaks or
+pending effects. The evidence tooling now queries both request and dependency
+tables for the supported app-owned root and validates the two-component
+distributed forest rather than incorrectly requiring one root per service.
+Resume/link proof remains blocked on the distinct reviewer credential.
 
 The release manifest cannot waive or authorize production checks; production
 requires the baseline-pinned trust validator, signed result attestations, and

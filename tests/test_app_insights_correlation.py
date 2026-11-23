@@ -294,9 +294,10 @@ class AppInsightsCorrelationTests(unittest.TestCase):
                     "operation_name": "",
                 }
                 for index, name in (
-                    (4, "invoke_workflow"),
+                    (4, "workflow.build"),
                     (5, "executor.process approval"),
-                    (6, "message.send"),
+                    (6, "invoke_workflow approval-workflow-v1"),
+                    (10, "edge_group.process InternalEdgeGroup"),
                     (7, f"order_resolution.workflow.{item['hosted_phase']}"),
                 )
             ]
@@ -342,6 +343,17 @@ class AppInsightsCorrelationTests(unittest.TestCase):
         self.assertEqual(
             {item["graph_mode"] for item in artifact["validated_hosted_traces"]},
             {"platform-parent-gap"},
+        )
+        self.assertEqual(
+            {
+                boundary["classification"]
+                for item in artifact["validated_hosted_traces"]
+                for boundary in item["boundary_classifications"]
+            },
+            {
+                "expected-external-caller-boundary",
+                "expected-agentserver-platform-parent-boundary",
+            },
         )
         self.assertEqual(
             {

@@ -23,7 +23,7 @@ def _query(trace_ids, started_at):
     return _single_line(
         f"""
         let expected = dynamic([{expected}]);
-        AppRequests
+        union withsource=table_name AppRequests, AppDependencies
         | where TimeGenerated between (datetime({_quoted(started_at)}) .. now())
         | extend trace_id=tolower(tostring(OperationId)), properties=Properties
         | where trace_id in (expected)
@@ -41,6 +41,7 @@ def _query(trace_ids, started_at):
                      tostring(properties['azure.ai.agentserver.agent_version'])
                  ),
                  foundry_marker=coalesce(
+                     tostring(properties['microsoft.foundry']),
                      tostring(properties['azure.ai.foundry.agent.id']),
                      tostring(properties['azure.ai.agentserver.agent_id']),
                      tostring(properties['azure.ai.agentserver.is_hosted'])

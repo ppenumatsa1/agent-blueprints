@@ -95,6 +95,11 @@ class FoundryTrajectoryEvidenceTests(unittest.TestCase):
         query = command[command.index("--analytics-query") + 1]
         self.assertIn("invoke_agent", query)
         self.assertIn(
+            "union withsource=table_name AppRequests, AppDependencies",
+            query,
+        )
+        self.assertIn("microsoft.foundry", query)
+        self.assertIn(
             "dynamic(['1234567890abcdef1234567890abcdef',"
             "'2234567890abcdef1234567890abcdef'])",
             query,

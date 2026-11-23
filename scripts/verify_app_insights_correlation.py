@@ -261,18 +261,27 @@ def _validate_trace_rows(expected, rows, foundry_trace_ids):
             )
         root_kind = "app-owned-hook"
         names = {str(row.get("span_name", "")) for row in trace_rows}
-        required = {
-            "invoke_workflow",
-            "executor.process approval",
-            "message.send",
+        required_exact = {
+            "workflow.build",
             f"order_resolution.workflow.{item['hosted_phase']}",
         }
-        if not required.issubset(names):
+        required_prefixes = (
+            "invoke_workflow",
+            "executor.process approval",
+            "edge_group.process",
+        )
+        if not required_exact.issubset(names) or any(
+            not any(name.startswith(prefix) for name in names)
+            for prefix in required_prefixes
+        ):
             raise RuntimeError(
                 "The trace is missing required native or business spans."
             )
         span_rows = [
-            row for row in trace_rows if len(str(row.get("span_id", ""))) == 16
+            row
+            for row in trace_rows
+            if row.get("table_name") in {"AppRequests", "AppDependencies"}
+            and len(str(row.get("span_id", ""))) == 16
         ]
         ids = {str(row["span_id"]).lower() for row in span_rows}
         if len(ids) != len(span_rows):
@@ -292,58 +301,71 @@ def _validate_trace_rows(expected, rows, foundry_trace_ids):
         if unexpected:
             raise RuntimeError("The trace contains spans from an unexpected role.")
 
-        def validate_subgraph(role_rows, required_root_id, label):
-            role_ids = {str(row["span_id"]).lower() for row in role_rows}
-            roots = [
-                row
-                for row in role_rows
-                if not row.get("parent_id")
-                or str(row.get("parent_id")).lower() not in role_ids
-            ]
-            if len(roots) != 1:
-                raise RuntimeError(f"The {label} trace must have one connected root.")
-            root_id = str(roots[0]["span_id"]).lower()
-            if required_root_id is not None and root_id != required_root_id:
-                raise RuntimeError(f"The {label} root is not the invoke_agent span.")
-            children = {}
-            for row in role_rows:
-                children.setdefault(
-                    str(row.get("parent_id", "")).lower(),
-                    [],
-                ).append(str(row["span_id"]).lower())
-            visited = set()
-            pending = [root_id]
-            while pending:
-                span_id = pending.pop()
-                if span_id in visited:
-                    continue
-                visited.add(span_id)
-                pending.extend(children.get(span_id, ()))
-            if visited != role_ids:
-                raise RuntimeError(f"The {label} trace contains disconnected spans.")
-            external_parent = str(roots[0].get("parent_id", "")).lower()
-            return external_parent if external_parent not in role_ids else ""
-
         api_rows = [row for row in span_rows if row.get("role_name") == api_role]
         hosted_rows = [row for row in span_rows if row.get("role_name") == hosted_role]
         if not api_rows or not hosted_rows:
             raise RuntimeError("The trace lacks a required service span graph.")
-        api_external_parent = validate_subgraph(api_rows, None, "API")
-        hosted_external_parent = validate_subgraph(
-            hosted_rows,
-            str(hosted_root["span_id"]).lower(),
-            "hosted",
+        boundaries = [
+            row
+            for row in span_rows
+            if str(row.get("parent_id", "")).lower() not in ids
+        ]
+        if len(boundaries) != 2:
+            raise RuntimeError(
+                "The trace must expose exactly two distributed boundary parents."
+            )
+        api_boundaries = [
+            row for row in boundaries if row.get("role_name") == api_role
+        ]
+        if len(api_boundaries) != 1:
+            raise RuntimeError("The API caller boundary is ambiguous.")
+        hosted_boundary = next(
+            (
+                row
+                for row in boundaries
+                if str(row.get("span_id", "")).lower()
+                == str(hosted_root["span_id"]).lower()
+            ),
+            None,
         )
-        if not hosted_external_parent:
+        if hosted_boundary is None:
             raise RuntimeError(
                 "The hosted invoke_agent root lacks its propagated platform parent."
             )
-        graph_mode = (
-            "platform-parent-gap"
-            if hosted_external_parent
-            not in {str(row["span_id"]).lower() for row in api_rows}
-            else "connected"
-        )
+        external_parents = {
+            str(row.get("parent_id", "")).lower() for row in boundaries
+        }
+        if "" in external_parents or len(external_parents) != 2:
+            raise RuntimeError("The distributed boundary parents are not explicit.")
+        children = {}
+        for row in span_rows:
+            children.setdefault(
+                str(row.get("parent_id", "")).lower(),
+                [],
+            ).append(str(row["span_id"]).lower())
+        visited = set()
+        pending = [str(row["span_id"]).lower() for row in boundaries]
+        while pending:
+            span_id = pending.pop()
+            if span_id in visited:
+                continue
+            visited.add(span_id)
+            pending.extend(children.get(span_id, ()))
+        if visited != ids:
+            raise RuntimeError("The distributed trace contains disconnected spans.")
+        boundary_classifications = [
+            {
+                "parent_id": str(api_boundaries[0]["parent_id"]).lower(),
+                "child_span_id": str(api_boundaries[0]["span_id"]).lower(),
+                "classification": "expected-external-caller-boundary",
+            },
+            {
+                "parent_id": str(hosted_boundary["parent_id"]).lower(),
+                "child_span_id": str(hosted_boundary["span_id"]).lower(),
+                "classification": "expected-agentserver-platform-parent-boundary",
+            },
+        ]
+        graph_mode = "platform-parent-gap"
         key = (item["case_id"], item["conversation_id"])
         if item["hosted_phase"] == "resume":
             restart = next(
@@ -371,16 +393,8 @@ def _validate_trace_rows(expected, rows, foundry_trace_ids):
                 "hosted_phase": item["hosted_phase"],
                 "root_kind": root_kind,
                 "graph_mode": graph_mode,
-                "external_parent_count": len(
-                    {
-                        parent
-                        for parent in (
-                            api_external_parent,
-                            hosted_external_parent,
-                        )
-                        if parent
-                    }
-                ),
+                "external_parent_count": len(external_parents),
+                "boundary_classifications": boundary_classifications,
                 "span_count": len(span_rows),
             }
         )

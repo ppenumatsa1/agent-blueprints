@@ -290,6 +290,21 @@ and remote-parent fact so the verifier can distinguish the unavoidable
 platform gap from arbitrary orphaned telemetry. `SOURCE_REVISION` and
 `DEPLOYMENT_REVISION` are privacy-safe, publication-bound hosted inputs.
 
+The version-5 live proof on source/deployment revision
+`acf2911b76b470d5b7254d97ba2b6934f5444ddb` validated this boundary.
+Trace `9ff606620c4a4d728da127c531ffef40` has exactly one hook-created
+`invoke_agent` dependency root, 101 hosted spans, 37 API spans and 136 resolved
+parent edges. Its two unmatched parents are explicitly classified as the
+external caller context and the non-exported AgentServer platform context; the
+hook root carries the required remote-parent marker. Foundry indexes the same
+root with conversation
+`conv_074ee32a0eb689c100PoXtqRjgxlaM5N448mfki3JExHKiP9mR`, version 5 and the
+active hosted session. App Insights reports zero correlated exceptions,
+exporter failures, raw semantic-content fields or synthetic payload leaks, and
+the durable case remains pending with zero effects. Start-path proof passes;
+resume and its explicit durable link remain separately blocked until the
+assigned reviewer credential is available.
+
 This customization does not recreate native MAF spans or replace the provider,
 exporter, propagation, instrumentation, enrichment, sampling, or flush
 pipeline. As read-only behavioral evidence, `ppenumatsa1/maf-monorepo`
