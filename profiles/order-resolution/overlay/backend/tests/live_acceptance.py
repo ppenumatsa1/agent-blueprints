@@ -146,7 +146,6 @@ class LiveClient:
         body: dict | None = None,
         idempotency_key: str | None = None,
         case_id: str | None = None,
-        request_id: str | None = None,
     ) -> tuple[int, dict, dict[str, str]]:
         trace_id = uuid4().hex
         headers = {
@@ -175,13 +174,15 @@ class LiveClient:
             response_headers = {name.lower(): value for name, value in error.headers.items()}
         parsed = json.loads(payload) if payload else {}
         returned_trace = response_headers.get("traceparent", "")
-        if returned_trace and case_id and request_id:
+        correlation_request_id = response_headers.get("x-correlation-id", "")
+        correlation_case_id = case_id or parsed.get("id")
+        if returned_trace and correlation_case_id and correlation_request_id:
             parts = returned_trace.split("-")
             if len(parts) == 4:
                 self.correlations.append(
                     {
-                        "request_id": request_id,
-                        "case_id": case_id,
+                        "request_id": correlation_request_id,
+                        "case_id": correlation_case_id,
                         "trace_id": parts[1],
                         "agent_version": os.environ["AGENT_VERSION"],
                         "deployment_revision": self.deployment_revision,
@@ -244,7 +245,6 @@ class LiveClient:
                 "channel": "foundry-responses",
             },
             case_id=record["id"],
-            request_id=record["decision_handle"],
         )
 
     def control(
@@ -315,7 +315,7 @@ class LiveHostedFailureAdapter:
 
     def create(self, idempotency_key: str, *, lose_ack: bool = False) -> HostedRecord:
         case = next(item for item in GOLDEN_CASES if item["id"] == "ORS-002")
-        record, headers = self.client.submit(_payload(case), idempotency_key)
+        record, _ = self.client.submit(_payload(case), idempotency_key)
         request_id = record["decision_handle"]
         if not request_id:
             case_id = self.keys.get(idempotency_key)
@@ -329,17 +329,6 @@ class LiveHostedFailureAdapter:
             "request_id": request_id,
             "idempotency_key": idempotency_key,
         }
-        traceparent = headers.get("traceparent", "")
-        if traceparent:
-            self.client.correlations.append(
-                {
-                    "request_id": request_id,
-                    "case_id": case_id,
-                    "trace_id": traceparent.split("-")[1],
-                    "agent_version": self.agent_version,
-                    "deployment_revision": self.deployment_revision,
-                }
-            )
         result = self._record(case_id)
         if lose_ack:
             raise UnknownOutcome("The synthetic client discarded the acknowledged response.")

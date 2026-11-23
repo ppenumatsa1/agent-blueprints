@@ -1,5 +1,6 @@
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 from uuid import UUID
 
 from app.api.routes.acceptance import _authorized, case_control
@@ -11,6 +12,7 @@ from app.order_resolution.acceptance import AcceptanceFaults
 from app.order_resolution.durability import Proposal
 from app.order_resolution.persistence import OrderResolutionStore
 from app.order_resolution.service import OrderResolutionService
+from tests.live_acceptance import LiveClient
 
 
 CASE_ID = UUID("10000000-0000-4000-8000-000000000001")
@@ -53,6 +55,57 @@ class FakeConnection:
 
 
 class AcceptanceFaultTests(unittest.TestCase):
+    def test_live_client_uses_response_correlation_id_for_telemetry_pair(self):
+        case_id = "20000000-0000-4000-8000-000000000002"
+        request_id = "30000000-0000-4000-8000-000000000003"
+        trace_id = "4" * 32
+
+        class Response:
+            status = 200
+            headers = {
+                "X-Correlation-ID": request_id,
+                "traceparent": f"00-{trace_id}-{'5' * 16}-01",
+            }
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return None
+
+            @staticmethod
+            def read():
+                return f'{{"id":"{case_id}"}}'.encode()
+
+        client = object.__new__(LiveClient)
+        client.base_url = "https://api.example.test"
+        client.deployment_revision = REVISION
+        client.correlations = []
+        with (
+            patch("tests.live_acceptance.urllib.request.urlopen", return_value=Response()),
+            patch.dict("os.environ", {"AGENT_VERSION": "1"}),
+        ):
+            status, _, _ = client.request(
+                "POST",
+                "/api/cases",
+                {"access_token": "token"},
+                body={"synthetic": True},
+            )
+
+        self.assertEqual(status, 200)
+        self.assertEqual(
+            client.correlations,
+            [
+                {
+                    "request_id": request_id,
+                    "case_id": case_id,
+                    "trace_id": trace_id,
+                    "agent_version": "1",
+                    "deployment_revision": REVISION,
+                }
+            ],
+        )
+
     def test_controls_are_revision_bound_and_one_shot(self):
         faults = AcceptanceFaults(enabled=True, deployment_revision=REVISION)
         faults.authorize_revision(REVISION)
