@@ -62,6 +62,10 @@ credential.
 
 PostgreSQL stores business state plus opaque operation/execution/request
 correlation, never MAF checkpoint bytes. Dispatch is claimed before send.
+The API container installs the Debian CA bundle and exports
+`SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt`; this is a trust-store
+discovery hint for bundled libpq/OpenSSL, not a TLS-policy override.
+`PGSSLROOTCERT=system` and `verify-full` remain the application contract.
 Ambiguous acknowledgments remain unknown and are reconciled by operation ID
 after restart rather than replayed. The native hosted workflow owns action invocation; PostgreSQL verifies and
 projects the idempotent business outcome, preserving the action ledger and

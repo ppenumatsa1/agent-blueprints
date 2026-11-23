@@ -51,7 +51,10 @@ acknowledged journal without a second Responses dispatch, and one
 decision/effect with null checkpoint fields.
 Fresh generated Compose built through approved package proxies, ran explicit
 migrations, became healthy, and returned root `200`, health `204`, and
-protected API `401`. The
+protected API `401`. The canonical backend image also exports
+`SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt` so bundled libpq/OpenSSL
+discovers the same readable system bundle selected by
+`PGSSLROOTCERT=system`; `verify-full` remains mandatory. The
 [application security contract](azure-foundry/application-security.md)
 records the identity matrix, Agent A interface, Agent B outputs, OBO decision,
 and recovery behavior. Draft PR [#48](https://github.com/ppenumatsa1/agent-blueprints/pull/48)

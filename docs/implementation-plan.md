@@ -115,6 +115,10 @@ Implementation acceptance criteria:
 - explicit migrations, startup schema validation, runtime/admin identity
   separation, TLS verification, bounded pools, and managed-identity or secret
   authentication;
+- a readable Debian CA bundle plus
+  `SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt` in the canonical and
+  generated API images so bundled libpq/OpenSSL can honor
+  `PGSSLROOTCERT=system` under `verify-full`;
 - unchanged frontend/API and ORS-001..009 contracts, atomic stores and effect
   ledger, and no duplicate synthetic effects; and
 - local PostgreSQL/native Responses-wire tests plus generated-project and

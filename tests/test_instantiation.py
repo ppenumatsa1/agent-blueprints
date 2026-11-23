@@ -212,6 +212,15 @@ class InstantiationTests(unittest.TestCase):
                     (target / relative).read_bytes(),
                 )
             self.assertTrue((target / "backend" / "Dockerfile").is_file())
+            generated_dockerfile = (target / "backend" / "Dockerfile").read_bytes()
+            self.assertEqual(
+                (ROOT / "blueprints" / "maf" / "workflow" / "backend" / "Dockerfile").read_bytes(),
+                generated_dockerfile,
+            )
+            self.assertIn(
+                b"SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt",
+                generated_dockerfile,
+            )
             for relative in (
                 Path("agent-framework-core.sha256"),
                 Path("scripts") / "verify_framework_supply_chain.py",

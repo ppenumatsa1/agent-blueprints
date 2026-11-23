@@ -164,6 +164,12 @@ Runtime and migration identities are separate configuration surfaces:
   `system` or the generated container CA bundle at
   `/etc/ssl/certs/ca-certificates.crt`; TLS `require` without host verification
   is rejected.
+- The canonical and generated API images export
+  `SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt`. Psycopg's bundled
+  libpq/OpenSSL does not reliably discover Debian's CA bundle from
+  `PGSSLROOTCERT=system` alone. This environment variable points OpenSSL at the
+  same readable bundle; it does not disable certificate or hostname
+  verification and must not be overridden by deployment configuration.
 - `DATABASE_POOL_MIN_SIZE`, `DATABASE_POOL_MAX_SIZE`,
   `DATABASE_POOL_TIMEOUT_SECONDS`, and
   `DATABASE_CONNECTION_MAX_LIFETIME_SECONDS` bound connection use and ensure
