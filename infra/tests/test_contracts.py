@@ -257,6 +257,14 @@ class InfrastructureContractTests(unittest.TestCase):
         self.assertIn("firewall-rule delete", scripts["configure-postgres.ps1"])
         self.assertIn("--server-name $postgresName", scripts["configure-postgres.ps1"])
         self.assertNotIn("--rule-name", scripts["configure-postgres.ps1"])
+        self.assertIn(
+            "container-apps-$($address.Replace('.', '-'))",
+            scripts["configure-postgres.ps1"],
+        )
+        self.assertIn(
+            "$existingRule.startIpAddress -ceq $address",
+            scripts["configure-postgres.ps1"],
+        )
         self.assertIn("--server-name $ServerName", scripts["common.ps1"])
         self.assertNotIn("--rule-name", scripts["common.ps1"])
         self.assertIn("az containerapp show", scripts["configure-postgres.ps1"])

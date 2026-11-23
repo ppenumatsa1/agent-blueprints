@@ -211,6 +211,12 @@ uses `--name`. The configuration and temporary operator-rule helpers now use
 that contract. The failure occurred before any firewall rule, migration, image
 build, hosted publication, or application activation.
 
+The Container Apps environment currently reports 407 exact outbound addresses.
+Firewall reconciliation uses stable IP-derived rule names, skips rules whose
+single-address range is already correct, and removes only stale rules with the
+managed `container-apps-` prefix. This keeps retries bounded and idempotent
+without using the broad Azure-services firewall rule.
+
 ## Deployment gate
 
 The current Azure CLI identity matches the authorized context. Azure CLI mode

@@ -46,13 +46,38 @@ $containerAppAddresses = @(
     $outbound -split '[,\s]+' | Where-Object { $_ } | Sort-Object -Unique
 )
 $desiredRules = [ordered]@{}
-for ($index = 0; $index -lt $containerAppAddresses.Count; $index++) {
-    $address = $containerAppAddresses[$index]
+foreach ($address in $containerAppAddresses) {
     Assert-PublicIpv4 -Address $address
-    $desiredRules["container-apps-{0:D2}" -f ($index + 1)] = $address
+    $desiredRules["container-apps-$($address.Replace('.', '-'))"] = $address
 }
+
+$managedRules = @(
+    az postgres flexible-server firewall-rule list `
+        --subscription $subscriptionId `
+        --resource-group $resourceGroup `
+        --server-name $postgresName `
+        --query "[].{name:name,startIpAddress:startIpAddress,endIpAddress:endIpAddress}" `
+        --output json |
+        ConvertFrom-Json
+)
+if ($LASTEXITCODE -ne 0) {
+    throw 'Unable to list managed PostgreSQL firewall rules.'
+}
+$existingRules = @{}
+foreach ($rule in $managedRules) {
+    $existingRules[$rule.name] = $rule
+}
+
 foreach ($ruleName in $desiredRules.Keys) {
     $address = $desiredRules[$ruleName]
+    $existingRule = $existingRules[$ruleName]
+    if (
+        $existingRule -and
+        $existingRule.startIpAddress -ceq $address -and
+        $existingRule.endIpAddress -ceq $address
+    ) {
+        continue
+    }
     az postgres flexible-server firewall-rule create `
         --subscription $subscriptionId `
         --resource-group $resourceGroup `
@@ -64,18 +89,7 @@ foreach ($ruleName in $desiredRules.Keys) {
     if ($LASTEXITCODE -ne 0) { throw "Unable to configure PostgreSQL firewall for $address." }
 }
 
-$managedRules = @(
-    az postgres flexible-server firewall-rule list `
-        --subscription $subscriptionId `
-        --resource-group $resourceGroup `
-        --server-name $postgresName `
-        --query "[].name" `
-        --output tsv
-)
-if ($LASTEXITCODE -ne 0) {
-    throw 'Unable to list managed PostgreSQL firewall rules.'
-}
-foreach ($ruleName in $managedRules) {
+foreach ($ruleName in $existingRules.Keys) {
     if (
         $ruleName -and
         (
