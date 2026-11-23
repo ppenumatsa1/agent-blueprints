@@ -360,6 +360,12 @@ class InfrastructureContractTests(unittest.TestCase):
         )
         self.assertIn("sslrootcert=system", combined)
         self.assertIn("PostgreSQL client 17 or later", scripts["common.ps1"])
+        self.assertIn("${database}?sslmode=verify-full", scripts["migrate.ps1"])
+        self.assertIn("import certifi; print(certifi.where())", scripts["migrate.ps1"])
+        self.assertIn(
+            "$env:DATABASE_TLS_ROOT_CERT = $databaseTlsRootCert",
+            scripts["migrate.ps1"],
+        )
         self.assertIn(
             "test -r /etc/ssl/certs/ca-certificates.crt",
             scripts["deploy.ps1"],

@@ -26,7 +26,8 @@ release readiness, or Azure deployment approval.
 
 ## Local Azure/Foundry integration acceptance
 
-**Status: Completed for local integration; cloud and production unverified.**
+**Status: Completed for local integration; Azure database partially verified;
+hosted and production unverified.**
 The integration starts at exact main
 `886b628fdea02f9089c385b4ed0fc46d90f375e8`. Accepted sources are
 A `708a4185abe149526c606477de02cd57c5d90a9c` (#45),
@@ -61,12 +62,17 @@ corrected before the final complete suites passed; no tests were removed.
 seven jobs. Azure validation then passed live identity/quota/provider checks,
 subscription policy review, provider-backed validation, and a what-if with 21
 creates and no modifications or deletions. Proceed through the guarded
-deployment workflow. The first corrected apply created the PostgreSQL server
-but exposed a Flexible Server control-plane concurrency constraint; the
-administrator, TLS configuration, database, and optional firewall resources
-are now explicitly serialized, with Bicep validation and all 17 infrastructure
-tests passing. Exact-head CI and a guarded live retry remain required. Live
-hosted execution, managed-identity token issuance,
+deployment workflow. The live PostgreSQL server is `Ready` with Entra-only
+authentication, password authentication disabled, `verify-full` TLS 1.3,
+platform revision `0001`, and all ten Order Resolution tables. The API UAMI
+database principal is mapped to the expected object as a non-admin role with
+connect/schema-use/table-DML/sequence privileges and no schema-create or
+elevated role attributes. The temporary broad E2E firewall rule
+`temporary-e2e-public-remove-after-e2e` must be removed after E2E and replaced
+by actual API outbound addresses plus the operator address only if still
+needed. The active API revision is still a placeholder, so runtime
+managed-identity token connectivity remains unverified. Exact-head CI and the
+real API deployment remain required. Live hosted execution,
 real-model evaluation, authenticated browser evidence, and independent
 production authorization remain unverified. The original architecture HTML
 remains unchanged.

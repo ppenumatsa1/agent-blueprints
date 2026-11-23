@@ -217,6 +217,31 @@ single-address range is already correct, and removes only stale rules with the
 managed `container-apps-` prefix. This keeps retries bounded and idempotent
 without using the broad Azure-services firewall rule.
 
+Live database configuration on 2026-11-23 verified PostgreSQL 17 `Ready`,
+Entra authentication enabled, password authentication disabled,
+`require_secure_transport=ON`, and a `verify-full` administrator connection
+using TLS 1.3. The generated platform migration reached revision `0001`; all
+ten Order Resolution tables were present. The API UAMI principal
+`aborsfoundpv2n45-api-id` maps to object
+`fe78ecef-bd1c-40e8-bfcd-81e48014e2e0` as a non-admin Entra service
+principal and has database connect, schema usage, table DML, and sequence
+privileges without schema create or elevated role attributes.
+
+The temporary E2E rule `temporary-e2e-public-remove-after-e2e` currently spans
+`0.0.0.0` through `255.255.255.255`. It is authorized only for the active E2E
+window and must be removed after E2E, then replaced by the actual API Container
+App outbound addresses plus the current operator machine address if operator
+access remains necessary. The current API revision is still the Azure sample
+placeholder, so managed-identity token authentication from the real API
+runtime remains unverified.
+
+The live migration also exposed two Windows operator defects: PowerShell
+treated `$database?sslmode` as one variable name, and bundled psycopg could not
+use a Windows `system` CA path. The migration helper now delimits
+`${database}` and resolves the locked generated backend's `certifi` bundle on
+Windows while retaining `verify-full`; Linux runtime configuration remains
+bound to the system CA store.
+
 ## Deployment gate
 
 The current Azure CLI identity matches the authorized context. Azure CLI mode

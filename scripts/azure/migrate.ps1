@@ -41,16 +41,36 @@ if ($LASTEXITCODE -ne 0 -or -not $token) {
 }
 
 $encodedUser = [uri]::EscapeDataString($adminName)
-$databaseUrl =
-    "postgresql://$encodedUser@$postgresHost`:5432/$database?sslmode=verify-full&sslrootcert=system"
 $projectRoot = Assert-GeneratedOrderResolutionProject -ProjectRoot $GeneratedProjectRoot
 $backend = Join-Path $projectRoot 'backend'
+$databaseTlsRootCert = 'system'
+if ($IsWindows) {
+    Push-Location $backend
+    try {
+        $databaseTlsRootCert = (
+            uv run python -c 'import certifi; print(certifi.where())'
+        ).Trim()
+        if ($LASTEXITCODE -ne 0 -or -not $databaseTlsRootCert) {
+            throw 'Unable to resolve the generated backend trusted CA bundle.'
+        }
+    }
+    finally {
+        Pop-Location
+    }
+    $databaseTlsRootCert = (Resolve-Path -LiteralPath $databaseTlsRootCert).Path
+}
+$encodedTlsRootCert = [uri]::EscapeDataString(
+    $databaseTlsRootCert.Replace('\', '/')
+)
+$databaseUrl =
+    "postgresql://$encodedUser@$postgresHost`:5432/${database}?sslmode=verify-full&sslrootcert=$encodedTlsRootCert"
 
 $previousDatabaseUrl = $env:DATABASE_URL
 $previousMigrationDatabaseUrl = $env:MIGRATION_DATABASE_URL
 $previousDatabaseAuthMode = $env:DATABASE_AUTH_MODE
 $previousDatabasePassword = $env:DATABASE_PASSWORD
 $previousDatabaseTlsMode = $env:DATABASE_TLS_MODE
+$previousDatabaseTlsRootCert = $env:DATABASE_TLS_ROOT_CERT
 $previousPgSslRootCert = $env:PGSSLROOTCERT
 $previousPassword = $env:PGPASSWORD
 $operatorRuleCreated = $false
@@ -67,7 +87,8 @@ try {
     $env:DATABASE_AUTH_MODE = 'password'
     $env:DATABASE_PASSWORD = $token
     $env:DATABASE_TLS_MODE = 'verify-full'
-    $env:PGSSLROOTCERT = 'system'
+    $env:DATABASE_TLS_ROOT_CERT = $databaseTlsRootCert
+    $env:PGSSLROOTCERT = $databaseTlsRootCert
     Push-Location $backend
     try {
         uv run python -m app.infrastructure.migrations upgrade
@@ -101,6 +122,7 @@ finally {
     $env:DATABASE_AUTH_MODE = $previousDatabaseAuthMode
     $env:DATABASE_PASSWORD = $previousDatabasePassword
     $env:DATABASE_TLS_MODE = $previousDatabaseTlsMode
+    $env:DATABASE_TLS_ROOT_CERT = $previousDatabaseTlsRootCert
     $env:PGSSLROOTCERT = $previousPgSslRootCert
     $env:PGPASSWORD = $previousPassword
     if ($operatorRuleCreated) {

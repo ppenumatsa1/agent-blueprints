@@ -2,7 +2,7 @@
 
 ## Local Azure/Foundry integration checkpoint
 
-**Completed locally and validated for deployment, not deployed.** The C -> A -> B -> D integration from
+**Completed locally, validated, and partially provisioned for E2E.** The C -> A -> B -> D integration from
 `886b628fdea02f9089c385b4ed0fc46d90f375e8` preserves native MAF checkpoints,
 Foundry-managed hosted state, and API-owned PostgreSQL business persistence.
 The [integration acceptance table](master-checklist.md#local-azurefoundry-integration-acceptance)
@@ -32,10 +32,20 @@ modifications or deletions, so `.azure/deployment-plan.md` is `Validated`.
 The first corrected apply created the PostgreSQL server but exposed concurrent
 Flexible Server child writes. The module now orders administrator, TLS
 settings, database, and optional firewall resources; Bicep validation and all
-17 infrastructure tests pass locally. Next: consume the corrected exact-head CI, retry the
-guarded deployment against the existing resource group, and retain immutable
-live evidence. These checks do not authorize merge, release, or production-risk
-acceptance.
+17 infrastructure tests pass locally. Live database configuration then
+verified Entra-only PostgreSQL 17, `verify-full` TLS 1.3, platform migration
+revision `0001`, all ten Order Resolution tables, and the non-admin API UAMI
+principal with DML/sequence privileges but no schema-create or elevated role
+attributes. A Windows migration defect was corrected by delimiting
+`${database}` in the URL and using the generated locked `certifi` CA bundle
+for operator-side psycopg while preserving system trust in the Linux runtime.
+The broad temporary rule `temporary-e2e-public-remove-after-e2e`
+(`0.0.0.0`-`255.255.255.255`) must be removed after E2E and replaced by actual
+API outbound addresses plus the current operator address if still needed.
+Next: deploy the real API image without changing these database contracts,
+verify API-UAMI token connectivity from that revision, complete E2E, and
+restrict the firewall. These checks do not authorize merge, release, or
+production-risk acceptance.
 
 ## Phase 0: foundation
 

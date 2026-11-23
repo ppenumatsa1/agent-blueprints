@@ -215,6 +215,11 @@ route fails closed until the final revision binds the authoritative principal.
   system CA bundle is absent. The canonical image explicitly owns
   `SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt` for bundled libpq/OpenSSL;
   Azure Bicep and deployment updates must not override or clear it.
+- Windows migration operations resolve the locked generated backend's
+  `certifi` CA bundle for psycopg because `sslrootcert=system` does not identify
+  a usable CA file in that client environment. This remains `verify-full`; it
+  is not a trust bypass and does not change the Linux runtime's system-CA
+  contract.
 - The API receives hosted mode, the explicit HTTPS adapter endpoint and scope,
   identity client ID, PostgreSQL managed-identity/TLS settings, Entra, and
   telemetry configuration. It never receives `BLUEPRINT_APPLICATION`,
@@ -392,11 +397,20 @@ Local non-deploying evidence:
 - Azure validation did not advance to provider what-if because deployment
   inputs are intentionally unset.
 
-Not verified by this workstream: resource provisioning, Azure RBAC writes,
-Container Apps image deployment, Hosted Agent creation/invocation, PostgreSQL
-connectivity/migration/restore, telemetry ingestion, browser execution,
-evaluation quality, rollback in Azure, teardown, or production readiness.
-Hosted code has no direct PostgreSQL connectivity by design.
+Live PostgreSQL evidence now verifies server readiness, Entra-only
+authentication, disabled password authentication, TLS 1.3 under
+`verify-full`, platform revision `0001`, ten Order Resolution tables, and the
+least-privilege API UAMI database principal. During authorized E2E only,
+`temporary-e2e-public-remove-after-e2e` allows
+`0.0.0.0`-`255.255.255.255`; it must be removed after E2E and replaced by the
+actual API outbound addresses plus the operator address only if needed.
+
+Still not verified: the real API revision's managed-identity database login,
+Container Apps image deployment, Hosted Agent creation/invocation, restore,
+telemetry ingestion, browser execution, evaluation quality, rollback in Azure,
+teardown, or production readiness. The current API revision is the Azure
+sample placeholder. Hosted code has no direct PostgreSQL connectivity by
+design.
 
 The deployment route never targets the source blueprint. It instantiates an
 independent Order Resolution project, validates the generated hosted/app
