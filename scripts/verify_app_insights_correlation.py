@@ -99,6 +99,35 @@ union withsource=table_name AppRequests, AppDependencies, AppTraces, AppExceptio
 """.strip()
 
 
+def _query_workspace(workspace):
+    if not workspace.casefold().startswith("/subscriptions/"):
+        return workspace
+    resolved = subprocess.run(
+        [
+            "az",
+            "monitor",
+            "log-analytics",
+            "workspace",
+            "show",
+            "--ids",
+            workspace,
+            "--query",
+            "customerId",
+            "--output",
+            "tsv",
+            "--only-show-errors",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    customer_id = resolved.stdout.strip()
+    if resolved.returncode != 0 or not customer_id:
+        raise RuntimeError("Unable to resolve the Log Analytics workspace query ID.")
+    return customer_id
+
+
 def verify(
     evidence_path,
     workspace,
@@ -119,6 +148,7 @@ def verify(
         raise ValueError("Hosted evidence environment mismatch.")
     expected = _expected_pairs(evidence)
     query = _query(expected, evidence["started_at"])
+    query_workspace = _query_workspace(workspace)
     observed = []
     for attempt in range(1, attempts + 1):
         completed = subprocess.run(
@@ -128,7 +158,7 @@ def verify(
                 "log-analytics",
                 "query",
                 "--workspace",
-                workspace,
+                query_workspace,
                 "--analytics-query",
                 query,
                 "--output",

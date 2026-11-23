@@ -220,6 +220,13 @@ merge-ref checks are historical snapshots; changes on top of this baseline
 require fresh validation. Local evidence is recorded in the
 [integration journal](../blueprints/maf/workflow/docs/design/issues-changes-fixes.md#2026-11-22---main-reconciliation-and-local-validation);
 
+Revision-bound release evidence has a stricter source boundary than ordinary
+pull-request merge validation. The `maf-independent` evidence producer checks
+out the pull-request head explicitly before generating and hashing artifacts;
+the manual cloud workflow then requires that same source revision plus the
+immutable deployment revision. A merge-ref artifact cannot be relabeled as the
+deployed head and must remain unusable until regenerated.
+
 The longer-term target adds a Foundry Responses adapter and host-managed
 checkpoints, neither of which is implemented. Staged Foundry-first Bicep/azd describes
 separately hosted frontend and API services and has credential-free static

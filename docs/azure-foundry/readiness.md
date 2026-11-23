@@ -130,6 +130,12 @@ ingestion.
 requires an already successful exact-head CI run and an immutable deployment
 evidence artifact produced by the deployment workstreams.
 
+The `maf-independent` producer explicitly checks out the pull-request head
+SHA (or `github.sha` on `main`) before recording `SOURCE_REVISION`. The default
+pull-request merge checkout is not accepted as exact-source evidence: its
+artifact revision would differ from the deployment source and the release
+evidence builder must reject it.
+
 Example:
 
 ```powershell
@@ -160,6 +166,10 @@ The `azure-foundry-validation` GitHub environment must provide:
   `MAF_REAL_RESULT_FACTORY`, and
   `MAF_REAL_EVALUATION_MINIMUM_SCORE`;
 - variable `MAF_HOSTED_FAILURE_ADAPTER`.
+
+`AZURE_LOG_ANALYTICS_WORKSPACE_ID` may be the workspace ARM resource ID emitted
+by deployment or the Log Analytics customer/workspace GUID. The correlation
+verifier resolves an ARM resource ID to the query GUID before issuing KQL.
 
 The provider evaluator, live-result producer, and failure adapter use explicit
 `module:callable` factories. The result producer must call the exact deployed

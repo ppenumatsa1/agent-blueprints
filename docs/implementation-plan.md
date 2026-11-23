@@ -13,15 +13,23 @@ The final canonical image includes C's system-CA discovery correction and B's
 no-deployment-override contract. Real PostgreSQL 17 verifies normal hosted
 startup plus wrong-hostname and untrusted-CA refusal, without a trust bypass.
 Fresh generated backend, hosted, verification, and canonical-image checks pass.
-Draft PR #49 publishes exact head
-`007f9bc0136c0d0e42bb22c4d45fd9a7f799cfb4`; exact-head CI run `45090269313`
-passed all seven jobs. Live Azure preflight, subscription policy review,
+Draft PR #49 head `a6ab0a1ac6412e17345e9d46c0b70fafe55faad3`
+passed all seven jobs in run `45099182951`. Read-only acceptance inspection
+found that the run's `maf-generated-evidence` artifact recorded the default
+pull-request merge revision
+`0859bf2f98f775ae2910deb770375ddfc240330f`, not the deployable source head.
+The `maf-independent` evidence producer now explicitly checks out the PR head
+before recording `SOURCE_REVISION`; a fresh exact-head run and artifact check
+are required before cloud validation. The telemetry verifier also now resolves
+the deployment-emitted Log Analytics ARM resource ID to the customer/workspace
+query GUID instead of passing an unsupported ARM path to `az monitor
+log-analytics query`. Live Azure preflight, subscription policy review,
 provider validation, and provider-backed what-if passed with 21 creates and no
 modifications or deletions, so `.azure/deployment-plan.md` is `Validated`.
 The first corrected apply created the PostgreSQL server but exposed concurrent
 Flexible Server child writes. The module now orders administrator, TLS
 settings, database, and optional firewall resources; Bicep validation and all
-17 infrastructure tests pass locally. Next: obtain exact-head CI, retry the
+17 infrastructure tests pass locally. Next: obtain corrected exact-head CI, retry the
 guarded deployment against the existing resource group, and retain immutable
 live evidence. These checks do not authorize merge, release, or production-risk
 acceptance.

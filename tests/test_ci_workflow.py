@@ -29,6 +29,22 @@ class VerificationWorkflowTests(unittest.TestCase):
         self.assertIn("npm run e2e:local", workflow)
         self.assertIn("python scripts/instantiate_maf.py", workflow)
 
+    def test_generated_evidence_is_produced_from_the_exact_source_head(self):
+        workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(
+            encoding="utf-8"
+        )
+        independent = workflow.split("  maf-independent:\n", 1)[1].split(
+            "\n  maf-browser:\n", 1
+        )[0]
+        self.assertIn(
+            "ref: ${{ github.event.pull_request.head.sha || github.sha }}",
+            independent,
+        )
+        self.assertIn(
+            'echo "SOURCE_REVISION=$(git rev-parse HEAD)" >> "$GITHUB_ENV"',
+            independent,
+        )
+
     def test_cloud_validation_is_manual_exact_revision_and_non_deploying(self):
         workflow = (ROOT / ".github" / "workflows" / "cloud-validation.yml").read_text(
             encoding="utf-8"

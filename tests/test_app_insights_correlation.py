@@ -90,6 +90,49 @@ class AppInsightsCorrelationTests(unittest.TestCase):
                     environment="synthetic-azure",
                 )
 
+    def test_workspace_resource_id_is_resolved_before_query(self):
+        resource_id = (
+            "/subscriptions/sub/resourceGroups/rg/providers/"
+            "Microsoft.OperationalInsights/workspaces/workspace"
+        )
+        resolved = Mock(returncode=0, stdout="customer-id\n", stderr="")
+        with patch(
+            "scripts.verify_app_insights_correlation.subprocess.run",
+            side_effect=(resolved, self.result()),
+        ) as run:
+            artifact = verify(
+                self.evidence,
+                resource_id,
+                self.output,
+                source_revision="source-123",
+                deployment_revision="deployment-123",
+                environment="synthetic-azure",
+            )
+        self.assertEqual(artifact["outcome"], "passed")
+        self.assertEqual(run.call_count, 2)
+        self.assertEqual(
+            run.call_args_list[0].args[0],
+            [
+                "az",
+                "monitor",
+                "log-analytics",
+                "workspace",
+                "show",
+                "--ids",
+                resource_id,
+                "--query",
+                "customerId",
+                "--output",
+                "tsv",
+                "--only-show-errors",
+            ],
+        )
+        query_command = run.call_args_list[1].args[0]
+        self.assertEqual(
+            query_command[query_command.index("--workspace") + 1],
+            "customer-id",
+        )
+
     def test_revision_mismatch_stops_before_query(self):
         with (
             patch("scripts.verify_app_insights_correlation.subprocess.run") as run,
