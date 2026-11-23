@@ -32,11 +32,13 @@ The integration starts at exact main
 A `708a4185abe149526c606477de02cd57c5d90a9c` (#45),
 C `722fc4e32937df4bd94678ec12380cac2a7c84df` (#48; runtime TLS fix
 `509fb0b20c80fa8e436de4ac782f618c47f38bd3`),
-B `5abad5977c04297f7154443b0ed8c28ed5d3b870` (#47), and
+B `b09877c219d3b9ec813614d879f5e1897729b254` (#47), and
 D `9336176459cf38c367c8956849ceac32ffa98cbc` (#46).
 Their exact-head owner CI is green. Runtime integration revision
 `920a339777e23be85c34402afb7fb4322ca26e02` supplies the following
-local evidence; the later C follow-up changes only documentation.
+local evidence. Later owner follow-ups record TLS/provenance evidence and
+enforce image-owned CA configuration in the generated-image guard; application
+runtime bytes are unchanged.
 
 | Acceptance criterion | Scoped local evidence |
 | --- | --- |
