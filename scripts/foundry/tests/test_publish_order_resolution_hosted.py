@@ -26,6 +26,10 @@ def runtime_environment(**changes):
     value = {
         "FOUNDRY_PROJECT_ENDPOINT": "https://project.example.test",
         "AZURE_AI_MODEL_DEPLOYMENT_NAME": "configured-model",
+        "APPLICATIONINSIGHTS_CONNECTION_STRING": (
+            "InstrumentationKey=00000000-0000-0000-0000-000000000000;"
+            "IngestionEndpoint=https://monitor.example.test/"
+        ),
         "ORDER_RESOLUTION_API_ENDPOINT": (
             "https://api.example.test/internal/order-resolution/hosted"
         ),
@@ -358,6 +362,18 @@ class PublisherTests(unittest.TestCase):
         )
         self.assertEqual(identity["project_endpoint"], "https://project.example.test")
         self.assertEqual(identity["hosted_definition"]["runtime"], "python_3_13")
+        self.assertNotIn(
+            "APPLICATIONINSIGHTS_CONNECTION_STRING",
+            identity["hosted_definition"]["environment"],
+        )
+        self.assertEqual(
+            len(
+                identity["hosted_definition"]["environment"][
+                    "APPLICATIONINSIGHTS_CONNECTION_STRING_SHA256"
+                ]
+            ),
+            64,
+        )
         self.assertEqual(
             identity["hosted_definition"]["protocols"],
             [{"protocol": "responses", "version": "2.0.0"}],
@@ -473,7 +489,13 @@ class PublisherTests(unittest.TestCase):
         )
         self.assertEqual(
             set(environment),
-            set(publisher.REQUIRED_RUNTIME_ENVIRONMENT) | {"PYTHONNOUSERSITE"},
+            set(publisher.REQUIRED_RUNTIME_ENVIRONMENT)
+            | set(publisher.PRIVACY_RUNTIME_ENVIRONMENT)
+            | {"PYTHONNOUSERSITE"},
+        )
+        self.assertEqual(
+            {name: environment[name] for name in publisher.PRIVACY_RUNTIME_ENVIRONMENT},
+            publisher.PRIVACY_RUNTIME_ENVIRONMENT,
         )
         self.assertFalse(
             {

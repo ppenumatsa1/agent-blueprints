@@ -198,14 +198,24 @@ class OrderResolutionWorkflowTests(unittest.IsolatedAsyncioTestCase):
         workflow = build_order_resolution_workflow(FakeStore(case), object())
         events = []
         async for event in workflow.run(
-            {"case_id": str(case_id), "request_id": "hosted-request-1"},
+            {
+                "case_id": str(case_id),
+                "request_id": "hosted-request-1",
+                "conversation_id": "hosted-conversation-1",
+            },
             stream=True,
         ):
             if event.type == "request_info":
                 events.append(event)
         self.assertEqual(len(events), 1)
         self.assertEqual(events[0].request_id, "hosted-request-1")
-        self.assertEqual(events[0].data, {"case_id": str(case_id)})
+        self.assertEqual(
+            events[0].data,
+            {
+                "case_id": str(case_id),
+                "conversation_id": "hosted-conversation-1",
+            },
+        )
 
 
 if __name__ == "__main__":

@@ -2,6 +2,9 @@ import threading
 import unittest
 from types import SimpleNamespace
 
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.trace import SpanKind
+
 from order_resolution_hosted.client import (
     AmbiguousCreate,
     ConversationBinding,
@@ -82,6 +85,30 @@ class ClientTests(unittest.TestCase):
         self.assertTrue(payload["background"])
         self.assertNotIn("agent_session_id", payload)
         self.assertEqual(payload["metadata"], {"operation_id": "start-1"})
+
+    def test_current_w3c_context_is_injected_without_sensitive_headers(self):
+        requests = []
+        provider = TracerProvider()
+        tracer = provider.get_tracer("test")
+
+        def post(*args, **kwargs):
+            requests.append((args, kwargs))
+            return FakeResponse()
+
+        with tracer.start_as_current_span("api.foundry", kind=SpanKind.CLIENT) as span:
+            expected_trace_id = f"{span.get_span_context().trace_id:032x}"
+            self.client(post).start(
+                operation_id="start-traced",
+                binding=self.binding,
+                case_id="c3dc94c3-7772-4249-bf63-95597591f49c",
+            )
+        headers = requests[0][1]["headers"]
+        self.assertRegex(
+            headers["traceparent"],
+            rf"^00-{expected_trace_id}-[0-9a-f]{{16}}-[0-9a-f]{{2}}$",
+        )
+        self.assertNotIn("baggage", {name.casefold() for name in headers})
+        self.assertNotIn("tracestate", {name.casefold() for name in headers})
 
     def test_conversation_create_returns_bound_identity(self):
         requests = []

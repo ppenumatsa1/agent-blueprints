@@ -1,18 +1,22 @@
 """Allowlisted operational telemetry; never inspect application payloads."""
 
+import hashlib
 import inspect
 import json
 import logging
 import os
 import re
+import threading
 import time
+import weakref
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, replace
 from functools import wraps
 from uuid import UUID
 
-from agent_framework.observability import disable_instrumentation
+from agent_framework.observability import enable_instrumentation
+from opentelemetry import trace
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.metrics import (
     AlwaysOffExemplarFilter,
@@ -42,6 +46,8 @@ if not _log.handlers:
 _log.setLevel(logging.INFO)
 _log.propagate = False
 _propagator = TraceContextTextMapPropagator()
+_provider_lock = threading.Lock()
+_azure_trace_destinations = weakref.WeakKeyDictionary()
 _SCHEMA_VERSION = "1.0.0"
 _SAFE_IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$")
 _OPERATIONS = frozenset(
@@ -437,9 +443,10 @@ class Telemetry:
         )
         readers = [metric_reader] if metric_reader is not None else []
         provider = meter_provider = azure_reader = processor = None
+        owns_provider = False
+        trace_destination = None
         processor_attached = reader_attached = False
         try:
-            disable_instrumentation()
             if mode == "azure-monitor":
                 # Do not let exporter diagnostics collect environment identifiers.
                 for setting in (
@@ -460,15 +467,22 @@ class Telemetry:
                     AzureMonitorTraceExporter,
                 )
 
-                if exporter is None:
-                    exporter = AzureMonitorTraceExporter(
-                        connection_string=connection_string, disable_offline_storage=True
-                    )
                 if metric_exporter is None:
                     metric_exporter = AzureMonitorMetricExporter(
                         connection_string=connection_string, disable_offline_storage=True
                     )
-            provider = TracerProvider(resource=resource)
+            current_provider = trace.get_tracer_provider()
+            if isinstance(current_provider, TracerProvider):
+                provider = current_provider
+            else:
+                provider = TracerProvider(resource=resource)
+                trace.set_tracer_provider(provider)
+                owns_provider = True
+            enable_instrumentation(
+                enable_sensitive_data=False,
+                enable_message_events=False,
+                force=True,
+            )
             tracer = provider.get_tracer("blueprint.manual")
             if mode == "azure-monitor":
                 azure_reader = PeriodicExportingMetricReader(SafeMetricExporter(metric_exporter))
@@ -484,11 +498,27 @@ class Telemetry:
             retries = meter.create_counter("blueprint.retries", unit="{retry}")
             outcomes = meter.create_counter("blueprint.outcomes", unit="{outcome}")
             if mode == "azure-monitor":
-                processor = BatchSpanProcessor(SafeExporter(exporter))
-                provider.add_span_processor(processor)
-                processor_attached = True
+                if exporter is None:
+                    trace_destination = hashlib.sha256(
+                        connection_string.encode("utf-8")
+                    ).hexdigest()
+                    with _provider_lock:
+                        destinations = _azure_trace_destinations.setdefault(provider, set())
+                        if trace_destination not in destinations:
+                            exporter = AzureMonitorTraceExporter(
+                                connection_string=connection_string,
+                                disable_offline_storage=True,
+                            )
+                            processor = BatchSpanProcessor(SafeExporter(exporter))
+                            provider.add_span_processor(processor)
+                            destinations.add(trace_destination)
+                            processor_attached = True
+                else:
+                    processor = BatchSpanProcessor(SafeExporter(exporter))
+                    provider.add_span_processor(processor)
+                    processor_attached = True
         except Exception:
-            if provider is not None:
+            if provider is not None and owns_provider:
                 try:
                     provider.shutdown()
                 except Exception:
@@ -717,7 +747,7 @@ class Telemetry:
 
     def shutdown(self):
         try:
-            self.provider.shutdown()
+            self.provider.force_flush()
         except Exception:
             _emit("telemetry.shutdown", outcome="failure")
         try:

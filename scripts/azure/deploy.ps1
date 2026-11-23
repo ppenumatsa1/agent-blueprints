@@ -363,6 +363,18 @@ try {
 
     $orderResolutionApiEndpoint = "https://$apiFqdn/api/internal/hosted/v1"
     $orderResolutionApiScope = "$($entra.apiAppIdUri)/.default"
+    $applicationInsightsResourceId =
+        Get-RequiredValue $values 'APPLICATIONINSIGHTS_RESOURCE_ID'
+    $applicationInsightsConnectionString = az resource show `
+        --subscription $SubscriptionId `
+        --ids $applicationInsightsResourceId `
+        --api-version 2020-02-02 `
+        --query properties.ConnectionString `
+        --output tsv `
+        --only-show-errors
+    if ($LASTEXITCODE -ne 0 -or -not $applicationInsightsConnectionString) {
+        throw 'Application Insights connection resolution failed.'
+    }
     $publisher = Join-Path $generatedRoot 'scripts\foundry\publish_order_resolution_hosted.py'
     $hostedRequirements = Join-Path $generatedRoot 'hosted-agent\requirements.txt'
     function Invoke-HostedPublisher {
@@ -436,6 +448,7 @@ try {
         'ORDER_RESOLUTION_API_ENDPOINT'
         'ORDER_RESOLUTION_API_SCOPE'
         'ORDER_RESOLUTION_API_TIMEOUT_SECONDS'
+        'APPLICATIONINSIGHTS_CONNECTION_STRING'
         'DATABASE_URL'
         'PGSSLROOTCERT'
         'ORDER_RESOLUTION_HOSTED_IDENTITY_BINDINGS'
@@ -461,6 +474,8 @@ try {
         $env:ORDER_RESOLUTION_API_ENDPOINT = $orderResolutionApiEndpoint
         $env:ORDER_RESOLUTION_API_SCOPE = $orderResolutionApiScope
         $env:ORDER_RESOLUTION_API_TIMEOUT_SECONDS = '30'
+        $env:APPLICATIONINSIGHTS_CONNECTION_STRING =
+            $applicationInsightsConnectionString
         $pendingPublishRecord = Assert-HostedPublishRecord `
             -Record (Invoke-HostedPublisher)
 

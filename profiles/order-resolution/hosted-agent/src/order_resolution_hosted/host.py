@@ -1,17 +1,52 @@
 from __future__ import annotations
 
 import json
+import os
 from typing import Any
 from uuid import UUID
 
+from agent_framework.observability import enable_instrumentation
 from agent_framework_foundry_hosting import (
     CheckpointStoreProvider,
     ResponsesHostServer,
     WorkflowTurn,
 )
+from azure.ai.agentserver.core import configure_observability as configure_agentserver_observability
 from azure.ai.agentserver.responses import ResponsesServerOptions
 
 from .application import CallerContext, HostedApplication, load_application
+
+
+_PRIVACY_ENVIRONMENT = {
+    "ENABLE_SENSITIVE_DATA": "false",
+    "ENABLE_MESSAGE_EVENTS": "false",
+    "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT": "false",
+}
+_INSTRUMENTATION_OPTIONS = {
+    "azure_sdk": {"enabled": True},
+    "httpx": {"enabled": True},
+    "urllib": {"enabled": True},
+}
+
+
+def _configure_host_observability(
+    *,
+    connection_string: str | None = None,
+    log_level: str | None = None,
+    enable_sensitive_data: bool = False,
+) -> None:
+    del enable_sensitive_data
+    configure_agentserver_observability(
+        connection_string=connection_string,
+        log_level=log_level,
+        enable_sensitive_data=False,
+        instrumentation_options=_INSTRUMENTATION_OPTIONS,
+    )
+    enable_instrumentation(
+        enable_sensitive_data=False,
+        enable_message_events=False,
+        force=True,
+    )
 
 
 def _caller(request: Any) -> CallerContext:
@@ -79,6 +114,8 @@ async def parse_turn(
 
 
 def create_responses_server(application: HostedApplication) -> ResponsesHostServer:
+    os.environ.update(_PRIVACY_ENVIRONMENT)
+
     async def parse_response(request: Any) -> WorkflowTurn[Any]:
         return await parse_turn(application, request)
 
@@ -92,6 +129,7 @@ def create_responses_server(application: HostedApplication) -> ResponsesHostServ
             allowed_checkpoint_types=list(application.checkpoint_types),
         ),
         options=ResponsesServerOptions(resilient_background=True),
+        configure_observability=_configure_host_observability,
     )
 
 

@@ -49,15 +49,28 @@ def _expected_pairs(evidence):
         if key in seen:
             raise ValueError("Correlation evidence contains duplicate pairs.")
         seen.add(key)
-        pairs.append(
-            {
-                "request_id": request_id,
-                "case_id": case_id,
-                "trace_id": trace_id,
-                "agent_version": item["agent_version"],
-                "deployment_revision": item["deployment_revision"],
-            }
-        )
+        pair = {
+            "request_id": request_id,
+            "case_id": case_id,
+            "trace_id": trace_id,
+            "agent_version": item["agent_version"],
+            "deployment_revision": item["deployment_revision"],
+        }
+        hosted_phase = item.get("hosted_phase")
+        if hosted_phase is not None:
+            if hosted_phase not in {"start", "resume"}:
+                raise ValueError("Hosted phases must be start or resume.")
+            for name in (
+                "conversation_id",
+                "hosted_agent_name",
+                "hosted_agent_version",
+            ):
+                value = item.get(name)
+                if not isinstance(value, str) or not value.strip() or len(value) > 512:
+                    raise ValueError(f"{name} is required for hosted trace evidence.")
+                pair[name] = value
+            pair["hosted_phase"] = hosted_phase
+        pairs.append(pair)
     if not pairs:
         raise ValueError("Correlation evidence is empty.")
     return pairs
@@ -83,11 +96,7 @@ def _query(expected, started_at):
         "agent_version",
         "deployment_revision",
     )
-    datatable = ",".join(
-        _quoted(item[field])
-        for item in expected
-        for field in fields
-    )
+    datatable = ",".join(_quoted(item[field]) for item in expected for field in fields)
     return (
         "let expected=datatable("
         "request_id:string,case_id:string,trace_id:string,"
@@ -109,6 +118,207 @@ def _query(expected, started_at):
         "request_id, case_id, trace_id, agent_version, deployment_revision "
         "| order by request_id asc"
     )
+
+
+def _trace_query(expected, started_at):
+    trace_ids = sorted(
+        {
+            item["trace_id"]
+            for item in expected
+            if item.get("hosted_phase") in {"start", "resume"}
+        }
+    )
+    if not trace_ids:
+        return None
+    values = ",".join(_quoted(item) for item in trace_ids)
+    raw_fields = (
+        "gen_ai.input.messages",
+        "gen_ai.output.messages",
+        "gen_ai.prompt",
+        "gen_ai.completion",
+        "gen_ai.tool.call.arguments",
+        "gen_ai.tool.call.result",
+        "input.value",
+        "output.value",
+        "tool.arguments",
+        "tool.result",
+    )
+    raw_expression = " or ".join(
+        f"strlen(tostring(Properties[{_quoted(name)}])) > 0" for name in raw_fields
+    )
+    return (
+        f"let expected=dynamic([{values}]); "
+        "union withsource=table_name "
+        "AppRequests, AppDependencies, AppTraces, AppExceptions "
+        f"| where TimeGenerated between (datetime({_quoted(started_at)}) .. now()) "
+        "| extend trace_id=tolower(tostring(OperationId)) "
+        "| where trace_id in (expected) "
+        "| extend span_id=tolower(tostring(Id)), "
+        "parent_id=tolower(tostring(ParentId)), "
+        "span_name=tostring(Name), role_name=tostring(AppRoleName), "
+        "operation_name=tostring(Properties['gen_ai.operation.name']), "
+        "conversation_id=coalesce("
+        "tostring(Properties['gen_ai.conversation.id']), "
+        "tostring(Properties['azure.ai.agentserver.conversation_id']), "
+        "tostring(Properties['azure.ai.agentserver.responses.conversation_id'])), "
+        "agent_name=tostring(Properties['gen_ai.agent.name']), "
+        "agent_version=tostring(Properties['gen_ai.agent.version']), "
+        "foundry_marker=tostring(Properties['microsoft.foundry']), "
+        "workflow_stage=tostring(Properties['blueprint.workflow.stage']), "
+        "link_trace_id=tolower(tostring(Properties['blueprint.trace.link.trace_id'])), "
+        "link_span_id=tolower(tostring(Properties['blueprint.trace.link.span_id'])), "
+        f"raw_content=iff({raw_expression}, 1, 0) "
+        "| project table_name, trace_id, span_id, parent_id, span_name, role_name, "
+        "operation_name, conversation_id, agent_name, agent_version, foundry_marker, "
+        "workflow_stage, link_trace_id, link_span_id, raw_content "
+        "| order by trace_id asc, span_id asc"
+    )
+
+
+def _foundry_trace_ids(path):
+    value = _read(path)
+    if (
+        value.get("evidence_kind") != "foundry_trajectory_index"
+        or value.get("outcome") != "passed"
+    ):
+        raise ValueError("Foundry trajectory evidence is not a passed index artifact.")
+    traces = value.get("trace_ids")
+    if not isinstance(traces, list) or not traces:
+        raise ValueError("Foundry trajectory evidence must contain trace_ids.")
+    result = set()
+    for trace_id in traces:
+        if not isinstance(trace_id, str) or len(trace_id) != 32:
+            raise ValueError(
+                "Foundry trace IDs must contain 32 hexadecimal characters."
+            )
+        int(trace_id, 16)
+        result.add(trace_id.lower())
+    return result, value
+
+
+def _validate_trace_rows(expected, rows, foundry_trace_ids):
+    hosted = [
+        item for item in expected if item.get("hosted_phase") in {"start", "resume"}
+    ]
+    if not hosted:
+        return []
+    by_trace = {}
+    for row in rows:
+        by_trace.setdefault(str(row.get("trace_id", "")).lower(), []).append(row)
+    validated = []
+    starts = {
+        (item["case_id"], item["conversation_id"]): item["trace_id"].lower()
+        for item in hosted
+        if item["hosted_phase"] == "start"
+    }
+    for item in hosted:
+        trace_id = item["trace_id"].lower()
+        trace_rows = by_trace.get(trace_id, [])
+        if not trace_rows:
+            raise RuntimeError("A required hosted trace is missing from App Insights.")
+        if trace_id not in foundry_trace_ids:
+            raise RuntimeError(
+                "A required hosted trace is missing from Foundry trajectories."
+            )
+        if any(int(row.get("raw_content", 0)) != 0 for row in trace_rows):
+            raise RuntimeError(
+                "Raw prompt, message, tool, or result content was captured."
+            )
+        roots = [
+            row
+            for row in trace_rows
+            if row.get("operation_name") == "invoke_agent"
+            and row.get("conversation_id") == item["conversation_id"]
+            and row.get("agent_name") == item["hosted_agent_name"]
+            and row.get("agent_version") == item["hosted_agent_version"]
+            and str(row.get("foundry_marker", "")).casefold() == "true"
+        ]
+        if not roots:
+            raise RuntimeError("The trace has no enriched hosted invoke_agent root.")
+        names = {str(row.get("span_name", "")) for row in trace_rows}
+        required = {
+            "invoke_workflow",
+            "executor.process approval",
+            "message.send",
+            f"order_resolution.workflow.{item['hosted_phase']}",
+        }
+        if not required.issubset(names):
+            raise RuntimeError(
+                "The trace is missing required native or business spans."
+            )
+        span_rows = [
+            row for row in trace_rows if len(str(row.get("span_id", ""))) == 16
+        ]
+        ids = {str(row["span_id"]).lower() for row in span_rows}
+        if len(ids) != len(span_rows):
+            raise RuntimeError("The trace contains duplicate span identifiers.")
+        external_parents = {
+            str(row.get("parent_id", "")).lower()
+            for row in span_rows
+            if row.get("parent_id") and str(row.get("parent_id")).lower() not in ids
+        }
+        if len(external_parents) > 1:
+            raise RuntimeError("The trace contains an invalid orphaned parent chain.")
+        roots = [
+            row
+            for row in span_rows
+            if not row.get("parent_id") or str(row.get("parent_id")).lower() not in ids
+        ]
+        if len(roots) != 1:
+            raise RuntimeError("The trace must have one connected root.")
+        children = {}
+        for row in span_rows:
+            children.setdefault(str(row.get("parent_id", "")).lower(), []).append(
+                str(row["span_id"]).lower()
+            )
+        visited = set()
+        pending = [str(roots[0]["span_id"]).lower()]
+        while pending:
+            span_id = pending.pop()
+            if span_id in visited:
+                continue
+            visited.add(span_id)
+            pending.extend(children.get(span_id, ()))
+        if visited != ids:
+            raise RuntimeError("The trace contains disconnected span trees.")
+        roles = {str(row.get("role_name", "")) for row in trace_rows}
+        if (
+            "agent-blueprints.maf-workflow" not in roles
+            or item["hosted_agent_name"] not in roles
+        ):
+            raise RuntimeError(
+                "The trace does not cover both API and hosted service roles."
+            )
+        key = (item["case_id"], item["conversation_id"])
+        if item["hosted_phase"] == "resume":
+            restart = next(
+                (
+                    row
+                    for row in trace_rows
+                    if row.get("span_name") == "order_resolution.workflow.resume"
+                ),
+                None,
+            )
+            if restart is None or not restart.get("link_span_id"):
+                raise RuntimeError(
+                    "The durable resume is missing its explicit trace link."
+                )
+            start_trace_id = starts.get(key)
+            if start_trace_id is None or restart.get("link_trace_id") != start_trace_id:
+                raise RuntimeError(
+                    "The durable resume trace link does not target its start trace."
+                )
+        validated.append(
+            {
+                "trace_id": trace_id,
+                "case_id": item["case_id"],
+                "conversation_id": item["conversation_id"],
+                "hosted_phase": item["hosted_phase"],
+                "span_count": len(span_rows),
+                "external_parent_count": len(external_parents),
+            }
+        )
+    return validated
 
 
 def _query_workspace(workspace):
@@ -148,6 +358,7 @@ def verify(
     source_revision,
     deployment_revision,
     environment,
+    foundry_evidence=None,
     attempts=1,
     wait_seconds=0,
 ):
@@ -159,7 +370,22 @@ def verify(
     if evidence.get("environment") != environment:
         raise ValueError("Hosted evidence environment mismatch.")
     expected = _expected_pairs(evidence)
+    hosted_expected = any(item.get("hosted_phase") for item in expected)
+    if hosted_expected and foundry_evidence is None:
+        raise ValueError("Foundry trajectory evidence is required for hosted traces.")
+    foundry_trace_ids = set()
+    foundry_value = None
+    if foundry_evidence is not None:
+        foundry_trace_ids, foundry_value = _foundry_trace_ids(foundry_evidence)
+        for key, expected_value in (
+            ("source_revision", source_revision),
+            ("deployment_revision", deployment_revision),
+            ("environment", environment),
+        ):
+            if foundry_value.get(key) != expected_value:
+                raise ValueError(f"Foundry trajectory {key} does not match.")
     query = _query(expected, evidence["started_at"])
+    trace_query = _trace_query(expected, evidence["started_at"])
     query_workspace = _query_workspace(workspace)
     observed = []
     for attempt in range(1, attempts + 1):
@@ -211,6 +437,48 @@ def verify(
             and int(item.get("exception_count", 0)) == 0
         }
         if observed_keys == expected_keys:
+            trace_rows = []
+            if trace_query is not None:
+                detail = subprocess.run(
+                    [
+                        _azure_cli(),
+                        "monitor",
+                        "log-analytics",
+                        "query",
+                        "--workspace",
+                        query_workspace,
+                        "--analytics-query",
+                        trace_query,
+                        "--output",
+                        "json",
+                    ],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    timeout=120,
+                )
+                if detail.returncode == 0:
+                    try:
+                        trace_rows = _rows(json.loads(detail.stdout))
+                    except json.JSONDecodeError:
+                        trace_rows = []
+                try:
+                    validated_traces = _validate_trace_rows(
+                        expected,
+                        trace_rows,
+                        foundry_trace_ids,
+                    )
+                except RuntimeError:
+                    validated_traces = []
+                if hosted_expected and not validated_traces:
+                    if attempt < attempts:
+                        time.sleep(wait_seconds)
+                        continue
+                    raise RuntimeError(
+                        "App Insights or Foundry did not corroborate the hosted trace graph."
+                    )
+            else:
+                validated_traces = []
             break
         if attempt < attempts:
             time.sleep(wait_seconds)
@@ -229,6 +497,16 @@ def verify(
         "outcome": "passed",
         "attempts": attempt,
         "validated_pairs": observed,
+        "validated_hosted_traces": validated_traces,
+        "foundry_evidence": (
+            {
+                "recorded_at": foundry_value.get("recorded_at"),
+                "agent_name": foundry_value.get("agent_name"),
+                "trace_ids": sorted(foundry_trace_ids),
+            }
+            if foundry_value is not None
+            else None
+        ),
     }
     Path(output).write_text(
         json.dumps(artifact, indent=2, ensure_ascii=False) + "\n",
@@ -245,6 +523,7 @@ def main():
     parser.add_argument("--source-revision", required=True)
     parser.add_argument("--deployment-revision", required=True)
     parser.add_argument("--environment", required=True)
+    parser.add_argument("--foundry-evidence", type=Path)
     parser.add_argument("--attempts", type=int, default=1)
     parser.add_argument("--wait-seconds", type=int, default=0)
     args = parser.parse_args()
@@ -260,6 +539,7 @@ def main():
             source_revision=args.source_revision,
             deployment_revision=args.deployment_revision,
             environment=args.environment,
+            foundry_evidence=args.foundry_evidence,
             attempts=args.attempts,
             wait_seconds=args.wait_seconds,
         )

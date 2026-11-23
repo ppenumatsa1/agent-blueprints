@@ -146,6 +146,7 @@ class LiveClient:
         body: dict | None = None,
         idempotency_key: str | None = None,
         case_id: str | None = None,
+        hosted_phase: str | None = None,
     ) -> tuple[int, dict, dict[str, str]]:
         trace_id = uuid4().hex
         headers = {
@@ -186,6 +187,13 @@ class LiveClient:
                         "trace_id": parts[1],
                         "agent_version": os.environ["AGENT_VERSION"],
                         "deployment_revision": self.deployment_revision,
+                        **(
+                            {
+                                "hosted_phase": hosted_phase,
+                            }
+                            if hosted_phase is not None
+                            else {}
+                        ),
                     }
                 )
         return status, parsed, response_headers
@@ -206,6 +214,7 @@ class LiveClient:
                 "payload": payload,
             },
             idempotency_key=key,
+            hosted_phase="start",
         )
         if status != 200:
             raise RuntimeError(f"Live submission failed with HTTP {status}.")
@@ -245,6 +254,7 @@ class LiveClient:
                 "channel": "foundry-responses",
             },
             case_id=record["id"],
+            hosted_phase="resume",
         )
 
     def control(
@@ -455,8 +465,24 @@ class LiveHostedFailureAdapter:
 
     def correlations(self) -> list[dict[str, str]]:
         unique = {}
-        for item in self.client.correlations:
-            unique[(item["request_id"], item["case_id"])] = item
+        for item in list(self.client.correlations):
+            value = dict(item)
+            if value.get("hosted_phase") in {"start", "resume"}:
+                control = self.client.control(
+                    "GET",
+                    f"/acceptance/cases/{value['case_id']}",
+                )
+                conversation_id = control.get("conversation_id")
+                if not isinstance(conversation_id, str) or not conversation_id:
+                    raise RuntimeError("The hosted conversation evidence is unavailable.")
+                value.update(
+                    {
+                        "conversation_id": conversation_id,
+                        "hosted_agent_name": os.environ["HOSTED_AGENT_NAME"],
+                        "hosted_agent_version": os.environ["HOSTED_AGENT_VERSION"],
+                    }
+                )
+            unique[(value["request_id"], value["case_id"])] = value
         return list(unique.values())
 
 

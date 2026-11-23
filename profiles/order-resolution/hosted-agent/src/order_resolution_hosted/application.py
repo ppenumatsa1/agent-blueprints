@@ -92,7 +92,7 @@ class HostedApplication(Protocol):
         caller: CallerContext,
         conversation_id: str,
         case_id: UUID,
-    ) -> dict[str, str]: ...
+    ) -> dict[str, Any]: ...
 
     def authorize_resume(
         self,
@@ -260,7 +260,9 @@ class GeneratedOrderResolutionApplication:
         caller: CallerContext,
         conversation_id: str,
         case_id: UUID,
-    ) -> dict[str, str]:
+    ) -> dict[str, Any]:
+        from app.order_resolution.observability import capture_trace_link
+
         principal = _require_application_principal(
             self._identity_bindings.resolve_start_principal(
                 case_id=case_id,
@@ -275,7 +277,13 @@ class GeneratedOrderResolutionApplication:
         allowed_statuses = ("created", "pending") if approval_required else ("created",)
         if case.status not in allowed_statuses:
             raise ValueError("The case is not eligible for a new hosted workflow run.")
-        workflow_input = {"case_id": str(case_id)}
+        workflow_input: dict[str, Any] = {
+            "case_id": str(case_id),
+            "conversation_id": conversation_id,
+        }
+        trace_link = capture_trace_link()
+        if trace_link is not None:
+            workflow_input["trace_link"] = trace_link
         if approval_required:
             request_id = _approval_request_id(case_id, caller, conversation_id)
             proposal = store.prepare_hosted_approval(

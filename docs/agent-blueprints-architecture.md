@@ -668,19 +668,27 @@ Phase 6 work.
 
 ## Azure/Foundry Workstream D
 
-The observability boundary is manual and content-free. A request UUID starts
-at the API and propagates through the Foundry call, native MAF workflow,
-model/tool operations, and PostgreSQL spans. A case UUID is added only after
-the application has established it. W3C trace/span IDs, agent version, and
-deployment revision bind technical evidence, but none authorizes a user,
-approval, case, or side effect. Technical status and business outcome remain
-separate.
+The observability boundary uses one process-global OpenTelemetry provider per
+runtime. AgentServer configures its supported Azure Monitor exporter and HTTP,
+HTTPX, urllib, and Azure SDK instrumentation before native MAF instrumentation
+is enabled on that provider. The API reuses its process-global provider and
+injects W3C context into the Foundry request. A request UUID starts at the API;
+a case UUID is added only after the application has established it. W3C
+trace/span IDs, conversation ID, hosted agent version, and deployment revision
+bind technical evidence, but none authorizes a user, approval, case, or side
+effect. Technical status and business outcome remain separate.
 
-Automatic MAF content instrumentation stays disabled. Model usage, latency,
-retry reason, safe provider/model/tool identifiers, and bounded operation
-status are allowlisted; prompts, completions, tokens, SQL, exception messages,
-arbitrary baggage, and business payloads are excluded. Application Insights
-verification joins only exact correlation tuples from hosted synthetic tests.
+Native MAF instrumentation is enabled only with sensitive-data and message
+capture disabled. The hosted `invoke_agent` root, native workflow/executor and
+message spans, and application workflow-stage spans share the global provider.
+Durable HITL resume starts under its new hosted root and carries an explicit
+OpenTelemetry link to the persisted start span; it does not fabricate a parent
+chain across the durable boundary. Model usage is required only when the real
+production path invokes a model. Prompts, completions, credentials, SQL,
+exception messages, arbitrary baggage, and business payloads remain excluded.
+Application Insights verification requires a connected OperationId/ParentId
+tree, conversation continuity, deployment metadata, restart links, privacy
+checks, and matching Foundry trajectory trace IDs.
 
 Release evidence is a separate architecture layer, not runtime state. Its
 manifest is diagnostic and non-authorizing: it validates immutable files and

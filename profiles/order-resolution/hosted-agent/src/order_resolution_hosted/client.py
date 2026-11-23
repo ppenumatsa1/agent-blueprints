@@ -10,8 +10,11 @@ from urllib.error import HTTPError
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
+from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
+
 
 FOUNDRY_SCOPE = "https://ai.azure.com/.default"
+_propagator = TraceContextTextMapPropagator()
 
 
 def DefaultAzureCredential(*args: Any, **kwargs: Any) -> Any:
@@ -234,6 +237,7 @@ class ResponsesClient:
             "Authorization": self._token_provider.authorization_header(),
             "Content-Type": "application/json",
         }
+        _propagator.inject(headers)
         try:
             response = self._post(
                 endpoint,

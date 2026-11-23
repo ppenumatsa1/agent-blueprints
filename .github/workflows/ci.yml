@@ -232,6 +232,12 @@ jobs:
             tests.test_order_resolution tests.test_order_resolution_api \
             tests.test_order_resolution_durability \
             tests.test_order_resolution_evaluation
+          cd ../hosted-agent
+          uv pip install --python "$ORDER_RESOLUTION_DIR/backend/.venv/bin/python" \
+            -r requirements.txt
+          PYTHONPATH="$PWD/src:$ORDER_RESOLUTION_DIR/backend" \
+            "$ORDER_RESOLUTION_DIR/backend/.venv/bin/python" \
+            -m unittest discover -s tests -v
           cd ../frontend
           npm test
           npm run build

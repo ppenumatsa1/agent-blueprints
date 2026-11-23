@@ -28,10 +28,16 @@ PYTHON_NO_USER_SITE = "1"
 REQUIRED_RUNTIME_ENVIRONMENT = (
     "FOUNDRY_PROJECT_ENDPOINT",
     "AZURE_AI_MODEL_DEPLOYMENT_NAME",
+    "APPLICATIONINSIGHTS_CONNECTION_STRING",
     "ORDER_RESOLUTION_API_ENDPOINT",
     "ORDER_RESOLUTION_API_SCOPE",
     "ORDER_RESOLUTION_API_TIMEOUT_SECONDS",
 )
+PRIVACY_RUNTIME_ENVIRONMENT = {
+    "ENABLE_SENSITIVE_DATA": "false",
+    "ENABLE_MESSAGE_EVENTS": "false",
+    "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT": "false",
+}
 
 
 @dataclass(frozen=True)
@@ -169,7 +175,17 @@ def hosted_runtime_environment(source: Mapping[str, str]) -> dict[str, str]:
     if timeout <= 0 or timeout > 300:
         raise ValueError("ORDER_RESOLUTION_API_TIMEOUT_SECONDS must be in (0, 300].")
     environment["PYTHONNOUSERSITE"] = PYTHON_NO_USER_SITE
+    environment.update(PRIVACY_RUNTIME_ENVIRONMENT)
     return environment
+
+
+def _publication_environment(environment: Mapping[str, str]) -> dict[str, str]:
+    published = dict(environment)
+    connection_string = published.pop("APPLICATIONINSIGHTS_CONNECTION_STRING")
+    published["APPLICATIONINSIGHTS_CONNECTION_STRING_SHA256"] = hashlib.sha256(
+        connection_string.encode("utf-8")
+    ).hexdigest()
+    return published
 
 
 def build_definition(runtime_environment: Mapping[str, str]) -> Any:
@@ -232,7 +248,7 @@ def publication_identity(
             "entry_point": list(ENTRY_POINT),
             "dependency_resolution": DEPENDENCY_RESOLUTION,
             "protocols": [{"protocol": "responses", "version": PROTOCOL_VERSION}],
-            "environment": environment,
+            "environment": _publication_environment(environment),
         },
     }
 

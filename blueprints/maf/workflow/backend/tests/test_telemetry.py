@@ -20,6 +20,7 @@ from opentelemetry.sdk.metrics.export import (
     InMemoryMetricReader,
     MetricExportResult,
 )
+from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor, SpanExportResult
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from opentelemetry.trace import StatusCode
@@ -331,7 +332,7 @@ class TelemetryTests(unittest.TestCase):
         self.assertIn('"event":"telemetry.metric_export"', str(logs.output))
         self.assertNotIn(CANARY, str(logs.output))
 
-    def test_maf_auto_instrumentation_stays_disabled_and_manual_spans_remain_safe(self):
+    def test_maf_and_manual_spans_share_global_provider_without_sensitive_content(self):
         script = textwrap.dedent(
             """
             import asyncio
@@ -369,14 +370,14 @@ class TelemetryTests(unittest.TestCase):
 
             class Passthrough(Executor):
                 def __init__(self, *, fail=False):
-                    super().__init__(id=TOOL_CANARY)
+                    super().__init__(id="passthrough")
                     self.fail = fail
 
                 @handler
                 async def run(self, value: str, ctx: WorkflowContext) -> None:
                     if self.fail:
                         raise RuntimeError(FAILURE_CANARY)
-                    await ctx.yield_output(TOOL_CANARY)
+                    await ctx.yield_output("safe-output")
 
             with TemporaryDirectory() as directory:
                 settings = Settings(
@@ -401,7 +402,8 @@ class TelemetryTests(unittest.TestCase):
                 )
                 first_telemetry = app.state.telemetry
                 second_telemetry = second_app.state.telemetry
-                assert first_telemetry.provider is not second_telemetry.provider
+                assert first_telemetry.provider is global_trace_provider
+                assert second_telemetry.provider is global_trace_provider
                 assert trace.get_tracer_provider() is global_trace_provider
                 assert metrics.get_meter_provider() is global_meter_provider
 
@@ -431,12 +433,12 @@ class TelemetryTests(unittest.TestCase):
                     assert failure_response.status_code == 500
 
                 normal_workflow = WorkflowBuilder(
-                    name="normal-" + TOOL_CANARY,
+                    name="normal-workflow",
                     start_executor=Passthrough(),
                 ).build()
                 asyncio.run(normal_workflow.run(PROMPT_CANARY))
                 failure_workflow = WorkflowBuilder(
-                    name="failure-" + TOOL_CANARY,
+                    name="failure-workflow",
                     start_executor=Passthrough(fail=True),
                 ).build()
                 failure_observed = False
@@ -447,12 +449,10 @@ class TelemetryTests(unittest.TestCase):
                 assert failure_observed, "The failing workflow did not preserve its failure."
 
                 spans = manual_exporter.get_finished_spans()
-                assert [span.name for span in spans] == [
-                    "http.request",
-                    "http.request",
-                ]
-                assert all(span.instrumentation_scope.name == "blueprint.manual" for span in spans)
-                assert all(not span.events for span in spans)
+                names = [span.name for span in spans]
+                assert names.count("http.request") == 2, names
+                assert sum(name.startswith("invoke_workflow") for name in names) == 2, names
+                assert names.count("executor.process passthrough") == 2, names
                 assert all(
                     not any(
                         canary in span.to_json()
@@ -466,7 +466,10 @@ class TelemetryTests(unittest.TestCase):
                     for span in spans
                 )
                 global_spans = global_trace_exporter.get_finished_spans()
-                assert not global_spans, [
+                assert "http.request" in {span.name for span in global_spans}
+                assert any(
+                    span.name.startswith("invoke_workflow") for span in global_spans
+                ), [
                     (
                         span.name,
                         span.instrumentation_scope.name,
@@ -484,6 +487,21 @@ class TelemetryTests(unittest.TestCase):
                     )
                     for span in global_spans
                 ]
+                assert "executor.process passthrough" in {
+                    span.name for span in global_spans
+                }
+                assert all(
+                    not any(
+                        canary in span.to_json()
+                        for canary in (
+                            PROMPT_CANARY,
+                            TOOL_CANARY,
+                            IDENTITY_CANARY,
+                            FAILURE_CANARY,
+                        )
+                    )
+                    for span in global_spans
+                )
                 global_metrics = global_metrics_reader.get_metrics_data()
                 assert global_metrics is None or not global_metrics.resource_metrics
                 assert trace.get_tracer_provider() is global_trace_provider
@@ -765,6 +783,57 @@ class TelemetryTests(unittest.TestCase):
                 metric_exporter.shutdown.assert_called_once()
                 self.assertNotIn(CANARY, str(caught.exception))
                 self.assertTrue(caught.exception.__suppress_context__)
+
+    def test_initialization_failure_does_not_shutdown_preexisting_global_provider(self):
+        provider = TracerProvider()
+        provider.shutdown = Mock()
+        trace_exporter = Mock()
+        metric_exporter = fake_metric_exporter()
+        with (
+            patch(
+                "app.infrastructure.telemetry.trace.get_tracer_provider",
+                return_value=provider,
+            ),
+            patch.object(provider, "get_tracer", side_effect=RuntimeError(CANARY)),
+            self.assertRaisesRegex(
+                RuntimeError, "^Azure Monitor telemetry initialization failed[.]$"
+            ),
+        ):
+            Telemetry(
+                "azure-monitor",
+                "configured",
+                exporter=trace_exporter,
+                metric_exporter=metric_exporter,
+            )
+        provider.shutdown.assert_not_called()
+        trace_exporter.shutdown.assert_called_once()
+        metric_exporter.shutdown.assert_called_once()
+
+    def test_azure_trace_processor_is_deduplicated_by_destination(self):
+        provider = TracerProvider()
+        trace_exporter = Mock()
+        trace_exporter.force_flush.return_value = True
+        trace_exporter.export.return_value = SpanExportResult.SUCCESS
+        with (
+            patch(
+                "app.infrastructure.telemetry.trace.get_tracer_provider",
+                return_value=provider,
+            ),
+            patch(
+                "azure.monitor.opentelemetry.exporter.AzureMonitorTraceExporter",
+                return_value=trace_exporter,
+            ) as trace_factory,
+            patch(
+                "azure.monitor.opentelemetry.exporter.AzureMonitorMetricExporter",
+                side_effect=lambda **_: fake_metric_exporter(),
+            ),
+        ):
+            first = Telemetry("azure-monitor", "configured")
+            second = Telemetry("azure-monitor", "configured")
+            first.shutdown()
+            second.shutdown()
+        provider.shutdown()
+        trace_factory.assert_called_once()
 
     def test_dependency_exception_payload_is_not_recorded(self):
         telemetry = Telemetry()

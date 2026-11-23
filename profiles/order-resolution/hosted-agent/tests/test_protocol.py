@@ -2,10 +2,19 @@ import asyncio
 import json
 import unittest
 from types import SimpleNamespace
+from unittest.mock import patch
 from uuid import uuid4
 
 from order_resolution_hosted.application import CallerContext
-from order_resolution_hosted.host import _caller, _conversation, _start_case, parse_turn
+from order_resolution_hosted.host import (
+    _INSTRUMENTATION_OPTIONS,
+    _PRIVACY_ENVIRONMENT,
+    _caller,
+    _configure_host_observability,
+    _conversation,
+    _start_case,
+    parse_turn,
+)
 
 
 class FakeApplication:
@@ -43,6 +52,44 @@ class FakeRequest:
 
 
 class ProtocolTests(unittest.TestCase):
+    def test_host_observability_uses_supported_builtins_with_privacy_disabled(self):
+        order = []
+        with (
+            patch(
+                "order_resolution_hosted.host.enable_instrumentation",
+                side_effect=lambda **_: order.append("enable"),
+            ) as enable,
+            patch(
+                "order_resolution_hosted.host.configure_agentserver_observability",
+                side_effect=lambda **_: order.append("configure"),
+            ) as configure,
+        ):
+            _configure_host_observability(
+                connection_string="InstrumentationKey=test",
+                log_level="INFO",
+                enable_sensitive_data=True,
+            )
+        enable.assert_called_once_with(
+            enable_sensitive_data=False,
+            enable_message_events=False,
+            force=True,
+        )
+        configure.assert_called_once_with(
+            connection_string="InstrumentationKey=test",
+            log_level="INFO",
+            enable_sensitive_data=False,
+            instrumentation_options=_INSTRUMENTATION_OPTIONS,
+        )
+        self.assertEqual(order, ["configure", "enable"])
+        self.assertEqual(
+            _PRIVACY_ENVIRONMENT,
+            {
+                "ENABLE_SENSITIVE_DATA": "false",
+                "ENABLE_MESSAGE_EVENTS": "false",
+                "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT": "false",
+            },
+        )
+
     def test_requires_trusted_caller_and_conversation_binding(self):
         request = SimpleNamespace(
             scope=SimpleNamespace(user_id="user", session_id="session", call_id="call"),

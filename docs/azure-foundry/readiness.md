@@ -15,9 +15,12 @@ run; the baseline run does not validate this workstream.
 
 ## Correlation and privacy contract
 
-Automatic MAF content instrumentation remains disabled. The backend creates
-manual allowlisted spans and metrics across the API, Foundry invocation,
-native workflow, model, tool, and PostgreSQL boundaries.
+AgentServer configures the supported Azure Monitor exporter and HTTP
+instrumentation on one global provider before native MAF instrumentation is
+enabled. The backend reuses its process-global provider, emits manual
+allowlisted operational spans and metrics, and explicitly propagates W3C
+context into the Foundry invocation. Sensitive-data and message-content
+capture are forced off in both runtimes.
 
 | Field | Contract |
 | --- | --- |
@@ -38,8 +41,14 @@ the examples demonstrate valid and invalid records.
 
 Application Insights verification queries only exact
 request/case/trace/agent-version/deployment-revision tuples emitted by the
-hosted failure run. It uses a bounded explicit ingestion retry and does not
-inspect content fields.
+hosted failure run. For hosted start/resume phases it also requires one
+connected span tree per OperationId, a real `invoke_agent` root, native
+workflow/executor/message spans, application workflow-stage spans, API and
+hosted service roles, durable conversation continuity, and an explicit
+start-span link on resume. A separately captured Foundry trajectory artifact
+must contain the same trace IDs. The verifier rejects raw message/content
+properties, uses a bounded ingestion retry, and does not treat row presence as
+correlation.
 
 ## Evidence and readiness contract
 

@@ -318,8 +318,17 @@ jobs:
           AZURE_LOG_ANALYTICS_WORKSPACE_ID: ${{ vars.AZURE_LOG_ANALYTICS_WORKSPACE_ID }}
         run: |
           mkdir -p evidence/telemetry
+          python scripts/capture_foundry_trajectory_evidence.py \
+            --evidence evidence/failure/hosted-failure.json \
+            --workspace "$AZURE_LOG_ANALYTICS_WORKSPACE_ID" \
+            --output evidence/telemetry/foundry-trajectory.json \
+            --source-revision "$SOURCE_REVISION" \
+            --deployment-revision "$DEPLOYMENT_REVISION" \
+            --environment "$EVIDENCE_ENVIRONMENT" \
+            --attempts 12 --wait-seconds 10
           python scripts/verify_app_insights_correlation.py \
             --evidence evidence/failure/hosted-failure.json \
+            --foundry-evidence evidence/telemetry/foundry-trajectory.json \
             --workspace "$AZURE_LOG_ANALYTICS_WORKSPACE_ID" \
             --output evidence/telemetry/app-insights-correlation.json \
             --source-revision "$SOURCE_REVISION" \
@@ -329,7 +338,7 @@ jobs:
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: workstream-d-telemetry
-          path: evidence/telemetry/app-insights-correlation.json
+          path: evidence/telemetry
           retention-days: 14
 
   release-evidence:

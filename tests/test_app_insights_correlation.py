@@ -20,6 +20,7 @@ class AppInsightsCorrelationTests(unittest.TestCase):
         self.root = Path(self.temporary.name)
         self.evidence = self.root / "hosted.json"
         self.output = self.root / "telemetry.json"
+        self.foundry = self.root / "foundry.json"
         self.pair = {
             "request_id": "10000000-0000-4000-8000-000000000001",
             "case_id": "20000000-0000-4000-8000-000000000002",
@@ -35,6 +36,21 @@ class AppInsightsCorrelationTests(unittest.TestCase):
                     "environment": "synthetic-azure",
                     "started_at": "2026-11-22T20:00:00Z",
                     "correlations": [self.pair],
+                }
+            ),
+            encoding="utf-8",
+        )
+        self.foundry.write_text(
+            json.dumps(
+                {
+                    "evidence_kind": "foundry_trajectory_index",
+                    "outcome": "passed",
+                    "source_revision": "source-123",
+                    "deployment_revision": "deployment-123",
+                    "environment": "synthetic-azure",
+                    "recorded_at": "2026-11-22T20:10:00Z",
+                    "agent_name": "order-resolution",
+                    "trace_ids": [self.pair["trace_id"]],
                 }
             ),
             encoding="utf-8",
@@ -171,6 +187,167 @@ class AppInsightsCorrelationTests(unittest.TestCase):
                 "workspace-id",
                 self.output,
                 source_revision="different",
+                deployment_revision="deployment-123",
+                environment="synthetic-azure",
+            )
+        run.assert_not_called()
+
+    def test_hosted_trace_requires_complete_graph_restart_link_and_foundry_visibility(
+        self,
+    ):
+        start = {
+            **self.pair,
+            "hosted_phase": "start",
+            "conversation_id": "conversation-1",
+            "hosted_agent_name": "order-resolution",
+            "hosted_agent_version": "2",
+        }
+        resume = {
+            **self.pair,
+            "request_id": "10000000-0000-4000-8000-000000000002",
+            "trace_id": "2234567890abcdef1234567890abcdef",
+            "hosted_phase": "resume",
+            "conversation_id": "conversation-1",
+            "hosted_agent_name": "order-resolution",
+            "hosted_agent_version": "2",
+        }
+        self.evidence.write_text(
+            json.dumps(
+                {
+                    "source_revision": "source-123",
+                    "deployment_revision": "deployment-123",
+                    "environment": "synthetic-azure",
+                    "started_at": "2026-11-22T20:00:00Z",
+                    "correlations": [start, resume],
+                }
+            ),
+            encoding="utf-8",
+        )
+        self.foundry.write_text(
+            json.dumps(
+                {
+                    "evidence_kind": "foundry_trajectory_index",
+                    "outcome": "passed",
+                    "source_revision": "source-123",
+                    "deployment_revision": "deployment-123",
+                    "environment": "synthetic-azure",
+                    "recorded_at": "2026-11-22T20:10:00Z",
+                    "agent_name": "order-resolution",
+                    "trace_ids": [start["trace_id"], resume["trace_id"]],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        def span_rows(item):
+            root = {
+                "table_name": "AppRequests",
+                "trace_id": item["trace_id"],
+                "span_id": "1" * 16,
+                "parent_id": "3" * 16,
+                "span_name": "POST /responses",
+                "role_name": "order-resolution",
+                "operation_name": "invoke_agent",
+                "conversation_id": "conversation-1",
+                "agent_name": "order-resolution",
+                "agent_version": "2",
+                "foundry_marker": "True",
+                "workflow_stage": "",
+                "link_trace_id": "",
+                "link_span_id": "",
+                "raw_content": 0,
+            }
+            api = {
+                **root,
+                "span_id": "2" * 16,
+                "parent_id": "",
+                "span_name": "http.request",
+                "role_name": "agent-blueprints.maf-workflow",
+                "operation_name": "",
+                "conversation_id": "",
+                "agent_name": "",
+                "agent_version": "",
+                "foundry_marker": "",
+            }
+            dependency = {
+                **root,
+                "span_id": "3" * 16,
+                "parent_id": "2" * 16,
+                "span_name": "POST /responses",
+                "role_name": "agent-blueprints.maf-workflow",
+                "operation_name": "",
+            }
+            native = [
+                {
+                    **root,
+                    "span_id": f"{index:x}" * 16,
+                    "parent_id": "1" * 16,
+                    "span_name": name,
+                    "operation_name": "",
+                }
+                for index, name in (
+                    (4, "invoke_workflow"),
+                    (5, "executor.process approval"),
+                    (6, "message.send"),
+                    (7, f"order_resolution.workflow.{item['hosted_phase']}"),
+                )
+            ]
+            if item["hosted_phase"] == "resume":
+                native[-1]["link_trace_id"] = start["trace_id"]
+                native[-1]["link_span_id"] = "a" * 16
+            return [api, dependency, root, *native]
+
+        exact = Mock(
+            returncode=0,
+            stdout=json.dumps(
+                [
+                    {**start, "telemetry_count": 8, "exception_count": 0},
+                    {**resume, "telemetry_count": 8, "exception_count": 0},
+                ]
+            ),
+            stderr="",
+        )
+        details = Mock(
+            returncode=0,
+            stdout=json.dumps(span_rows(start) + span_rows(resume)),
+            stderr="",
+        )
+        with patch(
+            "scripts.verify_app_insights_correlation.subprocess.run",
+            side_effect=(exact, details),
+        ):
+            artifact = verify(
+                self.evidence,
+                "workspace-id",
+                self.output,
+                source_revision="source-123",
+                deployment_revision="deployment-123",
+                environment="synthetic-azure",
+                foundry_evidence=self.foundry,
+            )
+        self.assertEqual(artifact["outcome"], "passed")
+        self.assertEqual(len(artifact["validated_hosted_traces"]), 2)
+
+    def test_hosted_trace_never_passes_without_foundry_evidence(self):
+        value = json.loads(self.evidence.read_text(encoding="utf-8"))
+        value["correlations"][0].update(
+            {
+                "hosted_phase": "start",
+                "conversation_id": "conversation-1",
+                "hosted_agent_name": "order-resolution",
+                "hosted_agent_version": "2",
+            }
+        )
+        self.evidence.write_text(json.dumps(value), encoding="utf-8")
+        with (
+            patch("scripts.verify_app_insights_correlation.subprocess.run") as run,
+            self.assertRaises(ValueError),
+        ):
+            verify(
+                self.evidence,
+                "workspace-id",
+                self.output,
+                source_revision="source-123",
                 deployment_revision="deployment-123",
                 environment="synthetic-azure",
             )

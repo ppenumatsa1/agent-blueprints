@@ -967,6 +967,22 @@ delegated Entra user has `workflow.read workflow.approve`,
 temporary PostgreSQL public rule remains required until a validated replacement
 egress/firewall path is active.
 
+The current observability remediation is built-ins-first and remains pending
+live proof. Pinned AgentServer `2.3.1b1`, Agent Framework `1.26.0`, Azure
+Monitor exporter `1.0.0b59`, OpenTelemetry `1.45.2`, HTTPX `0.28.1`, and
+Azure Identity `1.27.0` APIs were checked before implementation. Hosted startup
+now configures one AgentServer/Azure Monitor provider with supported Azure SDK,
+HTTPX, and urllib instrumentation before enabling privacy-safe native MAF
+instrumentation. The API reuses its global provider, injects W3C context into
+Foundry, and deduplicates Azure Monitor processors by destination. Durable
+start metadata records only W3C identifiers; resume emits an explicit OTel
+link rather than claiming uninterrupted parenting. The verifier now requires
+real hosted roots, connected parent trees, API/hosted role coverage,
+conversation continuity, native/business spans, restart links, deployment
+metadata, no raw content, and matching Foundry trajectory trace IDs. Generated
+hosted compatibility and privacy tests pass locally; exact-head CI and live
+App Insights/Foundry evidence are still required before this gate can pass.
+
 The release manifest cannot waive or authorize production checks; production
 requires the baseline-pinned trust validator, signed result attestations, and
 scoped, unexpired risk decisions, while critical/security-critical blocking

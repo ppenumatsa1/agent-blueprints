@@ -4,6 +4,7 @@ import unittest
 from importlib.metadata import version
 from unittest.mock import patch
 
+from agent_framework.observability import enable_instrumentation
 from agent_framework_foundry_hosting import (
     CheckpointStoreProvider,
     FoundryRequestScope,
@@ -11,7 +12,12 @@ from agent_framework_foundry_hosting import (
     ResponsesHostServer,
     WorkflowTurn,
 )
-from azure.ai.agentserver.core import AgentConfig, FoundryAgentRequestContext
+from azure.ai.agentserver.core import (
+    AgentConfig,
+    AgentServerHost,
+    FoundryAgentRequestContext,
+    configure_observability,
+)
 from azure.ai.projects.models import (
     CodeConfiguration,
     HostedAgentDefinition,
@@ -31,13 +37,41 @@ class SdkCompatibilityTests(unittest.TestCase):
             "azure-ai-agentserver-responses": "2.4.0",
             "azure-ai-projects": "2.11.0",
             "azure-identity": "1.27.0",
+            "azure-monitor-opentelemetry-exporter": "1.0.0b59",
+            "httpx": "0.28.1",
+            "opentelemetry-api": "1.45.2",
+            "opentelemetry-sdk": "1.45.2",
         }
         self.assertEqual({name: version(name) for name in expected}, expected)
 
     def test_public_hosting_and_publishing_surface_has_not_drifted(self):
         host = inspect.signature(ResponsesHostServer)
-        for parameter in ("workflow", "parse_response", "checkpoint_store_provider", "options"):
+        for parameter in (
+            "workflow",
+            "parse_response",
+            "checkpoint_store_provider",
+            "options",
+        ):
             self.assertIn(parameter, host.parameters)
+        self.assertIn("kwargs", host.parameters)
+        agent_server_host = inspect.signature(AgentServerHost)
+        for parameter in (
+            "applicationinsights_connection_string",
+            "configure_observability",
+        ):
+            self.assertIn(parameter, agent_server_host.parameters)
+        for parameter in (
+            "connection_string",
+            "enable_sensitive_data",
+            "instrumentation_options",
+        ):
+            self.assertIn(parameter, inspect.signature(configure_observability).parameters)
+        for parameter in (
+            "enable_sensitive_data",
+            "enable_message_events",
+            "force",
+        ):
+            self.assertIn(parameter, inspect.signature(enable_instrumentation).parameters)
         for member in ("get_input_items", "get_input_text", "get_workflow_responses"):
             self.assertTrue(inspect.iscoroutinefunction(getattr(HostedResponseRequest, member)))
         self.assertIn("responses", inspect.signature(WorkflowTurn).parameters)

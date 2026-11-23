@@ -28,6 +28,9 @@ class VerificationWorkflowTests(unittest.TestCase):
         self.assertEqual(workflow.count("  maf-browser:\n"), 1)
         self.assertIn("npm run e2e:local", workflow)
         self.assertIn("python scripts/instantiate_maf.py", workflow)
+        self.assertIn("cd ../hosted-agent", workflow)
+        self.assertIn("uv pip install --python", workflow)
+        self.assertIn("python -m unittest discover -s tests -v", workflow)
 
     def test_generated_evidence_is_produced_from_the_exact_source_head(self):
         workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(
@@ -55,6 +58,8 @@ class VerificationWorkflowTests(unittest.TestCase):
         self.assertIn('test "$(git rev-parse HEAD)" = "$SOURCE_REVISION"', workflow)
         self.assertIn("verify_active_revision.py", workflow)
         self.assertIn("verify_app_insights_correlation.py", workflow)
+        self.assertIn("capture_foundry_trajectory_evidence.py", workflow)
+        self.assertIn("--foundry-evidence", workflow)
         self.assertIn("tests.hosted_failure_runner", workflow)
         self.assertIn("tests.test_order_resolution_real_provider", workflow)
         self.assertIn("npm run e2e:live", workflow)

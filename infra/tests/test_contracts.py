@@ -423,6 +423,12 @@ class InfrastructureContractTests(unittest.TestCase):
         ]
         self.assertIn("ORDER_RESOLUTION_API_ENDPOINT", publisher_environment)
         self.assertIn("ORDER_RESOLUTION_API_SCOPE", publisher_environment)
+        self.assertIn(
+            "$env:APPLICATIONINSIGHTS_CONNECTION_STRING",
+            publisher_environment,
+        )
+        self.assertIn("properties.ConnectionString", deploy)
+        self.assertIn("APPLICATIONINSIGHTS_RESOURCE_ID", deploy)
         self.assertNotIn("$env:DATABASE_URL =", publisher_environment)
         self.assertNotIn("$env:DATABASE_AUTH_MODE =", publisher_environment)
         self.assertNotIn("$env:PGSSLROOTCERT =", publisher_environment)
