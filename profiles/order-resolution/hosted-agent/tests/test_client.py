@@ -260,6 +260,57 @@ class ClientTests(unittest.TestCase):
             OperationStatus.UNKNOWN,
         )
 
+    def test_token_failure_does_not_claim_and_later_retry_posts_once(self):
+        requests = []
+
+        class FlakyTokenProvider:
+            def __init__(self):
+                self.calls = 0
+
+            def authorization_header(self):
+                self.calls += 1
+                if self.calls == 1:
+                    raise RuntimeError("token unavailable")
+                return "Bearer recovered-token"
+
+        token_provider = FlakyTokenProvider()
+
+        def post(*args, **kwargs):
+            requests.append((args, kwargs))
+            return FakeResponse()
+
+        client = ResponsesClient(
+            "https://example.test/agents/order/endpoint/responses?api-version=v1",
+            self.journal,
+            token_provider=token_provider,
+            post=post,
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "token unavailable"):
+            client.start(
+                operation_id="start-token-retry",
+                binding=self.binding,
+                case_id="c3dc94c3-7772-4249-bf63-95597591f49c",
+            )
+        self.assertIsNone(self.journal.get("start-token-retry"))
+        self.assertEqual(requests, [])
+
+        for _ in range(2):
+            self.assertEqual(
+                client.start(
+                    operation_id="start-token-retry",
+                    binding=self.binding,
+                    case_id="c3dc94c3-7772-4249-bf63-95597591f49c",
+                ),
+                "resp-1",
+            )
+        self.assertEqual(token_provider.calls, 2)
+        self.assertEqual(len(requests), 1)
+        self.assertEqual(
+            self.journal.get("start-token-retry").status,
+            OperationStatus.ACKNOWLEDGED,
+        )
+
     def test_existing_pending_claim_is_unknown_and_never_sent(self):
         case_id = "c3dc94c3-7772-4249-bf63-95597591f49c"
         client = self.client(lambda *_args, **_kwargs: self.fail("POST must not run"))

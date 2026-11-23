@@ -70,6 +70,27 @@ backend-only image import/composition regression. No Azure, Foundry, RBAC,
 traffic, workflow, database, or firewall mutation is claimed. Resume deployment
 only from a green exact-head run in a separately authorized phase.
 
+## Hosted durability correction checkpoint
+
+Two independently verified crash windows are corrected in source only. The
+pending case transition, hosted binding, audit insertion, and decision-handle
+binding now use one PostgreSQL transaction through a typed connection helper.
+The replay branch locks and verifies the same proposal, and can repair a legacy
+unbound pending proposal only when its request identity and channel match.
+Separately, a fresh hosted Responses operation obtains its authorization token
+before the durable claim. A pre-request token failure therefore creates no
+claim and sends no POST; a later retry can submit exactly once. Lost-ack
+ambiguity after a request may have crossed the boundary is unchanged.
+
+Local evidence is two focused PostgreSQL regressions, 63 source hosted tests,
+166 independently generated PostgreSQL/backend tests with one explicit
+provider-opt-in skip, 63 generated hosted tests, nine canonical ORS contract
+tests, 105 repository contract/readiness tests with two documented
+adapter-selection skips, and passing Ruff checks. Next action: require all
+exact-head PR jobs to pass, then consider a separately authorized immutable
+deployment and focused live recovery rerun. Do not infer cloud acceptance from
+these local tests.
+
 ## Immutable version-9 deployment and signal checkpoint
 
 Exact source `a302e939810283bce47867b8fa088374f3d204ad` passed all seven PR

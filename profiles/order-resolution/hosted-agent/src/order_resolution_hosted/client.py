@@ -231,6 +231,9 @@ class ResponsesClient:
         if not isinstance(operation_id, str) or not operation_id.strip() or len(operation_id) > 256:
             raise ValueError("A bounded operation ID is required.")
         digest = self._digest(endpoint, payload)
+        authorization = None
+        if self._journal.get(operation_id) is None:
+            authorization = self._token_provider.authorization_header()
         claim = self._journal.claim(operation_id, digest)
         record = claim.record
         if record.status is OperationStatus.ACKNOWLEDGED:
@@ -244,8 +247,10 @@ class ResponsesClient:
             raise AmbiguousCreate(
                 "The pending operation has no active owner proof and cannot be replayed."
             )
+        if authorization is None:
+            raise RuntimeError("The operation journal returned an inconsistent active claim.")
         headers = {
-            "Authorization": self._token_provider.authorization_header(),
+            "Authorization": authorization,
             "Content-Type": "application/json",
         }
         _propagator.inject(headers)

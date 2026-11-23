@@ -89,6 +89,24 @@ new cloud acceptance. Deployment may resume only from a green exact-head run
 and in a separately authorized immutable rollout that replaces the failed
 revision.
 
+## Hosted durability correction checkpoint
+
+**Status: local correction passed; deployment remains blocked.** The hosted
+pending transition and native decision-handle binding now commit atomically
+with the hosted binding and audit event. The replay path verifies or repairs
+the exact handle/channel under the same row locks, so a binding failure cannot
+strand a pending proposal. The Responses client also obtains authorization
+before claiming a fresh durable operation: token failure sends no POST and
+leaves no claim, while ambiguity after a possible send remains fail-closed.
+
+Evidence passed locally: two focused PostgreSQL regressions, 63 source hosted
+tests, 166 independently generated PostgreSQL/backend tests with one explicit
+provider-opt-in skip, 63 generated hosted tests, nine canonical ORS contract
+tests without skips, 105 repository contract/readiness tests with two
+documented adapter-selection skips, and generated/source Ruff checks. No cloud,
+workflow, database, RBAC, firewall, or network state changed. Require green
+exact-head CI before any separately authorized immutable deployment.
+
 ## Immutable deployment and signal checkpoint
 
 **Status: Azure runtime deployment and the bounded version-9 signal comparison

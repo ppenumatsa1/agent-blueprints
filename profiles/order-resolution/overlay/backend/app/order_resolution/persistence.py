@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
+import psycopg
 from psycopg.types.json import Jsonb
 
 from app.domain.errors import AccessDenied, ActionError, Conflict, NotFound
@@ -250,38 +251,59 @@ class OrderResolutionStore(PostgresStore):
         channel: str = "api",
         now: datetime | None = None,
     ) -> Proposal:
+        with self.connect() as connection:
+            return self._bind_decision_handle(
+                connection,
+                case_id,
+                handle,
+                channel=channel,
+                now=now,
+            )
+
+    def _bind_decision_handle(
+        self,
+        connection: psycopg.Connection,
+        case_id: UUID,
+        handle: str,
+        *,
+        channel: str,
+        now: datetime | None = None,
+    ) -> Proposal:
         if not handle:
             raise Conflict("The native pending request identity is required.")
         current_time = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
         digest = hashlib.sha256(handle.encode("utf-8")).hexdigest()
         expires = current_time + DECISION_TTL
-        with self.connect() as connection:
-            row = connection.execute(
+        row = connection.execute(
+            """
+            SELECT * FROM order_resolution_proposals
+            WHERE case_id = %s AND is_current
+            FOR UPDATE
+            """,
+            (case_id,),
+        ).fetchone()
+        if row is None:
+            raise Conflict("The current proposal is missing.")
+        proposal = _proposal(row)
+        if not proposal.approval_required:
+            raise Conflict("The proposal does not accept a decision binding.")
+        if proposal.decision_handle_digest is None:
+            updated = connection.execute(
                 """
-                SELECT * FROM order_resolution_proposals
-                WHERE case_id = %s AND is_current
-                FOR UPDATE
+                UPDATE order_resolution_proposals
+                SET decision_handle_digest = %s, decision_expires_at = %s,
+                    decision_channel = %s
+                WHERE case_id = %s AND proposal_version = %s
+                RETURNING *
                 """,
-                (case_id,),
+                (digest, expires, channel, case_id, proposal.proposal_version),
             ).fetchone()
-            if row is None:
-                raise Conflict("The current proposal is missing.")
-            proposal = _proposal(row)
-            if not proposal.approval_required:
-                raise Conflict("The proposal does not accept a decision binding.")
-            if proposal.decision_handle_digest is None:
-                connection.execute(
-                    """
-                    UPDATE order_resolution_proposals
-                    SET decision_handle_digest = %s, decision_expires_at = %s,
-                        decision_channel = %s
-                    WHERE case_id = %s AND proposal_version = %s
-                    """,
-                    (digest, expires, channel, case_id, proposal.proposal_version),
-                )
-            elif proposal.decision_handle_digest != digest or proposal.decision_channel != channel:
-                raise Conflict("The proposal is bound to a different native pending request.")
-        return self.get_current_proposal(str(case_id))
+            if updated is None:
+                raise Conflict("The decision binding could not be verified.")
+            return _proposal(updated)
+        if proposal.decision_handle_digest != digest or proposal.decision_channel != channel:
+            raise Conflict("The proposal is bound to a different native pending request.")
+        return proposal
 
     def get_current_proposal(self, case_id: str) -> Proposal:
         with self.connect() as connection:
@@ -1031,7 +1053,12 @@ class OrderResolutionStore(PostgresStore):
                 and binding["hosted_status"] == "pending"
                 and binding["pending_request_id"] == request_id
             ):
-                return self.get_current_proposal(str(case_id))
+                return self._bind_decision_handle(
+                    connection,
+                    case_id,
+                    request_id,
+                    channel=channel,
+                )
             if (
                 case is None
                 or case["status"] != "created"
@@ -1074,7 +1101,12 @@ class OrderResolutionStore(PostgresStore):
                 """,
                 (case_id,),
             )
-        return self.bind_decision_handle(case_id, request_id, channel=channel)
+            return self._bind_decision_handle(
+                connection,
+                case_id,
+                request_id,
+                channel=channel,
+            )
 
     def claim_hosted_decision(self, decision: DecisionRecord) -> DecisionRecord:
         case_id = UUID(decision.case_id)

@@ -127,6 +127,31 @@ was made. Human resume remains separately blocked until a distinct delegated
 reviewer can prove approval and the durable trace link without weakening
 authorization.
 
+### Post-deployment hosted durability correction
+
+The source branch now closes two local durability gaps; these corrections are
+not present in the deployed `a302e939` artifacts. First, the transition to
+pending, hosted binding update, audit record, and native decision-handle
+binding share one PostgreSQL transaction. A failure during handle binding
+therefore rolls the case and binding back instead of leaving an unbound
+pending proposal. Replay locks the same rows and verifies or repairs an exact
+legacy handle/channel binding before returning it.
+
+Second, the hosted Responses client acquires its workload authorization token
+before creating a fresh durable operation claim. A credential failure before
+the request boundary now sends no POST and leaves no ambiguous claim; a later
+retry may claim and submit exactly once. Once a request may have been sent,
+the existing lost-ack rule remains fail-closed and requires reconciliation.
+
+Focused PostgreSQL crash-window and durable-journal regressions, 63 source
+hosted tests, 166 independently generated PostgreSQL/backend tests, 63
+generated hosted tests, nine canonical ORS contract tests, and 105 repository
+contract/readiness tests passed locally. The generated backend retained one
+explicit provider-opt-in skip and the repository suite retained two documented
+adapter-selection skips. This evidence changes no cloud state and does not
+authorize deployment; a green exact-head CI run and a separately authorized
+immutable rollout remain prerequisites.
+
 ## Open architecture and verification gaps
 
 The engineering foundation is not a deployment-readiness claim. Open work

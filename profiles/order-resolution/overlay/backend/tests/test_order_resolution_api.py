@@ -362,6 +362,202 @@ class OrderResolutionApiTests(unittest.TestCase):
         self.assertIsNotNone(proposal.decision_expires_at)
         self.assertEqual(proposal.decision_channel, "api")
 
+    def test_hosted_pending_transition_and_decision_handle_are_atomic(self):
+        owner, case, _ = self.hosted_case("ORDER-HOSTED-ATOMIC-PENDING", "185.00")
+        request_id = f"case:{case.id}:approval:v1"
+        conversation_id = "conversation-hosted-atomic-pending"
+        PostgresHostedAuthorityBindings(self.store).bind_start(
+            case.id,
+            owner,
+            conversation_id=conversation_id,
+            channel=HOSTED_CHANNEL,
+        )
+        with self.store.connect() as connection:
+            connection.execute(
+                """
+                CREATE FUNCTION reject_decision_handle_update()
+                RETURNS trigger LANGUAGE plpgsql AS $$
+                BEGIN
+                    IF OLD.decision_handle_digest IS NULL
+                       AND NEW.decision_handle_digest IS NOT NULL THEN
+                        RAISE EXCEPTION 'simulated crash before decision binding';
+                    END IF;
+                    RETURN NEW;
+                END
+                $$
+                """
+            )
+            connection.execute(
+                """
+                CREATE TRIGGER reject_decision_handle_update
+                BEFORE UPDATE OF decision_handle_digest
+                ON order_resolution_proposals
+                FOR EACH ROW EXECUTE FUNCTION reject_decision_handle_update()
+                """
+            )
+
+        with self.assertRaises(psycopg.errors.RaiseException):
+            self.store.prepare_hosted_approval(
+                case.id,
+                request_id,
+                channel=HOSTED_CHANNEL,
+            )
+
+        stored = self.store.get(case.id)
+        self.assertEqual(stored.status, "created")
+        self.assertIsNone(stored.request_id)
+        proposal = self.store.get_current_proposal(str(case.id))
+        self.assertIsNone(proposal.decision_handle_digest)
+        with self.store.connect() as connection:
+            binding = connection.execute(
+                """
+                SELECT hosted_status, pending_request_id
+                FROM order_resolution_hosted_bindings
+                WHERE case_id = %s
+                """,
+                (case.id,),
+            ).fetchone()
+            saved_events = connection.execute(
+                """
+                SELECT count(*) AS count FROM wf_audit
+                WHERE case_id = %s AND event = 'hosted_request_saved'
+                """,
+                (case.id,),
+            ).fetchone()["count"]
+            connection.execute(
+                "DROP TRIGGER reject_decision_handle_update ON order_resolution_proposals"
+            )
+            connection.execute("DROP FUNCTION reject_decision_handle_update()")
+        self.assertEqual(
+            (binding["hosted_status"], binding["pending_request_id"]),
+            ("bound", None),
+        )
+        self.assertEqual(saved_events, 0)
+
+        prepared = self.store.prepare_hosted_approval(
+            case.id,
+            request_id,
+            channel=HOSTED_CHANNEL,
+        )
+        replayed = self.store.prepare_hosted_approval(
+            case.id,
+            request_id,
+            channel=HOSTED_CHANNEL,
+        )
+        self.assertEqual(replayed, prepared)
+        self.assertIsNotNone(prepared.decision_handle_digest)
+        self.assertIsNotNone(prepared.decision_expires_at)
+        self.assertEqual(prepared.decision_channel, HOSTED_CHANNEL)
+        with self.store.connect() as connection:
+            final = connection.execute(
+                """
+                SELECT c.status, c.request_id, b.hosted_status,
+                    b.pending_request_id,
+                    (SELECT count(*) FROM wf_audit
+                     WHERE case_id = c.id AND event = 'hosted_request_saved')
+                        AS saved_events
+                FROM wf_cases AS c
+                JOIN order_resolution_hosted_bindings AS b ON b.case_id = c.id
+                WHERE c.id = %s
+                """,
+                (case.id,),
+            ).fetchone()
+        self.assertEqual(
+            (
+                final["status"],
+                final["request_id"],
+                final["hosted_status"],
+                final["pending_request_id"],
+                final["saved_events"],
+            ),
+            ("pending", request_id, "pending", request_id, 1),
+        )
+
+    def test_hosted_token_failure_does_not_create_durable_operation_claim(self):
+        from order_resolution_hosted.client import (
+            ConversationBinding,
+            ResponsesClient,
+        )
+
+        from app.order_resolution.hosted_journal import PostgresOperationJournal
+
+        _, case, _ = self.hosted_case("ORDER-HOSTED-TOKEN-RETRY", "79.00")
+        requests = []
+
+        class FlakyTokenProvider:
+            def __init__(self):
+                self.calls = 0
+
+            def authorization_header(self):
+                self.calls += 1
+                if self.calls == 1:
+                    raise RuntimeError("token unavailable")
+                return "Bearer recovered-token"
+
+        class Response:
+            status_code = 200
+
+            @staticmethod
+            def json():
+                return {"id": "response-after-token-retry"}
+
+        token_provider = FlakyTokenProvider()
+        operation_id = f"case:{case.id}:start"
+
+        def post(*args, **kwargs):
+            requests.append((args, kwargs))
+            return Response()
+
+        responses = ResponsesClient(
+            "http://127.0.0.1:1/responses?api-version=v1",
+            PostgresOperationJournal(self.store),
+            token_provider=token_provider,
+            post=post,
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "token unavailable"):
+            responses.start(
+                operation_id=operation_id,
+                binding=ConversationBinding("conversation-token-retry"),
+                case_id=str(case.id),
+            )
+        with self.store.connect() as connection:
+            claim_count = connection.execute(
+                """
+                SELECT count(*) AS count
+                FROM order_resolution_hosted_operations
+                WHERE operation_id = %s
+                """,
+                (operation_id,),
+            ).fetchone()["count"]
+        self.assertEqual(claim_count, 0)
+        self.assertEqual(requests, [])
+
+        for _ in range(2):
+            self.assertEqual(
+                responses.start(
+                    operation_id=operation_id,
+                    binding=ConversationBinding("conversation-token-retry"),
+                    case_id=str(case.id),
+                ),
+                "response-after-token-retry",
+            )
+        with self.store.connect() as connection:
+            claim = connection.execute(
+                """
+                SELECT status, remote_id
+                FROM order_resolution_hosted_operations
+                WHERE operation_id = %s
+                """,
+                (operation_id,),
+            ).fetchone()
+        self.assertEqual(
+            (claim["status"], claim["remote_id"]),
+            ("acknowledged", "response-after-token-retry"),
+        )
+        self.assertEqual(token_provider.calls, 2)
+        self.assertEqual(len(requests), 1)
+
     def test_hosted_service_endpoints_are_authorized_durable_and_idempotent(self):
         owner, case, proposal = self.hosted_case("ORDER-HOSTED-SERVICE", "185.00")
         case_id = case.id

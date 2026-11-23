@@ -448,6 +448,31 @@ These results repair local readiness evidence only. Bind the correction to a
 green exact-head run before a later immutable deployment; no workflow,
 firewall, or cloud acceptance state changed in this correction.
 
+## Hosted durability correction
+
+The source branch now makes hosted pending persistence atomic: case state,
+hosted binding, audit evidence, and the native decision-handle binding commit
+or roll back together. The replay branch uses the same typed
+connection-scoped helper to verify or repair the exact handle/channel, avoiding
+a permanently unbound pending proposal after the former two-transaction crash
+window.
+
+The hosted Responses client now acquires authorization before claiming a fresh
+durable operation. A token acquisition failure sends no POST and leaves no
+journal row; a later retry claims and posts exactly once. Existing ambiguity
+after a request may have been sent remains non-replayable without
+reconciliation.
+
+Local evidence passed: two focused PostgreSQL crash-window/journal regressions,
+63 source hosted tests, 166 independently generated PostgreSQL/backend tests
+with one explicit provider-opt-in skip, 63 generated hosted tests, nine
+canonical ORS contract tests without skips, 105 repository tests with two
+documented adapter-selection skips, and source/generated Ruff checks. This
+checkpoint did not deploy or invoke a workflow and changed no cloud, database,
+RBAC, firewall, or network state. A green exact-head CI run and separate
+authorization are required before an immutable rollout and focused live
+recovery verification.
+
 ## Immutable deployment and bounded signal comparison
 
 Exact source `a302e939810283bce47867b8fa088374f3d204ad` passed all seven
