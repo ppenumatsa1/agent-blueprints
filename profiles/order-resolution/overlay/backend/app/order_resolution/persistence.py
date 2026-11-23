@@ -634,11 +634,6 @@ class OrderResolutionStore(PostgresStore):
             ).fetchone()
             if row is None or row["conversation_id"] != conversation_id:
                 raise AccessDenied("The hosted platform binding is not authorized.")
-            if row["caller_id"] not in (None, caller_id) or row["session_id"] not in (
-                None,
-                session_id,
-            ):
-                raise Conflict("The hosted platform binding cannot change identity.")
             connection.execute(
                 """
                 UPDATE order_resolution_hosted_bindings

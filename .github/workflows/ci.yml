@@ -123,16 +123,17 @@ jobs:
           docker compose -p maf-app-ci up --build --wait --wait-timeout 300
       - name: Verify HTTP boundaries and container permissions
         run: |
-          html="$(curl --fail --silent http://127.0.0.1:18080/)"
+          curl_retry=(--retry 10 --retry-delay 1 --retry-all-errors --connect-timeout 5 --max-time 30)
+          html="$(curl --fail --silent "${curl_retry[@]}" http://127.0.0.1:18080/)"
           asset="$(printf '%s' "$html" | grep -oE 'src="/assets/[^"]+\.js"' | cut -d '"' -f2)"
           test -n "$asset"
-          bundle="$(curl --fail --silent "http://127.0.0.1:18080$asset")"
+          bundle="$(curl --fail --silent "${curl_retry[@]}" "http://127.0.0.1:18080$asset")"
           for value in "$ENTRA_TENANT_ID" "$ENTRA_SPA_CLIENT_ID" "$ENTRA_API_APP_ID_URI"; do
             [[ "$bundle" == *"$value"* ]]
           done
-          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:18080/healthz)" = 204
-          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:18080/api/cases/40000000-0000-4000-8000-000000000004)" = 401
-          curl --silent --head http://127.0.0.1:18080/ | grep -qi 'content-security-policy:'
+          test "$(curl --silent "${curl_retry[@]}" --output /dev/null --write-out '%{http_code}' http://127.0.0.1:18080/healthz)" = 204
+          test "$(curl --silent "${curl_retry[@]}" --output /dev/null --write-out '%{http_code}' http://127.0.0.1:18080/api/cases/40000000-0000-4000-8000-000000000004)" = 401
+          curl --silent "${curl_retry[@]}" --head http://127.0.0.1:18080/ | grep -qi 'content-security-policy:'
           docker compose -p maf-app-ci exec -T api python -c "import os, stat; assert os.getuid() != 0; assert stat.S_IMODE(os.stat('/var/lib/blueprint/checkpoints').st_mode) == 0o700"
       - name: Remove isolated stack
         if: always()
