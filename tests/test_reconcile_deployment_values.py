@@ -33,6 +33,10 @@ class ReconcileDeploymentValuesTests(unittest.TestCase):
         values = {
             "AZURE_SUBSCRIPTION_ID": subscription,
             "AZURE_AI_PROJECT_ID": project,
+            "APPLICATIONINSIGHTS_RESOURCE_ID": (
+                f"/subscriptions/{subscription}/resourceGroups/rg/providers/"
+                "Microsoft.Insights/components/appi"
+            ),
             "AZURE_API_FQDN": "api.example.test",
             "AZURE_WEB_FQDN": "web.example.test",
             "AZURE_POSTGRESQL_HOST": "db.example.test",
@@ -54,7 +58,15 @@ class ReconcileDeploymentValuesTests(unittest.TestCase):
             "properties": {
                 "latestReadyRevisionName": "api--revision",
                 "template": {
-                    "containers": [{"image": "registry/api@sha256:" + "a" * 64}]
+                    "containers": [
+                        {
+                            "image": "registry/api@sha256:" + "a" * 64,
+                            "env": [
+                                {"name": "AGENT_VERSION", "value": "2"},
+                                {"name": "HOSTED_AGENT_VERSION", "value": "2"},
+                            ],
+                        }
+                    ]
                 },
             }
         }
@@ -78,6 +90,18 @@ class ReconcileDeploymentValuesTests(unittest.TestCase):
             api_app=api_app,
             web_app=web_app,
             agent_role_assignments=[{"id": "role-assignment", "scope": scope}],
+            hosted_monitoring_role_assignments=[
+                {
+                    "id": "monitoring-role-assignment",
+                    "scope": values["APPLICATIONINSIGHTS_RESOURCE_ID"],
+                    "principalId": journal["identity_principal_id"],
+                    "roleDefinitionId": (
+                        f"/subscriptions/{subscription}/providers/"
+                        "Microsoft.Authorization/roleDefinitions/"
+                        f"{module.MONITORING_METRICS_PUBLISHER_ROLE_ID}"
+                    ),
+                }
+            ],
             hosted_app_role_assignments=[{"id": "app-role-assignment"}],
             acceptance_mode=True,
         )
@@ -87,8 +111,96 @@ class ReconcileDeploymentValuesTests(unittest.TestCase):
         self.assertEqual(
             result["AZURE_HOSTED_API_APP_ROLE_ASSIGNMENT_ID"], "app-role-assignment"
         )
+        self.assertEqual(
+            result["AZURE_HOSTED_APPINSIGHTS_ROLE_ASSIGNMENT_ID"],
+            "monitoring-role-assignment",
+        )
+        self.assertEqual(
+            result["AZURE_HOSTED_APPINSIGHTS_RBAC_SCOPE"],
+            values["APPLICATIONINSIGHTS_RESOURCE_ID"],
+        )
+        self.assertEqual(
+            result["AZURE_HOSTED_APPINSIGHTS_RBAC_ROLE_ID"],
+            module.MONITORING_METRICS_PUBLISHER_ROLE_ID,
+        )
         self.assertEqual(result["ACCEPTANCE_MODE"], "true")
         self.assertIn("sslmode=verify-full", result["AZURE_API_DATABASE_URL"])
+        stale_api = {
+            "properties": {
+                **api_app["properties"],
+                "template": {
+                    "containers": [
+                        {
+                            "image": "registry/api@sha256:" + "a" * 64,
+                            "env": [
+                                {"name": "AGENT_VERSION", "value": "2"},
+                                {"name": "HOSTED_AGENT_VERSION", "value": "1"},
+                            ],
+                        }
+                    ]
+                },
+            }
+        }
+        with self.assertRaisesRegex(module.ReconciliationError, "HOSTED_AGENT_VERSION"):
+            module.reconcile(
+                values,
+                journal,
+                source_revision="c" * 40,
+                deployment_revision="c" * 40,
+                agent_name="order-resolution",
+                responses_endpoint=self.endpoint("order-resolution", "responses"),
+                conversation_endpoint=self.endpoint(
+                    "order-resolution", "conversations"
+                ),
+                api_app=stale_api,
+                web_app=web_app,
+                agent_role_assignments=[{"id": "role-assignment", "scope": scope}],
+                hosted_monitoring_role_assignments=[
+                    {
+                        "id": "monitoring-role-assignment",
+                        "scope": values["APPLICATIONINSIGHTS_RESOURCE_ID"],
+                        "principalId": journal["identity_principal_id"],
+                        "roleDefinitionId": (
+                            f"/subscriptions/{subscription}/providers/"
+                            "Microsoft.Authorization/roleDefinitions/"
+                            f"{module.MONITORING_METRICS_PUBLISHER_ROLE_ID}"
+                        ),
+                    }
+                ],
+                hosted_app_role_assignments=[{"id": "app-role-assignment"}],
+                acceptance_mode=True,
+            )
+        with self.assertRaisesRegex(
+            module.ReconciliationError, "exact-component scoped"
+        ):
+            module.reconcile(
+                values,
+                journal,
+                source_revision="c" * 40,
+                deployment_revision="c" * 40,
+                agent_name="order-resolution",
+                responses_endpoint=self.endpoint("order-resolution", "responses"),
+                conversation_endpoint=self.endpoint(
+                    "order-resolution", "conversations"
+                ),
+                api_app=api_app,
+                web_app=web_app,
+                agent_role_assignments=[{"id": "role-assignment", "scope": scope}],
+                hosted_monitoring_role_assignments=[
+                    {
+                        "id": "monitoring-role-assignment",
+                        "scope": f"/subscriptions/{subscription}",
+                        "principalId": journal["identity_principal_id"],
+                        "roleDefinitionId": (
+                            f"/subscriptions/{subscription}/providers/"
+                            "Microsoft.Authorization/roleDefinitions/"
+                            f"{module.MONITORING_METRICS_PUBLISHER_ROLE_ID}"
+                        ),
+                    }
+                ],
+                hosted_app_role_assignments=[{"id": "app-role-assignment"}],
+                acceptance_mode=True,
+            )
 
     def test_reconcile_rejects_non_exact_agent_assignment(self):
         with self.assertRaises(module.ReconciliationError):
@@ -96,6 +208,10 @@ class ReconcileDeploymentValuesTests(unittest.TestCase):
                 {
                     "AZURE_SUBSCRIPTION_ID": "11111111-1111-4111-8111-111111111111",
                     "AZURE_AI_PROJECT_ID": "/subscriptions/x/projects/y",
+                    "APPLICATIONINSIGHTS_RESOURCE_ID": (
+                        "/subscriptions/11111111-1111-4111-8111-111111111111/"
+                        "resourceGroups/rg/providers/Microsoft.Insights/components/appi"
+                    ),
                     "AZURE_API_FQDN": "api.example.test",
                     "AZURE_WEB_FQDN": "web.example.test",
                     "AZURE_POSTGRESQL_HOST": "db.example.test",
@@ -122,7 +238,17 @@ class ReconcileDeploymentValuesTests(unittest.TestCase):
                     "properties": {
                         "latestReadyRevisionName": "api--1",
                         "template": {
-                            "containers": [{"image": "r/a@sha256:" + "a" * 64}]
+                            "containers": [
+                                {
+                                    "image": "r/a@sha256:" + "a" * 64,
+                                    "env": [
+                                        {
+                                            "name": "HOSTED_AGENT_VERSION",
+                                            "value": "1",
+                                        }
+                                    ],
+                                }
+                            ]
                         },
                     }
                 },
@@ -135,6 +261,22 @@ class ReconcileDeploymentValuesTests(unittest.TestCase):
                     }
                 },
                 agent_role_assignments=[{"id": "bad", "scope": "/wrong"}],
+                hosted_monitoring_role_assignments=[
+                    {
+                        "id": "monitoring",
+                        "scope": (
+                            "/subscriptions/11111111-1111-4111-8111-111111111111/"
+                            "resourceGroups/rg/providers/Microsoft.Insights/"
+                            "components/appi"
+                        ),
+                        "principalId": "principal",
+                        "roleDefinitionId": (
+                            "/subscriptions/11111111-1111-4111-8111-111111111111/"
+                            "providers/Microsoft.Authorization/roleDefinitions/"
+                            f"{module.MONITORING_METRICS_PUBLISHER_ROLE_ID}"
+                        ),
+                    }
+                ],
                 hosted_app_role_assignments=[{"id": "assignment"}],
                 acceptance_mode=False,
             )

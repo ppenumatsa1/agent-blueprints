@@ -486,6 +486,10 @@ class PublisherTests(unittest.TestCase):
                 DATABASE_TLS_MODE="verify-full",
                 PGSSLROOTCERT="/must/not/publish.pem",
                 AGENTSERVER_FLUSH_MODE="background",
+                APPLICATIONINSIGHTS_AUTH_MODE="connection-string",
+                ENABLE_SENSITIVE_DATA="true",
+                ENABLE_MESSAGE_EVENTS="true",
+                OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT="true",
             )
         )
         self.assertEqual(
@@ -504,7 +508,10 @@ class PublisherTests(unittest.TestCase):
                 name: environment[name]
                 for name in publisher.OBSERVABILITY_RUNTIME_ENVIRONMENT
             },
-            {"AGENTSERVER_FLUSH_MODE": "async"},
+            {
+                "AGENTSERVER_FLUSH_MODE": "async",
+                "APPLICATIONINSIGHTS_AUTH_MODE": "entra",
+            },
         )
         self.assertFalse(
             {

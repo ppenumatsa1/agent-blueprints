@@ -170,6 +170,7 @@ dependency. ACR stores only the generated API and frontend images.
 | API PostgreSQL principal | Application database | Connect, schema usage, table DML, and sequence use | Runtime business persistence without schema ownership |
 | Reviewed PostgreSQL administrator | PostgreSQL server | Entra administrator | Create the runtime principal and execute reviewed migrations |
 | Hosted-agent version principal | API application | `Hosted.Workflow.Invoke` application role | Call only the protected internal hosted-business API boundary |
+| Hosted-agent version principal | Exact Application Insights component | Monitoring Metrics Publisher | Export privacy-safe telemetry using AgentServer's managed-identity Azure Monitor path |
 | Hosted-agent version principal | Foundry model/session plane | Platform-provided model/session access | No unrelated external-resource role is added |
 | End users | No Azure workload scope | Delegated API scopes plus `Workflow.User`/`Workflow.Approver` application roles | API validates tenant, audience, scopes/roles, and record-level authorization |
 | Deployment principal | New resource group/resources | Contributor plus Role Based Access Control Administrator or User Access Administrator; Owner is accepted for the authorized test subscription | Create resources and reviewed role assignments without runtime data-plane use |

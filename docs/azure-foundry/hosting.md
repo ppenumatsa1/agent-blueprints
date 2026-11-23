@@ -247,7 +247,9 @@ or configuration fails closed before an SDK create. Publishing requires
 - `ORDER_RESOLUTION_API_TIMEOUT_SECONDS`.
 
 The publisher also sets the non-caller-overridable runtime safety value
-`AGENTSERVER_FLUSH_MODE=async`. AgentServer Responses `2.4.0` documents
+`AGENTSERVER_FLUSH_MODE=async` and the non-caller-overridable authentication
+selection `APPLICATIONINSIGHTS_AUTH_MODE=entra`. AgentServer Responses `2.4.0`
+documents
 background flushing as the default and warns that it can lose the final
 request's spans when the platform does not provide a post-response drain
 window. The async mode is the supported request-awaited path: it runs
@@ -256,6 +258,13 @@ version-2 trace preserved W3C context in API callbacks but lost all hosted
 parents under the background default, so this setting is required for the
 observed Foundry sandbox behavior. It does not create another provider or
 exporter and cannot be changed through the publication caller's runtime input.
+The pinned AgentServer core maps Entra mode to a system-assigned
+`ManagedIdentityCredential()` supplied through the Microsoft OpenTelemetry
+distro. This is required because the Application Insights component disables
+local authentication. The deployment orchestrator assigns the resulting
+hosted-version identity `Monitoring Metrics Publisher`
+(`3913510d-42f4-4e42-8a64-420c390055eb`) at the exact component resource ID
+only; the publisher itself still performs no RBAC mutation.
 
 The project endpoint in the runtime environment must match the publication
 target. Every allowlisted value is injected into the public
@@ -274,7 +283,8 @@ After an acknowledged create, the CLI safely polls the public
 `agents.get_version(agent_name, agent_version)` GET until the platform-created
 identity is available. The first phase returns the identity even when the
 version is still creating, so the infrastructure workstream can grant
-the hosted identity access to the protected API before any invocation.
+the hosted identity access to the protected API and exact Application Insights
+component before any invocation.
 Rerunning the identical operation with `--require-active` performs no create and
 polls the same version until it is active. The JSON record includes the agent
 version, data-plane version ID, agent GUID, provisioning status, identity

@@ -129,6 +129,10 @@ resource api 'Microsoft.App/containerApps@2025-07-01' = {
               value: agentVersion
             }
             {
+              name: 'HOSTED_AGENT_VERSION'
+              value: agentVersion
+            }
+            {
               name: 'ACCEPTANCE_MODE'
               value: string(acceptanceMode)
             }

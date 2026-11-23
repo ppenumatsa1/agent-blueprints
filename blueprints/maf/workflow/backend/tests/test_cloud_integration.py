@@ -146,10 +146,13 @@ class CloudConfigurationTests(unittest.TestCase):
             "HOSTED_SERVICE_APP_ROLE": "Hosted.Workflow.Invoke",
             "DATABASE_AUTH_MODE": "managed-identity",
             "PGSSLROOTCERT": "system",
+            "AGENT_VERSION": "2",
+            "HOSTED_AGENT_VERSION": "3",
         }
         with patch.dict(os.environ, environment, clear=True):
             settings = Settings.from_environment()
             store = PostgresStore.from_settings(settings)
+        self.assertEqual(settings.agent_version, "3")
         self.assertEqual(settings.database_tls_mode, "verify-full")
         self.assertEqual(settings.database_tls_root_cert, "system")
         self.assertEqual(store._connector.options.tls_mode, "verify-full")

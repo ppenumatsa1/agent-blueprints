@@ -453,6 +453,7 @@ try {
     $bootstrapApiEnvironment = @(
         $apiEnvironment
         'AGENT_VERSION=unpublished'
+        'HOSTED_AGENT_VERSION=unpublished'
         "HOSTED_WORKFLOW_ENDPOINT=$HostedWorkflowEndpoint"
         "HOSTED_CONVERSATION_ENDPOINT=$HostedConversationEndpoint"
         "HOSTED_SERVICE_PRINCIPAL_ID=$($entra.apiServicePrincipalObjectId)"
@@ -590,6 +591,7 @@ try {
     }
     $publishRecord = $null
     $agentAssignment = $null
+    $hostedMonitoringAssignment = $null
     try {
         $env:FOUNDRY_PROJECT_ENDPOINT = Get-RequiredValue $values 'AZURE_AI_PROJECT_ENDPOINT'
         $env:FOUNDRY_PROJECT_ID = Get-RequiredValue $values 'AZURE_AI_PROJECT_ID'
@@ -615,6 +617,19 @@ try {
             throw 'Unable to grant Agent Consumer at the hosted agent scope.'
         }
         $agentAssignment = $agentAssignmentJson | ConvertFrom-Json
+
+        $hostedMonitoringAssignmentJson = az role assignment create `
+            --subscription $SubscriptionId `
+            --assignee-object-id $pendingPublishRecord.identity_principal_id `
+            --assignee-principal-type ServicePrincipal `
+            --role '3913510d-42f4-4e42-8a64-420c390055eb' `
+            --scope $applicationInsightsResourceId `
+            --output json `
+            --only-show-errors
+        if ($LASTEXITCODE -ne 0) {
+            throw 'Unable to grant Monitoring Metrics Publisher at the Application Insights component scope.'
+        }
+        $hostedMonitoringAssignment = $hostedMonitoringAssignmentJson | ConvertFrom-Json
 
         $hostedEntraJson = & "$PSScriptRoot\configure-entra.ps1" `
             -Apply `
@@ -670,6 +685,7 @@ try {
     $finalApiEnvironment = @(
         $apiEnvironment
         "AGENT_VERSION=$($publishRecord.agent_version)"
+        "HOSTED_AGENT_VERSION=$($publishRecord.agent_version)"
         "HOSTED_WORKFLOW_ENDPOINT=$HostedWorkflowEndpoint"
         "HOSTED_CONVERSATION_ENDPOINT=$HostedConversationEndpoint"
         "HOSTED_SERVICE_PRINCIPAL_ID=$($publishRecord.identity_principal_id)"
@@ -748,6 +764,12 @@ try {
     $values['AZURE_HOSTED_AGENT_RBAC_SCOPE'] = $hostedAgentScope.scope
     $values['AZURE_HOSTED_AGENT_RBAC_SCOPE_SOURCE'] = $hostedAgentScope.source
     $values['AZURE_API_HOSTED_AGENT_ROLE_ASSIGNMENT_ID'] = $agentAssignment.id
+    $values['AZURE_HOSTED_APPINSIGHTS_ROLE_ASSIGNMENT_ID'] =
+        $hostedMonitoringAssignment.id
+    $values['AZURE_HOSTED_APPINSIGHTS_RBAC_SCOPE'] =
+        $applicationInsightsResourceId
+    $values['AZURE_HOSTED_APPINSIGHTS_RBAC_ROLE_ID'] =
+        '3913510d-42f4-4e42-8a64-420c390055eb'
     $values['AZURE_HOSTED_API_APP_ROLE_ASSIGNMENT_ID'] =
         $hostedEntra.hostedServiceAssignmentId
     $values['AZURE_HOSTED_API_APP_ROLE_ID'] = $hostedEntra.hostedServiceAppRoleId

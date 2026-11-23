@@ -1019,6 +1019,27 @@ as expected. Validation passes 103 root tests with two disclosed adapter skips,
 47 generated hosted tests, and Ruff. Exact-head CI, a new immutable hosted
 version, and live connected trace evidence remain required.
 
+The subsequent version-3 proof established that awaited flush was executing,
+but Azure Monitor rejected every hosted export as `Unauthorized`. The existing
+Application Insights component has `DisableLocalAuth=true`; the hosted
+definition did not select AgentServer's Entra mode and the hosted-version
+identity did not hold `Monitoring Metrics Publisher`. The compatible
+built-in-first correction fixes
+`APPLICATIONINSIGHTS_AUTH_MODE=entra`, which the pinned AgentServer
+`2.3.1b1` implementation maps to `ManagedIdentityCredential()` through the
+Microsoft OpenTelemetry distro. The staged deployment path grants role
+`3913510d-42f4-4e42-8a64-420c390055eb` only at the exact Application Insights
+component scope after hosted identity discovery and before active readiness.
+Normalized evidence rejects a missing, broader, wrong-role, or wrong-principal
+assignment. The API deployment binds `HOSTED_AGENT_VERSION` to the published
+version and the application prefers that value for trace metadata while
+retaining `AGENT_VERSION` as a compatibility fallback. Privacy flags remain
+fixed false. Deployment and live proof remain separate later gates.
+Local validation passes 103 root tests with the two disclosed adapter-selection
+skips, 126 source-backend tests and 179 independently generated backend tests
+against disposable PostgreSQL 17 instances, 48 generated hosted-agent tests,
+Ruff check/format, PowerShell parsing, and Bicep compilation.
+
 The first exact-head remediation run exposed a generated local-host regression
 rather than an exporter failure: the workflow now persisted its deterministic
 conversation ID, while `OrderResolutionWorkflowHost` still accepted only the

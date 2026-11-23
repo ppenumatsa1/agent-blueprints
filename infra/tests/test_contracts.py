@@ -364,6 +364,11 @@ class InfrastructureContractTests(unittest.TestCase):
             "eed3b665-ab3a-47b6-8f48-c9382fb1dad6",
             scripts["deploy.ps1"],
         )
+        self.assertIn(
+            "3913510d-42f4-4e42-8a64-420c390055eb",
+            scripts["deploy.ps1"],
+        )
+        self.assertIn("--scope $applicationInsightsResourceId", scripts["deploy.ps1"])
         self.assertIn("publishRecord.identity_principal_id", scripts["deploy.ps1"])
         self.assertIn("publishRecord.identity_client_id", scripts["deploy.ps1"])
         self.assertIn("publishRecord.provisioning_status", scripts["deploy.ps1"])
@@ -459,6 +464,9 @@ class InfrastructureContractTests(unittest.TestCase):
         hosted_grant = deploy.index(
             "-HostedServicePrincipalObjectId $pendingPublishRecord.identity_principal_id"
         )
+        monitoring_grant = deploy.index(
+            "--assignee-object-id $pendingPublishRecord.identity_principal_id"
+        )
         scope_verification = deploy.index("verify_hosted_agent_scope.py")
         role_assignment = deploy.index("az role assignment create")
         active_publish = deploy.index(
@@ -467,6 +475,8 @@ class InfrastructureContractTests(unittest.TestCase):
         self.assertLess(bootstrap_api, pending_publish)
         self.assertLess(bootstrap_identity, pending_publish)
         self.assertLess(pending_publish, hosted_grant)
+        self.assertLess(pending_publish, monitoring_grant)
+        self.assertLess(monitoring_grant, active_publish)
         self.assertLess(hosted_grant, active_publish)
         self.assertLess(scope_verification, role_assignment)
         self.assertIn("-ExpectedIdentity $pendingPublishRecord", deploy)
@@ -481,6 +491,12 @@ class InfrastructureContractTests(unittest.TestCase):
             "$env:APPLICATIONINSIGHTS_CONNECTION_STRING",
             publisher_environment,
         )
+        self.assertIn("HOSTED_AGENT_VERSION=$($publishRecord.agent_version)", deploy)
+        self.assertIn("AZURE_HOSTED_APPINSIGHTS_ROLE_ASSIGNMENT_ID", deploy)
+        container_apps = (
+            ROOT / "infra" / "modules" / "container-apps.bicep"
+        ).read_text(encoding="utf-8")
+        self.assertIn("name: 'HOSTED_AGENT_VERSION'", container_apps)
         self.assertIn("properties.ConnectionString", deploy)
         self.assertIn("APPLICATIONINSIGHTS_RESOURCE_ID", deploy)
         self.assertNotIn("[System.IO.Path]::GetTempPath()", deploy)

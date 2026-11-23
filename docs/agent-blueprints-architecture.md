@@ -724,6 +724,19 @@ MAF spans. This preserves one process-wide pipeline and native semantic spans;
 the only application-owned spans are bounded business anchors and the only
 durable-boundary relationship is an explicit OpenTelemetry link.
 
+Application Insights has local authentication disabled, so the hosted
+publisher also fixes AgentServer's supported
+`APPLICATIONINSIGHTS_AUTH_MODE=entra` environment selection. The pinned
+AgentServer path creates `ManagedIdentityCredential()` and supplies it to the
+Azure Monitor distro; the deployment orchestrator grants that hosted-version
+identity only `Monitoring Metrics Publisher` at the exact Application Insights
+component resource ID. No subscription- or resource-group-scope telemetry role
+is permitted. API telemetry metadata prefers the deployment-bound
+`HOSTED_AGENT_VERSION` over the compatibility `AGENT_VERSION` value so an
+immutable hosted publication and the API trace label cannot silently diverge
+after the coordinated deployment completes. Sensitive and message-content
+capture remain disabled.
+
 Release evidence is a separate architecture layer, not runtime state. Its
 manifest is diagnostic and non-authorizing: it validates immutable files and
 divides readiness into implementation, Azure runtime, and production

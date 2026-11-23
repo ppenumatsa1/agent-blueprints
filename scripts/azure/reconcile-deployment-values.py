@@ -13,6 +13,7 @@ from urllib.parse import quote, urlsplit
 
 
 AGENT_CONSUMER_ROLE_ID = "eed3b665-ab3a-47b6-8f48-c9382fb1dad6"
+MONITORING_METRICS_PUBLISHER_ROLE_ID = "3913510d-42f4-4e42-8a64-420c390055eb"
 
 
 class ReconciliationError(RuntimeError):
@@ -52,7 +53,7 @@ def _endpoint(value: str, agent_name: str, resource: str) -> str:
     return value
 
 
-def _container(app: dict, label: str) -> tuple[str, str]:
+def _container(app: dict, label: str) -> tuple[str, str, dict[str, str]]:
     properties = app.get("properties") or {}
     revision = properties.get("latestReadyRevisionName")
     containers = (properties.get("template") or {}).get("containers") or []
@@ -61,7 +62,14 @@ def _container(app: dict, label: str) -> tuple[str, str]:
         raise ReconciliationError(f"{label} has no latest ready revision.")
     if not isinstance(image, str) or "@sha256:" not in image:
         raise ReconciliationError(f"{label} is not running an immutable image.")
-    return revision, image
+    environment = {
+        str(item.get("name")): str(item.get("value"))
+        for item in containers[0].get("env", [])
+        if isinstance(item, dict)
+        and isinstance(item.get("name"), str)
+        and isinstance(item.get("value"), str)
+    }
+    return revision, image, environment
 
 
 def reconcile(
@@ -76,6 +84,7 @@ def reconcile(
     api_app: dict,
     web_app: dict,
     agent_role_assignments: list[dict],
+    hosted_monitoring_role_assignments: list[dict],
     hosted_app_role_assignments: list[dict],
     acceptance_mode: bool,
 ) -> dict:
@@ -106,10 +115,14 @@ def reconcile(
     )
     if len(agent_role_assignments) != 1:
         raise ReconciliationError("Expected one exact Agent Consumer role assignment.")
+    if len(hosted_monitoring_role_assignments) != 1:
+        raise ReconciliationError(
+            "Expected one exact hosted Monitoring Metrics Publisher role assignment."
+        )
     if len(hosted_app_role_assignments) != 1:
         raise ReconciliationError("Expected one hosted-service app-role assignment.")
-    api_revision, api_image = _container(api_app, "API Container App")
-    web_revision, web_image = _container(web_app, "web Container App")
+    api_revision, api_image, api_environment = _container(api_app, "API Container App")
+    web_revision, web_image, _ = _container(web_app, "web Container App")
 
     normalized = {str(name).upper(): value for name, value in values.items()}
     project_id = _required(normalized, "AZURE_AI_PROJECT_ID").rstrip("/")
@@ -120,6 +133,30 @@ def reconcile(
     ):
         raise ReconciliationError(
             "Agent Consumer assignment is not exact-agent scoped."
+        )
+    if api_environment.get("HOSTED_AGENT_VERSION") != journal["agent_version"]:
+        raise ReconciliationError(
+            "API HOSTED_AGENT_VERSION does not match the active hosted version."
+        )
+    application_insights_scope = _required(
+        normalized, "APPLICATIONINSIGHTS_RESOURCE_ID"
+    )
+    expected_monitoring_role = (
+        f"/subscriptions/{_required(normalized, 'AZURE_SUBSCRIPTION_ID')}/providers/"
+        "Microsoft.Authorization/roleDefinitions/"
+        f"{MONITORING_METRICS_PUBLISHER_ROLE_ID}"
+    )
+    monitoring_assignment = hosted_monitoring_role_assignments[0]
+    if (
+        str(monitoring_assignment.get("scope", "")).casefold()
+        != application_insights_scope.casefold()
+        or str(monitoring_assignment.get("roleDefinitionId", "")).casefold()
+        != expected_monitoring_role.casefold()
+        or str(monitoring_assignment.get("principalId", "")).casefold()
+        != str(journal["identity_principal_id"]).casefold()
+    ):
+        raise ReconciliationError(
+            "Hosted Monitoring Metrics Publisher assignment is not exact-component scoped."
         )
     api_fqdn = _required(normalized, "AZURE_API_FQDN")
     web_fqdn = _required(normalized, "AZURE_WEB_FQDN")
@@ -153,6 +190,11 @@ def reconcile(
             "AZURE_API_HOSTED_AGENT_ROLE_ASSIGNMENT_ID": agent_role_assignments[0][
                 "id"
             ],
+            "AZURE_HOSTED_APPINSIGHTS_ROLE_ASSIGNMENT_ID": monitoring_assignment["id"],
+            "AZURE_HOSTED_APPINSIGHTS_RBAC_SCOPE": application_insights_scope,
+            "AZURE_HOSTED_APPINSIGHTS_RBAC_ROLE_ID": (
+                MONITORING_METRICS_PUBLISHER_ROLE_ID
+            ),
             "AZURE_HOSTED_API_APP_ROLE_ASSIGNMENT_ID": hosted_app_role_assignments[0][
                 "id"
             ],
@@ -284,6 +326,26 @@ def main() -> int:
             for item in assignments_payload.get("value", [])
             if item.get("resourceId") == api_sp and item.get("appRoleId") == app_role_id
         ]
+        application_insights_scope = _required(
+            values, "APPLICATIONINSIGHTS_RESOURCE_ID"
+        )
+        monitoring_assignments = _az_json(
+            [
+                "role",
+                "assignment",
+                "list",
+                "--subscription",
+                subscription,
+                "--assignee-object-id",
+                hosted_principal,
+                "--scope",
+                application_insights_scope,
+                "--query",
+                f"[?roleDefinitionId=='/subscriptions/{subscription}/providers/"
+                "Microsoft.Authorization/roleDefinitions/"
+                f"{MONITORING_METRICS_PUBLISHER_ROLE_ID}']",
+            ]
+        )
         normalized = reconcile(
             values,
             journal,
@@ -295,6 +357,7 @@ def main() -> int:
             api_app=api_app,
             web_app=web_app,
             agent_role_assignments=agent_assignments,
+            hosted_monitoring_role_assignments=monitoring_assignments,
             hosted_app_role_assignments=hosted_assignments,
             acceptance_mode=args.acceptance_mode == "true",
         )

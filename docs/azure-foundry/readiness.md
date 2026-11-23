@@ -322,6 +322,34 @@ selection skips, 47 generated hosted tests, and Ruff. Live correlation remains
 immutable hosted version is published and one safe synthetic trace passes in
 both Application Insights and Foundry.
 
+The version-3 trace kept the gate failed and isolated the next defect. Foundry
+session metadata proved the transaction targeted `order-resolution:3`, while
+the unchanged API revision correctly continued to report its locally configured
+version `2`. After the ingestion window, Application Insights still contained
+37 API-only rows and no hosted root. Hosted runtime logs then recorded repeated
+`azure.monitor.opentelemetry.exporter.export._base` `Unauthorized` responses.
+This proves provider setup and export/flush execution; it rejects sampling,
+query indexing, and sandbox suspension as the remaining cause. The component
+has local authentication disabled, hosted version 3 lacked
+`APPLICATIONINSIGHTS_AUTH_MODE=entra`, and its managed identity lacked
+component-scoped `Monitoring Metrics Publisher`.
+
+The next code correction uses only the pinned supported path:
+AgentServer maps Entra mode to `ManagedIdentityCredential()` and the Microsoft
+OpenTelemetry distro's Azure Monitor credential argument. Publication keeps
+all raw-content flags false. The deployment path grants the hosted identity the
+publisher role only at the exact Application Insights component resource ID,
+records that assignment in normalized evidence, and binds
+`HOSTED_AGENT_VERSION` into the API so `blueprint.agent.version` names the
+active hosted version after the coordinated rollout. Deployment and a new
+synthetic trace remain unverified in this code-only phase.
+Local evidence for the correction passes 103 root tests with two disclosed
+adapter-selection skips, 126 source-backend tests and 179 independently
+generated backend tests against isolated PostgreSQL 17 instances, 48 generated
+hosted-agent tests, Ruff check/format, PowerShell parsing, and Bicep
+compilation. These checks do not establish Azure role propagation or telemetry
+ingestion.
+
 ## Live acceptance attempt — 2026-11-23
 
 Exact source `c63b48afa4179a3d92c286aeb6ae339e16ece275` passed all seven CI

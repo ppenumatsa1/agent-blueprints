@@ -19,6 +19,7 @@ from azure.ai.agentserver.core import (
     FoundryAgentRequestContext,
     configure_observability,
 )
+from azure.ai.agentserver.core._tracing import _setup_distro_export
 from azure.ai.agentserver.responses.hosting._endpoint_handler import (
     _flush_spans_for_mode,
 )
@@ -118,6 +119,41 @@ class SdkCompatibilityTests(unittest.TestCase):
             asyncio.run(_flush_spans_for_mode("async"))
         flush_async.assert_awaited_once_with()
         schedule_background.assert_not_called()
+
+    def test_supported_entra_mode_injects_managed_identity_exporter_credential(self):
+        credential = object()
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "APPLICATIONINSIGHTS_AUTH_MODE": "entra",
+                    "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT": "false",
+                },
+                clear=True,
+            ),
+            patch(
+                "azure.identity.ManagedIdentityCredential",
+                return_value=credential,
+            ) as credential_factory,
+            patch("microsoft.opentelemetry.use_microsoft_opentelemetry") as configure_distro,
+        ):
+            _setup_distro_export(
+                resource=object(),
+                span_processors=[],
+                metric_readers=[],
+                log_record_processors=[],
+                connection_string=(
+                    "InstrumentationKey=00000000-0000-0000-0000-000000000000;"
+                    "IngestionEndpoint=https://monitor.example.test/"
+                ),
+                enable_sensitive_data=False,
+                instrumentation_options={},
+            )
+        credential_factory.assert_called_once_with()
+        options = configure_distro.call_args.kwargs
+        self.assertTrue(options["enable_azure_monitor"])
+        self.assertIs(options["azure_monitor_exporter_credential"], credential)
+        self.assertFalse(options["enable_sensitive_data"])
 
     def test_platform_scope_rejects_conflicting_caller_session(self):
         config = AgentConfig(

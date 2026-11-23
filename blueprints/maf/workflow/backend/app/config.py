@@ -308,7 +308,9 @@ class Settings:
                 "APPLICATIONINSIGHTS_CONNECTION_STRING"
             )
             or None,
-            agent_version=os.environ.get("AGENT_VERSION", "0.1.0"),
+            agent_version=(
+                os.environ.get("HOSTED_AGENT_VERSION") or os.environ.get("AGENT_VERSION", "0.1.0")
+            ),
             deployment_revision=os.environ.get("DEPLOYMENT_REVISION", "local-unversioned"),
             acceptance_mode=acceptance_mode == "true",
         )
