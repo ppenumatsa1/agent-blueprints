@@ -375,6 +375,12 @@ Local non-deploying evidence:
   Direct PyPI failed locally with a TLS handshake error; the credentialless
   Microsoft package mirror retained hash/digest verification. Live Azure
   remains unverified.
+- The exact final generated Compose `web` target built with credentialless
+  `NPM_REGISTRY=https://packagefeedproxy.microsoft.io/npm/`. The unchanged
+  Dockerfile retained `npm ci --no-audit --no-fund`; TypeScript/Vite production
+  build, CSP verification, and nginx image export passed. Content
+  image-manifest digest was
+  `sha256:935b7688791961f8168de26c07519b30074877869bbac4652446c298d4c7bb86`.
 - Azure validation did not advance to provider what-if because deployment
   inputs are intentionally unset.
 

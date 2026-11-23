@@ -106,7 +106,9 @@ byte-identical owned files, built/imported the canonical no-dev backend, and
 passed nonconnecting wire composition. The integration coordinator
 independently reports 13/13 exact A+C PostgreSQL 17 authority/wire tests passed;
 B did not rerun that suite. Canonical packaging evidence is complete and
-integration awaits the A/C final handoff.
+the exact generated web target also passed unchanged `npm ci`, production Vite
+build, and CSP verification through the credentialless HTTPS npm proxy.
+Integration awaits final coordination.
 
 **Next action:** independently validate the exact PR revision, supply the
 deployment-specific hosted endpoint/agent-name/administrator/journal values,
