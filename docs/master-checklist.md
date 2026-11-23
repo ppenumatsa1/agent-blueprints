@@ -65,16 +65,19 @@ human principal/case authority bound to the server-selected conversation and
 channel must exist before Responses dispatch and cannot be inferred from the
 hosted token. Foundry user/session/call values are opaque platform correlation,
 not human authority; no caller-selected session or actor metadata is sent.
-Exact final A `708a4185` plus final C `2a04d5be` generation produced
+Exact final A `708a4185` plus final C `722fc4e3` (all-six CI run
+`45087843018`) generation produced
 byte-identical owned files, built/imported the canonical no-dev backend, and
 passed nonconnecting wire composition. The integration coordinator
-independently reports 13/13 exact A+C PostgreSQL 17 authority/wire tests passed;
-B did not rerun that suite. The exact generated web target also passed
-unchanged `npm ci`, production Vite build, and CSP verification through the
-credentialless HTTPS npm proxy. Normal PostgreSQL-backed startup then exposed a
-bundled-libpq trust-bundle defect. C owns the canonical image `SSL_CERT_FILE`
-correction; B deploy contracts prohibit overriding the image default. Exact
-composition evidence must be refreshed against C's corrected immutable head.
+independently reports default Docker CMD/app lifespan passed against isolated
+PostgreSQL 17 with inherited image CA setting, verified TLS, health `204`, and
+protected `401`; hostname and trust negatives failed closed. B did not rerun
+that suite. The exact generated web target also passed unchanged `npm ci`,
+production Vite build, and CSP verification through the credentialless HTTPS
+npm proxy. C's TLS code parent `509fb0b2` owns the canonical image
+`SSL_CERT_FILE`; B deploy contracts
+prohibit overriding the image default. Canonical packaging evidence is
+complete.
 
 **Next action:** independently validate the exact PR revision, supply the
 deployment-specific hosted endpoint/agent-name/administrator/journal values,
