@@ -146,6 +146,19 @@ class TelemetryTests(unittest.TestCase):
         child = next(s for s in spans if s.name == "workflow.resume")
         self.assertEqual(child.context.trace_id, int(trace_id, 16))
         self.assertTrue(any(s.context.span_id == child.parent.span_id for s in spans))
+        denied_span = next(
+            span
+            for span in spans
+            if span.attributes.get("blueprint.request.id") == denied.headers["X-Correlation-ID"]
+        )
+        self.assertEqual(
+            denied_span.attributes["blueprint.case.id"],
+            "30000000-0000-4000-8000-000000000003",
+        )
+        self.assertEqual(
+            denied_log["case_id"],
+            "30000000-0000-4000-8000-000000000003",
+        )
         self.assertNotIn(CANARY, str(records) + repr(spans) + "".join(s.to_json() for s in spans))
 
     def test_end_to_end_correlation_usage_retries_and_business_outcomes_are_distinct(self):

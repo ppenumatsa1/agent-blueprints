@@ -187,6 +187,7 @@ class LiveClient:
                         "trace_id": parts[1],
                         "agent_version": os.environ["AGENT_VERSION"],
                         "deployment_revision": self.deployment_revision,
+                        "http_status": status,
                         **(
                             {
                                 "hosted_phase": hosted_phase,

@@ -56,6 +56,15 @@ def _expected_pairs(evidence):
             "agent_version": item["agent_version"],
             "deployment_revision": item["deployment_revision"],
         }
+        http_status = item.get("http_status")
+        if http_status is not None:
+            if (
+                not isinstance(http_status, int)
+                or isinstance(http_status, bool)
+                or not 100 <= http_status <= 599
+            ):
+                raise ValueError("HTTP status evidence must be an integer from 100 to 599.")
+            pair["http_status"] = http_status
         hosted_phase = item.get("hosted_phase")
         if hosted_phase is not None:
             if hosted_phase not in {"start", "resume"}:
@@ -95,12 +104,26 @@ def _query(expected, started_at):
         "trace_id",
         "agent_version",
         "deployment_revision",
+        "expected_http_status",
     )
-    datatable = ",".join(_quoted(item[field]) for item in expected for field in fields)
+    rows = [
+        {
+            **item,
+            "expected_http_status": item.get("http_status", 0),
+        }
+        for item in expected
+    ]
+    datatable = ",".join(
+        str(item[field])
+        if field == "expected_http_status"
+        else _quoted(item[field])
+        for item in rows
+        for field in fields
+    )
     return (
         "let expected=datatable("
         "request_id:string,case_id:string,trace_id:string,"
-        "agent_version:string,deployment_revision:string"
+        "agent_version:string,deployment_revision:string,expected_http_status:int"
         f")[{datatable}]; "
         "union withsource=table_name "
         "AppRequests, AppDependencies, AppTraces, AppExceptions "
@@ -114,8 +137,13 @@ def _query(expected, started_at):
         "| join kind=inner expected on "
         "request_id, case_id, trace_id, agent_version, deployment_revision "
         "| summarize telemetry_count=count(), "
-        "exception_count=countif(table_name == 'AppExceptions') by "
-        "request_id, case_id, trace_id, agent_version, deployment_revision "
+        "exception_count=countif(table_name == 'AppExceptions'), "
+        "request_count=countif(table_name == 'AppRequests'), "
+        "matching_request_count=countif("
+        "table_name == 'AppRequests' and "
+        "(expected_http_status == 0 or toint(ResultCode) == expected_http_status)) by "
+        "request_id, case_id, trace_id, agent_version, deployment_revision, "
+        "expected_http_status "
         "| order by request_id asc"
     )
 
@@ -501,6 +529,7 @@ def verify(
                 item["trace_id"],
                 item["agent_version"],
                 item["deployment_revision"],
+                item.get("http_status", 0),
             )
             for item in expected
         }
@@ -511,10 +540,13 @@ def verify(
                 item.get("trace_id"),
                 item.get("agent_version"),
                 item.get("deployment_revision"),
+                int(item.get("expected_http_status", 0)),
             )
             for item in observed
             if int(item.get("telemetry_count", 0)) > 0
             and int(item.get("exception_count", 0)) == 0
+            and int(item.get("request_count", 0)) > 0
+            and int(item.get("matching_request_count", 0)) > 0
         }
         if observed_keys == expected_keys:
             trace_rows = []

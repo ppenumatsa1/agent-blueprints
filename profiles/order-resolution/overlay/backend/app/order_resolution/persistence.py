@@ -238,7 +238,7 @@ class OrderResolutionStore(PostgresStore):
             if current is None:
                 raise Conflict("The current proposal could not be verified.")
             recorded = _proposal(current)
-            if recorded != requested:
+            if recorded.submission_identity != requested.submission_identity:
                 raise Conflict("The current proposal conflicts with the submitted request.")
             return recorded
 

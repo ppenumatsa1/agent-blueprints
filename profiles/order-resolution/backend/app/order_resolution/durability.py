@@ -266,6 +266,23 @@ class Proposal:
     def action_identity(self) -> tuple[str, int, str, str]:
         return (self.case_id, self.proposal_version, self.action, self.destination_id)
 
+    @property
+    def submission_identity(self) -> tuple[object, ...]:
+        return (
+            self.case_id,
+            self.proposal_version,
+            self.tenant_id,
+            self.owner_id,
+            self.reviewer_id,
+            self.input_digest,
+            self.policy_evidence_digest,
+            self.policy_version,
+            self.action,
+            self.destination_id,
+            self.approval_required,
+            self.reason_codes,
+        )
+
 
 def build_proposal(
     *,

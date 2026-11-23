@@ -65,6 +65,9 @@ class AppInsightsCorrelationTests(unittest.TestCase):
                         **self.pair,
                         "telemetry_count": 6,
                         "exception_count": exceptions,
+                        "request_count": 1,
+                        "matching_request_count": 1,
+                        "expected_http_status": self.pair.get("http_status", 0),
                     }
                 ]
             ),
@@ -88,6 +91,7 @@ class AppInsightsCorrelationTests(unittest.TestCase):
         query = run.call_args.args[0]
         self.assertIn("AppRequests", query[-3])
         self.assertIn("Properties['blueprint.request.id']", query[-3])
+        self.assertIn("request_count=countif(table_name == 'AppRequests')", query[-3])
         self.assertIn("'10000000-0000-4000-8000-000000000001'", query[-3])
         self.assertNotIn("message", query[-3].lower())
 
@@ -95,6 +99,22 @@ class AppInsightsCorrelationTests(unittest.TestCase):
         for result in (
             Mock(returncode=0, stdout="[]", stderr=""),
             self.result(exceptions=1),
+            Mock(
+                returncode=0,
+                stdout=json.dumps(
+                    [
+                        {
+                            **self.pair,
+                            "telemetry_count": 6,
+                            "exception_count": 0,
+                            "request_count": 0,
+                            "matching_request_count": 0,
+                            "expected_http_status": 0,
+                        }
+                    ]
+                ),
+                stderr="",
+            ),
         ):
             with (
                 self.subTest(result=result.stdout),
@@ -112,6 +132,55 @@ class AppInsightsCorrelationTests(unittest.TestCase):
                     deployment_revision="deployment-123",
                     environment="synthetic-azure",
                 )
+
+    def test_expected_http_status_must_match_the_correlated_request(self):
+        value = json.loads(self.evidence.read_text(encoding="utf-8"))
+        value["correlations"][0]["http_status"] = 403
+        self.evidence.write_text(json.dumps(value), encoding="utf-8")
+        observed = {
+            **self.pair,
+            "telemetry_count": 2,
+            "exception_count": 0,
+            "request_count": 1,
+            "matching_request_count": 1,
+            "expected_http_status": 403,
+        }
+        with patch(
+            "scripts.verify_app_insights_correlation.subprocess.run",
+            return_value=Mock(returncode=0, stdout=json.dumps([observed]), stderr=""),
+        ) as run:
+            artifact = verify(
+                self.evidence,
+                "workspace-id",
+                self.output,
+                source_revision="source-123",
+                deployment_revision="deployment-123",
+                environment="synthetic-azure",
+            )
+        self.assertEqual(artifact["outcome"], "passed")
+        self.assertIn("expected_http_status:int", run.call_args.args[0][-3])
+        self.assertIn("403", run.call_args.args[0][-3])
+
+        observed["matching_request_count"] = 0
+        with (
+            patch(
+                "scripts.verify_app_insights_correlation.subprocess.run",
+                return_value=Mock(
+                    returncode=0,
+                    stdout=json.dumps([observed]),
+                    stderr="",
+                ),
+            ),
+            self.assertRaises(RuntimeError),
+        ):
+            verify(
+                self.evidence,
+                "workspace-id",
+                self.output,
+                source_revision="source-123",
+                deployment_revision="deployment-123",
+                environment="synthetic-azure",
+            )
 
     def test_workspace_resource_id_is_resolved_before_query(self):
         resource_id = (
@@ -310,8 +379,22 @@ class AppInsightsCorrelationTests(unittest.TestCase):
             returncode=0,
             stdout=json.dumps(
                 [
-                    {**start, "telemetry_count": 8, "exception_count": 0},
-                    {**resume, "telemetry_count": 8, "exception_count": 0},
+                    {
+                        **start,
+                        "telemetry_count": 8,
+                        "exception_count": 0,
+                        "request_count": 1,
+                        "matching_request_count": 1,
+                        "expected_http_status": 0,
+                    },
+                    {
+                        **resume,
+                        "telemetry_count": 8,
+                        "exception_count": 0,
+                        "request_count": 1,
+                        "matching_request_count": 1,
+                        "expected_http_status": 0,
+                    },
                 ]
             ),
             stderr="",

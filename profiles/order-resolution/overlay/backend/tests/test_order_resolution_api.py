@@ -320,6 +320,40 @@ class OrderResolutionApiTests(unittest.TestCase):
             ).fetchone()["count"]
         self.assertEqual(count, 1)
 
+    def test_pending_submission_replay_preserves_claim_and_returns_original_case(self):
+        body = payload("ORDER-LOST-ACK", "185.00", 5, [late_policy()])
+        key = str(uuid4())
+        with self.client() as client:
+            first = client.post(
+                "/api/cases",
+                headers=self.headers(self.owner_token, key),
+                json={"reviewer_id": REVIEWER, "payload": body},
+            )
+            replay = client.post(
+                "/api/cases",
+                headers=self.headers(self.owner_token, key),
+                json={"reviewer_id": REVIEWER, "payload": body},
+            )
+
+        self.assertEqual(first.status_code, 200, first.text)
+        self.assertEqual(replay.status_code, 200, replay.text)
+        self.assertEqual(replay.json(), first.json())
+        case_id = UUID(first.json()["id"])
+        self.assertEqual(self.store.get(case_id).status, "pending")
+        self.assertEqual(self.database_counts(case_id)["actions"], 0)
+        self.assertEqual(self.durability_counts(case_id)["effect_claims"], 0)
+        self.assertEqual(self.durability_counts(case_id)["synthetic_effects"], 0)
+        with self.store.connect() as connection:
+            claim_count = connection.execute(
+                "SELECT count(*) AS count FROM order_resolution_requests WHERE case_id = %s",
+                (case_id,),
+            ).fetchone()["count"]
+        self.assertEqual(claim_count, 1)
+        proposal = self.store.get_current_proposal(str(case_id))
+        self.assertIsNotNone(proposal.decision_handle_digest)
+        self.assertIsNotNone(proposal.decision_expires_at)
+        self.assertEqual(proposal.decision_channel, "api")
+
     def test_hosted_service_endpoints_are_authorized_durable_and_idempotent(self):
         owner, case, proposal = self.hosted_case("ORDER-HOSTED-SERVICE", "185.00")
         case_id = case.id

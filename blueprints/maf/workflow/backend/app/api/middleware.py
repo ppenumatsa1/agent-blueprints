@@ -37,6 +37,10 @@ def install_request_middleware(app: FastAPI, telemetry: Telemetry | None = None)
                         response = JSONResponse(
                             status_code=500, content={"detail": "Internal server error."}
                         )
+                    telemetry.bind_case(request.path_params.get("case_id"))
+                    case_id = telemetry.correlation_fields().get("case_id")
+                    if case_id is not None:
+                        span.set_attribute("blueprint.case.id", case_id)
                     span.set_attribute("http.response.status_code", response.status_code)
                     if response.status_code >= 500:
                         span.set_status(Status(StatusCode.ERROR))
