@@ -211,7 +211,9 @@ firewall rule because public hosted egress has no stable source-IP contract.
 Only API Container App outbound IPs are allowlisted; the API UAMI is the sole
 runtime database principal. API PostgreSQL clients use `verify-full` with
 `sslrootcert=system`, and generated API image builds fail if the system CA
-bundle is absent.
+bundle is absent. The canonical image owns the bundled libpq/OpenSSL
+`SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt` setting; Bicep and deployment
+updates must not override or clear it.
 
 The generated application interface is frozen at Agent C draft PR #48 head
 `2a04d5be3013e782a7c1222b2a16a7047cbb15cd`; all six C CI jobs passed in run
@@ -247,8 +249,13 @@ The local manifest-list digest is omitted because BuildKit provenance
 attestation metadata changes it without changing the image content.
 The integration coordinator independently reports 13/13 exact A+C PostgreSQL
 17 authority/wire tests passed; B did not rerun that PostgreSQL suite. B's
-canonical packaging evidence is complete, while live Azure behavior remains
-unverified and integration still requires the A/C final handoff.
+prior canonical packaging evidence is superseded by a normal
+`app.main`/lifespan defect: bundled libpq requires the image to set
+`SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt` explicitly. Agent C owns that
+Dockerfile correction. B deploy contracts prohibit an environment override so
+the image default remains authoritative. Exact composition evidence must be
+refreshed against C's corrected immutable head; live Azure behavior remains
+unverified.
 The exact generated web target was separately built with the credentialless
 HTTPS npm proxy `https://packagefeedproxy.microsoft.io/npm/`; it retained
 `npm ci` and produced content image-manifest digest

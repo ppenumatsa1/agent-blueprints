@@ -129,10 +129,13 @@ Exact final A `708a4185` plus final C `2a04d5be` generation produced
 byte-identical owned files, built the canonical no-dev backend, imported the
 bridge, and passed nonconnecting composition. The integration coordinator
 independently reports 13/13 exact A+C PostgreSQL 17 authority/wire tests passed;
-B did not rerun that suite. Canonical packaging evidence is complete and
-the exact generated web image also built with credentialless HTTPS npm proxy,
-unchanged `npm ci`, production Vite build, and CSP verification. Integration
-awaits final coordination. Live Azure composition is not proven.
+B did not rerun that suite. The exact generated web image also built with
+credentialless HTTPS npm proxy, unchanged `npm ci`, production Vite build, and
+CSP verification. Normal PostgreSQL-backed startup then exposed a bundled
+libpq trust-bundle defect. C owns the canonical image `SSL_CERT_FILE`
+correction; B deploy contracts prohibit overriding the image default. Exact
+composition evidence must be refreshed after C publishes the corrected
+immutable head. Live Azure composition is not proven.
 The current Azure CLI identity matches the authorized target, but azd is a
 different account and tenant. Azure CLI mode reports that mismatch without
 blocking; explicit azd mode still fails closed. No Azure mutation or deployment

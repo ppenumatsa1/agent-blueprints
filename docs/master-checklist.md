@@ -69,10 +69,12 @@ Exact final A `708a4185` plus final C `2a04d5be` generation produced
 byte-identical owned files, built/imported the canonical no-dev backend, and
 passed nonconnecting wire composition. The integration coordinator
 independently reports 13/13 exact A+C PostgreSQL 17 authority/wire tests passed;
-B did not rerun that suite. Canonical packaging evidence is complete and
-the exact generated web target also passed unchanged `npm ci`, production Vite
-build, and CSP verification through the credentialless HTTPS npm proxy.
-Integration awaits final coordination.
+B did not rerun that suite. The exact generated web target also passed
+unchanged `npm ci`, production Vite build, and CSP verification through the
+credentialless HTTPS npm proxy. Normal PostgreSQL-backed startup then exposed a
+bundled-libpq trust-bundle defect. C owns the canonical image `SSL_CERT_FILE`
+correction; B deploy contracts prohibit overriding the image default. Exact
+composition evidence must be refreshed against C's corrected immutable head.
 
 **Next action:** independently validate the exact PR revision, supply the
 deployment-specific hosted endpoint/agent-name/administrator/journal values,
