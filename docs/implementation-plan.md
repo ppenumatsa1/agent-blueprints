@@ -13,14 +13,15 @@ The final canonical image includes C's system-CA discovery correction and B's
 no-deployment-override contract. Real PostgreSQL 17 verifies normal hosted
 startup plus wrong-hostname and untrusted-CA refusal, without a trust bypass.
 Fresh generated backend, hosted, verification, and canonical-image checks pass.
-Draft PR #49 head `a6ab0a1ac6412e17345e9d46c0b70fafe55faad3`
-passed all seven jobs in run `45099182951`. Read-only acceptance inspection
-found that the run's `maf-generated-evidence` artifact recorded the default
+Read-only acceptance inspection found that PR #49 run `45099182951` passed all
+seven jobs but its `maf-generated-evidence` artifact recorded default
 pull-request merge revision
-`0859bf2f98f775ae2910deb770375ddfc240330f`, not the deployable source head.
-The `maf-independent` evidence producer now explicitly checks out the PR head
-before recording `SOURCE_REVISION`; a fresh exact-head run and artifact check
-are required before cloud validation. The telemetry verifier also now resolves
+`0859bf2f98f775ae2910deb770375ddfc240330f`, not deployable source head
+`a6ab0a1ac6412e17345e9d46c0b70fafe55faad3`. The corrected PR #49 head
+`d516410f3c63472152b13f28f65081d4006ec04b` passed all seven jobs in run
+`45152016819`; all 12 downloaded revision-bound evidence documents record that
+exact head. The `maf-independent` evidence producer now explicitly checks out
+the PR head before recording `SOURCE_REVISION`. The telemetry verifier also now resolves
 the deployment-emitted Log Analytics ARM resource ID to the customer/workspace
 query GUID instead of passing an unsupported ARM path to `az monitor
 log-analytics query`. The cloud health verifier now also enforces exact
@@ -31,7 +32,7 @@ modifications or deletions, so `.azure/deployment-plan.md` is `Validated`.
 The first corrected apply created the PostgreSQL server but exposed concurrent
 Flexible Server child writes. The module now orders administrator, TLS
 settings, database, and optional firewall resources; Bicep validation and all
-17 infrastructure tests pass locally. Next: obtain corrected exact-head CI, retry the
+17 infrastructure tests pass locally. Next: consume the corrected exact-head CI, retry the
 guarded deployment against the existing resource group, and retain immutable
 live evidence. These checks do not authorize merge, release, or production-risk
 acceptance.

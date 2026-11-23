@@ -140,6 +140,12 @@ The deployment health verifier requires the public health endpoint to return
 exactly `204` and an unauthenticated protected API request to return exactly
 `401`; `200` health or `403` unauthenticated responses do not pass.
 
+The corrected exact-head producer and health-verifier contracts passed all
+seven PR #49 jobs at
+`d516410f3c63472152b13f28f65081d4006ec04b` in run `45152016819`.
+Independent download inspection confirmed all 12 revision-bound implementation
+evidence documents use that exact source revision.
+
 Example:
 
 ```powershell
