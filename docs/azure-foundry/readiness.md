@@ -303,3 +303,25 @@ The remaining live suite did not pass and was not replaced with fixtures:
 
 No refund, shipment, or other consequential effect was executed. Production
 and merge authorization remain blocked.
+
+## Observability remediation validation
+
+The first exact-head remediation run, `45183371725`, failed the generated
+PostgreSQL Order Resolution API suite before any cloud deployment. The workflow
+correctly added deterministic conversation metadata to its durable approval
+request, but the local host still compared that request with the historical
+case-only shape. The resulting fail-closed `CheckpointError` surfaced as HTTP
+`503 Workflow recovery is unavailable` for approval-required starts.
+
+The correction preserves the new metadata and security boundary: the host now
+requires the exact case ID and deterministic local conversation ID both when
+the request is emitted and when its checkpoint is restored. The complete
+generated PostgreSQL API module, Ruff check, and source instantiation tests pass
+locally. Run `45183593755` also exposed a separate contracts-only probe that
+imported the hosted bridge without installing its runtime dependencies. The
+probe now verifies the generated module location through import metadata;
+runtime import remains covered in the locked generated-project job. The full
+103-test contracts suite passes in an isolated `requirements-dev.txt`
+environment. These are implementation results only; exact-head CI, immutable
+Azure deployment, one accepted App Insights/Foundry trace tree, restart-link
+evidence, and the remaining hosted acceptance gates are still required.

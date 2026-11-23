@@ -14,6 +14,15 @@ from app.workflows.workflow import WORKFLOW_NAME
 class OrderResolutionWorkflowHost(LocalWorkflowHost):
     """Allow either automatic completion or the base host's native approval pause."""
 
+    @staticmethod
+    def _validate_request_data(data: object, case_id: UUID) -> None:
+        expected = {
+            "case_id": str(case_id),
+            "conversation_id": f"local:{case_id}",
+        }
+        if data != expected:
+            raise CheckpointError("The pending request does not match the record.")
+
     def _storage(self, case_id: UUID) -> FileCheckpointStorage:
         directory = self.root / str(case_id)
         self._private_directory(directory)
@@ -27,12 +36,19 @@ class OrderResolutionWorkflowHost(LocalWorkflowHost):
         outputs: list[object] = []
         async for event in stream:
             if event.type == "request_info":
-                if event.data != {"case_id": str(case_id)}:
-                    raise CheckpointError("The pending request does not match the record.")
+                self._validate_request_data(event.data, case_id)
                 requests.append(event.request_id)
             elif event.type == "output":
                 outputs.append(event.data)
         return requests, outputs
+
+    async def _requests(self, stream, case_id: UUID) -> list[str]:
+        requests = []
+        async for event in stream:
+            if event.type == "request_info":
+                self._validate_request_data(event.data, case_id)
+                requests.append(event.request_id)
+        return requests
 
     @instrumented("workflow.start")
     async def start(self, case_id: UUID, actor: Principal | None = None) -> None:

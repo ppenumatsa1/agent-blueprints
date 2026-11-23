@@ -686,6 +686,10 @@ OpenTelemetry link to the persisted start span; it does not fabricate a parent
 chain across the durable boundary. Model usage is required only when the real
 production path invokes a model. Prompts, completions, credentials, SQL,
 exception messages, arbitrary baggage, and business payloads remain excluded.
+The local Order Resolution host validates the complete persisted request
+identity—case plus deterministic local conversation—when it first observes and
+later restores a checkpoint, so adding durable correlation metadata cannot
+silently disable recovery or weaken the checkpoint binding.
 Application Insights verification requires a connected OperationId/ParentId
 tree, conversation continuity, deployment metadata, restart links, privacy
 checks, and matching Foundry trajectory trace IDs.

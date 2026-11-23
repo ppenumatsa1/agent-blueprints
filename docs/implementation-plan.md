@@ -983,6 +983,20 @@ metadata, no raw content, and matching Foundry trajectory trace IDs. Generated
 hosted compatibility and privacy tests pass locally; exact-head CI and live
 App Insights/Foundry evidence are still required before this gate can pass.
 
+The first exact-head remediation run exposed a generated local-host regression
+rather than an exporter failure: the workflow now persisted its deterministic
+conversation ID, while `OrderResolutionWorkflowHost` still accepted only the
+older case-only request payload. That strict mismatch converted every
+approval-required start into fail-closed HTTP `503`. The host now validates the
+complete case/conversation identity both on initial observation and checkpoint
+restore. The generated PostgreSQL Order Resolution API suite, Ruff, and source
+instantiation tests pass locally after the correction. The same run also showed
+that the contracts-only source-independence probe imported the hosted bridge
+after its supported OTel propagation dependency was added. That probe now
+resolves the generated module path without importing runtime dependencies;
+actual imports remain covered by the locked generated-project job. A new
+exact-head CI run is still required before deployment.
+
 The release manifest cannot waive or authorize production checks; production
 requires the baseline-pinned trust validator, signed result attestations, and
 scoped, unexpired risk decisions, while critical/security-critical blocking

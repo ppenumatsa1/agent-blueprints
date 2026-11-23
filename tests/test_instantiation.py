@@ -542,8 +542,10 @@ class InstantiationTests(unittest.TestCase):
                     sys.executable,
                     "-c",
                     (
-                        "import order_resolution_hosted.bridge as bridge; "
-                        "print(bridge.__file__)"
+                        "import importlib.util; "
+                        "spec = importlib.util.find_spec('order_resolution_hosted.bridge'); "
+                        "assert spec is not None and spec.origin is not None; "
+                        "print(spec.origin)"
                     ),
                 ],
                 cwd=target / "backend",
