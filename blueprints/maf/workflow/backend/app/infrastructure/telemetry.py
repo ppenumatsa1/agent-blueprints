@@ -71,8 +71,12 @@ _BUSINESS_OUTCOMES = frozenset(
     {"created", "pending", "approved", "rejected", "completed", "failed", "unknown"}
 )
 _RETRY_REASONS = frozenset({"transient", "timeout", "conflict", "interrupted", "unknown_outcome"})
+_HTTP_METHODS = frozenset(
+    {"CONNECT", "DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT", "TRACE"}
+)
 _SPAN_ATTRIBUTES = frozenset(
     {
+        "http.request.method",
         "http.response.status_code",
         "blueprint.request.id",
         "blueprint.case.id",
@@ -268,7 +272,11 @@ class _Operation:
 
     def set_attribute(self, name, value):
         valid = False
-        if name == "http.response.status_code":
+        if name == "http.request.method":
+            value = value.upper() if isinstance(value, str) else None
+            value = value if value in _HTTP_METHODS else "_OTHER"
+            valid = True
+        elif name == "http.response.status_code":
             valid = isinstance(value, int)
         elif name in {
             "blueprint.request.id",

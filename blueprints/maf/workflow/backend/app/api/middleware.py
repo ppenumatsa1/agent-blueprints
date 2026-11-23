@@ -30,6 +30,7 @@ def install_request_middleware(app: FastAPI, telemetry: Telemetry | None = None)
                     kind=SpanKind.SERVER,
                     parent=telemetry.parent_from_headers(request.headers),
                 ) as span:
+                    span.set_attribute("http.request.method", request.method)
                     try:
                         response = await call_next(request)
                     except Exception as exc:

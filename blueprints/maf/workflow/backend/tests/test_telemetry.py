@@ -13,8 +13,12 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 from uuid import UUID
 
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 from jsonschema import Draft202012Validator
+from azure.monitor.opentelemetry.exporter.export.trace._exporter import (
+    _convert_span_to_envelope,
+)
 from opentelemetry.sdk.metrics.export import (
     AggregationTemporality,
     InMemoryMetricReader,
@@ -160,6 +164,38 @@ class TelemetryTests(unittest.TestCase):
             "30000000-0000-4000-8000-000000000003",
         )
         self.assertNotIn(CANARY, str(records) + repr(spans) + "".join(s.to_json() for s in spans))
+
+    def test_request_status_maps_to_azure_monitor_result_code(self):
+        app = self.app()
+        exporter = InMemorySpanExporter()
+        app.state.telemetry.provider.add_span_processor(SimpleSpanProcessor(exporter))
+
+        @app.get("/test-denied")
+        async def denied():
+            return JSONResponse(status_code=403, content={"detail": "Forbidden."})
+
+        with TestClient(app) as client:
+            response = client.get(
+                f"/test-denied?ignored={CANARY}",
+                headers={"X-Ignored-Secret": CANARY},
+            )
+
+        self.assertEqual(response.status_code, 403)
+        span = next(
+            span
+            for span in exporter.get_finished_spans()
+            if span.name == "http.request"
+            and span.attributes.get("blueprint.request.id") == response.headers["X-Correlation-ID"]
+        )
+        self.assertEqual(span.attributes["http.request.method"], "GET")
+        self.assertEqual(span.attributes["http.response.status_code"], 403)
+
+        envelope = _convert_span_to_envelope(span)
+        self.assertEqual(envelope.data.base_type, "RequestData")
+        self.assertEqual(envelope.data.base_data.response_code, "403")
+        self.assertFalse(envelope.data.base_data.success)
+        self.assertEqual(envelope.data.base_data.name, "http.request")
+        self.assertNotIn(CANARY, str(envelope))
 
     def test_end_to_end_correlation_usage_retries_and_business_outcomes_are_distinct(self):
         telemetry = Telemetry(
