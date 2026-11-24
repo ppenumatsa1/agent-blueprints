@@ -12,6 +12,7 @@ from unittest.mock import patch
 from order_resolution_hosted.client import (
     AmbiguousCreate,
     ConversationBinding,
+    HostedResponseFailed,
     MemoryOperationJournal,
     OperationStatus,
     ResponsesClient,
@@ -419,6 +420,33 @@ class ClientTests(unittest.TestCase):
         )
         self.assertEqual(reconciled.status, OperationStatus.ACKNOWLEDGED)
         self.assertEqual(reconciled.remote_id, "resp-authoritative")
+
+    def test_explicit_response_failure_is_terminal_and_retains_remote_id(self):
+        requests = []
+
+        def post(*args, **kwargs):
+            requests.append((args, kwargs))
+            return FakeResponse(
+                body={"id": "resp-failed", "status": "failed", "error": {"message": "private"}}
+            )
+
+        arguments = {
+            "operation_id": "start-failed",
+            "binding": self.binding,
+            "case_id": "c3dc94c3-7772-4249-bf63-95597591f49c",
+        }
+        client = self.client(post)
+        with self.assertRaises(HostedResponseFailed) as captured:
+            client.start(**arguments)
+        self.assertNotIn("private", str(captured.exception))
+        record = self.journal.get("start-failed")
+        self.assertEqual((record.status, record.remote_id), (OperationStatus.FAILED, "resp-failed"))
+        self.assertEqual(client.reconcile_acknowledgment("start-failed", ["resp-failed"]), record)
+        with self.assertRaises(HostedResponseFailed):
+            self.client(post).start(**arguments)
+        with self.assertRaisesRegex(ValueError, "different request content"):
+            client.start(**{**arguments, "case_id": "different-case"})
+        self.assertEqual(len(requests), 1)
 
     def test_resume_rejects_cross_channel_or_conversation(self):
         client = self.client(lambda *_args, **_kwargs: FakeResponse())

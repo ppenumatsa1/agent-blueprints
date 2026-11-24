@@ -514,10 +514,10 @@ class OrderResolutionStore(PostgresStore):
         status: str,
         remote_id: str | None,
     ) -> HostedOperation:
-        if status not in ("pending", "acknowledged", "rejected", "unknown"):
+        if status not in ("pending", "acknowledged", "failed", "rejected", "unknown"):
             raise ValueError("The hosted operation status is invalid.")
-        if (status == "acknowledged") != bool(remote_id):
-            raise ValueError("Only acknowledged operations have a remote ID.")
+        if (status in ("acknowledged", "failed")) != bool(remote_id):
+            raise ValueError("Acknowledged and failed hosted operations require a remote ID.")
         with self.connect() as connection:
             row = connection.execute(
                 """
@@ -532,10 +532,12 @@ class OrderResolutionStore(PostgresStore):
             if row is None or row["request_digest"] != request_digest:
                 raise Conflict("The hosted operation claim is missing or conflicts.")
             current = HostedOperation(**row)
-            if current.status == "acknowledged":
+            if current.status == "failed" and status == "unknown":
+                return current
+            if current.status in ("acknowledged", "failed"):
                 if current.status == status and current.remote_id == remote_id:
                     return current
-                raise Conflict("An acknowledged hosted operation cannot change outcome.")
+                raise Conflict("A recorded hosted response cannot change outcome.")
             connection.execute(
                 """
                 UPDATE order_resolution_hosted_operations

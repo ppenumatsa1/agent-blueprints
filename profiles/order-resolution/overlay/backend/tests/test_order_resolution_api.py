@@ -658,6 +658,74 @@ class OrderResolutionApiTests(unittest.TestCase):
         self.assertEqual(token_provider.calls, 2)
         self.assertEqual(len(requests), 1)
 
+    def test_hosted_failed_resume_survives_restart_without_redispatch(self):
+        from order_resolution_hosted.client import (
+            ConversationBinding,
+            HostedResponseFailed,
+            OperationStatus,
+            ResponsesClient,
+        )
+
+        from app.order_resolution.hosted_journal import PostgresOperationJournal
+
+        _, case, _ = self.hosted_case("ORDER-JOURNAL-FAILED-RESPONSE", "79.00")
+        operation_id = f"case:{case.id}:decision:1"
+        binding = ConversationBinding("conversation-failed-response")
+        sent = []
+
+        class Token:
+            def authorization_header(self):
+                return "Bearer test"
+
+        class FailedResponse:
+            status_code = 200
+
+            def json(self):
+                return {"id": "response-failed", "status": "failed"}
+
+        def post(*_args, **kwargs):
+            sent.append(kwargs["json"])
+            return FailedResponse()
+
+        def resume(store):
+            return ResponsesClient(
+                "http://127.0.0.1:1/responses",
+                PostgresOperationJournal(store),
+                token_provider=Token(),
+                post=post,
+            ).resume(
+                operation_id=operation_id,
+                binding=binding,
+                request_id="request-1",
+                decision={
+                    "conversation_id": binding.conversation_id,
+                    "channel": HOSTED_CHANNEL,
+                    "handle": "request-1",
+                    "decision": "approved",
+                },
+            )
+
+        with self.assertRaises(HostedResponseFailed):
+            resume(self.store)
+        upgrade(self.settings.database_url)
+        restarted = OrderResolutionStore(self.settings.database_url)
+        self.addCleanup(restarted.close)
+        record = PostgresOperationJournal(restarted).get(operation_id)
+        self.assertEqual(
+            (record.status, record.remote_id), (OperationStatus.FAILED, "response-failed")
+        )
+        unchanged = restarted.update_hosted_operation(
+            operation_id, record.request_digest, "unknown", None
+        )
+        self.assertEqual((unchanged.status, unchanged.remote_id), ("failed", "response-failed"))
+        with self.assertRaises(Conflict):
+            restarted.update_hosted_operation(
+                operation_id, record.request_digest, "acknowledged", record.remote_id
+            )
+        with self.assertRaises(HostedResponseFailed):
+            resume(restarted)
+        self.assertEqual(len(sent), 1)
+
     def test_hosted_lost_ack_survives_restart_and_requires_reconciliation(self):
         from order_resolution_hosted.client import (
             AmbiguousCreate,

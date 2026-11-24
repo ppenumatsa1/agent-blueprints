@@ -30,6 +30,7 @@ def DefaultAzureCredential(*args: Any, **kwargs: Any) -> Any:
 class OperationStatus(str, Enum):
     PENDING = "pending"
     ACKNOWLEDGED = "acknowledged"
+    FAILED = "failed"
     REJECTED = "rejected"
     UNKNOWN = "unknown"
 
@@ -79,13 +80,15 @@ class MemoryOperationJournal:
             existing = self._records.get(record.operation_id)
             if existing is None or existing.request_digest != record.request_digest:
                 raise ValueError("The operation claim is missing or conflicts.")
-            if existing.status is OperationStatus.ACKNOWLEDGED:
-                if (
-                    record.status is OperationStatus.ACKNOWLEDGED
-                    and existing.remote_id == record.remote_id
-                ):
+            if (
+                existing.status is OperationStatus.FAILED
+                and record.status is OperationStatus.UNKNOWN
+            ):
+                return existing
+            if existing.status in (OperationStatus.ACKNOWLEDGED, OperationStatus.FAILED):
+                if record.status is existing.status and existing.remote_id == record.remote_id:
                     return existing
-                raise ValueError("An acknowledged operation cannot change outcome.")
+                raise ValueError("A recorded response cannot change outcome.")
             self._records[record.operation_id] = record
             return record
 
@@ -96,6 +99,11 @@ class MemoryOperationJournal:
 
 class AmbiguousCreate(RuntimeError):
     """The POST may have applied; callers must reconcile and must not replay it."""
+
+
+class HostedResponseFailed(RuntimeError):
+    def __init__(self) -> None:
+        super().__init__("Foundry returned a failed response; do not retry the create.")
 
 
 class TokenProvider:
@@ -227,6 +235,8 @@ class ResponsesClient:
         endpoint: str,
         operation_id: str,
         payload: dict[str, Any],
+        *,
+        response_create: bool,
     ) -> str:
         if not isinstance(operation_id, str) or not operation_id.strip() or len(operation_id) > 256:
             raise ValueError("A bounded operation ID is required.")
@@ -238,12 +248,16 @@ class ResponsesClient:
         record = claim.record
         if record.status is OperationStatus.ACKNOWLEDGED:
             return record.remote_id or ""
+        if record.status is OperationStatus.FAILED:
+            raise HostedResponseFailed()
         if record.status is OperationStatus.UNKNOWN:
             raise AmbiguousCreate("The operation is unknown and cannot be replayed.")
         if record.status is OperationStatus.REJECTED:
             raise RuntimeError("The operation was previously rejected.")
         if not claim.acquired:
-            self._journal.update(replace(record, status=OperationStatus.UNKNOWN))
+            observed = self._journal.update(replace(record, status=OperationStatus.UNKNOWN))
+            if observed.status is OperationStatus.FAILED:
+                raise HostedResponseFailed()
             raise AmbiguousCreate(
                 "The pending operation has no active owner proof and cannot be replayed."
             )
@@ -284,6 +298,11 @@ class ResponsesClient:
         if not isinstance(remote_id, str) or not remote_id:
             self._journal.update(replace(record, status=OperationStatus.UNKNOWN))
             raise AmbiguousCreate("The successful response did not contain an authoritative ID.")
+        if response_create and isinstance(body, dict) and body.get("status") == "failed":
+            self._journal.update(
+                replace(record, status=OperationStatus.FAILED, remote_id=remote_id)
+            )
+            raise HostedResponseFailed()
         self._journal.update(
             replace(
                 record,
@@ -304,6 +323,7 @@ class ResponsesClient:
             self._conversation_endpoint,
             operation_id,
             {"metadata": {"operation_id": operation_id}},
+            response_create=False,
         )
         return ConversationBinding(conversation_id)
 
@@ -324,6 +344,7 @@ class ResponsesClient:
                 "metadata": {"operation_id": operation_id},
                 "store": True,
             },
+            response_create=True,
         )
 
     def resume(
@@ -362,6 +383,7 @@ class ResponsesClient:
                 "metadata": {"operation_id": operation_id},
                 "store": True,
             },
+            response_create=True,
         )
 
     def reconcile_acknowledgment(
@@ -372,6 +394,8 @@ class ResponsesClient:
         record = self._journal.get(operation_id)
         if record is None:
             raise ValueError("The operation was not claimed.")
+        if record.status is OperationStatus.FAILED:
+            return record
         candidates = sorted({value for value in authoritative_remote_ids if value})
         if len(candidates) != 1:
             return record

@@ -1394,6 +1394,14 @@ Acceptance requires:
    artifact hashes, plus a permanently non-authorizing production dimension
    that defers to the signed trust validator.
 
+For an immediate Responses `status: failed` with an authoritative ID, the
+client surfaces an error and persists the outcome; same-key retries, including
+after a PostgreSQL-backed restart, must fail without redispatch. The generated
+hosted API regression covers this contract without Azure. Apply the profile
+migration before deploying the client fix. Keep later background failure,
+safe HTTP 429 retry, and authoritative unknown-outcome reconciliation open
+until verified against the hosted API.
+
 The exact commands, GitHub environment inputs, evidence schemas, baseline CI,
 region reference, current blocked/unverified matrix, and dependencies on
 Agents A-C are in the [Workstream D readiness guide](azure-foundry/readiness.md).

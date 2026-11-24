@@ -199,7 +199,13 @@ only for the process that inserted the new claim. An existing `pending` record
 has no current owner proof, becomes `unknown`, and is not sent again. A
 concurrent original owner may still complete its one in-flight request and
 record the authoritative acknowledgment. Identical acknowledged duplicates
-return the recorded remote ID; conflicting duplicates fail.
+return the recorded remote ID; conflicting duplicates fail. A create
+acknowledgment is not proof of workflow completion. If a Responses create
+returns an ID with `status: failed`, the journal records the terminal `failed`
+outcome and ID, and the API surfaces a hosted workflow error. The same key
+continues to fail after restart without another POST. Apply the profile
+migration before running the updated API; existing acknowledgments are not
+reclassified.
 
 A connection error, timeout, 5xx, malformed 2xx JSON, or success body without
 an authoritative ID changes the operation to `unknown`; the client does not
@@ -207,6 +213,8 @@ replay that POST. Malformed response bodies are not retained in the journal or
 surfaced in the error. `reconcile_acknowledgment` requires exactly one
 authoritative remote ID supplied by a trusted query/operator path. An empty or
 ambiguous search does not prove absence and leaves the operation `unknown`.
+Later background failure observation and a production authoritative lookup
+remain unverified. HTTP 429 handling is unchanged; it does not permit replay.
 
 The included in-memory journal is only for local tests. Agents B-D must supply
 a durable journal with atomic insert/claim ownership and update semantics and
