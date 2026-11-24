@@ -5,12 +5,13 @@ import { createRoot } from "react-dom/client";
 
 import { AuthenticatedApplication } from "./authenticated-app";
 import { readConfig } from "./config";
+import { reportStudioCaughtError } from "./components/protocol-context-panel";
 import "./styles.css";
 
 async function start() {
   const rootElement = document.getElementById("root");
   if (!rootElement) throw new Error("The application root is missing.");
-  const root = createRoot(rootElement);
+  const root = createRoot(rootElement, { onCaughtError: reportStudioCaughtError });
   try {
     const config = readConfig(import.meta.env);
     const instance = new PublicClientApplication({

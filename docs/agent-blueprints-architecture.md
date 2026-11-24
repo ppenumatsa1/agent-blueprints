@@ -8,6 +8,18 @@ contracts and documented engineering patterns where they have demonstrated
 value; do not hide MAF, LangGraph, or a harness behind a universal runtime.
 Generated projects must not import this repository at runtime.
 
+## Optional protocol context
+
+Layer 5 exposes explicitly activated, typed read-only context registration for
+AG-UI and CopilotKit. Only a fixed description and validated selected-case
+status are supplied; adapters receive no workflow client or mutation
+capability. Registration code is trusted, not sandboxed. The configured
+consumer may disclose this status during a later agent run and is responsible
+for cleanup, authorization, privacy, and avoiding automatic calls. This is
+an AG-UI context input, not an event stream or a protocol-conformance claim.
+See the [generated blueprint architecture](../blueprints/maf/workflow/docs/architecture.md#optional-protocol-context)
+for supported boundaries and limitations.
+
 ## Optional studio projections
 
 Layer 4 adds opt-in, application-owned typed evidence and synthetic-test

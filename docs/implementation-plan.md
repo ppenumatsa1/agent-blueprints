@@ -1,5 +1,22 @@
 # Phased implementation plan
 
+## UX stack Layer 5: read-only protocol context
+
+**In progress; stacked on PR #53** at
+`3bdf2646095383583445e0cea04d34d0658c694f`. A selected,
+already-authorized case can provide only its validated status through an
+explicitly activated AG-UI context registration or CopilotKit v2 hook adapter.
+The default has no optional protocol dependencies or automatic agent calls.
+Neither integration supplies workflow mutations, agent runs, tools, event
+streams, or transport. Adapter code is trusted and its cleanup cannot be
+enforced. Configured consumers may transmit the status during later runs.
+Focused unit/axe and browser checks, a production build, and a local
+`@ag-ui/core@1.0.4` schema plus
+`@copilotkit/react-core@2.0.0-rc.53` real-hook lifecycle check with a
+synthetic consumer passed. This does not test a real provider or remote
+agent. Independent generated-project checks and exact-head CI remain pending.
+Next: verify those boundaries and retain draft status.
+
 ## UX stack Layer 4: optional evidence and synthetic tests
 
 **In progress; stacked on PR #52** at

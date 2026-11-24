@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { ComponentType, ReactNode } from "react";
 
 import type { ActivityType, DecisionBinding, WorkflowCase } from "./api";
 
@@ -23,6 +23,13 @@ export interface SyntheticManualTest {
   label: string;
   run(): Promise<{ outcome: "passed" | "failed"; summary: string }>;
 }
+
+export interface StudioProtocolContext {
+  readonly description: string;
+  readonly value: string;
+}
+
+export type StudioProtocolAdapter = ComponentType<{ context: StudioProtocolContext }>;
 
 export interface WorkflowStudioProfile {
   title: string;
@@ -56,5 +63,9 @@ export interface WorkflowStudioProfile {
   decisionBinding?(record: WorkflowCase): DecisionBinding | undefined;
   projectEvidence?(record: WorkflowCase): EvidenceProjection;
   syntheticManualTests?: readonly SyntheticManualTest[];
+  protocolAdapters?: {
+    agUi?: StudioProtocolAdapter;
+    copilotKit?: StudioProtocolAdapter;
+  };
 }
 
