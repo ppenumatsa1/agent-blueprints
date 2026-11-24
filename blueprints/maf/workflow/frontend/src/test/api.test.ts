@@ -22,6 +22,7 @@ it("uses the requested delegated scope and sends the idempotency key", async () 
   });
   expect(fetcher.mock.calls[0][1].headers.traceparent)
     .toMatch(/^00-(?!0{32})[0-9a-f]{32}-(?!0{16})[0-9a-f]{16}-01$/);
+  expect(fetcher.mock.calls[0][1].redirect).toBe("error");
 });
 
 it("continues without tracing when browser randomness is unavailable", async () => {
@@ -99,6 +100,7 @@ it("uses bearer fetch for fragmented refresh signals without exposing event cont
   expect(refresh).toHaveBeenCalledTimes(1);
   expect(fetcher.mock.calls[0][1].headers.Authorization).toBe("Bearer synthetic-token");
   expect(fetcher.mock.calls[0][1].credentials).toBe("omit");
+  expect(fetcher.mock.calls[0][1].redirect).toBe("error");
 });
 
 it("reports revoked live access without reflecting server content", async () => {

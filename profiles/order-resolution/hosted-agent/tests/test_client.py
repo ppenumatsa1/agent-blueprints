@@ -1,5 +1,9 @@
+import io
 import threading
 import unittest
+import urllib.request
+import urllib.response
+from email.message import Message
 from types import SimpleNamespace
 
 from opentelemetry.sdk.trace import TracerProvider
@@ -17,6 +21,8 @@ from order_resolution_hosted.client import (
     OperationStatus,
     ResponsesClient,
     TokenProvider,
+    _post_json,
+    _RejectRedirects,
 )
 
 
@@ -60,6 +66,64 @@ class ClientTests(unittest.TestCase):
             token_provider=TokenProvider(self.credential),
             post=post,
         )
+
+    def test_redirect_never_forwards_bearer_and_create_remains_unknown(self):
+        observed = []
+        code = 302
+        location = ""
+
+        class FakeHTTPS(urllib.request.BaseHandler):
+            handler_order = 100
+
+            def https_open(self, request):
+                observed.append((request.full_url, request.get_header("Authorization")))
+                headers = Message()
+                headers["Location"] = location
+                response = urllib.response.addinfourl(
+                    io.BytesIO(b""), headers, request.full_url, code
+                )
+                response.msg = "Redirect"
+                return response
+
+        for code, location in (
+            (302, "https://attacker.example/steal"),
+            (307, "http://example.test/steal"),
+            (308, "https://example.test/other"),
+        ):
+            with self.subTest(code=code, location=location):
+                observed.clear()
+                journal = MemoryOperationJournal()
+                client = ResponsesClient(
+                    "https://example.test/responses",
+                    journal,
+                    token_provider=TokenProvider(self.credential),
+                    post=_post_json,
+                )
+                opener = urllib.request.build_opener(
+                    urllib.request.ProxyHandler({}), _RejectRedirects(), FakeHTTPS()
+                )
+                with patch("order_resolution_hosted.client.build_opener", return_value=opener):
+                    for _ in range(2):
+                        with self.assertRaises(AmbiguousCreate):
+                            client.start(
+                                operation_id="redirected-create",
+                                binding=self.binding,
+                                case_id="c3dc94c3-7772-4249-bf63-95597591f49c",
+                            )
+                self.assertEqual(
+                    observed, [("https://example.test/responses", "Bearer managed-identity-token")]
+                )
+                self.assertEqual(journal.get("redirected-create").status, OperationStatus.UNKNOWN)
+
+    def test_injected_transport_redirect_is_unknown_even_if_it_returns_an_id(self):
+        client = self.client(lambda *_args, **_kwargs: FakeResponse(status_code=302))
+        with self.assertRaises(AmbiguousCreate):
+            client.start(
+                operation_id="redirect-response",
+                binding=self.binding,
+                case_id="c3dc94c3-7772-4249-bf63-95597591f49c",
+            )
+        self.assertEqual(self.journal.get("redirect-response").status, OperationStatus.UNKNOWN)
 
     def test_managed_identity_token_and_duplicate_acknowledgment(self):
         requests = []

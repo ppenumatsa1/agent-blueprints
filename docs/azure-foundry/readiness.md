@@ -225,6 +225,12 @@ a compromised authorized origin or trusted proxy, or verify Entra login.
 The model evaluator separately checks its endpoint against
 `MAF_MODEL_AUTHORIZED_ORIGIN` and refuses all redirects. Its endpoint may
 include a path and query, but not user info or a fragment.
+The frontend's protected API and activity-stream fetches also reject redirects.
+The hosted Responses client rejects redirects and retains an unknown operation
+outcome rather than replaying a potentially applied create. Top-level browser
+navigation is not constrained by those fetch settings; origin-gated storage
+does not make the authorized page, configured endpoints, MSAL, custom
+factories, proxy, or host trustworthy.
 
 The distinct `azure-foundry-failure-injection-nonproduction` GitHub
 environment must be configured with required reviewers and an OIDC federated

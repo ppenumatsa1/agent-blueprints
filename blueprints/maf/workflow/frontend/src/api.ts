@@ -243,6 +243,7 @@ export class HttpWorkflowClient implements WorkflowClient {
         },
         body: options.body === undefined ? undefined : JSON.stringify(options.body),
         credentials: "omit",
+        redirect: "error",
         signal: options.signal,
       });
     } catch {
@@ -304,6 +305,7 @@ export class HttpWorkflowClient implements WorkflowClient {
       const response = await fetch(`/api/cases/${encodeURIComponent(id)}/activity/stream`, {
         headers: { Authorization: `Bearer ${token}`, Accept: "text/event-stream" },
         credentials: "omit",
+        redirect: "error",
         signal: connection.signal,
       });
       clearTimeout(connectTimeout);

@@ -51,6 +51,10 @@ live Azure or Entra access. Existing local browser suites remain intact. CI and 
 configuration remain unverified. Next: integrate the separate fix into the
 draft and run exact-head CI. This does not establish trusted deployment
 provenance, proxy safety or isolation for same-identity approval.
+The same trace found a hosted Responses POST using default redirect handling
+and browser API/stream fetches that followed redirects. Both now reject
+redirects; the hosted client records an ambiguous outcome as unknown. Synthetic
+loopback and transport checks do not prove live service or proxy behavior.
 
 ## Hosted approval UI repair above #62
 

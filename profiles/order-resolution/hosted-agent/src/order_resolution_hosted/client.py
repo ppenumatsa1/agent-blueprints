@@ -8,7 +8,7 @@ from enum import Enum
 from typing import Any, Callable, Protocol
 from urllib.error import HTTPError
 from urllib.parse import urlsplit
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 
@@ -131,6 +131,11 @@ class _JsonResponse:
         raise RuntimeError(f"Responses request failed with HTTP {self.status_code}.")
 
 
+class _RejectRedirects(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise RuntimeError("Responses redirects are not permitted.")
+
+
 def _post_json(
     endpoint: str,
     *,
@@ -150,10 +155,12 @@ def _post_json(
         method="POST",
     )
     try:
-        with urlopen(request, timeout=timeout) as response:
+        with build_opener(_RejectRedirects()).open(request, timeout=timeout) as response:
             return _JsonResponse(response.status, response.read())
     except HTTPError as error:
         try:
+            if 300 <= error.code < 400:
+                raise RuntimeError("Responses redirects are not permitted.") from None
             return _JsonResponse(error.code, error.read())
         finally:
             error.close()
@@ -278,9 +285,9 @@ class ResponsesClient:
         except Exception:
             self._journal.update(replace(record, status=OperationStatus.UNKNOWN))
             raise AmbiguousCreate("The create acknowledgment was lost; do not retry.") from None
-        if response.status_code >= 500:
+        if 300 <= response.status_code < 400 or response.status_code >= 500:
             self._journal.update(replace(record, status=OperationStatus.UNKNOWN))
-            raise AmbiguousCreate("The service error is ambiguous; do not retry the create.")
+            raise AmbiguousCreate("The service response is ambiguous; do not retry the create.")
         if response.status_code >= 400:
             self._journal.update(replace(record, status=OperationStatus.REJECTED))
             response.raise_for_status()

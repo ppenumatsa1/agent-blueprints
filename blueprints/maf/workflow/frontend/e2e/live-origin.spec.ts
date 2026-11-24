@@ -1,4 +1,6 @@
 import { expect, test } from "@playwright/test";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { authorizedOrigin, checkedStorageState, injectSessionStorage } from "./live-origin";
 
 const origin = "https://app.example.test";
@@ -49,6 +51,7 @@ test("session storage is injected only into the authorized origin", async ({ bro
       origin,
       entries: { "synthetic-canary": "synthetic-value" },
     });
+
     const page = await context.newPage();
     await page.goto(`${origin}/`);
     expect(await page.evaluate(() => sessionStorage.getItem("synthetic-canary"))).toBe(
@@ -68,5 +71,54 @@ test("session storage is injected only into the authorized origin", async ({ bro
     expect(await page.evaluate(() => sessionStorage.getItem("synthetic-canary"))).toBeNull();
   } finally {
     await context.close();
+  }
+});
+
+test("browser bearer requests reject redirects before reaching another origin", async ({ browser }) => {
+  let destinationRequests = 0;
+  const destination = createServer((_request, response) => {
+    destinationRequests += 1;
+    response.writeHead(200, { "access-control-allow-origin": "*" });
+    response.end("{}");
+  });
+  await new Promise<void>((resolve) => destination.listen(0, "127.0.0.1", resolve));
+  const destinationPort = (destination.address() as AddressInfo).port;
+  const source = createServer((request, response) => {
+    if (request.url === "/") {
+      response.writeHead(200, { "content-type": "text/html" });
+      response.end("<html></html>");
+    } else {
+      const status = request.url === "/redirect-307" ? 307 : 302;
+      response.writeHead(status, { location: `http://127.0.0.1:${destinationPort}/` });
+      response.end();
+    }
+  });
+  await new Promise<void>((resolve) => source.listen(0, "127.0.0.1", resolve));
+  try {
+    const page = await browser.newPage();
+    await page.goto(`http://127.0.0.1:${(source.address() as AddressInfo).port}/`);
+    for (const path of ["/redirect-302", "/redirect-307"]) {
+      const rejected = await page.evaluate(async (url) => {
+        try {
+          await fetch(url, {
+            method: "POST",
+            headers: { Authorization: "Bearer synthetic-canary" },
+            body: "synthetic",
+            redirect: "error",
+          });
+          return false;
+        } catch {
+          return true;
+        }
+      }, path);
+      expect(rejected).toBe(true);
+    }
+    expect(destinationRequests).toBe(0);
+    await page.close();
+  } finally {
+    await Promise.all([
+      new Promise<void>((resolve, reject) => source.close((error) => error ? reject(error) : resolve())),
+      new Promise<void>((resolve, reject) => destination.close((error) => error ? reject(error) : resolve())),
+    ]);
   }
 });

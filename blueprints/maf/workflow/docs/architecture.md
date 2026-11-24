@@ -476,6 +476,10 @@ requires a separate authorized HTTPS origin and refuses redirects. The operator
 must independently authorize and trust that origin and the network path; this does
 not verify Entra authentication, deployment provenance, or a compromised
 authorized page.
+Protected browser API/stream requests and hosted Responses POSTs reject
+redirects. A potentially applied hosted POST remains unknown, not retried.
+These controls do not constrain top-level navigation or establish trust in
+custom factories, configured endpoints, the host, or its proxy.
 
 The hosted failure runner blocks its interruption scenario before invoking an
 adapter because its current interface does not verify native continuation.

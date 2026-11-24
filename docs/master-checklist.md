@@ -52,6 +52,9 @@ independently before enabling the scenario. See
 origin before reading authentication; prevent bearer redirects and restrict
 browser storage injection to that origin without weakening live assertions.
 The model endpoint has a separate authorized HTTPS origin and redirect block.
+The hosted Responses client and frontend API/stream fetches reject redirects;
+ambiguous hosted creates remain unknown. Synthetic checks do not attest a
+deployed endpoint, trusted factory, proxy, or real credential handling.
 Synthetic checks cover the source and independently generated Order Resolution
 profile; no live Entra or Azure call is evidence. Existing local browser suites
 remain intact. Exact-head CI and a trusted configured origin remain unverified.
