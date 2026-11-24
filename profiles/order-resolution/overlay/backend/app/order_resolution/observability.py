@@ -6,7 +6,14 @@ from typing import Any, Iterator
 from uuid import UUID
 
 from opentelemetry import trace
-from opentelemetry.trace import Link, SpanContext, SpanKind, Status, StatusCode, TraceFlags
+from opentelemetry.trace import (
+    Link,
+    SpanContext,
+    SpanKind,
+    Status,
+    StatusCode,
+    TraceFlags,
+)
 
 
 _TRACE_KEYS = frozenset({"trace_id", "span_id", "trace_flags"})

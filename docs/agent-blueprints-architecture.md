@@ -27,15 +27,19 @@ adapters. Evidence is rendered as text after authorized case selection;
 the application must allowlist safe fields and must not return raw model,
 tool, checkpoint, actor or sensitive payload data. The shell performs no
 additional fetch and cannot verify that application-supplied values are safe.
-Manual tests run only after a click in development, with no workflow client
-passed in; production builds omit the test UI and do not support opt-in,
-because a build flag cannot sandbox code running in an authenticated browser
-origin. Application code is trusted rather than sandboxed, and omitting the
-client cannot prevent network access or real effects. Manual tests require a
-separately isolated synthetic development backend; the blueprint does not
-enforce this isolation. Owners must ensure fixtures are synthetic. Errors are visible
-without disabling the base workflow. This is not authorization, artifact
-verification, or evidence of production readiness.
+Application-supplied manual-test execution is disabled in all environments.
+This interim control is not an isolated synthetic execution capability:
+application code is trusted rather than sandboxed, and a build flag or
+omitting the workflow client cannot prevent network access or real effects.
+A future implementation requires a separately verified isolation boundary.
+Evidence projections are not authorization, artifact verification, or
+evidence of production readiness.
+
+The hosted failure runner validates and preserves optional HTTP status and
+hosted phase metadata in correlation evidence for the independent App Insights
+consumer. This shape compatibility is not evidence that live telemetry exists
+or matches. Acceptance fault controls remain default-off and role- and
+revision-bound, but a non-production environment boundary is not enforced.
 
 ## Live activity reconciliation
 
@@ -57,10 +61,30 @@ implementation also poll. Token acquisition and
 connection establishment have 15-second deadlines; idle reads have a
 20-second deadline. Cancellation stops waiting for token acquisition and
 prevents a late request, but cannot cancel MSAL's underlying token operation.
-The server's wall-clock deadline ends the stream, but cannot cancel a blocked
-synchronous identity or PostgreSQL worker; a borrowed connection can remain
-occupied until that worker returns, within the existing pool bound. Network
-stall behavior and production resource limits remain unverified.
+The server no longer submits synchronous identity or database calls to an SSE
+executor. At most four async I/O operations and 32 streams run per process.
+Each operation has a five-second cancellation deadline. Malformed token
+headers are rejected before network I/O. Signing keys are read using async
+HTTPS with a bounded response and cached for five minutes per application
+identity; unknown-key and failed refreshes are throttled to once per 30 seconds,
+with one fetch in flight. Expired keys are never a failure fallback. The existing
+delegated-token validator runs locally on every tick. PostgreSQL uses separate async, read-only connections
+with five-second connection, statement, and lock timeouts, never the API pool.
+Each connection closes before the next tick. Managed-identity database
+credentials and custom service/store/policy/identity implementations fall back
+to authorized polling rather than invoking synchronous callbacks on this path.
+This intentionally narrows streaming support; the Order Resolution profile
+also polls.
+
+Local regressions verify stalled HTTP cancellation/cleanup, cancellation of an
+actual locked PostgreSQL read, server statement deadlines, read-only mode,
+capacity recovery, token expiry, and policy revocation. These do not prove
+platform DNS resolver cancellation, TLS/network black-hole recovery, or cloud
+proxy behavior. The underlying async libraries may use executor-backed DNS.
+Polling requests still use synchronous database work and client cancellation
+does not stop that work on the server; repeated stalls can exhaust shared
+capacity. End-to-end shutdown/network resilience and polling I/O deadlines
+remain reliability blockers, not production-scale tuning.
 Scans start no more often than every 15 seconds and are limited to 50 pages
 and 60 seconds;
 exceeding either limit surfaces an error instead of silently truncating.

@@ -175,6 +175,15 @@ class PostgresStore:
             raise NotFound("Record not found.")
         return _case(row)
 
+    async def get_for_activity_stream(self, case_id: UUID) -> Case:
+        # A separate cancellable connection cannot exhaust the synchronous API pool.
+        async with await self._connector.connect_for_activity_stream() as connection:
+            cursor = await connection.execute(_CASE_QUERY, (case_id,))
+            row = await cursor.fetchone()
+        if row is None:
+            raise NotFound("Record not found.")
+        return _case(row)
+
     @instrumented("database.history")
     def list_history(
         self,

@@ -111,7 +111,7 @@ class HostedFailureAdapter(Protocol):
 
     def reconcile(self, case_id: str) -> HostedRecord: ...
 
-    def correlations(self) -> list[dict[str, str]]: ...
+    def correlations(self) -> list[dict[str, str | int]]: ...
 
 
 def _key(name):
@@ -323,14 +323,29 @@ def run_scenarios(adapter, *, source_revision, deployment_revision, environment)
     if not correlations:
         raise ValueError("Hosted failure evidence requires correlation records.")
     for item in correlations:
-        if set(item) != {
+        required = {
             "request_id",
             "case_id",
             "trace_id",
             "agent_version",
             "deployment_revision",
-        }:
+        }
+        hosted = {"hosted_phase", "conversation_id", "hosted_agent_name", "hosted_agent_version"}
+        optional = {"http_status"} | hosted
+        if not required <= set(item) or set(item) - required - optional:
             raise ValueError("Hosted correlation records have an unexpected shape.")
+        if "http_status" in item and (
+            type(item["http_status"]) is not int or not 100 <= item["http_status"] <= 599
+        ):
+            raise ValueError("Hosted correlation HTTP status is invalid.")
+        if set(item) & hosted:
+            if not hosted <= set(item) or item["hosted_phase"] not in {"start", "resume"}:
+                raise ValueError("Hosted correlation phase is invalid.")
+            if any(
+                not isinstance(item[name], str) or not item[name].strip() or len(item[name]) > 512
+                for name in hosted - {"hosted_phase"}
+            ):
+                raise ValueError("Hosted correlation metadata is invalid.")
         UUID(item["request_id"])
         UUID(item["case_id"])
         int(item["trace_id"], 16)

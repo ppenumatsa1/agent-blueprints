@@ -7,8 +7,15 @@ Install dependencies as described in [setup](setup.md). Set
 ```text
 uv run --locked ruff check .
 uv run --locked ruff format --check .
-uv run --locked python -m unittest -v tests.test_core tests.test_external_effect tests.test_security tests.test_evidence_runner tests.test_telemetry tests.test_migrations tests.test_extensions tests.test_evaluation
+uv run --locked python -m unittest discover -s tests -v
 ```
+
+Complete backend discovery includes hosted failure-runner regression tests. SSE tests
+use synthetic signing keys/HTTP transports and disposable PostgreSQL; they
+exercise cancellation of a locked read, HTTP resource cleanup, capacity
+recovery, server deadlines, read-only connections, token expiry, and policy
+revocation. They do not prove bounded DNS resolver shutdown or recovery from
+real network black holes. Synchronous polling remains a reliability limitation.
 
 Tests create and drop isolated schemas and roles; the test identity requires
 `CREATEROLE`. They fail if the database is unavailable; do not point them at

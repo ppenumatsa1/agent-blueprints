@@ -64,16 +64,32 @@ seconds and stop after 50 pages or 60 seconds, surfacing
 an error rather than showing a silently truncated snapshot. A supplied
 `Last-Event-ID` must be a valid activity cursor but is only a hint, never a
 watermark. Switching accounts or cases cancels the stream and reads. Local
-tests do not establish live Entra or cloud proxy behavior. Stream identity and
-database calls use a dedicated bounded worker pool and a bounded stream count.
-The standard PostgreSQL pool reserves at least one connection from stream work;
-timed-out work retains its slot until the synchronous call actually returns.
-Streams fail closed to polling for custom service or store implementations
-whose connection behavior cannot be established, including the Order Resolution
-service. This reservation is per process and cannot constrain arbitrary
-callbacks that start work on other threads. Four permanently blocked stream
-workers disable streams in that process; deployment-scale tuning and live
-proxy behavior remain unverified.
+tests do not establish live Entra or cloud proxy behavior. SSE does not submit
+synchronous callbacks to an executor. Per process, at most four async I/O
+operations and 32 streams run, with a five-second cancellation deadline per
+operation. Malformed token headers fail before I/O. Async HTTPS reads a bounded
+signing-key response, cached for five minutes per application identity. A single
+refresh can run at once; unknown-key and failed refreshes are throttled for 30
+seconds. Expired keys are never reused on failure. Rotation to an unknown key
+during that throttle may temporarily deny a stream, which can fall back to
+authorized polling. The existing delegated-token validator still verifies each
+token locally on every tick. Separate async
+PostgreSQL connections use read-only mode and five-second connection, statement,
+and lock deadlines, and never borrow from the synchronous API pool. Each
+connection closes before waiting for another tick.
+
+Streaming supports the standard service, PostgreSQL reader, default case policy,
+Entra validator, and password-mode database credentials only. Custom
+implementations, managed-identity database credentials (which require synchronous
+SDK token acquisition), and the Order Resolution service fail closed to polling.
+Tests verify async HTTP cleanup, cancellation of a locked database read,
+server deadlines, read-only enforcement, capacity recovery, and authorization.
+Platform DNS resolution may still use underlying library executor threads;
+DNS hangs, TLS/network black holes, and process-wide shutdown are not proven
+bounded. Polling still uses synchronous database calls and a browser abort
+cannot cancel them; repeated stalls can exhaust the shared API pool. These
+remain reliability blockers. The per-process limits are not deployment-wide
+capacity guarantees.
 
 An unsupported service receives a 503 from the stream endpoint before stream
 authentication; it sends no activity information. The browser then falls back

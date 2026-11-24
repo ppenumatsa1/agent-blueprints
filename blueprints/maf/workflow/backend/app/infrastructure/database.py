@@ -78,6 +78,26 @@ class DatabaseConnector:
             kwargs["password"] = password
         return psycopg.connect(self.options.dsn, **kwargs)
 
+    async def connect_for_activity_stream(self):
+        # Managed-identity token acquisition is synchronous; never run it on this path.
+        if self.options.auth_mode != "password":
+            raise ValueError("Activity streaming requires asynchronous database credentials.")
+        parameters = psycopg.conninfo.conninfo_to_dict(self.options.dsn)
+        parameters["options"] = (
+            parameters.get("options", "")
+            + " -cstatement_timeout=5000 -clock_timeout=5000 -cdefault_transaction_read_only=on"
+        )
+        parameters["connect_timeout"] = "5"
+        if self.options.password:
+            parameters["password"] = self.options.password
+        if self.options.tls_mode:
+            parameters["sslmode"] = self.options.tls_mode
+        if self.options.tls_root_cert:
+            parameters["sslrootcert"] = self.options.tls_root_cert
+        return await psycopg.AsyncConnection.connect(
+            **parameters, row_factory=dict_row, autocommit=True
+        )
+
 
 class BoundedConnectionPool:
     """Small synchronous pool with bounded borrowers and expiring connections."""
@@ -101,9 +121,6 @@ class BoundedConnectionPool:
         self._max_lifetime = max_lifetime_seconds
         self._available: queue.LifoQueue[tuple[psycopg.Connection, float]] = queue.LifoQueue()
         self._borrowers = threading.BoundedSemaphore(max_size)
-        self._stream_borrowers = threading.BoundedSemaphore(max_size - 1) if max_size > 1 else None
-        self._stream_work_slots = threading.BoundedSemaphore(max_size - 1) if max_size > 1 else None
-        self._stream_context = threading.local()
         self._opened = False
         self._closed = False
         self._lock = threading.Lock()
@@ -152,31 +169,8 @@ class BoundedConnectionPool:
             raise
 
     @contextmanager
-    def stream_work(self) -> Iterator[None]:
-        previous = getattr(self._stream_context, "active", False)
-        if previous:
-            raise RuntimeError("Nested stream work is not supported.")
-        if self._stream_work_slots is None or not self._stream_work_slots.acquire(blocking=False):
-            raise TimeoutError("The PostgreSQL stream capacity is exhausted.")
-        self._stream_context.active = True
-        try:
-            yield
-        finally:
-            self._stream_context.active = previous
-            self._stream_work_slots.release()
-
-    @contextmanager
     def connection(self) -> Iterator[psycopg.Connection]:
-        stream_slot = None
-        if getattr(self._stream_context, "active", False):
-            stream_slot = self._stream_borrowers
-            if stream_slot is None or not stream_slot.acquire(blocking=False):
-                raise TimeoutError("The PostgreSQL stream capacity is exhausted.")
-        try:
-            yield from self._connection()
-        finally:
-            if stream_slot is not None:
-                stream_slot.release()
+        yield from self._connection()
 
     def _connection(self) -> Iterator[psycopg.Connection]:
         connection, created_at = self._borrow()

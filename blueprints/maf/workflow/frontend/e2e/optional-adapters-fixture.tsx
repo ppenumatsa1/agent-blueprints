@@ -15,10 +15,11 @@ const record: WorkflowCase = {
   failure_code: null,
 };
 const unavailable = async (): Promise<never> => { throw new Error("Not available in fixture"); };
+const projectionFails = new URLSearchParams(location.search).has("projection-error");
 const client: WorkflowClient = {
   submit: unavailable,
   read: async () => record,
-  decide: unavailable,
+  decide: async () => ({ ...record, status: "completed", decision: "approved", execution_complete: true }),
   listHistory: async () => ({ schema_version: "workflow-history/1", items: [], next_cursor: null }),
   activity: async () => ({ schema_version: "workflow-activity/1", items: [], next_cursor: null }),
 };
@@ -35,13 +36,19 @@ createRoot(root).render(
       ...defaultWorkflowStudioProfile,
       capabilities: { ...defaultWorkflowStudioProfile.capabilities, evidence: true, manualTests: true },
       projectPayload: () => ({ summary: "Synthetic request", fields: [] }),
-      projectEvidence: (selected) => ({
-        heading: "Review evidence",
-        items: [{ label: "Approved", value: String(selected.payload.evidence) }],
-      }),
+      projectEvidence: (selected) => {
+        if (projectionFails) throw new Error("Private projection failure");
+        return {
+          heading: "Review evidence",
+          items: [{ label: "Approved", value: String(selected.payload.evidence) }],
+        };
+      },
       syntheticManualTests: [{
         label: "Run synthetic check",
-        run: async () => ({ outcome: "failed", summary: "Synthetic assertion failed" }),
+        run: async () => {
+          document.body.dataset.manualTestInvoked = "true";
+          return { outcome: "failed", summary: "Synthetic assertion failed" };
+        },
       }],
     }}
   />,
