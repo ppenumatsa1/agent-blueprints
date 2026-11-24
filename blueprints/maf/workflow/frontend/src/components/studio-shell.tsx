@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent } from "react";
+import { lazy, Suspense, useRef, useState, type FormEvent } from "react";
 
 import { WorkflowClientError, type WorkflowCase, type WorkflowClient } from "../api";
 import type { WorkflowStudioProfile } from "../studio-profile";
@@ -8,6 +8,12 @@ import { CaseSummaryPanel } from "./case-summary-panel";
 import { ActivityTimeline } from "./activity-timeline";
 import { HistorySidebar } from "./history-sidebar";
 import { RequestComposer } from "./request-composer";
+import { EvidencePanel } from "./evidence-panel";
+import { OptionalBoundary } from "./optional-boundary";
+
+const SyntheticManualTests = import.meta.env.DEV
+  ? lazy(() => import("./synthetic-manual-tests").then((module) => ({ default: module.SyntheticManualTests })))
+  : null;
 
 export interface StudioShellProps {
   profile: WorkflowStudioProfile;
@@ -149,6 +155,13 @@ export function StudioShell({
             onPayloadChange={setPayload}
             onSubmit={(event) => void create(event)}
           />
+          {profile.capabilities.manualTests && SyntheticManualTests && profile.syntheticManualTests?.length ? (
+            <OptionalBoundary>
+              <Suspense fallback={<p role="status">Loading synthetic tests...</p>}>
+                <SyntheticManualTests tests={profile.syntheticManualTests} />
+              </Suspense>
+            </OptionalBoundary>
+          ) : null}
           {profile.capabilities.history && (
             <HistorySidebar
               profile={profile}
@@ -177,6 +190,9 @@ export function StudioShell({
                 )}
                 <CaseMetadataPanel record={record} status={status} profile={profile} />
                 <CaseSummaryPanel record={record} profile={profile} />
+                {profile.capabilities.evidence && profile.projectEvidence && (
+                  <EvidencePanel record={record} project={profile.projectEvidence} />
+                )}
                 {profile.capabilities.history && (
                   <ActivityTimeline
                     caseId={record.id}

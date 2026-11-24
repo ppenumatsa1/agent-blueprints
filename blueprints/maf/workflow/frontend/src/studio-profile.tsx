@@ -14,6 +14,16 @@ export interface PayloadProjection {
   fields: PayloadField[];
 }
 
+export interface EvidenceProjection {
+  heading: string;
+  items: ReadonlyArray<{ label: string; value: string }>;
+}
+
+export interface SyntheticManualTest {
+  label: string;
+  run(): Promise<{ outcome: "passed" | "failed"; summary: string }>;
+}
+
 export interface WorkflowStudioProfile {
   title: string;
   description: string;
@@ -44,5 +54,7 @@ export interface WorkflowStudioProfile {
   projectPayload(payload: Record<string, unknown>, record: WorkflowCase): PayloadProjection;
   renderPayload?(projection: PayloadProjection, record: WorkflowCase): ReactNode;
   decisionBinding?(record: WorkflowCase): DecisionBinding | undefined;
+  projectEvidence?(record: WorkflowCase): EvidenceProjection;
+  syntheticManualTests?: readonly SyntheticManualTest[];
 }
 

@@ -30,7 +30,10 @@ export function CaseMetadataPanel({
       <div className="capabilities" aria-label="Optional studio capabilities">
         {Object.entries(profile.capabilities).map(([capability, enabled]) => (
           <span className="capability" key={capability}>
-            {capabilityLabels[capability as StudioCapability]}: {enabled ? "Enabled" : "Not enabled"}
+            {capabilityLabels[capability as StudioCapability]}: {enabled &&
+              (capability !== "evidence" || !!profile.projectEvidence) &&
+              (capability !== "manualTests" || (import.meta.env.DEV && !!profile.syntheticManualTests?.length))
+              ? "Enabled" : "Not enabled"}
           </span>
         ))}
       </div>

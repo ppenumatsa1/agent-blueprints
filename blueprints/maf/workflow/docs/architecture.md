@@ -284,8 +284,29 @@ and activity labels, status-filtered navigation, and a safe timeline over the
 generic API. The named overlay replaces that profile with application labels,
 payload projection, and proposal decision binding while retaining the same
 protected API and MSAL client; its history UI reuses the generic labels and
-does not add order-specific event content. Evidence, manual tests, AG-UI, and
-CopilotKit remain disabled flags and belong to later layers.
+does not add order-specific event content. Evidence and manual tests are
+disabled by default; AG-UI and CopilotKit remain reserved flags.
+
+Applications may opt in to `projectEvidence` and return a text-only
+`EvidenceProjection` from a selected, already authorized case. Explicitly
+allowlist safe fields; never return raw payloads, model/tool/checkpoint/actor
+data, or sensitive identifiers. The shell makes no evidence request and does
+not verify that the application projection is safe. Projection errors are
+reported locally without stopping approval.
+
+Applications may provide `syntheticManualTests` and enable `manualTests` for
+development. Each function receives no workflow client and runs only on an
+explicit click. Return a real pass/fail and safe summary; failures and thrown
+errors are not converted to successes. Application code is trusted, not
+sandboxed: not passing a client does not prevent network access or real
+business effects. Authors must use synthetic fixtures and a separately
+isolated synthetic development backend; the blueprint does not enforce this
+isolation. Production builds exclude the manual-test UI without an opt-in,
+because a build flag cannot sandbox code in an authenticated browser origin.
+It is not a production endpoint or an authorization bypass. Applications must
+not import their test adapters into production entrypoints. Neither adapter
+establishes release evidence or changes authentication, idempotency, or
+business state.
 
 The profile keeps framework and application state distinct. Low-risk proposals
 run through a concrete MAF `Executor` and `WorkflowBuilder` to a terminal native
