@@ -86,10 +86,31 @@ Tests verify async HTTP cleanup, cancellation of a locked database read,
 server deadlines, read-only enforcement, capacity recovery, and authorization.
 Platform DNS resolution may still use underlying library executor threads;
 DNS hangs, TLS/network black holes, and process-wide shutdown are not proven
-bounded. Polling still uses synchronous database calls and a browser abort
-cannot cancel them; repeated stalls can exhaust the shared API pool. These
-remain reliability blockers. The per-process limits are not deployment-wide
-capacity guarantees.
+bounded.
+
+The case, activity, and history GET handlers share a nonblocking, per-store
+polling admission limit for PostgreSQL stores, including the generated Order
+Resolution store. At the supported minimum pool size of two, one read is
+admitted so healthy polling remains available. This is a compatibility
+exception, not a two-connection business reservation: a stalled read can
+leave only one connection, while the standard local workflow needs one for its
+advisory lock and another for a nested transaction. In a disposable PostgreSQL
+reproduction, a simulated stalled read caused a business submission to time
+out. Configure at least three connections to leave two outside the polling
+limit; at sizes of three or more the limit is `min(4, pool_max_size - 2)`.
+Those two slots are not exclusively reserved: other traffic can still exhaust
+the pool. At capacity reads return 503 after authentication. A slot stays
+occupied until the synchronous handler actually exits, even if its caller
+stops waiting. Tests exercise repeated stalled reads, rejection, cleanup and
+generated Order Resolution with local PostgreSQL; simulated stalls hold
+connections but do not reproduce network black holes.
+This is containment, not cancellation or an I/O deadline: a stalled worker
+and connection can remain occupied indefinitely. Authentication occurs before
+admission and can itself stall. Non-PostgreSQL stores remain unchanged; custom
+services, stores, policies or connectors may use additional connections or
+spawn work, so their isolation is not established. Managed-identity token
+acquisition, network black holes, worker shutdown, and multi-process capacity
+are unverified. These remain reliability blockers.
 
 An unsupported service receives a 503 from the stream endpoint before stream
 authentication; it sends no activity information. The browser then falls back

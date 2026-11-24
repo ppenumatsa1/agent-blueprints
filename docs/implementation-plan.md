@@ -1,5 +1,37 @@
 # Phased implementation plan
 
+## Polling fallback containment above PR #60
+
+**In progress**, based on `99b4303a209c983ca7d306fd6d23473476e85ff6`.
+The case, activity and history GET handlers share a per-PostgreSQL-store
+nonblocking admission limit. At the supported minimum pool size of two, one
+read is admitted for compatibility. This does not leave two business
+connections: a disposable PostgreSQL reproduction of one simulated stalled
+read caused a local workflow submission to time out while trying to borrow its
+nested connection. Configure at least three connections for a polling limit
+of `min(4, pool_max_size - 2)` and two slots outside polling. Other traffic
+can still use those slots. A saturated handler returns 503 after
+authentication. Slots are released only after the actual synchronous handler
+exits, not when an asynchronous caller cancels. Tests reproduce
+pre-containment exhaustion and cover repeated stalls, rejection, cleanup and
+generated Order Resolution against disposable local PostgreSQL 17.12. The
+minimum-size correction passes six focused source tests, six in an independent
+generated base and nine in an independent generated profile; both generated
+Ruff checks pass. On the preceding head, full source and independent base
+suites passed 168 each and the independent profile passed 235 with one
+real-provider opt-in skip using the Windows selector event loop; instantiation
+tests passed 8/8. Default Windows Proactor runs failed
+in all three suites with two Psycopg async errors and one stream assertion
+failure each; selector reruns do not erase those failures. Exact-head CI
+remains pending.
+
+This is not a network timeout, thread termination or exclusive business-pool
+reservation. Other traffic may still exhaust the pool, authentication is
+outside admission, and custom implementations may borrow more connections or
+spawn work. Managed-identity acquisition, network black holes, shutdown and
+deployment-wide capacity are unverified. Next: review the draft and exact-head
+CI, then separately address these production reliability limitations.
+
 ## Remediation above PR #54
 
 **In progress**, starting at
@@ -41,9 +73,9 @@ database credentials fall back to independently authorized polling. Regression
 tests cover actual locked-query cancellation, connection cleanup, HTTP cleanup,
 capacity recovery, token expiry, policy revocation, and server read-only/deadline
 enforcement. DNS may still use library executor threads; resolver shutdown and
-TLS/network-black-hole behavior are not verified. Polling still uses synchronous
-database calls and repeated stalls can exhaust shared capacity. Those remain
-reliability blockers; this is a bounded SSE mitigation, not full I/O resilience.
+TLS/network-black-hole behavior are not verified. Polling remains synchronous;
+the successor containment and limitations are recorded above. I/O deadlines
+remain a reliability blocker; this is not full I/O resilience.
 
 Successor local validation on 2026-11-24 uses complete backend discovery, not
 the former curated module list. Source and independent generated base backend:

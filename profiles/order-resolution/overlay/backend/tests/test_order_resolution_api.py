@@ -13,6 +13,7 @@ import unittest
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
+from unittest.mock import patch
 from uuid import UUID, uuid4
 
 import psycopg
@@ -151,6 +152,105 @@ class OrderResolutionApiTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 200, response.text)
         return response.json()
+
+    def test_healthy_poll_reads_at_minimum_pool_size(self):
+        self.store.close()
+        self.store = OrderResolutionStore(
+            self.settings.database_url, pool_max_size=2, pool_timeout_seconds=1
+        )
+        self.addCleanup(self.store.close)
+        with self.client() as client:
+            record = self.submit(client, payload("POLL-MIN", "185.00", 5, [late_policy()]))
+            service = client.app.state.service
+            self.assertIsInstance(service, OrderResolutionService)
+            case_id = record["id"]
+            paths = ("/api/cases", f"/api/cases/{case_id}", f"/api/cases/{case_id}/activity")
+            self.assertEqual(
+                client.get(
+                    paths[2] + "/stream", headers=self.headers(self.owner_token)
+                ).status_code,
+                503,
+            )
+            for path in paths:
+                with self.subTest(path=path):
+                    response = client.get(path, headers=self.headers(self.owner_token))
+                    self.assertEqual(response.status_code, 200, response.text)
+            stranger = self.tokens.token(subject=str(uuid4()), scopes="workflow.read")
+            self.assertEqual(client.get(paths[1], headers=self.headers(stranger)).status_code, 403)
+
+    def test_poll_stalls_leave_order_resolution_business_capacity(self):
+        self.store.close()
+        self.store = OrderResolutionStore(
+            self.settings.database_url,
+            pool_min_size=0,
+            pool_max_size=4,
+            pool_timeout_seconds=1,
+        )
+        self.addCleanup(self.store.close)
+        with self.client() as client:
+            record = self.submit(client, payload("POLL-READ", "185.00", 5, [late_policy()]))
+            service = client.app.state.service
+            self.assertIsInstance(service, OrderResolutionService)
+            path = f"/api/cases/{record['id']}/activity"
+            self.assertEqual(
+                client.get(path + "/stream", headers=self.headers(self.owner_token)).status_code,
+                503,
+            )
+            entered, release = threading.Event(), threading.Event()
+            lock = threading.Lock()
+            active = 0
+            original = service.activity
+
+            def stalled(*args, **kwargs):
+                nonlocal active
+                with self.store.connect() as connection:
+                    connection.execute("SELECT 1")
+                    with lock:
+                        active += 1
+                        if active == 2:
+                            entered.set()
+                    if not release.wait(10):
+                        raise TimeoutError("Test worker was not released.")
+                return original(*args, **kwargs)
+
+            with patch.object(service, "activity", side_effect=stalled):
+                with ThreadPoolExecutor(max_workers=2) as executor:
+                    futures = [
+                        executor.submit(client.get, path, headers=self.headers(self.owner_token))
+                        for _ in range(2)
+                    ]
+                    try:
+                        self.assertTrue(entered.wait(5))
+                        for _ in range(3):
+                            self.assertEqual(
+                                client.get(
+                                    path, headers=self.headers(self.owner_token)
+                                ).status_code,
+                                503,
+                            )
+                        business = self.submit(
+                            client,
+                            payload("POLL-BUSINESS", "185.00", 5, [late_policy()]),
+                        )
+                        decision = client.post(
+                            f"/api/cases/{business['id']}/decision",
+                            headers=self.headers(self.reviewer_token),
+                            json=self.decision_body(business, "rejected"),
+                        )
+                        self.assertEqual(decision.status_code, 200, decision.text)
+                        self.assertEqual(decision.json()["status"], "rejected")
+                        counts = self.durability_counts(UUID(business["id"]))
+                        self.assertEqual(counts["proposal_decisions"], 1)
+                        self.assertEqual(counts["effect_claims"], 0)
+                        self.assertEqual(counts["synthetic_effects"], 0)
+                    finally:
+                        release.set()
+                    for future in futures:
+                        self.assertEqual(future.result(timeout=10).status_code, 200)
+            self.assertEqual(
+                client.get(path, headers=self.headers(self.owner_token)).status_code,
+                200,
+            )
 
     def hosted_case(self, order_id: str, amount: str):
         owner = Principal(

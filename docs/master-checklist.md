@@ -11,6 +11,38 @@ The original [interactive architecture](software-factory.html) is a preserved
 historical source; this checklist records current status. The 2–3 hour
 prototype objective has not yet been measured.
 
+## Polling fallback containment above PR #60
+
+**Status: In Progress.** Parent head:
+`99b4303a209c983ca7d306fd6d23473476e85ff6`. Local PostgreSQL tests reproduce
+shared-pool starvation without read admission and exercise bounded synchronous
+GET admission, repeated stalls, fail-closed 503s, cancellation of a waiter,
+real worker completion, business submission and rejection. The generated Order
+Resolution path is also exercised. The limit is per store and at most four.
+At the supported minimum pool size of two, one read is admitted for
+compatibility; one stalled read can leave too few connections for the standard
+business workflow. A local reproduction showed a submission timeout while a
+simulated stall held a pool connection. At sizes of three or more, the limit
+leaves two pool slots outside polling, but they are not reserved against other
+traffic. Configure at least three for that limited protection.
+
+On local PostgreSQL 17.12, the minimum-size correction passes six focused
+source tests, six in an independently generated base project, and nine in an
+independently generated Order Resolution project; both generated Ruff checks
+pass. These include healthy minimum-size reads, the single-slot boundary and
+release, and size-four business continuity. On the preceding head, full source
+and independent base suites passed 168 each, and the independent profile
+passed 235 with one real-provider opt-in skip, using the Windows selector
+event loop; instantiation tests passed 8/8. Default Windows Proactor runs
+failed in all three suites (each two Psycopg async errors and one stream
+assertion failure); the selector reruns do not erase those failures. This does
+not terminate stalled threads, guarantee business availability under other
+traffic, or prove custom adapters, managed identity or network black-hole
+recovery. Exact-head CI is pending.
+
+Next action: review the draft and its exact-head CI; separately address bounded
+I/O, authentication stalls, network recovery and production capacity.
+
 ## Remediation above PR #54
 
 **Status: In Progress.** This work starts at PR #54 head
@@ -25,7 +57,7 @@ and verified safe target, isolation, permissions, and provenance.
 | --- | --- |
 | Same-identity development approval | **Blocked.** Same-user approval remains denied, including at the effect boundary. The synthetic adapter uses configured PostgreSQL; the runtime cannot verify isolation of storage, credentials, permissions, or network access. A flag or adapter declaration cannot establish that isolation. Independently verified isolation, trusted deployment provenance, and an atomic exception audit are prerequisites. |
 | Manual test safety | The studio does not execute application-supplied manual-test callbacks, even in development. This is an interim control, not an isolated synthetic execution capability. Trusted profile code itself is not sandboxed; an audited fixed test path and its execution boundary require separate design and verification. |
-| Stream availability | **Mitigated, not production verified.** SSE uses at most four cancellable async operations/32 streams per process, async bounded HTTPS key reads, and separate read-only PostgreSQL connections with five-second connection/statement/lock deadlines. It no longer submits synchronous work to an SSE executor or borrows the API pool. Tests cover actual locked-read cancellation/connection cleanup, HTTP cleanup, capacity recovery, token expiry and policy revocation. Custom components, managed-identity database credentials, and Order Resolution fall back to authorized polling. Library DNS resolver shutdown and TLS/network-black-hole recovery remain unverified. Polling remains synchronous and repeated stalls can exhaust shared capacity; its I/O deadlines remain **blocked**. The UI does not indicate polling mode. |
+| Stream availability | **Mitigated, not production verified.** SSE uses at most four cancellable async operations/32 streams per process, async bounded HTTPS key reads, and separate read-only PostgreSQL connections with five-second connection/statement/lock deadlines. It no longer submits synchronous work to an SSE executor or borrows the API pool. Tests cover actual locked-read cancellation/connection cleanup, HTTP cleanup, capacity recovery, token expiry and policy revocation. Custom components, managed-identity database credentials, and Order Resolution fall back to authorized polling. Library DNS resolver shutdown and TLS/network-black-hole recovery remain unverified. Polling is synchronous; its admission containment and remaining limits are recorded above. I/O deadlines remain **blocked**. The UI does not indicate polling mode. |
 | Rollout and live acceptance | The manual workflow verifies exact successful CI/deployment run heads and a configured deployment-workflow path, checks the active-revision artifact, and defaults destructive injection off. Failure injection has a deliberate pre-OIDC hard stop because source-to-image/hosted deployment provenance is not independently attested; its Azure login and adapter steps are unreachable. The dedicated synthetic environment, scoped identity/RBAC, and reviewed adapter remain unverified. No in-repository workflow currently produces the deployment artifact; the producer path is unset. Firewall rules are unchanged; parent preflight still reports isolation and delegated consent unverified. No rollout or live acceptance is claimed. |
 | Local checks | Successor 2026-11-24: isolated repository 105 tests/two adapter-selection skips; complete source and independent base backend discovery 162 each/no skips; independent profile backend 228/one real-provider opt-in skip; generated Agent A 63/no skips. Disposable PostgreSQL and explicit generated Agent A selection were used. Generated base verification 52/no skips; profile canonical contract 9/no skips. Source/base/profile frontend 54/54/56 plus builds/CSP; source and generated base offline browser suites 1 local + 5 history/optional/protocol/activity + 1 production studio each. No live calls. Builds retain >500 kB chunk warnings and backend fixtures emit non-fatal open synchronous-connection ResourceWarnings. |
 | Follow-on verification | Successor is based on verified `766d8e46c13447deb10a9a1903e12af296163818`. Generated-profile formatting uses locked Ruff 0.14.13 with the generated 100-column configuration. Source/base CI now use full discovery and generated browser CI uses all three offline suites. Exact-head CI is tracked on the successor draft PR; [historical run 45309564583](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/45309564583) at `b7004af4316a419f7b5afd0048a388e9c2af9705` remains failed, not reclassified. The hosted failure runner validates HTTP status, hosted metadata, and exact synthetic-nonproduction target identity for the App Insights consumer; no live telemetry or failure injection is verified. |

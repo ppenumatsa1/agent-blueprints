@@ -3,7 +3,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Query
 
-from app.api.dependencies import current_identity, workflow_service
+from app.api.dependencies import current_identity, poll_read, workflow_service
 from app.api.schemas import (
     ActivityOutput,
     CaseHistoryOutput,
@@ -29,12 +29,13 @@ def history(
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
     cursor: Annotated[str | None, Query(max_length=512)] = None,
 ) -> CaseHistoryOutput:
-    page = service.history(
-        actor.principal,
-        status=status,
-        cursor=cursor,
-        limit=limit,
-    )
+    with poll_read(service):
+        page = service.history(
+            actor.principal,
+            status=status,
+            cursor=cursor,
+            limit=limit,
+        )
     return CaseHistoryOutput(
         items=[
             {
@@ -71,7 +72,8 @@ def activity(
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
     cursor: Annotated[str | None, Query(max_length=512)] = None,
 ) -> ActivityOutput:
-    page = service.activity(actor.principal, case_id, cursor=cursor, limit=limit)
+    with poll_read(service):
+        page = service.activity(actor.principal, case_id, cursor=cursor, limit=limit)
     return ActivityOutput(
         items=[{"type": item.event_type, "created_at": item.created_at} for item in page.items],
         next_cursor=page.next_cursor,
@@ -84,7 +86,8 @@ def read(
     actor: Annotated[AuthenticatedRequest, Depends(current_identity)],
     service: Annotated[WorkflowService, Depends(workflow_service)],
 ) -> CaseOutput:
-    return case_output(service.read(actor.principal, case_id))
+    with poll_read(service):
+        return case_output(service.read(actor.principal, case_id))
 
 
 @router.post("/cases/{case_id}/decision", response_model=CaseOutput)

@@ -1,4 +1,5 @@
 from contextlib import contextmanager
+from threading import BoundedSemaphore
 from typing import Iterator
 from uuid import UUID, uuid4
 
@@ -43,6 +44,9 @@ _AUDIT_ACTIVITY_TYPES = {
     "recovery_failed": "recovery_failed",
     "resolution_failed": "workflow_failed",
 }
+MAX_CONCURRENT_POLL_READS = 4
+# Local workflow execution holds an advisory-lock connection while borrowing another.
+BUSINESS_POOL_RESERVATION = 2
 
 
 def _case(row: dict) -> Case:
@@ -110,6 +114,13 @@ class PostgresStore:
             open_connection=self._open_connection,
             checkout_failure=self._record_checkout_failure,
         )
+        # Preserve reads at the supported minimum, without a two-connection reservation.
+        poll_limit = (
+            1
+            if pool_max_size == 2
+            else min(MAX_CONCURRENT_POLL_READS, max(0, pool_max_size - BUSINESS_POOL_RESERVATION))
+        )
+        self._poll_read_slots = BoundedSemaphore(poll_limit)
         self.telemetry = None
 
     @classmethod
@@ -138,6 +149,15 @@ class PostgresStore:
 
     def connect(self):
         return self._pool.connection()
+
+    @contextmanager
+    def poll_read(self) -> Iterator[bool]:
+        admitted = self._poll_read_slots.acquire(blocking=False)
+        try:
+            yield admitted
+        finally:
+            if admitted:
+                self._poll_read_slots.release()
 
     def _open_connection(self, reason: str):
         if self.telemetry is None:

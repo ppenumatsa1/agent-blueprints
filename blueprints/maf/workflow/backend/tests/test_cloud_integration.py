@@ -1,5 +1,6 @@
 import os
 import unittest
+from contextlib import ExitStack
 from dataclasses import replace
 from types import SimpleNamespace
 from unittest.mock import ANY, patch
@@ -183,6 +184,23 @@ class CloudConfigurationTests(unittest.TestCase):
                 with pool.connection():
                     self.fail("A second borrower exceeded the pool maximum.")
         pool.close()
+
+    def test_poll_read_limits_follow_pool_size_and_release_on_error(self):
+        for size, limit in ((1, 0), (2, 1), (3, 1), (4, 2), (5, 3), (6, 4), (8, 4), (32, 4)):
+            with self.subTest(pool_size=size):
+                store = PostgresStore("postgresql://localhost/test", pool_max_size=size)
+                with ExitStack() as stack:
+                    for _ in range(limit):
+                        self.assertTrue(stack.enter_context(store.poll_read()))
+                    self.assertFalse(stack.enter_context(store.poll_read()))
+                if limit:
+                    with self.assertRaisesRegex(ValueError, "test"):
+                        with store.poll_read() as admitted:
+                            self.assertTrue(admitted)
+                            raise ValueError("test")
+                    with store.poll_read() as admitted:
+                        self.assertTrue(admitted)
+                store.close()
 
     def test_pool_reports_only_physical_open_replacement_and_checkout_failure(self):
         class Connection:
