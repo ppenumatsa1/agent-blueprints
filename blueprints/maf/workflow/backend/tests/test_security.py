@@ -7,6 +7,7 @@ import tempfile
 import time
 import unittest
 from dataclasses import replace
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import AsyncMock, Mock, patch
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
@@ -155,6 +156,41 @@ class ActivityStreamTests(unittest.TestCase):
         response = self.client.get(self.path, headers=self.headers)
         self.assertEqual(response.status_code, 403)
         self.assertNotIn("private-canary", response.text)
+
+    def test_valid_resume_hint_forces_fresh_authorized_refresh_and_bounded_stream(self):
+        from app.usecases.history import _encode_cursor
+
+        cursor = _encode_cursor("activity", datetime.now(timezone.utc), 1, None)
+        with (
+            patch("app.api.routes.activity_stream.STREAM_SECONDS", 2),
+            patch("app.api.routes.activity_stream.HEARTBEAT_SECONDS", 1),
+            patch("app.api.routes.activity_stream.asyncio.sleep", new_callable=AsyncMock),
+        ):
+            response = self.client.get(self.path, headers={**self.headers, "Last-Event-ID": cursor})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.text.count("event: activity.refresh"), 2)
+        self.assertEqual(self.service.activity.call_count, 3)
+        for call in self.service.activity.call_args_list:
+            self.assertIsNone(call.kwargs["cursor"])
+        self.assertNotIn(cursor, response.text)
+
+    def test_token_is_revalidated_until_it_expires(self):
+        identity = self.identity.authenticate.return_value
+        self.identity.authenticate.side_effect = [
+            identity,
+            identity,
+            AuthenticationFailed("private-canary"),
+        ]
+        with (
+            patch("app.api.routes.activity_stream.STREAM_SECONDS", 2),
+            patch("app.api.routes.activity_stream.HEARTBEAT_SECONDS", 1),
+            patch("app.api.routes.activity_stream.asyncio.sleep", new_callable=AsyncMock),
+        ):
+            response = self.client.get(self.path, headers=self.headers)
+        self.assertEqual(response.text.count("event: activity.refresh"), 1)
+        self.assertIn("event: unavailable", response.text)
+        self.assertNotIn("private-canary", response.text)
+        self.assertEqual(self.service.activity.call_count, 2)
 
 
 class IdentityTests(unittest.TestCase):
