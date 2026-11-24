@@ -85,11 +85,12 @@ not deploy, merge, or infer an operational self-approval path.
 
 The manual cloud-validation workflow now checks both evidence-run heads and
 success states, requires the configured trusted deployment workflow path,
-verifies the exact active-revision artifact before failure injection, and
-defaults destructive injection off. No workflow in this checkout currently
-produces the required deployment evidence artifact, so that producer path
-remains unset and exact deployment provenance is blocked. The opt-in job is
-isolated behind the dedicated
+checks the exact active-revision artifact, and defaults destructive injection
+off. The active-revision JSON and hosted inspection are not signed source-to-
+image attestations, so the failure-injection job hard-stops before Azure login
+or adapter execution. No workflow in this checkout currently produces the
+required deployment evidence artifact, so that producer path remains unset and
+exact deployment provenance is blocked. The job is isolated behind the dedicated
 `azure-foundry-failure-injection-nonproduction` GitHub environment, checks the
 exact configured Container App resource ID and
 synthetic environment marker, installs locked dependencies and pinned `azd`

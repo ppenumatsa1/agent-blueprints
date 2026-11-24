@@ -383,6 +383,13 @@ jobs:
           }
           assert evidence["hosted_agent"]["version"] == os.environ["EXPECTED_HOSTED_VERSION"]
           PY
+      - name: Block injection without independent source-to-image provenance
+        env:
+          ACTIONS_ID_TOKEN_REQUEST_URL: ""
+          ACTIONS_ID_TOKEN_REQUEST_TOKEN: ""
+        run: |
+          echo "::error::Failure injection requires a trusted attestation verifier binding the source commit to active image digests and hosted-agent version."
+          exit 1
       - name: Authenticate scoped Azure identity with OIDC
         uses: azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5 # v2.3.0
         with:

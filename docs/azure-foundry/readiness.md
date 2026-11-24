@@ -222,26 +222,37 @@ credential restricted to this repository/environment. Its secrets are
 `MAF_HOSTED_FAILURE_API_REVISION`, `MAF_HOSTED_FAILURE_HOSTED_ROOT`, and
 `MAF_HOSTED_FAILURE_ADAPTER`.
 
-The job compares the dispatch target and URL to those protected settings,
-checks the exact active-revision artifact before requesting Azure identity,
-and verifies the logged-in tenant/subscription. It uses the GitHub-hosted
-`ubuntu-24.04` Azure CLI and installs Azure Developer CLI 1.39.1 using the
-action pinned to commit
+The job compares the dispatch target and URL to those protected settings and
+checks the exact active-revision artifact before the provenance hard stop. It
+uses the GitHub-hosted `ubuntu-24.04` Azure CLI and installs Azure Developer
+CLI 1.39.1 using the action pinned to commit
 `413f112a14d9b57e38ed09d704c451124cd4ff08`. Locked backend dependencies and
 the target check run with the OIDC request-token variables blanked; `azure/login`
-is the only step that obtains the Azure token. Adapter auth material is
-restored only after those checks and removed even when the adapter fails.
-The identity must have only the target-specific permissions needed to restart
-the configured Container App and stop the specific synthetic hosted session;
-the workflow cannot verify Azure role-assignment scope.
+and target-verification steps are staged after the hard stop but are currently
+unreachable. Adapter auth material restoration and execution are also
+unreachable. Once independently verified provenance exists, the identity must
+have only target-specific permissions needed to restart the configured
+Container App and stop the synthetic session; the workflow cannot verify Azure
+role-assignment scope.
+
+The active-revision verifier checks health, traffic, digest shape, and
+revision fields in supplied JSON; it does not independently attest that the
+image digest was built from the requested source or that the hosted inspection
+is authentic. No signed source-to-image or hosted-deployment attestation
+verifier is present. Therefore the failure-injection job contains a deliberate
+hard stop before `azure/login` and before loading/running the adapter. Setting
+dispatch inputs or environment markers cannot bypass that stop.
 
 These settings and marker checks are necessary gates, not proof of isolation.
 The adapter is trusted executable code, and the repository does not contain a
-reviewed Azure implementation for the hosted-failure adapter. Until the
-environment reviewers, federated credential, resource-scoped role assignments,
-target ownership/isolation, auth material, and adapter implementation are
+reviewed Azure implementation for the hosted-failure adapter. Until a trusted
+source-to-image/hosted provenance verifier exists and the environment
+reviewers, federated credential, resource-scoped role assignments, target
+ownership/isolation, auth material, and adapter implementation are
 independently verified, leave failure injection disabled. No live dispatch or
-fault injection is claimed. The cloud workflow does not modify existing
+fault injection is claimed. Replacing the hard stop requires a separately
+reviewed code change that verifies provenance, not a workflow variable or
+operator assertion. The cloud workflow does not modify existing
 PostgreSQL firewall rules; issue #56 remains open.
 
 `AZURE_LOG_ANALYTICS_WORKSPACE_ID` may be the workspace ARM resource ID emitted

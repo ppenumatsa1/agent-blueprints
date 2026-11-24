@@ -153,6 +153,20 @@ class VerificationWorkflowTests(unittest.TestCase):
             job.index("Restore hosted adapter authentication material"),
             job.index("Run bounded hosted failure injection"),
         )
+        provenance_gate = "Block injection without independent source-to-image provenance"
+        self.assertIn(provenance_gate, job)
+        provenance_step = job.split(f"- name: {provenance_gate}", 1)[1].split(
+            "\n      - name:", 1
+        )[0]
+        self.assertIn("exit 1", provenance_step)
+        self.assertLess(
+            job.index(provenance_gate),
+            job.index("azure/login@"),
+        )
+        self.assertLess(
+            job.index(provenance_gate),
+            job.index("Run bounded hosted failure injection"),
+        )
         self.assertIn('ACTIONS_ID_TOKEN_REQUEST_TOKEN: ""', job)
 
     def test_postgres_readiness_waits_for_tcp_and_fails_after_timeout(self):

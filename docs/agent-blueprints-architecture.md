@@ -933,15 +933,17 @@ self-authored review files cannot waive critical or security-critical gates.
 
 The manual cloud workflow does not provision, deploy, change traffic, retry an
 ambiguous business operation, roll back, or change PostgreSQL firewall rules.
-Its destructive hosted failure adapter is opt-in and defaults off; when
-enabled, it is gated on an exact active revision and a configured
-synthetic-nonproduction Container App target, under a dedicated protected
-GitHub environment and scoped OIDC identity. The deployment evidence run must
-match a configured trusted workflow path; no in-repository workflow currently
-produces that artifact. These declarations do not prove isolation: required
-environment reviewers, the deployment producer, federated identity/RBAC
-scope, and the adapter's actual target behavior must be independently
-configured and verified before dispatch. Agent A supplies native hosted
+Its destructive hosted failure adapter is opt-in and defaults off, with a
+hard stop before Azure authentication or adapter execution until a trusted
+source-to-image/hosted provenance verifier exists. Its planned target checks
+require an exact active revision and a configured synthetic-nonproduction
+Container App target under a dedicated protected GitHub environment and scoped
+OIDC identity. The deployment evidence run must match a configured trusted
+workflow path; no in-repository workflow currently produces that artifact.
+These declarations do not prove isolation: required environment reviewers, the
+deployment producer, federated identity/RBAC scope, and the adapter's actual
+target behavior must be independently configured and verified before
+dispatch. Agent A supplies native hosted
 lifecycle and reconciliation semantics; Agent B supplies immutable
 revision/resource evidence and telemetry endpoints; Agent C supplies
 authenticated application/database behavior and bounded synthetic fault
