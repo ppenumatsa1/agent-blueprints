@@ -455,6 +455,8 @@ class OrderResolutionStore(PostgresStore):
         operation_id: str,
         operation_kind: str,
         request_digest: str,
+        *,
+        request_id: str | None = None,
     ) -> HostedOperationClaim:
         if (
             not operation_id
@@ -463,16 +465,20 @@ class OrderResolutionStore(PostgresStore):
             or not _DIGEST.fullmatch(request_digest)
         ):
             raise ValueError("The hosted operation claim is invalid.")
+        if request_id is not None:
+            if operation_kind != "start":
+                raise ValueError("Only a hosted start claim can record a request ID.")
+            request_id = str(UUID(request_id))
         with self.connect() as connection:
             inserted = connection.execute(
                 """
                 INSERT INTO order_resolution_hosted_operations
-                    (operation_id, case_id, operation_kind, request_digest, status)
-                VALUES (%s, %s, %s, %s, 'pending')
+                    (operation_id, case_id, operation_kind, request_digest, status, first_request_id)
+                VALUES (%s, %s, %s, %s, 'pending', %s)
                 ON CONFLICT (operation_id) DO NOTHING
                 RETURNING operation_id
                 """,
-                (operation_id, case_id, operation_kind, request_digest),
+                (operation_id, case_id, operation_kind, request_digest, request_id),
             ).fetchone()
             row = connection.execute(
                 """
@@ -699,6 +705,19 @@ class OrderResolutionStore(PostgresStore):
             "conversation_id": row["conversation_id"],
             "session_id": row["session_id"],
         }
+
+    def acceptance_start_claim_request_id(self, case_id: UUID) -> str | None:
+        with self.connect() as connection:
+            row = connection.execute(
+                """
+                SELECT first_request_id
+                FROM order_resolution_hosted_operations
+                WHERE case_id = %s AND operation_id = %s
+                    AND operation_kind = 'start' AND status = 'acknowledged'
+                """,
+                (case_id, f"case:{case_id}:start"),
+            ).fetchone()
+        return str(row["first_request_id"]) if row and row["first_request_id"] else None
 
     def acceptance_snapshot(self, case_id: UUID) -> dict[str, object]:
         case = self.get(case_id)
@@ -1111,14 +1130,14 @@ class OrderResolutionStore(PostgresStore):
                 UPDATE wf_cases SET status = 'pending', request_id = %s,
                     checkpoint_id = NULL,
                     failure_code = CASE
-                        WHEN failure_code = 'hosted_response_failed'
-                            OR EXISTS (
+                        WHEN failure_code IS NOT NULL THEN failure_code
+                        WHEN EXISTS (
                                 SELECT 1 FROM order_resolution_hosted_operations AS operation
                                 WHERE operation.case_id = wf_cases.id
                                     AND operation.operation_kind IN ('start', 'resume')
                                     AND operation.status = 'failed'
                             )
-                        THEN COALESCE(failure_code, 'hosted_response_failed')
+                        THEN 'hosted_response_failed'
                         ELSE NULL
                     END,
                     updated_at = now()
@@ -1416,6 +1435,10 @@ class OrderResolutionStore(PostgresStore):
                                     AND operation.status = 'failed'
                             )
                         THEN COALESCE(failure_code, 'hosted_response_failed')
+                        WHEN EXISTS (
+                            SELECT 1 FROM order_resolution_hosted_bindings AS binding
+                            WHERE binding.case_id = wf_cases.id
+                        ) THEN failure_code
                         ELSE NULL
                     END,
                     updated_at = now()

@@ -4,6 +4,7 @@ from typing import Any
 from uuid import UUID
 
 from app.domain.errors import InvalidInput
+from app.infrastructure.telemetry import current_request_id
 from app.order_resolution.persistence import HostedOperation, OrderResolutionStore
 
 
@@ -66,6 +67,7 @@ class PostgresOperationJournal:
             operation_id,
             operation_kind,
             request_digest,
+            request_id=current_request_id() if operation_kind == "start" else None,
         )
         return self._claim_type(
             record=self._record(claim.record),

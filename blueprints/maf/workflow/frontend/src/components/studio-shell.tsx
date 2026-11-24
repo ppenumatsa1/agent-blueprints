@@ -47,7 +47,7 @@ export function StudioShell({
   const recordRequest = useRef(0);
 
   useEffect(() => {
-    if (!signedIn || busy || !record || record.execution_complete || record.failure_code) return;
+    if (!signedIn || busy || !record || record.execution_complete) return;
     const current = record;
     const requestNumber = recordRequest.current;
     let active = true;

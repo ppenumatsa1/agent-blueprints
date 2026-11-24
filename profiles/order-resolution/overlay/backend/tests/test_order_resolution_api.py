@@ -36,7 +36,7 @@ from app.order_resolution.durability import (
 from app.order_resolution.effects import EffectIdentity
 from app.order_resolution.host import OrderResolutionWorkflowHost
 from app.order_resolution.hosted_authority import PostgresHostedAuthorityBindings
-from app.order_resolution.migrations import upgrade
+from app.order_resolution.migrations import OrderResolutionSchemaError, upgrade, validate_connection
 from app.order_resolution.persistence import (
     HOSTED_CHANNEL,
     OrderResolutionStore,
@@ -128,6 +128,26 @@ class OrderResolutionApiTests(unittest.TestCase):
                 identity=self.identity,
             )
         )
+
+    def test_hosted_start_claim_migration_is_required_and_idempotent(self):
+        upgrade(self.settings.database_url)
+        with self.store.connect() as connection:
+            connection.execute(
+                "ALTER TABLE order_resolution_hosted_operations DROP COLUMN first_request_id"
+            )
+            with self.assertRaisesRegex(OrderResolutionSchemaError, "start claim migration"):
+                validate_connection(connection)
+        upgrade(self.settings.database_url)
+        with self.store.connect() as connection:
+            validate_connection(connection)
+            connection.execute(
+                """
+                ALTER TABLE order_resolution_hosted_operations
+                ALTER COLUMN first_request_id TYPE text USING first_request_id::text
+                """
+            )
+            with self.assertRaisesRegex(OrderResolutionSchemaError, "start claim migration"):
+                validate_connection(connection)
 
     def test_generated_api_bridge_import_graph_is_complete(self):
         from order_resolution_hosted import bridge, client, credentials
@@ -658,6 +678,102 @@ class OrderResolutionApiTests(unittest.TestCase):
         self.assertEqual(token_provider.calls, 2)
         self.assertEqual(len(requests), 1)
 
+    def test_hosted_start_claim_records_the_original_http_request_not_a_replay(self):
+        from order_resolution_hosted.client import ConversationBinding, ResponsesClient
+
+        from app.order_resolution.acceptance import AcceptanceFaults
+        from app.order_resolution.hosted_journal import PostgresOperationJournal
+
+        class Token:
+            def authorization_header(self):
+                return "Bearer synthetic"
+
+        class Response:
+            status_code = 200
+
+            def json(self):
+                return {"id": "response-synthetic"}
+
+        sent = []
+
+        def post(*_args, **_kwargs):
+            sent.append(True)
+            return Response()
+
+        responses = ResponsesClient(
+            "http://127.0.0.1:1/responses",
+            PostgresOperationJournal(self.store),
+            token_provider=Token(),
+            post=post,
+        )
+
+        class Host:
+            async def start(self, case_id, _actor):
+                await asyncio.to_thread(
+                    responses.start,
+                    operation_id=f"case:{case_id}:start",
+                    binding=ConversationBinding("conversation-synthetic"),
+                    case_id=str(case_id),
+                )
+
+        app = create_app(
+            self.settings,
+            build_application(),
+            store=self.store,
+            identity=self.identity,
+        )
+        app.state.service.host = Host()
+        revision = "a" * 40
+        self.store.acceptance_faults = AcceptanceFaults(enabled=True, deployment_revision=revision)
+        operator_token = self.tokens.token(
+            subject=str(uuid4()),
+            scopes="workflow.read",
+            roles=["Acceptance.Operator"],
+        )
+        body = {
+            "reviewer_id": REVIEWER,
+            "payload": payload("ORDER-START-CLAIM", "79.00", 5, [late_policy()]),
+        }
+        with TestClient(app) as client:
+            first = client.post(
+                "/api/cases", headers=self.headers(self.owner_token, "claim-replay"), json=body
+            )
+            replay = client.post(
+                "/api/cases", headers=self.headers(self.owner_token, "claim-replay"), json=body
+            )
+            self.assertEqual(first.status_code, 200, first.text)
+            self.assertEqual(replay.status_code, 200, replay.text)
+            case_id = first.json()["id"]
+            self.assertEqual(replay.json()["id"], case_id)
+            first_request_id = first.headers["x-correlation-id"]
+            self.assertNotEqual(first_request_id, replay.headers["x-correlation-id"])
+            control_path = (
+                f"/api/internal/hosted/v1/acceptance/cases/{case_id}?deployment_revision={revision}"
+            )
+            self.assertEqual(
+                client.get(control_path, headers=self.headers(self.owner_token)).status_code, 403
+            )
+            control = client.get(control_path, headers=self.headers(operator_token))
+            self.assertEqual(control.status_code, 200, control.text)
+            self.assertEqual(control.json()["start_claim_request_id"], first_request_id)
+            self.assertEqual(sent, [True])
+
+            with self.store.connect() as connection:
+                connection.execute(
+                    """
+                    UPDATE order_resolution_hosted_operations
+                    SET first_request_id = NULL WHERE operation_id = %s
+                    """,
+                    (f"case:{case_id}:start",),
+                )
+            legacy = client.post(
+                "/api/cases", headers=self.headers(self.owner_token, "claim-replay"), json=body
+            )
+            self.assertEqual(legacy.status_code, 200, legacy.text)
+            control = client.get(control_path, headers=self.headers(operator_token))
+            self.assertIsNone(control.json()["start_claim_request_id"])
+            self.assertEqual(sent, [True])
+
     def test_hosted_failed_start_is_visible_without_redispatch(self):
         from order_resolution_hosted.client import (
             ConversationBinding,
@@ -874,6 +990,38 @@ class OrderResolutionApiTests(unittest.TestCase):
                 decision_command=command,
             )
         self.assertIsNone(self.store.get_decision(case.id))
+
+    def test_existing_failure_survives_callback_before_failed_response(self):
+        for callback in ("pending", "action"):
+            with self.subTest(callback=callback):
+                amount = "185.00" if callback == "pending" else "79.00"
+                owner, case, _ = self.hosted_case(f"ORDER-FAILURE-FIRST-{callback}", amount)
+                self.store.bind_hosted_principal(
+                    case.id,
+                    owner,
+                    conversation_id=f"conversation-failure-first-{callback}",
+                    principal_kind="owner",
+                )
+                with self.store.connect() as connection:
+                    connection.execute(
+                        "UPDATE wf_cases SET failure_code = 'recovery_failed' WHERE id = %s",
+                        (case.id,),
+                    )
+                operation_id = f"case:{case.id}:start"
+                self.store.claim_hosted_operation(case.id, operation_id, "start", "a" * 64)
+                if callback == "pending":
+                    self.store.prepare_hosted_approval(
+                        case.id, f"case:{case.id}:approval:v1", channel=HOSTED_CHANNEL
+                    )
+                else:
+                    self.store.apply_automatic(
+                        case.id, RecordOrderResolutionAction().bind(self.store)
+                    )
+                self.assertEqual(self.store.get(case.id).failure_code, "recovery_failed")
+                self.store.update_hosted_operation(
+                    operation_id, "a" * 64, "failed", "response-failed"
+                )
+                self.assertEqual(self.store.get(case.id).failure_code, "recovery_failed")
 
     def test_hosted_failed_resume_survives_restart_without_redispatch(self):
         from order_resolution_hosted.client import (

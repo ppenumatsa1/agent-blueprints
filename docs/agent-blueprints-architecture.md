@@ -22,9 +22,13 @@ Azure observer; the failure-injection hard stop remains in place.
 ## Acceptance evidence boundaries
 
 The hosted failure runner requires each passed case to have a successful
-hosted-start HTTP correlation with hosted metadata for that case. Its HTTP
-request ID is not the native approval handle; supplied metadata alone does
-not authenticate an operation's telemetry or prove recovery. The profile
+hosted-start HTTP correlation matching the original server-generated request
+ID persisted on its acknowledged start claim. The acceptance operator
+endpoint exposes that ID; replays and legacy claims without it do not count.
+The claim is not proof of outbound dispatch: supplied metadata does not
+authenticate an operation's telemetry or prove recovery. Independent
+telemetry and provenance verification remain mandatory. The HTTP request ID
+is not the native approval handle. The profile
 adapter receives configured target metadata and uses the failure job's
 authentication file; these settings do not independently verify isolation or
 provenance. Hosted interruption is blocked before using a hosted root or
@@ -44,7 +48,10 @@ checkpoint. Existing failure codes are retained. The stored failed operation
 also prevents a new hosted decision even when another failure code was already
 present; the UI hides decisions for a pending case with a failure. A delayed
 pending or action callback cannot clear the failure before the existing
-hosted completion transition confirms matching business state. Same-key
+hosted completion transition confirms matching business state, including
+when the callback arrives before the failed operation is journaled. Failed
+nonterminal cases keep refreshing without enabling approval. The live
+acceptance poll uses a cancellable overall timeout for its reads. Same-key
 failure replay never redispatches. These are local fixture semantics, not
 evidence of later Foundry background failure detection or recovery.
 

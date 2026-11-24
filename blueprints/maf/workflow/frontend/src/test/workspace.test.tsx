@@ -135,6 +135,28 @@ describe("workflow workspace", () => {
     }
   });
 
+  it("refreshes a failed nonterminal case until hosted completion", async () => {
+    vi.useFakeTimers();
+    try {
+      const failed = { ...pending, failure_code: "hosted_response_failed" };
+      const complete = { ...failed, status: "completed" as const, decision: "approved" as const, execution_complete: true, failure_code: null };
+      const read = vi.fn().mockResolvedValueOnce(failed).mockResolvedValueOnce(complete);
+      const { unmount } = render(workspace(client({ read })));
+      fireEvent.change(screen.getByLabelText("Case ID"), { target: { value: id } });
+      await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Open" })); });
+      expect(screen.getByText(/recovery or action failed/i)).toBeVisible();
+      expect(screen.queryByRole("button", { name: "Approve" })).not.toBeInTheDocument();
+      await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
+      expect(screen.getByRole("heading", { name: "Case status: completed" })).toBeVisible();
+      expect(screen.queryByText(/recovery or action failed/i)).not.toBeInTheDocument();
+      await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+      expect(read).toHaveBeenCalledTimes(2);
+      unmount();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("aborts a stalled refresh and resumes polling", async () => {
     vi.useFakeTimers();
     try {

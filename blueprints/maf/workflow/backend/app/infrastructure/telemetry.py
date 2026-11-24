@@ -107,6 +107,10 @@ class CorrelationContext:
 _correlation = ContextVar("blueprint_correlation", default=CorrelationContext())
 
 
+def current_request_id() -> str | None:
+    return _correlation.get().request_id
+
+
 def _safe_identifier(value):
     return value if isinstance(value, str) and _SAFE_IDENTIFIER.fullmatch(value) else None
 

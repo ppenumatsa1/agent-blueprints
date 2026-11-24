@@ -11,33 +11,50 @@ outcome, framework checkpoint, or replay is fabricated. A pending case with
 any failure code does not offer approval in the UI.
 
 The live adapter polls bounded reads for a hosted decision handle and for the
-requested terminal state, rejects a different case or invalid channel, and
-does not repeat a decision POST. The failure runner requires successful
-hosted-start correlation metadata for every passed case; this is a shape
-check, not independent telemetry. The full nine-case live result producer
-fails before submissions because its ORS-005 native continuation is not
-verified. Hosted interruption and reconciliation remain blocked.
+requested terminal state with a cancellable 60-second overall timeout,
+rejects a different case or invalid channel, and does not repeat a decision
+POST. Failed nonterminal cases continue refreshing while approval remains
+hidden. The failure runner requires each passed case's successful correlation
+to match the server-recorded request ID of its acknowledged start claim;
+replays and legacy claims without that ID cannot cover it. This structural
+claim correlation does not prove outbound dispatch or independently
+authenticate producer metadata. Independent telemetry and provenance remain
+mandatory. The full nine-case live result producer fails before submissions
+because its ORS-005 native continuation is not verified. Hosted interruption
+and reconciliation remain blocked.
 
-Acceptance evidence on the candidate above `8c2a8c9`: three generated local
-happy paths; nine synthetic canonical scenarios; 40 focused checks; 174 base
-and 263 profile backend tests under Windows Selector policy, with one profile
-real-provider skip; 67 hosted-agent tests; 61 base and 66 profile frontend
+Acceptance evidence on the follow-up candidate above `174eca3`: three
+generated local happy paths; nine synthetic canonical scenarios; 42 focused
+checks; 175 base and 272 profile backend tests under Windows Selector policy,
+with one profile real-provider skip; 67 hosted-agent tests; 62 base and 67 profile frontend
 tests plus builds/CSP; and Chromium local/history/studio suites of 1/5/1 for
-each generated frontend. The isolated root suite passed 114 tests with two
+each generated frontend. Three real Docker isolation tests passed using the
+previously verified package mirror, including approval, rejection, and
+capability-denial probes. A loopback HTTPS stalled-body probe timed out and
+observed client socket closure. The isolated root suite passed 114 tests with two
 adapter-selection skips. A pre-fix failure-state regression, the earlier
-wrong-directory scenario invocation, dependency setup errors, two broad-UI
-fixture failures in each frontend, and a profile studio-title failure are
-retained as failed attempts, not relabeled. The earlier default-Proactor
-backend failure remains unresolved. Historical
+wrong-directory and missing-database scenario invocations, dependency setup
+errors, two broad-UI fixture failures in each frontend, a profile studio-title
+failure, a negative-test message assertion and a formatting check are retained
+as failed attempts, not relabeled. A fresh Docker build using the default
+PyPI index failed before tests on a package-download TLS handshake; the
+mirror-backed Docker pass is a separate run. An additional root-level Ruff invocation
+did not apply the generated project's path-relative adapter ignores; lint and
+format checks pass from both generated backend directories. A shorter first
+HTTPS probe did not establish that its server handler was reached and remains
+inconclusive. The earlier default-Proactor backend
+failure remains unresolved. Historical
 [run 45487881616](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/45487881616)
 passed at exact head `8c2a8c909b27b23802b4ee71450e82a5ebfcd2e7`, not this
-candidate.
+candidate; [run 45496167774](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/45496167774)
+passed at `174eca3d9a6b02f5fe4d42f3e2ae4a360639d5c8`, before these changes.
 
 Next: bind the reviewed commit to exact-head CI, then establish independently
 administered build provenance and a fresh deployment observer. Verify a
 firewall-preserving path for migration
-`0004_order_resolution_hosted_response_outcomes.sql` before any authorized
-rollout. No current-head Azure, live Entra, authenticated-browser, real
+`0004_order_resolution_hosted_response_outcomes.sql` and
+`0005_order_resolution_hosted_start_claim.sql` before any authorized rollout.
+No current-head Azure, live Entra, authenticated-browser, real
 provider or Foundry recovery result is claimed.
 
 ## Advisory deployment-provenance preflight

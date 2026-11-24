@@ -339,9 +339,11 @@ def run_scenarios(
             "deployment_revision",
         }
         hosted = {"hosted_phase", "conversation_id", "hosted_agent_name", "hosted_agent_version"}
-        optional = {"http_status"} | hosted
+        optional = {"http_status", "extensions"} | hosted
         if not required <= set(item) or set(item) - required - optional:
             raise ValueError("Hosted correlation records have an unexpected shape.")
+        if "extensions" in item and not isinstance(item["extensions"], dict):
+            raise ValueError("Hosted correlation extensions must be an object.")
         if "http_status" in item and (
             type(item["http_status"]) is not int or not 100 <= item["http_status"] <= 599
         ):
@@ -354,6 +356,14 @@ def run_scenarios(
                 for name in hosted - {"hosted_phase"}
             ):
                 raise ValueError("Hosted correlation metadata is invalid.")
+            if item["hosted_phase"] == "start":
+                extensions = item.get("extensions", {})
+                producer = extensions.get("producer")
+                if (
+                    not isinstance(producer, dict)
+                    or producer.get("hosted_start_claim_request_id") != item["request_id"]
+                ):
+                    raise ValueError("Hosted start claim correlation is missing or mismatched.")
         UUID(item["request_id"])
         UUID(item["case_id"])
         int(item["trace_id"], 16)
@@ -369,7 +379,7 @@ def run_scenarios(
         and 200 <= item["http_status"] < 300
     }
     if not expected_cases.issubset(observed_cases):
-        raise ValueError("A successful hosted start is required for every passed scenario.")
+        raise ValueError("A successful hosted start claim is required for every passed scenario.")
     return {
         "schema_version": "1.0.0",
         "source_revision": source_revision,

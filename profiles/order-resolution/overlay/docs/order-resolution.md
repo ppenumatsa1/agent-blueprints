@@ -56,8 +56,10 @@ An immediate failed hosted start or resume records the operation outcome,
 case failure, and audit event atomically. Existing failures are preserved,
 the failed operation is not replayed, and a new hosted decision is denied
 while that failure remains unresolved. Delayed callbacks preserve the failure
-until the hosted completion transition verifies matching business state. The
-case retains its actual business status; no hosted checkpoint is fabricated.
+until the hosted completion transition verifies matching business state,
+including when callbacks precede the failed journal update. Failed nonterminal
+cases continue to refresh without exposing approval. The case retains its
+actual business status; no hosted checkpoint is fabricated.
 Later background failure detection and authoritative hosted recovery remain
 unverified.
 
@@ -72,7 +74,11 @@ owned by merged PR #42 and are not duplicated in the profile.
 
 Run `python -m app.order_resolution.migrations upgrade` with the schema-owner
 database identity before application startup. Runtime startup validates the
-profile schema and does not create it. PostgreSQL owns requests, proposals,
+profile schema and does not create it. Existing deployments need a separately
+verified, firewall-preserving path for both the hosted response-outcome and
+hosted start-claim migrations. The latter records the initial HTTP request ID
+for an acknowledged start claim; it is not proof of outbound dispatch.
+PostgreSQL owns requests, proposals,
 decisions, effect state, audit records, and the synthetic downstream; native
 MAF checkpoint files remain separate and unmodified.
 

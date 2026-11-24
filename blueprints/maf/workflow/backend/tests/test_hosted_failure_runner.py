@@ -138,6 +138,7 @@ class FixtureHostedAdapter:
                 "conversation_id": f"conversation-{record.case_id}",
                 "hosted_agent_name": "synthetic-agent",
                 "hosted_agent_version": "1",
+                "extensions": {"producer": {"hosted_start_claim_request_id": record.request_id}},
             }
             for index, record in enumerate(self.records.values())
         ]
@@ -336,10 +337,46 @@ class HostedFailureRunnerTests(unittest.TestCase):
                 target_id="synthetic-target",
             )
 
+    def test_replayed_request_cannot_cover_a_hosted_start_claim(self):
+        for claim in (None, str(uuid4())):
+            with self.subTest(claim=claim):
+                adapter = FixtureHostedAdapter()
+                original = adapter.correlations
+                adapter.correlations = lambda: [
+                    {
+                        **item,
+                        "extensions": {"producer": {"hosted_start_claim_request_id": claim}},
+                    }
+                    for item in original()
+                ]
+                with self.assertRaisesRegex(ValueError, "Hosted start claim"):
+                    run_scenarios(
+                        adapter,
+                        source_revision="source-123",
+                        deployment_revision="deployment-456",
+                        environment="synthetic-hosted",
+                        target_kind="synthetic-nonproduction",
+                        target_id="synthetic-target",
+                    )
+
     def test_correlation_request_ids_are_distinct_from_approval_handles(self):
         adapter = FixtureHostedAdapter()
         original = adapter.correlations
-        adapter.correlations = lambda: [{**item, "request_id": str(uuid4())} for item in original()]
+
+        def correlations():
+            result = []
+            for item in original():
+                request_id = str(uuid4())
+                result.append(
+                    {
+                        **item,
+                        "request_id": request_id,
+                        "extensions": {"producer": {"hosted_start_claim_request_id": request_id}},
+                    }
+                )
+            return result
+
+        adapter.correlations = correlations
         result = run_scenarios(
             adapter,
             source_revision="source-123",

@@ -1,13 +1,17 @@
 import asyncio
 import io
+import time
 from email.message import Message
 import urllib.error
 import urllib.request
 import unittest
 from pathlib import Path
+from threading import Event
 from types import SimpleNamespace
-from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
 from uuid import UUID, uuid4
+
+import httpx
 
 from app.api.routes.acceptance import _authorized, case_control
 from app.config import Settings
@@ -315,7 +319,7 @@ class AcceptanceFaultTests(unittest.TestCase):
         client.owner = {"object_id": "owner"}
         client.reviewer = {"object_id": "reviewer"}
         client.submit = Mock(return_value=(created, {}))
-        client.read = Mock(side_effect=[pending, completed])
+        client._read_for_poll = AsyncMock(side_effect=[pending, completed])
         client.decide = Mock(return_value=(200, pending, {}))
         client.snapshot = Mock(
             side_effect=[
@@ -331,13 +335,13 @@ class AcceptanceFaultTests(unittest.TestCase):
         adapter.unknown = set()
         adapter.timeout_after_effect = False
 
-        with patch("tests.live_acceptance.time.sleep"):
+        with patch("tests.live_acceptance.CASE_POLL_INTERVAL_SECONDS", 0):
             initial = adapter.create("synthetic-key")
             final = adapter.approve(case_id, request_id=handle)
 
         self.assertEqual((initial.business_outcome, initial.effect_count), ("pending", 0))
         self.assertEqual((final.business_outcome, final.effect_count), ("completed", 1))
-        self.assertEqual(client.read.call_count, 2)
+        self.assertEqual(client._read_for_poll.await_count, 2)
         client.decide.assert_called_once()
 
     def test_failure_adapter_does_not_invent_a_missing_pending_handle(self):
@@ -348,16 +352,19 @@ class AcceptanceFaultTests(unittest.TestCase):
                 {},
             )
         )
-        client.read = Mock(
+        client._read_for_poll = AsyncMock(
             return_value={"id": str(CASE_ID), "status": "failed", "failure_code": "hosted_failure"}
         )
         adapter = object.__new__(LiveHostedFailureAdapter)
         adapter.client = client
         adapter.records = {}
         adapter.keys = {}
-        with patch("tests.live_acceptance.time.sleep"), self.assertRaises(RuntimeError):
+        with (
+            patch("tests.live_acceptance.CASE_POLL_INTERVAL_SECONDS", 0),
+            self.assertRaises(RuntimeError),
+        ):
             adapter.create("synthetic-key")
-        client.read.assert_called_once_with(str(CASE_ID))
+        client._read_for_poll.assert_awaited_once_with(str(CASE_ID))
         self.assertFalse(adapter.records)
 
     def test_provider_results_do_not_infer_native_continuation_from_completion(self):
@@ -383,17 +390,17 @@ class AcceptanceFaultTests(unittest.TestCase):
         case_id = str(CASE_ID)
         client = object.__new__(LiveClient)
         created = {"id": case_id, "status": "created"}
-        client.read = Mock(return_value={"id": str(uuid4()), "status": "pending"})
+        client._read_for_poll = AsyncMock(return_value={"id": str(uuid4()), "status": "pending"})
         with (
-            patch("tests.live_acceptance.time.sleep"),
+            patch("tests.live_acceptance.CASE_POLL_INTERVAL_SECONDS", 0),
             self.assertRaisesRegex(RuntimeError, "different case"),
         ):
             client.wait_for_pending(created)
-        self.assertEqual(client.read.call_count, 1)
+        self.assertEqual(client._read_for_poll.await_count, 1)
 
         for handle, channel in (("handle", "other"), ("  ", "foundry-responses")):
             with self.subTest(handle=handle, channel=channel):
-                client.read = Mock(
+                client._read_for_poll = AsyncMock(
                     return_value={
                         "id": case_id,
                         "status": "pending",
@@ -402,19 +409,176 @@ class AcceptanceFaultTests(unittest.TestCase):
                     }
                 )
                 with (
-                    patch("tests.live_acceptance.time.sleep"),
+                    patch("tests.live_acceptance.CASE_POLL_INTERVAL_SECONDS", 0),
                     self.assertRaisesRegex(RuntimeError, "invalid|unexpected"),
                 ):
                     client.wait_for_pending(created)
-                self.assertEqual(client.read.call_count, 1)
+                self.assertEqual(client._read_for_poll.await_count, 1)
 
-        client.read = Mock(return_value={"id": case_id, "status": "pending"})
+        client._read_for_poll = AsyncMock(return_value={"id": case_id, "status": "pending"})
         with (
-            patch("tests.live_acceptance.time.sleep"),
+            patch("tests.live_acceptance.CASE_POLL_INTERVAL_SECONDS", 0),
             self.assertRaisesRegex(RuntimeError, "polling limit"),
         ):
             client.wait_for_pending(created)
-        self.assertEqual(client.read.call_count, 30)
+        self.assertEqual(client._read_for_poll.await_count, 30)
+
+    def test_wait_for_pending_has_a_wall_clock_deadline_for_a_stalled_read(self):
+        case_id = str(CASE_ID)
+        for phase in ("response", "body"):
+            with self.subTest(phase=phase):
+                client = object.__new__(LiveClient)
+                client.base_url = "https://api.example.test"
+                client.owner = {"access_token": "synthetic-token"}
+                cancelled = Event()
+
+                class StalledStream(httpx.AsyncByteStream):
+                    async def __aiter__(self):
+                        try:
+                            yield b'{"id":'
+                            await asyncio.sleep(10)
+                        finally:
+                            cancelled.set()
+
+                async def stalled_read(_request):
+                    if phase == "body":
+                        return httpx.Response(200, stream=StalledStream())
+                    try:
+                        await asyncio.sleep(10)
+                    finally:
+                        cancelled.set()
+
+                real_client = httpx.AsyncClient
+                transport = httpx.MockTransport(stalled_read)
+                start = time.monotonic()
+                with (
+                    patch(
+                        "tests.live_acceptance.httpx.AsyncClient",
+                        side_effect=lambda **kwargs: real_client(transport=transport, **kwargs),
+                    ),
+                    patch("tests.live_acceptance.CASE_POLL_TIMEOUT_SECONDS", 0.1),
+                    patch("tests.live_acceptance.CASE_POLL_INTERVAL_SECONDS", 0),
+                    self.assertRaisesRegex(TimeoutError, "polling deadline"),
+                ):
+                    client.wait_for_pending({"id": case_id, "status": "created"})
+                self.assertTrue(cancelled.is_set())
+                self.assertLess(time.monotonic() - start, 2)
+
+    def test_poll_read_records_correlation_and_reaches_pending(self):
+        case_id = str(CASE_ID)
+        request_id = str(uuid4())
+        trace_id = "a" * 32
+        client = object.__new__(LiveClient)
+        client.base_url = "https://api.example.test"
+        client.owner = {"access_token": "synthetic-token"}
+        client.deployment_revision = REVISION
+        client.correlations = []
+
+        async def pending(_request):
+            return httpx.Response(
+                200,
+                headers={
+                    "X-Correlation-ID": request_id,
+                    "traceparent": f"00-{trace_id}-{'b' * 16}-01",
+                },
+                json={
+                    "id": case_id,
+                    "status": "pending",
+                    "decision_handle": "handle",
+                    "decision_channel": "foundry-responses",
+                },
+            )
+
+        real_client = httpx.AsyncClient
+        with (
+            patch(
+                "tests.live_acceptance.httpx.AsyncClient",
+                side_effect=lambda **kwargs: real_client(
+                    transport=httpx.MockTransport(pending), **kwargs
+                ),
+            ),
+            patch("tests.live_acceptance.CASE_POLL_INTERVAL_SECONDS", 0),
+            patch.dict("os.environ", {"AGENT_VERSION": "1"}),
+        ):
+            result = client.wait_for_pending({"id": case_id, "status": "created"})
+        self.assertEqual(result["status"], "pending")
+        self.assertEqual(client.correlations[0]["request_id"], request_id)
+        self.assertEqual(client.correlations[0]["trace_id"], trace_id)
+
+    def test_poll_read_does_not_follow_redirect_with_bearer(self):
+        client = object.__new__(LiveClient)
+        client.base_url = "https://api.example.test"
+        client.owner = {"access_token": "synthetic-canary"}
+        observed = []
+
+        async def redirect(request):
+            observed.append((str(request.url), request.headers.get("authorization")))
+            return httpx.Response(302, headers={"Location": "https://attacker.example/steal"})
+
+        real_client = httpx.AsyncClient
+        with (
+            patch(
+                "tests.live_acceptance.httpx.AsyncClient",
+                side_effect=lambda **kwargs: real_client(
+                    transport=httpx.MockTransport(redirect), **kwargs
+                ),
+            ),
+            self.assertRaisesRegex(RuntimeError, "redirects are not permitted"),
+        ):
+            asyncio.run(client._read_for_poll(str(CASE_ID)))
+        self.assertEqual(
+            observed,
+            [(f"https://api.example.test/api/cases/{CASE_ID}", "Bearer synthetic-canary")],
+        )
+
+    def test_poll_does_not_mislabel_an_early_transport_timeout_as_deadline_expiry(self):
+        client = object.__new__(LiveClient)
+        client._read_for_poll = AsyncMock(side_effect=TimeoutError("transport timeout"))
+        with (
+            patch("tests.live_acceptance.CASE_POLL_INTERVAL_SECONDS", 0),
+            self.assertRaisesRegex(TimeoutError, "^transport timeout$"),
+        ):
+            client.wait_for_pending({"id": str(CASE_ID), "status": "created"})
+
+    def test_replayed_submission_is_not_a_hosted_start_correlation(self):
+        case_id = str(CASE_ID)
+        first_request_id = str(uuid4())
+        replay_request_id = str(uuid4())
+        adapter = object.__new__(LiveHostedFailureAdapter)
+        adapter.client = Mock()
+        adapter.client.correlations = [
+            {
+                "request_id": first_request_id,
+                "case_id": case_id,
+                "trace_id": "b" * 32,
+                "agent_version": "1",
+                "deployment_revision": REVISION,
+                "http_status": 200,
+                "hosted_phase": "start",
+            },
+            {
+                "request_id": replay_request_id,
+                "case_id": case_id,
+                "trace_id": "a" * 32,
+                "agent_version": "1",
+                "deployment_revision": REVISION,
+                "http_status": 200,
+                "hosted_phase": "start",
+            },
+        ]
+        adapter.client.control.return_value = {
+            "conversation_id": "conversation-1",
+            "start_claim_request_id": first_request_id,
+        }
+        with patch.dict(
+            "os.environ", {"HOSTED_AGENT_NAME": "synthetic-agent", "HOSTED_AGENT_VERSION": "1"}
+        ):
+            result = adapter.correlations()
+        self.assertEqual(result[0]["hosted_phase"], "start")
+        self.assertEqual(
+            result[0]["extensions"]["producer"]["hosted_start_claim_request_id"], first_request_id
+        )
+        self.assertNotIn("hosted_phase", result[1])
 
     def test_live_client_uses_response_correlation_id_for_telemetry_pair(self):
         case_id = "20000000-0000-4000-8000-000000000002"
@@ -620,6 +784,7 @@ class AcceptanceFaultTests(unittest.TestCase):
             raise NotFound("The hosted platform binding is not available.")
 
         store.acceptance_binding = missing_binding
+        store.acceptance_start_claim_request_id = lambda _case_id: None
         store.acceptance_snapshot = lambda _case_id: {
             "status": "failed",
             "counts": {"effects": 0},

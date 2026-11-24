@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import os
 import re
+import ssl
 import subprocess
 import time
 import urllib.error
@@ -12,6 +14,7 @@ import urllib.request
 from pathlib import Path
 from uuid import UUID, uuid4
 
+import httpx
 from agent_framework import EvalItemResult, EvalResults, EvalScoreResult, Evaluator
 
 from tests.hosted_failure_runner import (
@@ -38,6 +41,8 @@ GOLDEN_CASES = json.loads(
     )
 )["cases"]
 MODEL_CRITERION = "order-resolution-model-quality"
+CASE_POLL_TIMEOUT_SECONDS = 60
+CASE_POLL_INTERVAL_SECONDS = 2
 
 
 def _https_origin(value: str) -> str:
@@ -220,6 +225,20 @@ class LiveClient:
             status = error.code
             payload = error.read()
             response_headers = {name.lower(): value for name, value in error.headers.items()}
+        parsed = self._capture_response(
+            status, payload, response_headers, case_id=case_id, hosted_phase=hosted_phase
+        )
+        return status, parsed, response_headers
+
+    def _capture_response(
+        self,
+        status: int,
+        payload: bytes,
+        response_headers: dict[str, str],
+        *,
+        case_id: str | None = None,
+        hosted_phase: str | None = None,
+    ) -> dict:
         parsed = json.loads(payload) if payload else {}
         returned_trace = response_headers.get("traceparent", "")
         correlation_request_id = response_headers.get("x-correlation-id", "")
@@ -244,7 +263,7 @@ class LiveClient:
                         ),
                     }
                 )
-        return status, parsed, response_headers
+        return parsed
 
     def submit(
         self,
@@ -280,21 +299,62 @@ class LiveClient:
             raise RuntimeError(f"Live read failed with HTTP {status}.")
         return record
 
+    async def _read_for_poll(self, case_id: str) -> dict:
+        headers = {
+            "Authorization": f"Bearer {self.owner['access_token']}",
+            "Accept": "application/json",
+            "traceparent": f"00-{uuid4().hex}-{uuid4().hex[:16]}-01",
+        }
+        async with httpx.AsyncClient(
+            follow_redirects=False,
+            verify=ssl.create_default_context(),
+            timeout=None,
+        ) as client:
+            response = await client.get(f"{self.base_url}/api/cases/{case_id}", headers=headers)
+        if 300 <= response.status_code < 400:
+            raise RuntimeError("Live acceptance redirects are not permitted.")
+        record = self._capture_response(
+            response.status_code,
+            response.content,
+            {name.lower(): value for name, value in response.headers.items()},
+        )
+        if response.status_code >= 500:
+            raise TransientFailure("The live API reported a transient read failure.")
+        if response.status_code != 200:
+            raise RuntimeError(f"Live read failed with HTTP {response.status_code}.")
+        return record
+
     def _wait_for_case(self, record: dict, ready, description: str) -> dict:
         case_id = str(UUID(record["id"]))
-        for attempt in range(31):
-            if record.get("id") != case_id:
-                raise RuntimeError("The live read returned a different case.")
-            if record.get("failure_code") or record.get("status") == "failed":
-                raise RuntimeError("The live case reported a failure while waiting.")
-            if ready(record):
-                return record
-            if record.get("execution_complete"):
-                raise RuntimeError("The live case completed without the expected state.")
-            if attempt < 30:
-                time.sleep(2)
-                record = self.read(case_id)
-        raise RuntimeError(f"The live case did not reach {description} within the polling limit.")
+
+        async def poll() -> dict:
+            current = record
+            deadline = asyncio.timeout(CASE_POLL_TIMEOUT_SECONDS)
+            try:
+                async with deadline:
+                    for attempt in range(31):
+                        if current.get("id") != case_id:
+                            raise RuntimeError("The live read returned a different case.")
+                        if current.get("failure_code") or current.get("status") == "failed":
+                            raise RuntimeError("The live case reported a failure while waiting.")
+                        if ready(current):
+                            return current
+                        if current.get("execution_complete"):
+                            raise RuntimeError(
+                                "The live case completed without the expected state."
+                            )
+                        if attempt < 30:
+                            await asyncio.sleep(CASE_POLL_INTERVAL_SECONDS)
+                            current = await self._read_for_poll(case_id)
+            except TimeoutError as exc:
+                if not deadline.expired():
+                    raise
+                raise TimeoutError("The live case polling deadline expired.") from exc
+            raise RuntimeError(
+                f"The live case did not reach {description} within the polling limit."
+            )
+
+        return asyncio.run(poll())
 
     def wait_for_pending(self, record: dict) -> dict:
         def ready(value: dict) -> bool:
@@ -539,7 +599,7 @@ class LiveHostedFailureAdapter:
     def reconcile(self, case_id: str) -> HostedRecord:
         raise UnsupportedScenario("Authoritative hosted reconciliation is not available.")
 
-    def correlations(self) -> list[dict[str, str | int]]:
+    def correlations(self) -> list[dict[str, object]]:
         unique = {}
         for item in list(self.client.correlations):
             value = dict(item)
@@ -548,6 +608,15 @@ class LiveHostedFailureAdapter:
                     "GET",
                     f"/acceptance/cases/{value['case_id']}",
                 )
+                if value["hosted_phase"] == "start":
+                    claim_request_id = control.get("start_claim_request_id")
+                    if claim_request_id != value["request_id"]:
+                        value.pop("hosted_phase")
+                        unique[(value["request_id"], value["case_id"])] = value
+                        continue
+                    value["extensions"] = {
+                        "producer": {"hosted_start_claim_request_id": claim_request_id}
+                    }
                 conversation_id = control.get("conversation_id")
                 if not isinstance(conversation_id, str) or not conversation_id:
                     raise RuntimeError("The hosted conversation evidence is unavailable.")
