@@ -110,6 +110,8 @@ perform mutations. Cleanup is requested, not verifiably enforced; removal
 failure is logged generically. Configure an independently authorized endpoint
 and data handling before any later run. A protocol integration does not grant
 case access, verify authorization, or replace the normal approval workflow.
+The application root reports caught component errors generically without
+logging exception text or component stacks.
 Local verification used `@ag-ui/core@1.0.4`'s `ContextSchema` and the real
 `@copilotkit/react-core@2.0.0-rc.53` hook against a synthetic in-process
 consumer. This does not establish real provider configuration, remote

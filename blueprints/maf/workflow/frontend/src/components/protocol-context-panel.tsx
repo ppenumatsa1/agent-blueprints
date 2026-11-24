@@ -20,11 +20,11 @@ export class ProtocolBoundary extends Component<{ children: ReactNode }, { faile
   }
 }
 
-export const reportStudioCaughtError: NonNullable<RootOptions["onCaughtError"]> = (error, info) => {
+export const reportStudioCaughtError: NonNullable<RootOptions["onCaughtError"]> = (_error, info) => {
   if (info.errorBoundary instanceof ProtocolBoundary) {
     console.error("Protocol context could not be shared.");
   } else {
-    console.error(error, info.componentStack);
+    console.error("An application component could not be displayed.");
   }
 };
 

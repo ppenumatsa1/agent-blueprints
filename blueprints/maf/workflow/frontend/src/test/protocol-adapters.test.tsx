@@ -158,4 +158,15 @@ describe("read-only protocol context", () => {
       consoleError.mockRestore();
     }
   });
+
+  it("does not log exception text or component stacks from other boundaries", () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      reportStudioCaughtError(new Error("PRIVATE EXCEPTION"), { componentStack: "PRIVATE STACK" });
+      expect(consoleError).toHaveBeenCalledWith("An application component could not be displayed.");
+      expect(JSON.stringify(consoleError.mock.calls)).not.toMatch(/PRIVATE EXCEPTION|PRIVATE STACK/);
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
 });
