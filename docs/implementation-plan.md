@@ -47,12 +47,13 @@ frontends passed 53 and 55 tests, respectively, plus builds and CSP checks,
 before the additional fallback regression.
 Builds retain the >500 kB chunk warning. [CI run 45309564583](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/45309564583)
 at `b7004af4316a419f7b5afd0048a388e9c2af9705` failed generated-profile
-formatting before executing its profile tests; six jobs passed. Independent
-generated profile backend and exact-head follow-on CI checks remain pending.
-Independent profile backend discovery at `3803e45500000fa5785bdae8f916e158cb61b005`
-ran 219 tests, with 217 passing and two skips (Agent A source not selected and
-real-provider evaluation). Follow-on CI selects the generated Agent A source
-and includes the optional-adapters browser spec. The hosted failure runner now
+formatting before executing its profile tests; six jobs passed. Exact-head
+follow-on CI remains pending.
+Independent generated profile backend discovery after the follow-on changes ran
+220 tests, with Agent A loopback passing and real-provider evaluation skipped.
+Generated local and optional-adapters browser specs passed. Follow-on CI selects
+the generated Agent A source and includes the optional-adapters browser spec;
+exact-head CI remains required. The hosted failure runner now
 preserves validated HTTP status and hosted correlation fields for the existing
 App Insights verifier; no live telemetry has been checked. The lost-ack test
 supplies a remote ID rather than verifying an operational reconciliation source.
