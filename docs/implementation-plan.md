@@ -37,7 +37,7 @@ layers separate.
 ## UX stack Layer 2: authorized history and activity
 
 **Implemented locally; draft PR #51 is open and the authorization/pagination
-correction is locally verified; exact-head CI is pending.** This increment is a
+correction is locally verified; exact-head CI passed.** This increment is a
 distinct draft PR stacked directly above PR #50's
 `ppenumatsa1-ux-layer-1-studio-shell` branch. It reuses the PostgreSQL
 `wf_cases` owner/reviewer/tenant fields and committed `wf_audit` events; it
@@ -74,15 +74,17 @@ policy-authorized records. A 1,001-candidate deny-all test verifies that the
 generic 503 with no partial page or cursor. An existing within-budget
 regression verifies successful pagination across denied candidates. The
 focused six-test PostgreSQL/security selection, full 136-test backend suite,
-and isolated 105-test repository suite pass; exact-head CI remains pending.
+and isolated 105-test repository suite pass. Exact-head CI run
+[45294440225](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/45294440225)
+passed all seven jobs on `bfcbe1e6ee31945942c45422799374ddb026aeb1`.
 Frontend unit/axe tests pass (21), as do the production build, CSP check, and
 the source history/studio production-browser specs. Deferred frontend tests
 verify that new history-filter and activity-case generations clear stale
 load-more state. The required isolated repository suite passes 105 tests with
 two documented adapter-selection skips. Prior generated base/Order Resolution
 verification suites passed 52 and 61 tests, and generated Order Resolution
-hosted-agent tests passed 63; exact-head generated CI for this correction is
-pending. PR #49's existing local/live E2E files remain unchanged byte-for-byte
+hosted-agent tests passed 63; exact-head CI passed all generated validation.
+PR #49's existing local/live E2E files remain unchanged byte-for-byte
 against the parent. Vite continues to report a >500 kB bundle warning.
 
 The generated Order Resolution backend suite ran 190 tests, with two explicit
@@ -91,10 +93,10 @@ pre-existing unrelated failure:
 `test_live_client_uses_response_correlation_id_for_telemetry_pair` expects a
 telemetry projection without `http_status`, while the current client includes
 it. The history/activity tests pass. Do not suppress or relabel this failure;
-exact-head CI remains pending and this gap must be included in the draft PR.
+exact-head CI passed, and this local gap remains disclosed in the draft PR.
 No Azure state, streaming, evidence, manual-test, AG-UI, or CopilotKit work is
-included. **Next action:** push the correction to PR #51, then report exact-head
-CI and the inherited generated Order Resolution test failure. Do not merge or
+included. **Next action:** obtain human review of PR #51; retain disclosure of
+the inherited local generated Order Resolution test failure. Do not merge or
 enable auto-merge.
 
 ## Local Azure/Foundry integration checkpoint

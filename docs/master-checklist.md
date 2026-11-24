@@ -35,8 +35,9 @@ layers. No backend/cloud change or production readiness is claimed.
 
 **Status: implemented; draft PR #51 is open above Layer 1 PR #50, and the
 authorization/pagination correction is locally verified. Exact-head CI is
-pending for the correction.** This is a separate draft stacked above Layer 1
-PR #50 (`ppenumatsa1-ux-layer-1-studio-shell`), not a merge or deployment.
+green for the bounded-scan revision.** This is a separate draft stacked above
+Layer 1 PR #50 (`ppenumatsa1-ux-layer-1-studio-shell`), not a merge or
+deployment.
 
 | Acceptance criterion | Local evidence |
 | --- | --- |
@@ -44,14 +45,14 @@ PR #50 (`ppenumatsa1-ux-layer-1-studio-shell`), not a merge or deployment.
 | Durable activity | Committed `wf_audit` only, fixed safe event mapping, unknown events excluded; no payload, actor, request/checkpoint ID, prompt, model output, or tool content. Event mapping/privacy coverage passes; native MAF continuation remains separate. |
 | Contract safety | Versioned API response schemas, bounded page size/cursors, and frontend runtime validation. Existing single-case and decision APIs remain compatible. |
 | Reusable studio UI | Generic profile-driven sidebar and timeline support status filter, refresh, keyset paging, loading/empty/error states, and stale-response suppression. Each new request generation resets `loadingMore`; deferred-load tests cover history-filter changes and activity-case switches, including the re-enabled load-more control. Frontend unit tests include axe checks. |
-| Independent generation | Base and Order Resolution outputs previously passed verification suites (52 and 61 tests), frontend suites (19 and 21 tests), builds, and separate history/studio browser specs. The generated Order Resolution hosted-agent suite passed 63 tests. Its PostgreSQL backend suite ran 190 tests with two explicit skips and one unrelated pre-existing failure in `test_live_client_uses_response_correlation_id_for_telemetry_pair` (telemetry includes an extra `http_status` field). These results predate the current correction; exact-head generated CI is pending. PR #49 `local.spec.ts` and `live.spec.ts` remain byte-for-byte unchanged against the parent. |
-| Verification | Current source: six focused PostgreSQL/API-security tests and all 136 backend tests pass; frontend 21 tests, production build, CSP check, and history/studio browser specs pass. Repository `python -m unittest discover -s tests -v` passes 105 tests in an isolated environment with `requirements-dev.txt` (two documented adapter-selection skips). Vite reports the existing >500 kB chunk warning. Exact-head CI for this follow-up is pending. |
+| Independent generation | Base and Order Resolution outputs previously passed verification suites (52 and 61 tests), frontend suites (19 and 21 tests), builds, and separate history/studio browser specs. The generated Order Resolution hosted-agent suite passed 63 tests. Its PostgreSQL backend suite ran 190 tests with two explicit skips and one unrelated pre-existing failure in `test_live_client_uses_response_correlation_id_for_telemetry_pair` (telemetry includes an extra `http_status` field). These local results predate the current correction; exact-head CI run [45294440225](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/45294440225) passed all seven jobs at `bfcbe1e6ee31945942c45422799374ddb026aeb1`, including generated validation. PR #49 `local.spec.ts` and `live.spec.ts` remain byte-for-byte unchanged against the parent. |
+| Verification | Current source: six focused PostgreSQL/API-security tests and all 136 backend tests pass; frontend 21 tests, production build, CSP check, and history/studio browser specs pass. Repository `python -m unittest discover -s tests -v` passes 105 tests in an isolated environment with `requirements-dev.txt` (two documented adapter-selection skips). Vite reports the existing >500 kB chunk warning. Exact-head CI run [45294440225](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/45294440225) passed all seven jobs on `bfcbe1e6ee31945942c45422799374ddb026aeb1`. |
 
 No evidence, manual-test, streaming, AG-UI, CopilotKit, or optional adapter
 work is included. No Azure resource or firewall change is authorized or
-claimed. **Next action:** push the correction to PR #51, monitor exact-head CI,
-and disclose the inherited Order Resolution telemetry test failure. Do not
-merge or enable auto-merge.
+claimed. **Next action:** obtain human review of PR #51; disclose the inherited
+local Order Resolution telemetry test failure. Do not merge or enable
+auto-merge.
 
 PR #17 merged into `main` at
 `0c1297cc8e93c62f69d61d0eb3bdabf3c27c683d`, with parents
