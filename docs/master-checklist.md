@@ -11,6 +11,24 @@ The original [interactive architecture](software-factory.html) is a preserved
 historical source; this checklist records current status. The 2–3 hour
 prototype objective has not yet been measured.
 
+## Fixed offline synthetic manual tests above PR #61
+
+**Status: In Progress (local implementation and checks completed; draft/CI
+review pending).** Verified parent:
+`a78854c5fff4d4f518e9fea729d0bba0123ce2bb`.
+
+| Acceptance criterion | Evidence and limitations |
+| --- | --- |
+| Shipped native execution, not a callback or fabricated result | `scripts/run_synthetic_manual_test.py` in the blueprint builds a dedicated image and runs the canonical MAF approval graph. Both native suspension/response decisions are checked against exactly one in-memory synthetic record. No application factory, business action, model, database or checkpoint is loaded. |
+| Enforced boundary and negative checks | Actual Docker inspection gates start on network none, read-only root, UID/GID 65534, capability drop, no-new-privileges, no user mounts/devices/ports/credential environment and bounded resources. In-container denied external/metadata TCP and filesystem writes, capability/privilege/seccomp checks pass. Six actual altered container configurations are rejected before start. Eight unit tests cover capability/resource mutations, allowlisted context, symlinks, remote endpoints, credential exclusion and failure/timeout cleanup. |
+| Independent instantiation | Three real-Docker tests pass in source, independent base and independent Order Resolution projects (nine executions total), and both generated CLIs pass approval/rejection. Generated images are built exclusively from their copied allowlists; no original-repository mounts or runtime imports. CI additionally makes the source checkout unavailable for generated checks. The profile's business workflow is intentionally not tested. |
+| Regression evidence | Isolated repository suite: 114 tests, two inherited adapter-selection skips; new scripts pass Ruff 0.14.13 lint/format and `git diff --check`. Linux Docker 29.9.3 was used locally through Windows named-pipe transport. Default package-download TLS failed locally; a public HTTPS package mirror passed with unchanged lock hashes and TLS checks. Exact-head CI is pending, not inferred from local results. |
+| Preserved controls and limits | Production authorization/separation of duties and disabled browser callbacks are unchanged. Fixed operator-only synthetic execution is implemented, **not** UI dispatch, a same-identity exception, atomic exception audit, domain-specific testing, durable recovery, Azure isolation or production readiness. The host/daemon/source/dependencies remain trusted; container escape resistance against arbitrary hostile code and immutable build provenance are not claimed. |
+
+Next action: review the stacked draft and exact-head CI. Keep all drafts
+unmerged; any browser integration or approval exception requires a separate
+verified boundary. See the [operator guide](../blueprints/maf/workflow/docs/offline-synthetic-tests.md).
+
 ## Polling fallback containment above PR #60
 
 **Status: In Progress.** Parent head:

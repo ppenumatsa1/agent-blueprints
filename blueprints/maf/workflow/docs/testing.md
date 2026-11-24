@@ -1,5 +1,10 @@
 # Testing and evidence
 
+For an operator-triggered, network-isolated test of the bundled native approval
+graph, see [offline synthetic manual tests](offline-synthetic-tests.md).
+This fixed runner is separate from application tests below and does not
+enable browser callbacks, same-user approval, business effects or recovery.
+
 Install dependencies as described in [setup](setup.md). Set
 `MAF_TEST_DATABASE_URL` to a disposable, isolated PostgreSQL database. From
 `backend`, run:

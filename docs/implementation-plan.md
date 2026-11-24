@@ -1,5 +1,42 @@
 # Phased implementation plan
 
+## Fixed offline synthetic manual tests above PR #61
+
+**In progress; local implementation and validation completed, draft/CI review
+pending.** Base verified against open draft #61 at
+`a78854c5fff4d4f518e9fea729d0bba0123ce2bb`.
+The incremental deliverable is an operator-triggered fixed runner rather
+than unsafe browser dispatch. It packages the canonical native MAF approval
+graph plus fixed in-memory synthetic state in a separate image. It accepts
+only approval/rejection selection (and a credential-free HTTPS package mirror
+for builds), with no code/image/payload/factory injection. Actual pre-start
+Docker inspection enforces network none, read-only root, unprivileged user,
+no capabilities or privilege escalation, no user mounts/devices/ports,
+credential environment exclusion and resource limits. Runtime negative
+network/metadata and filesystem probes must pass before the native graph.
+The host, daemon, reviewed sources and dependencies remain trusted.
+
+Acceptance/evidence: eight boundary unit tests pass; three real Docker tests
+pass in each of source, independently generated base and generated profile,
+including both native decisions and six actual altered-container denials
+before execution. Both generated operator CLIs pass independently. Isolated
+repository suite: 114 tests with two inherited adapter-selection skips; Ruff
+0.14.13 lint/format and whitespace checks pass. Local package-download TLS
+failure was resolved with an HTTPS public mirror without changing dependency
+hashes or disabling TLS. CI adds source and independently built base/profile
+Docker checks with the original checkout temporarily unavailable; exact-head
+CI remains pending.
+
+No application business workflow/action, human approval, model, database,
+checkpoint, durable recovery, browser integration, same-identity exception or
+atomic exception audit is implemented or claimed by this layer. Production
+controls remain unchanged. Builds use public registries and mutable base
+tags; source-to-image attestation and arbitrary hostile-code sandboxing are
+not claimed. Next: review the stacked draft and exact-head CI without merging
+or changing stack metadata, Azure resources or firewall rules. The
+[operator guide](../blueprints/maf/workflow/docs/offline-synthetic-tests.md)
+records runnable commands, assumptions and limits.
+
 ## Polling fallback containment above PR #60
 
 **In progress**, based on `99b4303a209c983ca7d306fd6d23473476e85ff6`.

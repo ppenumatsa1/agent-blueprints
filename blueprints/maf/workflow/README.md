@@ -15,6 +15,7 @@ local prototype, not a production deployment:
 - [Setup and configuration](docs/setup.md)
 - [Development and debugging](docs/development.md)
 - [Testing and evidence](docs/testing.md)
+- [Operator-only offline synthetic manual tests](docs/offline-synthetic-tests.md)
 - [Deployment design](docs/deployment.md)
 - [Observability design and troubleshooting](docs/operations.md)
 

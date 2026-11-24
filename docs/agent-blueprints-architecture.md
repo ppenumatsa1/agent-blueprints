@@ -8,6 +8,31 @@ contracts and documented engineering patterns where they have demonstrated
 value; do not hide MAF, LangGraph, or a harness behind a universal runtime.
 Generated projects must not import this repository at runtime.
 
+## Operator-only isolated synthetic manual tests
+
+Above PR #61 (`a78854c5fff4d4f518e9fea729d0bba0123ce2bb`), the blueprint
+ships a separate fixed offline runner, not browser integration. Its
+allowlisted build context contains only the canonical native MAF approval
+graph, domain types, locked dependency inputs and bundled fixture/launcher
+assets. Actual Docker configuration is verified before execution: local
+socket/pipe endpoint, immutable image ID, network none, read-only filesystem,
+unprivileged identity, no capabilities or privilege escalation, no mounts,
+devices, ports or application credentials, and bounded resources. Negative
+runtime probes must pass before native request/response execution. The
+in-memory synthetic record does not execute business effects or checkpoints.
+No application factory or arbitrary callback is loaded.
+
+The trusted operator, reviewed source, dependencies, Docker daemon and host
+are outside this boundary; a local socket may itself be forwarded. Builds
+use public registries and are not offline or independently attested. The
+runner's output is fixed-fixture evidence, not a production release gate.
+Independent base/profile copies carry the runner and real Docker tests;
+neither invokes a runtime dependency on this repository. See the
+[copied operator guide](../blueprints/maf/workflow/docs/offline-synthetic-tests.md)
+for the exact checks and limitations. UI dispatch, same-identity exceptions,
+domain-specific workflow testing, atomic exception audit and durable recovery
+remain unimplemented by this layer. Existing production controls are unchanged.
+
 ## Optional protocol context
 
 Layer 5 exposes explicitly activated, typed read-only context registration for
@@ -31,7 +56,8 @@ Application-supplied manual-test execution is disabled in all environments.
 This interim control is not an isolated synthetic execution capability:
 application code is trusted rather than sandboxed, and a build flag or
 omitting the workflow client cannot prevent network access or real effects.
-A future implementation requires a separately verified isolation boundary.
+A browser implementation still requires a separately verified dispatch and
+isolation boundary; the operator-only fixed runner above does not enable it.
 Evidence projections are not authorization, artifact verification, or
 evidence of production readiness.
 

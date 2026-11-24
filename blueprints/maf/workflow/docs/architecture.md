@@ -15,6 +15,18 @@ coordinates transitions; checkpoint and database writes are not one atomic
 transaction. Recovery reconciles them. Neither a conversation nor a
 checkpoint is a human approval.
 
+## Fixed offline synthetic runner
+
+The [operator-only runner](offline-synthetic-tests.md) builds a separate image
+from an explicit source allowlist and executes the canonical native approval
+graph with a fixed in-memory synthetic record. The API, application factories,
+business actions and browser are outside this image and are never dispatched.
+The host verifies actual Docker isolation before start; runtime probes verify
+denied network and filesystem operations before the graph. The reviewed source,
+local Docker daemon and host remain trusted. This is not a general application
+sandbox, human approval, durable recovery or UI manual-test support. Production
+separation of duties and disabled studio callbacks remain unchanged.
+
 ## Authorized history and activity
 
 The generic history API uses the existing PostgreSQL `wf_cases` fields for
