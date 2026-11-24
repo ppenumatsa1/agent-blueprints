@@ -207,6 +207,15 @@ continues to fail after restart without another POST. Apply the profile
 migration before running the updated API; existing acknowledgments are not
 reclassified.
 
+For start/resume operations, the failed journal transition, case failure and
+audit event share one PostgreSQL transaction. An existing case failure is not
+overwritten; a failed journal also prevents a new hosted decision if the case
+already had a different failure code. Delayed pending and action callbacks
+preserve the failure until `finish_hosted` verifies the matching business
+outcome. The UI hides approval while any failure code is present. This does
+not fabricate a terminal business outcome or hosted checkpoint, and does not
+establish that a later background Responses failure will be detected.
+
 A connection error, timeout, 5xx, malformed 2xx JSON, or success body without
 an authoritative ID changes the operation to `unknown`; the client does not
 replay that POST. Malformed response bodies are not retained in the journal or

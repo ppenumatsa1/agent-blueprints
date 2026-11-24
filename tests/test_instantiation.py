@@ -463,6 +463,15 @@ class InstantiationTests(unittest.TestCase):
                 ).read_bytes(),
             )
             for relative in (
+                "frontend/e2e/local.spec.ts",
+                "frontend/e2e/studio-shell.spec.ts",
+            ):
+                with self.subTest(profile_browser_spec=relative):
+                    self.assertEqual(
+                        (ROOT / "profiles" / "order-resolution" / "overlay" / relative).read_bytes(),
+                        (target / relative).read_bytes(),
+                    )
+            for relative in (
                 "backend/app/order_resolution/action.py",
                 "backend/app/order_resolution/application.py",
                 "backend/app/order_resolution/host.py",

@@ -546,6 +546,22 @@ class OrderResolutionStore(PostgresStore):
                 """,
                 (status, remote_id, operation_id),
             )
+            if status == "failed" and current.operation_kind in ("start", "resume"):
+                connection.execute(
+                    """
+                    UPDATE wf_cases SET failure_code = 'hosted_response_failed', updated_at = now()
+                    WHERE id = %s AND NOT execution_complete AND failure_code IS NULL
+                    """,
+                    (current.case_id,),
+                )
+                connection.execute(
+                    """
+                    INSERT INTO wf_audit (case_id, event)
+                    SELECT id, 'hosted_response_failed' FROM wf_cases
+                    WHERE id = %s AND NOT execution_complete
+                    """,
+                    (current.case_id,),
+                )
         operation = self.get_hosted_operation(operation_id)
         if operation is None:
             raise Conflict("The hosted operation update could not be verified.")
@@ -776,6 +792,15 @@ class OrderResolutionStore(PostgresStore):
             if case_row is None:
                 raise NotFound("The case was not found.")
             case = _case(case_row)
+            failed_response = connection.execute(
+                """
+                SELECT 1 FROM order_resolution_hosted_operations
+                WHERE case_id = %s AND operation_kind IN ('start', 'resume')
+                    AND status = 'failed'
+                LIMIT 1
+                """,
+                (case_id,),
+            ).fetchone()
             if not (
                 principal.tenant_id == case.tenant_id
                 and principal.subject == case.reviewer_id
@@ -784,6 +809,8 @@ class OrderResolutionStore(PostgresStore):
                 and "Workflow.Approver" in principal.roles
                 and case.checkpoint_id is None
                 and case.request_id == decision_command.handle
+                and case.failure_code != "hosted_response_failed"
+                and (case.execution_complete or failed_response is None)
             ):
                 raise AccessDenied("The hosted reviewer is not authorized for the case.")
             row = connection.execute(
@@ -1082,7 +1109,19 @@ class OrderResolutionStore(PostgresStore):
             connection.execute(
                 """
                 UPDATE wf_cases SET status = 'pending', request_id = %s,
-                    checkpoint_id = NULL, failure_code = NULL, updated_at = now()
+                    checkpoint_id = NULL,
+                    failure_code = CASE
+                        WHEN failure_code = 'hosted_response_failed'
+                            OR EXISTS (
+                                SELECT 1 FROM order_resolution_hosted_operations AS operation
+                                WHERE operation.case_id = wf_cases.id
+                                    AND operation.operation_kind IN ('start', 'resume')
+                                    AND operation.status = 'failed'
+                            )
+                        THEN COALESCE(failure_code, 'hosted_response_failed')
+                        ELSE NULL
+                    END,
+                    updated_at = now()
                 WHERE id = %s
                 """,
                 (request_id, case_id),
@@ -1367,7 +1406,19 @@ class OrderResolutionStore(PostgresStore):
             )
             connection.execute(
                 """
-                UPDATE wf_cases SET status = 'completed', failure_code = NULL, updated_at = now()
+                UPDATE wf_cases SET status = 'completed',
+                    failure_code = CASE
+                        WHEN failure_code = 'hosted_response_failed'
+                            OR EXISTS (
+                                SELECT 1 FROM order_resolution_hosted_operations AS operation
+                                WHERE operation.case_id = wf_cases.id
+                                    AND operation.operation_kind IN ('start', 'resume')
+                                    AND operation.status = 'failed'
+                            )
+                        THEN COALESCE(failure_code, 'hosted_response_failed')
+                        ELSE NULL
+                    END,
+                    updated_at = now()
                 WHERE id = %s
                 """,
                 (case_id,),

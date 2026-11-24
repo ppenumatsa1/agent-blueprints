@@ -11,6 +11,49 @@ The original [interactive architecture](software-factory.html) is a preserved
 historical source; this checklist records current status. The 2–3 hour
 prototype objective has not yet been measured.
 
+## Hosted failure visibility and acceptance corrections in PR #62
+
+**Status: In Progress; current-head CI and Azure validation remain pending.**
+Acceptance: persist an immediate failed hosted start/resume and its case
+failure/audit atomically without inventing a business outcome or checkpoint;
+do not overwrite an existing failure, replay the failed operation, or authorize
+a new decision against a recorded failed response. Delayed callbacks retain
+the failure until a matching hosted completion. The UI hides decisions while
+any case failure is displayed. The acceptance adapter waits for the actual
+hosted handle and terminal state; passed failure scenarios require a successful
+hosted-start correlation. The full live nine-case producer stops before
+submitting cases because ORS-005 native continuation is not independently
+verified.
+
+Local evidence on the candidate based on `8c2a8c909b27b23802b4ee71450e82a5ebfcd2e7`:
+three generated API/MAF/PostgreSQL and Agent A loopback happy paths; all nine
+canonical synthetic scenarios; 40 focused regression tests; generated base
+backend 174 tests and profile backend 263 tests with one real-provider skip,
+both under Windows Selector policy; hosted-agent 67 tests; generated base and
+profile frontend 61 and 66 tests, builds and CSP; and Chromium local, history,
+and production-studio checks of 1, 5 and 1 tests for each generated frontend.
+The isolated repository suite passed 114 tests with two adapter-selection
+skips. These use synthetic identities, disposable local PostgreSQL, and a
+loopback Responses fixture, not a deployment or live authenticated browser.
+
+Earlier candidate runs failed: the original five regression checks had four
+failures and one error; a pre-existing failure was cleared by a delayed
+callback; a scenario command used the wrong directory; fresh frontend and
+hosted environments lacked dependencies; two frontend suites and the profile
+production-studio test had assertion failures. Corrected runs are reported
+separately above. The previous default-Windows-Proactor backend run remains
+failed, and the real-provider test remains skipped. Historical
+[CI run 45487881616](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/45487881616)
+passed all eight jobs for `8c2a8c909b27b23802b4ee71450e82a5ebfcd2e7`, not
+this candidate.
+
+Next: review exact-head CI and establish an independently administered
+builder/policy and fresh deployment observer before any Azure rollout. Verify
+a firewall-preserving application path for migration
+`0004_order_resolution_hosted_response_outcomes.sql`. Native hosted recovery,
+later background failures, HTTP 429 replay safety and live identity remain
+unverified; correlation metadata is not independent telemetry.
+
 ## Deployment-provenance preflight above PR #61
 
 **Status: In Progress; deployment provenance remains blocked.** The

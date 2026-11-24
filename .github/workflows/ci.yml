@@ -429,6 +429,8 @@ jobs:
           E2E_LIVE=true E2E_BASE_URL=https://app.example.test npx playwright test e2e/live-origin.spec.ts
           cd "$GENERATED_PROFILE_FRONTEND"
           npm run e2e:local
+          npm run e2e:history
+          npm run e2e:studio
       - name: Retain browser diagnostics
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -437,7 +439,11 @@ jobs:
           path: |
             ${{ runner.temp }}/maf-browser-generated/frontend/playwright-report
             ${{ runner.temp }}/maf-browser-generated/frontend/test-results
+            ${{ runner.temp }}/maf-browser-generated/frontend/test-results-history
+            ${{ runner.temp }}/maf-browser-generated/frontend/test-results-studio
             ${{ runner.temp }}/maf-browser-order-resolution/frontend/playwright-report
             ${{ runner.temp }}/maf-browser-order-resolution/frontend/test-results
+            ${{ runner.temp }}/maf-browser-order-resolution/frontend/test-results-history
+            ${{ runner.temp }}/maf-browser-order-resolution/frontend/test-results-studio
           if-no-files-found: warn
           retention-days: 7

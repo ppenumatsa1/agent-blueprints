@@ -52,6 +52,15 @@ self-approval is also rejected at the effect boundary. These tests use
 synthetic identities and a disposable database; they do not prove downstream
 transport or cloud isolation.
 
+An immediate failed hosted start or resume records the operation outcome,
+case failure, and audit event atomically. Existing failures are preserved,
+the failed operation is not replayed, and a new hosted decision is denied
+while that failure remains unresolved. Delayed callbacks preserve the failure
+until the hosted completion transition verifies matching business state. The
+case retains its actual business status; no hosted checkpoint is fabricated.
+Later background failure detection and authoritative hosted recovery remain
+unverified.
+
 ## Verification assets and current integration limits
 
 `verification/scenarios/order-resolution/acceptance-contract.json` and

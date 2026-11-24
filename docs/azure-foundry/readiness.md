@@ -302,6 +302,13 @@ faults. The runner does not serialize the target resource ID into evidence. A
 missing capability is `blocked`; a failed observation is `failed`; neither is
 converted to success.
 
+The checked-in full live-result producer currently stops before submitting any
+cases: ORS-005 needs independently verified native continuation, not merely a
+completed business snapshot. The failure runner requires each passed case to
+have a successful hosted-start correlation with hosted metadata. Those
+supplied fields are structural evidence only; independently observed telemetry
+and deployment identity remain necessary.
+
 The hosted-interruption scenario is blocked before creating or interrupting a
 case: its existing adapter cannot verify native continuation after a stopped
 session. The live adapter also refuses direct interruption and reconciliation;

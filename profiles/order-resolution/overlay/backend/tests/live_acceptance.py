@@ -280,6 +280,47 @@ class LiveClient:
             raise RuntimeError(f"Live read failed with HTTP {status}.")
         return record
 
+    def _wait_for_case(self, record: dict, ready, description: str) -> dict:
+        case_id = str(UUID(record["id"]))
+        for attempt in range(31):
+            if record.get("id") != case_id:
+                raise RuntimeError("The live read returned a different case.")
+            if record.get("failure_code") or record.get("status") == "failed":
+                raise RuntimeError("The live case reported a failure while waiting.")
+            if ready(record):
+                return record
+            if record.get("execution_complete"):
+                raise RuntimeError("The live case completed without the expected state.")
+            if attempt < 30:
+                time.sleep(2)
+                record = self.read(case_id)
+        raise RuntimeError(f"The live case did not reach {description} within the polling limit.")
+
+    def wait_for_pending(self, record: dict) -> dict:
+        def ready(value: dict) -> bool:
+            if value.get("status") != "pending":
+                return False
+            handle = value.get("decision_handle")
+            channel = value.get("decision_channel")
+            if handle is not None and (not isinstance(handle, str) or not handle.strip()):
+                raise RuntimeError("The live approval handle is invalid.")
+            if channel is not None and channel != "foundry-responses":
+                raise RuntimeError("The live approval channel is unexpected.")
+            return bool(handle) and channel == "foundry-responses"
+
+        return self._wait_for_case(
+            record,
+            ready,
+            "a hosted approval pause",
+        )
+
+    def wait_for_completion(self, record: dict, status: str) -> dict:
+        return self._wait_for_case(
+            record,
+            lambda value: value.get("status") == status and value.get("execution_complete") is True,
+            f"the {status} terminal state",
+        )
+
     def decide(
         self,
         record: dict,
@@ -376,13 +417,17 @@ class LiveHostedFailureAdapter:
     def create(self, idempotency_key: str, *, lose_ack: bool = False) -> HostedRecord:
         case = next(item for item in GOLDEN_CASES if item["id"] == "ORS-002")
         record, _ = self.client.submit(_payload(case), idempotency_key)
-        request_id = record["decision_handle"]
-        if not request_id:
-            case_id = self.keys.get(idempotency_key)
-            if case_id is None:
-                raise RuntimeError("The live pending decision handle is unavailable.")
-            request_id = self.records[case_id]["request_id"]
         case_id = record["id"]
+        previous = self.keys.get(idempotency_key)
+        if previous is not None and previous != case_id:
+            raise RuntimeError("The idempotency key returned a different live case.")
+        if previous is None or record.get("status") in {"created", "pending"}:
+            record = self.client.wait_for_pending(record)
+        request_id = record.get("decision_handle")
+        if not request_id and previous is not None:
+            request_id = self.records[previous]["request_id"]
+        if not request_id:
+            raise RuntimeError("The live pending decision handle is unavailable.")
         self.keys[idempotency_key] = case_id
         self.records[case_id] = {
             "record": record,
@@ -443,7 +488,7 @@ class LiveHostedFailureAdapter:
             raise RuntimeError("The effect acknowledgement fault was not observed.")
         if status != 200:
             raise RuntimeError(f"Live approval failed with HTTP {status}.")
-        cached["record"] = response
+        cached["record"] = self.client.wait_for_completion(response, "completed")
         return self._record(case_id)
 
     def restart_api(self) -> None:
@@ -685,6 +730,10 @@ def create_results(
 ) -> dict[str, dict]:
     if source_revision != deployment_revision:
         raise ValueError("Live provider results require exact source/deployment parity.")
+    if any(case["id"] == "ORS-005" for case in GOLDEN_CASES):
+        raise UnsupportedScenario(
+            "ORS-005 requires independently verified native continuation evidence."
+        )
     client = LiveClient(base_url, auth_file, deployment_revision)
     results = {}
     for case in GOLDEN_CASES:
@@ -731,37 +780,25 @@ def create_results(
         if case_id == "ORS-009":
             reviewer_id = str(uuid4())
         record, _ = client.submit(_payload(case), key, reviewer_id=reviewer_id)
+        if case_id in {"ORS-002", "ORS-003", "ORS-009"}:
+            record = client.wait_for_pending(record)
+        elif case_id in {"ORS-001", "ORS-004"}:
+            record = client.wait_for_completion(record, "completed")
         original = False
         pending_before = record["status"] == "pending"
         if case_id == "ORS-002":
             status, record, _ = client.decide(record, "approved", client.reviewer)
             if status != 200:
                 raise RuntimeError(f"ORS-002 approval failed with HTTP {status}.")
+            record = client.wait_for_completion(record, "completed")
         elif case_id == "ORS-003":
             status, record, _ = client.decide(record, "rejected", client.reviewer)
             if status != 200:
                 raise RuntimeError(f"ORS-003 rejection failed with HTTP {status}.")
+            record = client.wait_for_completion(record, "rejected")
         elif case_id == "ORS-004":
             replay, _ = client.submit(_payload(case), key)
             original = replay["id"] == record["id"]
-        elif case_id == "ORS-005":
-            client.control(
-                "POST",
-                f"/acceptance/cases/{record['id']}/faults/decision-ack-lost",
-                enabled=True,
-            )
-            client.decide(record, "approved", client.reviewer)
-            for _ in range(30):
-                control = client.control("GET", f"/acceptance/cases/{record['id']}")
-                snapshot = control["snapshot"]
-                if (
-                    "decision-ack-lost" in control["observed_faults"]
-                    and snapshot["status"] == "completed"
-                ):
-                    break
-                time.sleep(2)
-            else:
-                raise RuntimeError("ORS-005 did not reconcile after acknowledgement loss.")
         elif case_id == "ORS-009":
             denied = []
             for label, identity in (
@@ -802,16 +839,9 @@ def create_results(
                 request_identity_reused=original,
                 duplicate_terminal_event_emitted=snapshot["counts"]["terminal"] != 1,
             )
-        elif case_id == "ORS-005":
-            extras.update(
-                termination_point="after_decision_commit_before_native_resume_acknowledgement",
-                native_continuation_reconciled=snapshot["status"] == "completed",
-                stored_decision_reused=snapshot["counts"]["approved"] == 1,
-                original_decision_audit_preserved=snapshot["counts"]["approved"] == 1,
-            )
         result = _result(
             snapshot,
-            native_pause=case_id in {"ORS-002", "ORS-003", "ORS-005"},
+            native_pause=case_id in {"ORS-002", "ORS-003"},
             extras=extras,
         )
         if snapshot["status"] == "failed":
@@ -821,8 +851,6 @@ def create_results(
         if case_id == "ORS-004":
             result["business_outcome"]["returned_original_outcome"] = original
             result["technical_execution"].pop("native_pause_required")
-            result["technical_execution"].pop("authorized_decision_count")
-        if case_id == "ORS-005":
             result["technical_execution"].pop("authorized_decision_count")
         results[case_id] = result
     return results

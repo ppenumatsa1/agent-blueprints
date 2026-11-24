@@ -100,6 +100,7 @@ describe("read-only protocol context", () => {
       capabilities: { ...defaultWorkflowStudioProfile.capabilities, agUi: true },
       protocolAdapters: { agUi: createAgUiContextAdapter(() => { throw new Error("PRIVATE ERROR"); }) },
     });
+    vi.mocked(client.read).mockResolvedValueOnce({ ...record, failure_code: null });
     await selectCase();
     await userEvent.click(screen.getByRole("button", { name: "Share status with AG-UI" }));
     expect(await screen.findByText("AG-UI context could not be shared.")).toBeVisible();
@@ -143,11 +144,12 @@ describe("read-only protocol context", () => {
   it("isolates a throwing CopilotKit hook", async () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
     try {
-      setup({
+      const { client } = setup({
         ...defaultWorkflowStudioProfile,
         capabilities: { ...defaultWorkflowStudioProfile.capabilities, copilotKit: true },
         protocolAdapters: { copilotKit: createCopilotKitContextAdapter(() => { throw new Error("PRIVATE ERROR"); }) },
       });
+      vi.mocked(client.read).mockResolvedValueOnce({ ...record, failure_code: null });
       await selectCase();
       await userEvent.click(screen.getByRole("button", { name: "Share status with CopilotKit" }));
       expect(screen.getByText("Protocol context could not be shared.")).toBeVisible();

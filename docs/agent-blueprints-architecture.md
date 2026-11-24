@@ -21,16 +21,32 @@ Azure observer; the failure-injection hard stop remains in place.
 
 ## Acceptance evidence boundaries
 
-The hosted failure runner requires each passed case to have an HTTP correlation
-record for that case. Its HTTP request ID is not the native approval handle;
-case-level association alone does not establish a particular operation's
-telemetry or prove recovery. The profile adapter receives configured target
-metadata and uses the failure job's authentication file; these settings do
-not independently verify isolation or provenance. Hosted interruption is
-blocked before using a hosted root or stopping a session.
+The hosted failure runner requires each passed case to have a successful
+hosted-start HTTP correlation with hosted metadata for that case. Its HTTP
+request ID is not the native approval handle; supplied metadata alone does
+not authenticate an operation's telemetry or prove recovery. The profile
+adapter receives configured target metadata and uses the failure job's
+authentication file; these settings do not independently verify isolation or
+provenance. Hosted interruption is blocked before using a hosted root or
+stopping a session.
 The live browser spec recognizes the base and Order Resolution labels. Local
 fixture checks are not live hosted or identity evidence. Recovery-evidence and
 credential-safety checks do not prove live recovery or trusted origin control.
+The full live result producer refuses to submit any case until ORS-005 native
+continuation can be independently established.
+
+## Hosted response failure visibility
+
+An immediate failed Responses start/resume commits the operation outcome,
+case failure marker and audit event in one application-owned database
+transaction, without fabricating a failed business outcome or native
+checkpoint. Existing failure codes are retained. The stored failed operation
+also prevents a new hosted decision even when another failure code was already
+present; the UI hides decisions for a pending case with a failure. A delayed
+pending or action callback cannot clear the failure before the existing
+hosted completion transition confirms matching business state. Same-key
+failure replay never redispatches. These are local fixture semantics, not
+evidence of later Foundry background failure detection or recovery.
 
 ## Operator-only isolated synthetic manual tests
 

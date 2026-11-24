@@ -135,8 +135,8 @@ PYTHONPATH="$PWD/src:$(cd ../backend && pwd)" \
 
 These are local SDK and fixture checks, not live model or Foundry validation.
 From each generated frontend, run `npm test`, `npm run build`, and
-`npm run check-csp` and, with Chromium installed, `npm run e2e:local`.
-The base generated frontend additionally runs `npm run e2e:history` and
-`npm run e2e:studio`. The optional-adapters browser tests retain evidence
-display, failure isolation, and ordinary approval coverage; callback execution
-remains disabled as an interim control, not completed isolated manual testing.
+`npm run check-csp` and, with Chromium installed, `npm run e2e:local`,
+`npm run e2e:history`, and `npm run e2e:studio`. The optional-adapters browser
+tests retain evidence display, failure isolation, and ordinary approval
+coverage; callback execution remains disabled as an interim control, not
+completed isolated manual testing.

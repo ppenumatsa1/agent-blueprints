@@ -254,7 +254,7 @@ export function StudioShell({
                 )}
                 <ApprovalPanel
                   decision={record.decision}
-                  pending={record.status === "pending" && record.decision === "pending" && (!profile.decisionBinding || !!profile.decisionBinding(record))}
+                  pending={record.status === "pending" && record.decision === "pending" && !record.failure_code && (!profile.decisionBinding || !!profile.decisionBinding(record))}
                   busy={busy}
                   profile={profile}
                   onDecide={(value) => void decide(value)}

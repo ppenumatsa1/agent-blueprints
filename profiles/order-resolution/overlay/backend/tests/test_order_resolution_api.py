@@ -658,6 +658,223 @@ class OrderResolutionApiTests(unittest.TestCase):
         self.assertEqual(token_provider.calls, 2)
         self.assertEqual(len(requests), 1)
 
+    def test_hosted_failed_start_is_visible_without_redispatch(self):
+        from order_resolution_hosted.client import (
+            ConversationBinding,
+            HostedResponseFailed,
+            ResponsesClient,
+        )
+
+        from app.order_resolution.hosted_journal import PostgresOperationJournal
+
+        _, case, _ = self.hosted_case("ORDER-JOURNAL-FAILED-START", "79.00")
+        sent = []
+
+        class Token:
+            def authorization_header(self):
+                return "Bearer test"
+
+        class FailedResponse:
+            status_code = 200
+
+            def json(self):
+                return {"id": "response-failed-start", "status": "failed"}
+
+        def post(*_args, **kwargs):
+            sent.append(kwargs["json"])
+            return FailedResponse()
+
+        responses = ResponsesClient(
+            "http://127.0.0.1:1/responses",
+            PostgresOperationJournal(self.store),
+            token_provider=Token(),
+            post=post,
+        )
+        values = {
+            "operation_id": f"case:{case.id}:start",
+            "binding": ConversationBinding("conversation-failed-start"),
+            "case_id": str(case.id),
+        }
+        for _ in range(2):
+            with self.assertRaises(HostedResponseFailed):
+                responses.start(**values)
+        self.assertEqual(len(sent), 1)
+
+        result = self.client().get(
+            f"/api/cases/{case.id}",
+            headers=self.headers(self.owner_token),
+        )
+        self.assertEqual(result.status_code, 200, result.text)
+        self.assertEqual(result.json()["status"], "created")
+        self.assertFalse(result.json()["execution_complete"])
+        self.assertEqual(result.json()["failure_code"], "hosted_response_failed")
+        with self.store.connect() as connection:
+            events = connection.execute(
+                "SELECT event FROM wf_audit WHERE case_id = %s AND event = %s",
+                (case.id, "hosted_response_failed"),
+            ).fetchall()
+        self.assertEqual(len(events), 1)
+
+    def test_failed_response_does_not_replace_a_completed_business_outcome(self):
+        with self.client() as client:
+            record = self.submit(
+                client,
+                payload("ORDER-ALREADY-COMPLETED", "79.00", 5, [late_policy()]),
+            )
+        case_id = UUID(record["id"])
+        operation_id = f"case:{case_id}:start"
+        self.store.claim_hosted_operation(case_id, operation_id, "start", "a" * 64)
+        self.store.update_hosted_operation(operation_id, "a" * 64, "failed", "response-failed")
+        observed = self.store.get(case_id)
+        self.assertEqual(observed.status, "completed")
+        self.assertTrue(observed.execution_complete)
+        self.assertIsNone(observed.failure_code)
+
+    def test_failed_response_remains_visible_until_hosted_completion(self):
+        for existing_failure in (None, "recovery_failed"):
+            with self.subTest(existing_failure=existing_failure):
+                owner, case, _ = self.hosted_case(
+                    f"ORDER-FAILED-THEN-FINISHED-{existing_failure}", "79.00"
+                )
+                self.store.bind_hosted_principal(
+                    case.id,
+                    owner,
+                    conversation_id=f"conversation-failed-then-finished-{existing_failure}",
+                    principal_kind="owner",
+                )
+                if existing_failure:
+                    with self.store.connect() as connection:
+                        connection.execute(
+                            "UPDATE wf_cases SET failure_code = %s WHERE id = %s",
+                            (existing_failure, case.id),
+                        )
+                operation_id = f"case:{case.id}:start"
+                self.store.claim_hosted_operation(case.id, operation_id, "start", "a" * 64)
+                self.store.update_hosted_operation(
+                    operation_id, "a" * 64, "failed", "response-failed"
+                )
+                self.store.apply_automatic(case.id, RecordOrderResolutionAction().bind(self.store))
+                observed = self.store.get(case.id)
+                self.assertEqual(observed.status, "completed")
+                self.assertFalse(observed.execution_complete)
+                self.assertEqual(
+                    observed.failure_code, existing_failure or "hosted_response_failed"
+                )
+                self.store.finish_hosted(case.id)
+                finished = self.store.get(case.id)
+                self.assertTrue(finished.execution_complete)
+                self.assertIsNone(finished.failure_code)
+
+    def test_failed_response_and_case_marker_commit_atomically(self):
+        _, case, _ = self.hosted_case("ORDER-FAILED-ATOMIC", "79.00")
+        operation_id = f"case:{case.id}:start"
+        self.store.claim_hosted_operation(case.id, operation_id, "start", "a" * 64)
+        with self.store.connect() as connection:
+            connection.execute(
+                """
+                CREATE FUNCTION reject_hosted_failure_audit() RETURNS trigger AS $$
+                BEGIN
+                    IF NEW.event = 'hosted_response_failed' THEN
+                        RAISE EXCEPTION 'synthetic audit failure';
+                    END IF;
+                    RETURN NEW;
+                END;
+                $$ LANGUAGE plpgsql
+                """
+            )
+            connection.execute(
+                """
+                CREATE TRIGGER reject_hosted_failure_audit
+                BEFORE INSERT ON wf_audit FOR EACH ROW
+                EXECUTE FUNCTION reject_hosted_failure_audit()
+                """
+            )
+        with self.assertRaises(psycopg.Error):
+            self.store.update_hosted_operation(operation_id, "a" * 64, "failed", "response-failed")
+        self.assertEqual(self.store.get_hosted_operation(operation_id).status, "pending")
+        self.assertIsNone(self.store.get(case.id).failure_code)
+
+    def test_delayed_pending_callback_does_not_clear_failed_response_or_allow_decision(self):
+        owner, case, proposal = self.hosted_case("ORDER-FAILED-PENDING", "185.00")
+        authority = PostgresHostedAuthorityBindings(self.store)
+        authority.bind_start(
+            case.id, owner, conversation_id="conversation-failed", channel=HOSTED_CHANNEL
+        )
+        operation_id = f"case:{case.id}:start"
+        self.store.claim_hosted_operation(case.id, operation_id, "start", "a" * 64)
+        self.store.update_hosted_operation(operation_id, "a" * 64, "failed", "response-failed")
+        request_id = f"case:{case.id}:approval:v1"
+        self.store.prepare_hosted_approval(case.id, request_id, channel=HOSTED_CHANNEL)
+        self.assertEqual(self.store.get(case.id).failure_code, "hosted_response_failed")
+        reviewer = Principal(
+            TENANT,
+            REVIEWER,
+            frozenset({"workflow.read", "workflow.approve"}),
+            frozenset({"Workflow.Approver"}),
+        )
+        command = DecisionCommand(
+            case_id=str(case.id),
+            proposal_version=proposal.proposal_version,
+            action=proposal.action,
+            destination_id=proposal.destination_id,
+            handle=request_id,
+            decision=Decision.APPROVED,
+            scope="workflow.approve",
+            channel=HOSTED_CHANNEL,
+        )
+        with self.assertRaises(AccessDenied):
+            authority.bind_resume(
+                case.id,
+                reviewer,
+                conversation_id="conversation-failed",
+                channel=HOSTED_CHANNEL,
+                decision_command=command,
+            )
+        self.assertIsNone(self.store.get_decision(case.id))
+
+    def test_existing_failure_survives_failed_response_and_delayed_pending_callback(self):
+        owner, case, proposal = self.hosted_case("ORDER-EXISTING-FAILURE", "185.00")
+        authority = PostgresHostedAuthorityBindings(self.store)
+        authority.bind_start(
+            case.id, owner, conversation_id="conversation-existing-failure", channel=HOSTED_CHANNEL
+        )
+        with self.store.connect() as connection:
+            connection.execute(
+                "UPDATE wf_cases SET failure_code = 'recovery_failed' WHERE id = %s", (case.id,)
+            )
+        operation_id = f"case:{case.id}:start"
+        self.store.claim_hosted_operation(case.id, operation_id, "start", "a" * 64)
+        self.store.update_hosted_operation(operation_id, "a" * 64, "failed", "response-failed")
+        self.assertEqual(self.store.get(case.id).failure_code, "recovery_failed")
+        request_id = f"case:{case.id}:approval:v1"
+        self.store.prepare_hosted_approval(case.id, request_id, channel=HOSTED_CHANNEL)
+        self.assertEqual(self.store.get(case.id).failure_code, "recovery_failed")
+        reviewer = Principal(
+            TENANT,
+            REVIEWER,
+            frozenset({"workflow.read", "workflow.approve"}),
+            frozenset({"Workflow.Approver"}),
+        )
+        command = DecisionCommand(
+            case_id=str(case.id),
+            proposal_version=proposal.proposal_version,
+            action=proposal.action,
+            destination_id=proposal.destination_id,
+            handle=request_id,
+            decision=Decision.APPROVED,
+            scope="workflow.approve",
+            channel=HOSTED_CHANNEL,
+        )
+        with self.assertRaises(AccessDenied):
+            authority.bind_resume(
+                case.id,
+                reviewer,
+                conversation_id="conversation-existing-failure",
+                channel=HOSTED_CHANNEL,
+                decision_command=command,
+            )
+        self.assertIsNone(self.store.get_decision(case.id))
+
     def test_hosted_failed_resume_survives_restart_without_redispatch(self):
         from order_resolution_hosted.client import (
             ConversationBinding,
@@ -714,6 +931,10 @@ class OrderResolutionApiTests(unittest.TestCase):
         self.assertEqual(
             (record.status, record.remote_id), (OperationStatus.FAILED, "response-failed")
         )
+        case_after_restart = restarted.get(case.id)
+        self.assertEqual(case_after_restart.status, "created")
+        self.assertFalse(case_after_restart.execution_complete)
+        self.assertEqual(case_after_restart.failure_code, "hosted_response_failed")
         unchanged = restarted.update_hosted_operation(
             operation_id, record.request_digest, "unknown", None
         )

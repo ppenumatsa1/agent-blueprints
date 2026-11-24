@@ -361,9 +361,15 @@ def run_scenarios(
             raise ValueError("Hosted trace IDs must contain 32 hexadecimal characters.")
         if item["deployment_revision"] != deployment_revision:
             raise ValueError("Hosted correlation deployment revision mismatch.")
-    observed_cases = {item["case_id"] for item in correlations}
+    observed_cases = {
+        item["case_id"]
+        for item in correlations
+        if item.get("hosted_phase") == "start"
+        and type(item.get("http_status")) is int
+        and 200 <= item["http_status"] < 300
+    }
     if not expected_cases.issubset(observed_cases):
-        raise ValueError("Hosted correlation evidence does not cover every passed scenario.")
+        raise ValueError("A successful hosted start is required for every passed scenario.")
     return {
         "schema_version": "1.0.0",
         "source_revision": source_revision,

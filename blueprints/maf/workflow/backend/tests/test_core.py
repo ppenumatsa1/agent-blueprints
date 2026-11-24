@@ -468,6 +468,7 @@ class WorkflowIntegrationTests(unittest.IsolatedAsyncioTestCase):
                 "automatic_action_applied",
                 "hosted_workflow_finished",
                 "resolution_failed",
+                "hosted_response_failed",
             ):
                 connection.execute(
                     "INSERT INTO wf_audit (case_id, event, actor_id) VALUES (%s, %s, %s)",
@@ -484,6 +485,7 @@ class WorkflowIntegrationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(first_page.items, repeated.items)
         self.assertEqual(first_page.items[0].event_type, "workflow_failed")
         events = [item.event_type for item in first_page.items + remaining.items]
+        self.assertEqual(events.count("workflow_failed"), 2)
         self.assertEqual(
             set(events),
             {

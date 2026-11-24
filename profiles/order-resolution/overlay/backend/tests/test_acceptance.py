@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from app.api.routes.acceptance import _authorized, case_control
 from app.config import Settings
@@ -27,6 +27,7 @@ from tests.live_acceptance import (
     FoundryModelEvaluator,
     LiveClient,
     LiveHostedFailureAdapter,
+    create_results,
     _https_origin,
     _RejectRedirects,
 )
@@ -292,6 +293,128 @@ class AcceptanceFaultTests(unittest.TestCase):
         client.assert_called_once_with("https://example.invalid", "synthetic-auth.json", REVISION)
         self.assertEqual(adapter.target_kind, "synthetic-nonproduction")
         self.assertEqual(adapter.target_id, "synthetic-target")
+
+    def test_failure_adapter_waits_for_hosted_pending_and_completion(self):
+        case_id = str(CASE_ID)
+        handle = "20000000-0000-4000-8000-000000000002"
+        created = {"id": case_id, "status": "created", "decision_handle": None}
+        pending = {
+            "id": case_id,
+            "status": "pending",
+            "decision_handle": handle,
+            "decision_channel": "foundry-responses",
+            "payload": {"proposal": {}},
+        }
+        completed = {
+            **pending,
+            "status": "completed",
+            "execution_complete": True,
+            "decision_handle": None,
+        }
+        client = object.__new__(LiveClient)
+        client.owner = {"object_id": "owner"}
+        client.reviewer = {"object_id": "reviewer"}
+        client.submit = Mock(return_value=(created, {}))
+        client.read = Mock(side_effect=[pending, completed])
+        client.decide = Mock(return_value=(200, pending, {}))
+        client.snapshot = Mock(
+            side_effect=[
+                {"status": "pending", "counts": {"effects": 0}},
+                {"status": "completed", "counts": {"effects": 1}},
+            ]
+        )
+        adapter = object.__new__(LiveHostedFailureAdapter)
+        adapter.client = client
+        adapter.records = {}
+        adapter.keys = {}
+        adapter.interrupted = set()
+        adapter.unknown = set()
+        adapter.timeout_after_effect = False
+
+        with patch("tests.live_acceptance.time.sleep"):
+            initial = adapter.create("synthetic-key")
+            final = adapter.approve(case_id, request_id=handle)
+
+        self.assertEqual((initial.business_outcome, initial.effect_count), ("pending", 0))
+        self.assertEqual((final.business_outcome, final.effect_count), ("completed", 1))
+        self.assertEqual(client.read.call_count, 2)
+        client.decide.assert_called_once()
+
+    def test_failure_adapter_does_not_invent_a_missing_pending_handle(self):
+        client = object.__new__(LiveClient)
+        client.submit = Mock(
+            return_value=(
+                {"id": str(CASE_ID), "status": "created", "decision_handle": None},
+                {},
+            )
+        )
+        client.read = Mock(
+            return_value={"id": str(CASE_ID), "status": "failed", "failure_code": "hosted_failure"}
+        )
+        adapter = object.__new__(LiveHostedFailureAdapter)
+        adapter.client = client
+        adapter.records = {}
+        adapter.keys = {}
+        with patch("tests.live_acceptance.time.sleep"), self.assertRaises(RuntimeError):
+            adapter.create("synthetic-key")
+        client.read.assert_called_once_with(str(CASE_ID))
+        self.assertFalse(adapter.records)
+
+    def test_provider_results_do_not_infer_native_continuation_from_completion(self):
+        client = Mock()
+        with (
+            patch(
+                "tests.live_acceptance.GOLDEN_CASES",
+                [{"id": "ORS-001"}, {"id": "ORS-005"}],
+            ),
+            patch("tests.live_acceptance.LiveClient", return_value=client),
+            self.assertRaisesRegex(UnsupportedScenario, "native continuation"),
+        ):
+            create_results(
+                base_url="https://example.invalid",
+                auth_file="unused",
+                source_revision=REVISION,
+                deployment_revision=REVISION,
+            )
+        client.submit.assert_not_called()
+        client.decide.assert_not_called()
+
+    def test_wait_for_pending_rejects_mismatched_cases_and_unusable_handles(self):
+        case_id = str(CASE_ID)
+        client = object.__new__(LiveClient)
+        created = {"id": case_id, "status": "created"}
+        client.read = Mock(return_value={"id": str(uuid4()), "status": "pending"})
+        with (
+            patch("tests.live_acceptance.time.sleep"),
+            self.assertRaisesRegex(RuntimeError, "different case"),
+        ):
+            client.wait_for_pending(created)
+        self.assertEqual(client.read.call_count, 1)
+
+        for handle, channel in (("handle", "other"), ("  ", "foundry-responses")):
+            with self.subTest(handle=handle, channel=channel):
+                client.read = Mock(
+                    return_value={
+                        "id": case_id,
+                        "status": "pending",
+                        "decision_handle": handle,
+                        "decision_channel": channel,
+                    }
+                )
+                with (
+                    patch("tests.live_acceptance.time.sleep"),
+                    self.assertRaisesRegex(RuntimeError, "invalid|unexpected"),
+                ):
+                    client.wait_for_pending(created)
+                self.assertEqual(client.read.call_count, 1)
+
+        client.read = Mock(return_value={"id": case_id, "status": "pending"})
+        with (
+            patch("tests.live_acceptance.time.sleep"),
+            self.assertRaisesRegex(RuntimeError, "polling limit"),
+        ):
+            client.wait_for_pending(created)
+        self.assertEqual(client.read.call_count, 30)
 
     def test_live_client_uses_response_correlation_id_for_telemetry_pair(self):
         case_id = "20000000-0000-4000-8000-000000000002"

@@ -258,4 +258,14 @@ describe("workflow workspace", () => {
     expect(screen.getByText("AG-UI: Not enabled")).toBeVisible();
     expect(screen.getByText("CopilotKit: Not enabled")).toBeVisible();
   });
+
+  it.each(["hosted_response_failed", "recovery_failed"])("does not offer decisions for a pending case with %s", async (failure_code) => {
+    const failed = { ...pending, failure_code };
+    render(workspace(client({ read: vi.fn().mockResolvedValue(failed) })));
+    await userEvent.type(screen.getByLabelText("Case ID"), id);
+    await userEvent.click(screen.getByRole("button", { name: "Open" }));
+    expect(await screen.findByText(/recovery or action failed/i)).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Approve" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Reject" })).not.toBeInTheDocument();
+  });
 });
