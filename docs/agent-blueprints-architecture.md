@@ -931,11 +931,20 @@ Production authorization remains solely with the baseline-pinned trust
 validator, signed result attestations, and scoped, unexpired risk decisions;
 self-authored review files cannot waive critical or security-critical gates.
 
-The manual cloud workflow observes existing resources but never provisions,
-deploys, changes traffic, retries an ambiguous business operation, or rolls
-back. Agent A supplies native hosted lifecycle and reconciliation semantics;
-Agent B supplies immutable revision/resource evidence and telemetry endpoints;
-Agent C supplies authenticated application/database behavior and bounded
-synthetic fault controls. See the
+The manual cloud workflow does not provision, deploy, change traffic, retry an
+ambiguous business operation, roll back, or change PostgreSQL firewall rules.
+Its destructive hosted failure adapter is opt-in and defaults off; when
+enabled, it is gated on an exact active revision and a configured
+synthetic-nonproduction Container App target, under a dedicated protected
+GitHub environment and scoped OIDC identity. The deployment evidence run must
+match a configured trusted workflow path; no in-repository workflow currently
+produces that artifact. These declarations do not prove isolation: required
+environment reviewers, the deployment producer, federated identity/RBAC
+scope, and the adapter's actual target behavior must be independently
+configured and verified before dispatch. Agent A supplies native hosted
+lifecycle and reconciliation semantics; Agent B supplies immutable
+revision/resource evidence and telemetry endpoints; Agent C supplies
+authenticated application/database behavior and bounded synthetic fault
+controls. See the
 [Workstream D readiness guide](azure-foundry/readiness.md) for executable gates
 and the current blocked/unverified matrix.

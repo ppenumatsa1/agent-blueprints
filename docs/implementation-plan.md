@@ -83,22 +83,32 @@ Next: inspect exact-head CI and independent review, retain both drafts, and
 resolve the disclosed polling/network and isolation blockers separately. Do
 not deploy, merge, or infer an operational self-approval path.
 
-The coordinating session's read-only preflight reports that the existing
-target lacks established isolation, usable delegated consent is unverified,
-and default deployment configuration touches the deferred firewall. Separately,
-the committed cloud failure-injection job does not supply the live adapter's
-authentication file, agent version, Azure API revision, hosted root, and
-other required Azure environment inputs (`AZURE_RESOURCE_GROUP`,
-`AZURE_API_CONTAINER_APP_NAME`, `AZURE_ENV_NAME`, `HOSTED_AGENT_NAME`, and
-`HOSTED_AGENT_VERSION`). The live adapter also invokes `az` revision restart
-and `azd` session stop, but this job has no scoped Azure login or established
-tool setup. Merely wiring environment variables would not bind those
-destructive operations to an authorized isolated target or establish least
-privilege. A separate reviewed workflow design must provision scoped identity,
-validate exact targets, install dependencies before exposing authentication
-material, and clean it up. Resolve and verify these gaps before any authorized
-rollout or live acceptance; this work neither supplies secrets nor changes
-Azure.
+The manual cloud-validation workflow now checks both evidence-run heads and
+success states, requires the configured trusted deployment workflow path,
+verifies the exact active-revision artifact before failure injection, and
+defaults destructive injection off. No workflow in this checkout currently
+produces the required deployment evidence artifact, so that producer path
+remains unset and exact deployment provenance is blocked. The opt-in job is
+isolated behind the dedicated
+`azure-foundry-failure-injection-nonproduction` GitHub environment, checks the
+exact configured Container App resource ID and
+synthetic environment marker, installs locked dependencies and pinned `azd`
+before Azure login, verifies the OIDC-selected tenant/subscription, and removes
+the adapter authentication file on every outcome. The generated harness also
+requires the adapter to identify the same synthetic target and exact source
+and deployment revisions. Existing firewall rules are not read or mutated by
+this workflow.
+
+These are fail-closed code contracts, not proof of isolation. The protected
+GitHub environment and required reviewers, its OIDC federated credential,
+resource-scoped Azure role assignments, exact target variables, adapter auth
+material, and a reviewed compatible adapter are tenant/repository settings
+that are not present or verifiable in this checkout. Azure CLI destructive
+operations are therefore not yet safe to dispatch; no Azure deployment,
+restart, session stop, fault injection, firewall change, or live acceptance
+was performed. Preserve issue #56 and its existing firewall rule. Resolve
+those authorization and environment prerequisites before any live run; this
+change does not populate tenant values or claim rollout readiness.
 
 ## UX stack Layer 5: read-only protocol context
 

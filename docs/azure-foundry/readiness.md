@@ -136,8 +136,19 @@ ingestion.
 ## Explicit live validation workflow
 
 `.github/workflows/cloud-validation.yml` is manual and non-deploying. It
-requires an already successful exact-head CI run and an immutable deployment
-evidence artifact produced by the deployment workstreams.
+requires successful CI and deployment runs whose run metadata both name the
+requested exact source commit. The CI run must be the repository's Readiness
+validation workflow. The deployment run must also come from the exact trusted
+workflow path configured in repository variable
+`MAF_HOSTED_DEPLOYMENT_WORKFLOW_PATH`; an unset or mismatched path fails before
+artifact download. The artifact is then checked against the requested
+deployment/environment and active backend, frontend, and hosted agent
+revisions.
+
+The current checkout has no workflow that produces
+`azure-foundry-deployment-evidence`, so the trusted deployment producer path
+and artifact remain unverified. Do not populate the path variable until an
+authorized producer exists and is reviewed.
 
 The `maf-independent` producer explicitly checks out the pull-request head
 SHA (or `github.sha` on `main`) before recording `SOURCE_REVISION`. The default
@@ -171,6 +182,16 @@ gh workflow run cloud-validation.yml `
   -f base_url=https://<generated-frontend-host>
 ```
 
+Failure injection is a separate, destructive opt-in and defaults to `false`.
+Only when the protected synthetic target is ready, add
+`-f run_failure_injection=true` and
+`-f failure_target_id=<exact-container-app-resource-id>` to the dispatch
+command.
+
+Repository variable `MAF_HOSTED_DEPLOYMENT_WORKFLOW_PATH` must be the exact
+`.github/workflows/<file>.yml` or `.yaml` path of the reviewed artifact
+producer. It is intentionally not guessed in this repository.
+
 The `azure-foundry-validation` GitHub environment must provide:
 
 - secrets `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`,
@@ -183,8 +204,45 @@ The `azure-foundry-validation` GitHub environment must provide:
 - variables `MAF_REAL_EVALUATION_PROVIDER`,
   `MAF_REAL_EVALUATION_MODEL`, `MAF_REAL_EVALUATOR_FACTORY`,
   `MAF_REAL_RESULT_FACTORY`, and
-  `MAF_REAL_EVALUATION_MINIMUM_SCORE`;
-- variable `MAF_HOSTED_FAILURE_ADAPTER`.
+  `MAF_REAL_EVALUATION_MINIMUM_SCORE`.
+
+The distinct `azure-foundry-failure-injection-nonproduction` GitHub
+environment must be configured with required reviewers and an OIDC federated
+credential restricted to this repository/environment. Its secrets are
+`AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, and
+`MAF_HOSTED_FAILURE_AUTH_JSON`. Its variables are
+`MAF_HOSTED_FAILURE_TARGET_KIND` (exactly `synthetic-nonproduction`),
+`MAF_HOSTED_FAILURE_TARGET_ID` (the exact API Container App ARM resource ID),
+`MAF_HOSTED_FAILURE_BASE_URL`, `MAF_HOSTED_FAILURE_EVIDENCE_ENVIRONMENT`
+(exactly `synthetic-nonproduction`), `MAF_HOSTED_FAILURE_RESOURCE_GROUP`,
+`MAF_HOSTED_FAILURE_API_CONTAINER_APP_NAME`,
+`MAF_HOSTED_FAILURE_AZD_ENVIRONMENT`,
+`MAF_HOSTED_FAILURE_HOSTED_AGENT_NAME`,
+`MAF_HOSTED_FAILURE_HOSTED_AGENT_VERSION`,
+`MAF_HOSTED_FAILURE_API_REVISION`, `MAF_HOSTED_FAILURE_HOSTED_ROOT`, and
+`MAF_HOSTED_FAILURE_ADAPTER`.
+
+The job compares the dispatch target and URL to those protected settings,
+checks the exact active-revision artifact before requesting Azure identity,
+and verifies the logged-in tenant/subscription. It uses the GitHub-hosted
+`ubuntu-24.04` Azure CLI and installs Azure Developer CLI 1.39.1 using the
+action pinned to commit
+`413f112a14d9b57e38ed09d704c451124cd4ff08`. Locked backend dependencies and
+the target check run with the OIDC request-token variables blanked; `azure/login`
+is the only step that obtains the Azure token. Adapter auth material is
+restored only after those checks and removed even when the adapter fails.
+The identity must have only the target-specific permissions needed to restart
+the configured Container App and stop the specific synthetic hosted session;
+the workflow cannot verify Azure role-assignment scope.
+
+These settings and marker checks are necessary gates, not proof of isolation.
+The adapter is trusted executable code, and the repository does not contain a
+reviewed Azure implementation for the hosted-failure adapter. Until the
+environment reviewers, federated credential, resource-scoped role assignments,
+target ownership/isolation, auth material, and adapter implementation are
+independently verified, leave failure injection disabled. No live dispatch or
+fault injection is claimed. The cloud workflow does not modify existing
+PostgreSQL firewall rules; issue #56 remains open.
 
 `AZURE_LOG_ANALYTICS_WORKSPACE_ID` may be the workspace ARM resource ID emitted
 by deployment or the Log Analytics customer/workspace GUID. The correlation
@@ -197,7 +255,9 @@ canonical expected outputs are never substituted as actual output. The
 real-provider gate has no synthetic fallback. The hosted adapter must implement
 the protocol in
 `blueprints/maf/workflow/backend/tests/hosted_failure_runner.py`, expose exact
-source/deployment revisions, and support only bounded synthetic faults. A
+source/deployment revisions plus `target_kind` and `target_id` matching the
+protected synthetic-nonproduction target, and support only bounded synthetic
+faults. The runner does not serialize the target resource ID into evidence. A
 missing capability is `blocked`; a failed observation is `failed`; neither is
 converted to success.
 
@@ -209,11 +269,11 @@ authenticated state is not uploaded. If an authenticated state is unavailable
 or the protected request/approval flow fails, browser authentication remains
 `unverified`.
 
-Dependency installation runs without browser/provider secrets and without
-Azure OIDC permission. The workflow restores short-lived authentication files
-only after locked dependencies are installed, removes those files on every
-outcome, and scopes `id-token: write` to the telemetry-query job, which installs
-no application dependencies.
+Browser/provider dependency installation runs without their secrets. For
+failure injection, the step-level OIDC request-token environment is blanked
+while locked dependencies, Azure tools, and exact target/revision checks run;
+`id-token: write` is limited to the failure-injection and telemetry-query jobs.
+The telemetry-query job installs no application dependencies.
 
 The workflow expects Agent B's `azure-foundry-deployment-evidence` artifact to
 contain `backend-revisions.json`, `frontend-revisions.json`, and

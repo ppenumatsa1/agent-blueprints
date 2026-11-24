@@ -84,6 +84,8 @@ class HostedRecord:
 class HostedFailureAdapter(Protocol):
     source_revision: str
     deployment_revision: str
+    target_kind: str
+    target_id: str
 
     def create(self, idempotency_key: str, *, lose_ack: bool = False) -> HostedRecord: ...
 
@@ -290,11 +292,23 @@ SCENARIOS = (
 )
 
 
-def run_scenarios(adapter, *, source_revision, deployment_revision, environment):
+def run_scenarios(
+    adapter,
+    *,
+    source_revision,
+    deployment_revision,
+    environment,
+    target_kind,
+    target_id,
+):
     if adapter.source_revision != source_revision:
         raise ValueError("Hosted adapter source revision does not match the requested revision.")
     if adapter.deployment_revision != deployment_revision:
         raise ValueError("Hosted adapter deployment revision is not the active requested revision.")
+    if target_kind != "synthetic-nonproduction":
+        raise ValueError("Hosted failure injection requires a synthetic nonproduction target.")
+    if adapter.target_kind != target_kind or adapter.target_id != target_id:
+        raise ValueError("Hosted adapter target does not match the approved target.")
     started_at = datetime.now(timezone.utc).isoformat()
     results = {}
     expected_correlations = set()
@@ -368,12 +382,12 @@ def run_scenarios(adapter, *, source_revision, deployment_revision, environment)
     }
 
 
-def _load_adapter(specification, base_url):
+def _load_adapter(specification, base_url, target_kind, target_id):
     module_name, separator, attribute = specification.partition(":")
     if not separator or not module_name or not attribute:
         raise ValueError("MAF_HOSTED_FAILURE_ADAPTER must use module:callable syntax.")
     factory = getattr(importlib.import_module(module_name), attribute)
-    return factory(base_url=base_url)
+    return factory(base_url=base_url, target_kind=target_kind, target_id=target_id)
 
 
 def main():
@@ -390,6 +404,9 @@ def main():
         name: os.environ.get(name, "")
         for name in (
             "MAF_HOSTED_FAILURE_ADAPTER",
+            "MAF_HOSTED_FAILURE_TARGET_KIND",
+            "MAF_HOSTED_FAILURE_TARGET_ID",
+            "MAF_HOSTED_FAILURE_EXPECTED_TARGET_ID",
             "MAF_HOSTED_BASE_URL",
             "SOURCE_REVISION",
             "DEPLOYMENT_REVISION",
@@ -403,15 +420,34 @@ def main():
             file=sys.stderr,
         )
         return 2
+    if required["MAF_HOSTED_FAILURE_TARGET_KIND"] != "synthetic-nonproduction":
+        print(
+            "Hosted failure injection requires a synthetic nonproduction target.",
+            file=sys.stderr,
+        )
+        return 2
+    if (
+        required["MAF_HOSTED_FAILURE_TARGET_ID"]
+        != required["MAF_HOSTED_FAILURE_EXPECTED_TARGET_ID"]
+    ):
+        print(
+            "Hosted failure injection target does not match its approved target.",
+            file=sys.stderr,
+        )
+        return 2
     try:
         evidence = run_scenarios(
             _load_adapter(
                 required["MAF_HOSTED_FAILURE_ADAPTER"],
                 required["MAF_HOSTED_BASE_URL"],
+                required["MAF_HOSTED_FAILURE_TARGET_KIND"],
+                required["MAF_HOSTED_FAILURE_TARGET_ID"],
             ),
             source_revision=required["SOURCE_REVISION"],
             deployment_revision=required["DEPLOYMENT_REVISION"],
             environment=required["EVIDENCE_ENVIRONMENT"],
+            target_kind=required["MAF_HOSTED_FAILURE_TARGET_KIND"],
+            target_id=required["MAF_HOSTED_FAILURE_TARGET_ID"],
         )
         args.output.write_text(
             json.dumps(evidence, indent=2, ensure_ascii=False) + "\n",
