@@ -18,7 +18,7 @@ from app.order_resolution.acceptance import AcceptanceFaults
 from app.order_resolution.durability import Proposal
 from app.order_resolution.persistence import OrderResolutionStore
 from app.order_resolution.service import OrderResolutionService
-from tests.hosted_failure_runner import ReconciliationRequired, UnsupportedScenario
+from tests.hosted_failure_runner import ReconciliationRequired, UnsupportedScenario, _load_adapter
 from tests.live_acceptance import (
     FoundryModelEvaluator,
     LiveClient,
@@ -147,6 +147,7 @@ class AcceptanceFaultTests(unittest.TestCase):
         adapter = object.__new__(LiveHostedFailureAdapter)
         adapter.client = Mock()
         with (
+            patch.dict("os.environ", {"HOSTED_ROOT": "synthetic-root", "AZURE_ENV_NAME": "test"}),
             patch("tests.live_acceptance.subprocess.run") as run,
             self.assertRaises(UnsupportedScenario),
         ):
@@ -249,6 +250,27 @@ class AcceptanceFaultTests(unittest.TestCase):
             with self.subTest(path=path), self.assertRaises(ValueError):
                 client.request("GET", path, {"access_token": "synthetic-canary"})
         client.opener.open.assert_not_called()
+
+    def test_failure_adapter_uses_runner_target_and_failure_auth(self):
+        environment = {
+            "SOURCE_REVISION": REVISION,
+            "DEPLOYMENT_REVISION": REVISION,
+            "AGENT_VERSION": "1",
+            "MAF_HOSTED_FAILURE_AUTH_FILE": "synthetic-auth.json",
+        }
+        with (
+            patch.dict("os.environ", environment, clear=True),
+            patch("tests.live_acceptance.LiveClient") as client,
+        ):
+            adapter = _load_adapter(
+                "tests.live_acceptance:create_failure_adapter",
+                "https://example.invalid",
+                "synthetic-nonproduction",
+                "synthetic-target",
+            )
+        client.assert_called_once_with("https://example.invalid", "synthetic-auth.json", REVISION)
+        self.assertEqual(adapter.target_kind, "synthetic-nonproduction")
+        self.assertEqual(adapter.target_id, "synthetic-target")
 
     def test_live_client_uses_response_correlation_id_for_telemetry_pair(self):
         case_id = "20000000-0000-4000-8000-000000000002"

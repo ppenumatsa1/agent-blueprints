@@ -74,18 +74,15 @@ test("live generated frontend enforces separate owner and reviewer identities", 
   try {
     const ownerPage = await ownerContext.newPage();
     await ownerPage.goto("/");
-    await expect(ownerPage.getByRole("heading", { name: "New request" })).toBeVisible();
+    await expect(ownerPage.getByRole("heading", { name: /^(New request|New order issue)$/ })).toBeVisible();
     await expect(ownerPage.getByRole("button", { name: "Sign in" })).toHaveCount(0);
     await ownerPage.getByLabel("Reviewer object ID").fill(process.env.E2E_REVIEWER_ID!);
-    await ownerPage.getByLabel("Request data (JSON)").fill(JSON.stringify(payload));
-    await ownerPage.getByRole("button", { name: "Submit request" }).click();
+    await ownerPage.getByLabel(/^(Request data|Order issue data) \(JSON\)$/).fill(JSON.stringify(payload));
+    await ownerPage.getByRole("button", { name: /^(Submit request|Submit issue)$/ }).click();
     await expect(
-      ownerPage.getByRole("heading", { name: "Record status: pending" }),
+      ownerPage.getByRole("heading", { name: "Case status: pending" }),
     ).toBeVisible();
-    const recordId = (await ownerPage.getByText(/^Record ID:/).textContent())?.replace(
-      "Record ID: ",
-      "",
-    );
+    const recordId = await ownerPage.getByLabel("Case ID").inputValue();
     expect(recordId).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
     );
@@ -93,14 +90,14 @@ test("live generated frontend enforces separate owner and reviewer identities", 
     const reviewerPage = await reviewerContext.newPage();
     await reviewerPage.goto("/");
     await expect(reviewerPage.getByRole("button", { name: "Sign in" })).toHaveCount(0);
-    await reviewerPage.getByLabel("Record ID").fill(recordId!);
+    await reviewerPage.getByLabel("Case ID").fill(recordId);
     await reviewerPage.getByRole("button", { name: "Open" }).click();
     await expect(
-      reviewerPage.getByRole("heading", { name: "Record status: pending" }),
+      reviewerPage.getByRole("heading", { name: "Case status: pending" }),
     ).toBeVisible();
     await reviewerPage.getByRole("button", { name: "Approve" }).click();
     await expect(
-      reviewerPage.getByRole("heading", { name: "Record status: completed" }),
+      reviewerPage.getByRole("heading", { name: "Case status: completed" }),
     ).toBeVisible();
     await expect(reviewerPage.getByText("Decision: approved")).toBeVisible();
 

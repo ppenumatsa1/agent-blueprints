@@ -75,6 +75,23 @@ Next: integrate the local commit into #62 and verify exact-head CI and authorize
 end-to-end hosted approval, rejection, restart and recovery. No Azure resource,
 credential, checkpoint/resume or production-readiness validation is claimed.
 
+## Acceptance harness contract repairs above PR #62
+
+**Status: In Progress.** Starting revision: `19e1837e2cb4d0781aa34ec7e345c5fed30b7a03`.
+The generated profile factory accepts the runner's target metadata and uses its
+failure-auth setting. Hosted interruption remains blocked and does not use the
+hosted-root setting. Failure evidence checks HTTP correlation
+coverage by case, not by comparing HTTP request IDs to approval handles. The
+live browser selectors match both the base and Order Resolution labels and read
+the case ID from the form. Focused source runner tests and independently
+generated backend and UI tests pass; the generated frontend build succeeds.
+These are local fixture checks, not Azure evidence.
+
+Next action: integrate the separately owned recovery-evidence and token-safety
+fixes, then rerun exact-head checks. Native interruption, reconciliation,
+deployment, actual identities and live browser behavior remain unverified;
+the existing failure-injection provenance hard stop remains in place.
+
 ## Fixed offline synthetic manual tests above PR #61
 
 **Status: In Progress (local implementation and checks completed; draft/CI

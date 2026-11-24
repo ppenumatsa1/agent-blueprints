@@ -289,6 +289,27 @@ class HostedFailureRunnerTests(unittest.TestCase):
                 target_id="synthetic-target",
             )
 
+    def test_correlation_request_ids_are_distinct_from_approval_handles(self):
+        adapter = FixtureHostedAdapter()
+        original = adapter.correlations
+        adapter.correlations = lambda: [{**item, "request_id": str(uuid4())} for item in original()]
+        result = run_scenarios(
+            adapter,
+            source_revision="source-123",
+            deployment_revision="deployment-456",
+            environment="synthetic-hosted",
+            target_kind="synthetic-nonproduction",
+            target_id="synthetic-target",
+        )
+        self.assertEqual(result["scenarios"]["hosted_interruption"]["status"], "blocked")
+        self.assertTrue(
+            all(
+                item["status"] == "passed"
+                for name, item in result["scenarios"].items()
+                if name != "hosted_interruption"
+            )
+        )
+
     def test_live_correlation_metadata_survives_and_invalid_status_is_rejected(self):
         adapter = FixtureHostedAdapter()
         original = adapter.correlations

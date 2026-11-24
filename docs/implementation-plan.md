@@ -65,6 +65,21 @@ skips. These are local fixture checks, not proof of actual Foundry execution.
 Next: integrate into #62 and run exact-head CI and authorized live approval,
 rejection, checkpoint/resume, restart, idempotency and recovery checks.
 
+## Acceptance harness contract repairs above PR #62
+
+**In progress**, starting at `19e1837e2cb4d0781aa34ec7e345c5fed30b7a03`.
+Acceptance criteria: load the profile adapter using the runner's target and
+workflow environment contract; associate actual HTTP correlations with each
+passed case without treating an approval handle as a correlation ID; and
+select the generated UI's real controls. Source runner and independently
+generated backend and UI fixture tests pass, as does the generated frontend
+build. These checks do not verify a hosted recovery, human identity, effect,
+deployment provenance or a live browser session.
+
+Next: coordinate the separate recovery-evidence and credential-safety changes
+before exact-head integration checks. Keep failure injection blocked by the
+existing provenance hard stop; no Azure call or live evidence is claimed.
+
 ## Fixed offline synthetic manual tests above PR #61
 
 **In progress; local implementation and validation completed, draft/CI review

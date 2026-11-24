@@ -337,13 +337,15 @@ class LiveClient:
 
 
 class LiveHostedFailureAdapter:
-    def __init__(self, base_url: str):
+    def __init__(self, base_url: str, *, target_kind: str, target_id: str):
         self.source_revision = os.environ["SOURCE_REVISION"]
         self.deployment_revision = os.environ["DEPLOYMENT_REVISION"]
         self.agent_version = os.environ["AGENT_VERSION"]
+        self.target_kind = target_kind
+        self.target_id = target_id
         self.client = LiveClient(
             base_url,
-            os.environ["MAF_REAL_AUTH_FILE"],
+            os.environ["MAF_HOSTED_FAILURE_AUTH_FILE"],
             self.deployment_revision,
         )
         self.records: dict[str, dict] = {}
@@ -515,8 +517,10 @@ class LiveHostedFailureAdapter:
         return list(unique.values())
 
 
-def create_failure_adapter(*, base_url: str) -> LiveHostedFailureAdapter:
-    return LiveHostedFailureAdapter(base_url)
+def create_failure_adapter(
+    *, base_url: str, target_kind: str, target_id: str
+) -> LiveHostedFailureAdapter:
+    return LiveHostedFailureAdapter(base_url, target_kind=target_kind, target_id=target_id)
 
 
 class FoundryModelEvaluator:

@@ -19,6 +19,19 @@ independent trust, and a signed build claim does not prove the actual checkout,
 generated inputs, or live image. The preflight is not a release gate or an
 Azure observer; the failure-injection hard stop remains in place.
 
+## Acceptance evidence boundaries
+
+The hosted failure runner requires each passed case to have an HTTP correlation
+record for that case. Its HTTP request ID is not the native approval handle;
+case-level association alone does not establish a particular operation's
+telemetry or prove recovery. The profile adapter receives configured target
+metadata and uses the failure job's authentication file; these settings do
+not independently verify isolation or provenance. Hosted interruption is
+blocked before using a hosted root or stopping a session.
+The live browser spec recognizes the base and Order Resolution labels. Local
+fixture checks are not live hosted or identity evidence. Recovery-evidence and
+credential-safety checks do not prove live recovery or trusted origin control.
+
 ## Operator-only isolated synthetic manual tests
 
 Above PR #61 (`a78854c5fff4d4f518e9fea729d0bba0123ce2bb`), the blueprint

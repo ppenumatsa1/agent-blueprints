@@ -305,7 +305,7 @@ def run_scenarios(
         raise ValueError("Hosted adapter target does not match the approved target.")
     started_at = datetime.now(timezone.utc).isoformat()
     results = {}
-    expected_correlations = set()
+    expected_cases = set()
     for name, scenario in SCENARIOS:
         try:
             record = scenario(adapter)
@@ -322,7 +322,7 @@ def run_scenarios(
         else:
             if not isinstance(record, HostedRecord):
                 raise ValueError("Hosted scenarios must return their correlated record.")
-            expected_correlations.add((record.request_id, record.case_id))
+            expected_cases.add(record.case_id)
             results[name] = {
                 "status": "passed",
                 "reason": "The hosted failure contract was observed.",
@@ -361,8 +361,8 @@ def run_scenarios(
             raise ValueError("Hosted trace IDs must contain 32 hexadecimal characters.")
         if item["deployment_revision"] != deployment_revision:
             raise ValueError("Hosted correlation deployment revision mismatch.")
-    observed_correlations = {(item["request_id"], item["case_id"]) for item in correlations}
-    if not expected_correlations.issubset(observed_correlations):
+    observed_cases = {item["case_id"] for item in correlations}
+    if not expected_cases.issubset(observed_cases):
         raise ValueError("Hosted correlation evidence does not cover every passed scenario.")
     return {
         "schema_version": "1.0.0",
