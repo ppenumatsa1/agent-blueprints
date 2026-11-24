@@ -19,6 +19,7 @@ export interface WorkflowCase {
   decision: Decision;
   payload: Record<string, unknown>;
   decision_handle?: string | null;
+  decision_channel?: "api" | "foundry-responses" | null;
   execution_complete: boolean;
   failure_code: string | null;
 }
@@ -135,6 +136,10 @@ function isWorkflowCase(value: unknown): value is WorkflowCase {
     (record.decision_handle === undefined ||
       record.decision_handle === null ||
       typeof record.decision_handle === "string") &&
+    (record.decision_channel === undefined ||
+      record.decision_channel === null ||
+      record.decision_channel === "api" ||
+      record.decision_channel === "foundry-responses") &&
     typeof record.execution_complete === "boolean" &&
     (record.failure_code === null || typeof record.failure_code === "string")
   );

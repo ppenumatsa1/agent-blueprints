@@ -58,6 +58,23 @@ remain intact. Exact-head CI and a trusted configured origin remain unverified.
 Next: integrate the independently reviewable fix into the draft and run CI.
 See [cloud readiness](azure-foundry/readiness.md) for configuration and limits.
 
+## Hosted approval UI repair above #62
+
+**Status: In Progress.** Based on `19e1837e2cb4d0781aa34ec7e345c5fed30b7a03`.
+The generated Order Resolution API returns the selected host's decision channel
+only alongside a pending handle; the UI binds that value instead of assuming
+the local channel. The studio refreshes incomplete cases with authorized
+reads and discards stale results, stopping on failures or completion.
+Source frontend: 57 tests; independently generated profile frontend: 61 tests,
+build and CSP check; generated backend: two focused channel tests and Ruff
+checks. The isolated repository suite passed 114 tests with two
+adapter-selection skips, after installing the declared development
+requirements. These use mocks and local fixtures, not a deployed hosted agent.
+
+Next: integrate the local commit into #62 and verify exact-head CI and authorized
+end-to-end hosted approval, rejection, restart and recovery. No Azure resource,
+credential, checkpoint/resume or production-readiness validation is claimed.
+
 ## Fixed offline synthetic manual tests above PR #61
 
 **Status: In Progress (local implementation and checks completed; draft/CI

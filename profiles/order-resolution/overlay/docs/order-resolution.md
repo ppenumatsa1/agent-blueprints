@@ -26,6 +26,12 @@ workflow without a human pause. High-value refunds and replacement shipments
 create a native approval request and use the existing authenticated,
 server-authorized decision endpoint.
 
+For a pending request, the case response includes its decision handle and the
+selected host channel (`api` locally or `foundry-responses` for hosted mode).
+The UI returns both with the proposal binding; the service still validates
+the reviewer, proposal, handle and channel. Existing pending cases whose
+stored channel differs from the currently selected host fail closed.
+
 Missing, conflicting, or invalid policy evidence creates a persisted terminal
 failed case with its explicit failure code. It creates no proposal, native
 pause/checkpoint, decision, action claim, or effect. Other malformed or

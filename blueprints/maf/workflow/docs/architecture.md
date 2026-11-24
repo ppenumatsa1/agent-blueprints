@@ -66,6 +66,13 @@ projected. Application audit state and native MAF continuation/checkpoint
 state remain separate. Existing single-case reads and decision endpoints
 remain unchanged.
 
+The studio separately refreshes an incomplete selected case through the
+authorized case-read endpoint at five-second intervals after each completed
+read. Switching cases or signing out invalidates late results; read
+authorization failures clear the displayed case. Refresh stops on read error,
+execution completion or a reported failure; reopening the case retries it.
+This is not a deadline on an in-flight read or proof of cloud availability.
+
 ### Live activity
 
 The authenticated activity stream sends only fixed refresh signals and

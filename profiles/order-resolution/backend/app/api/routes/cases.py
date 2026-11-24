@@ -62,7 +62,9 @@ async def submit(
     case = await service.submit(
         actor.principal, str(body.reviewer_id), body.payload, idempotency_key
     )
-    return case_output(case)
+    return case_output(
+        case, hosted_mode=isinstance(service, OrderResolutionService) and service.hosted_mode
+    )
 
 
 @router.get("/cases/{case_id}/activity", response_model=ActivityOutput)
@@ -88,7 +90,10 @@ def read(
     service: Annotated[WorkflowService, Depends(workflow_service)],
 ) -> CaseOutput:
     with poll_read(service):
-        return case_output(service.read(actor.principal, case_id))
+        return case_output(
+            service.read(actor.principal, case_id),
+            hosted_mode=isinstance(service, OrderResolutionService) and service.hosted_mode,
+        )
 
 
 @router.post("/cases/{case_id}/decision", response_model=CaseOutput)
@@ -111,4 +116,6 @@ async def decide(
         )
     else:
         case = await service.decide(actor.principal, case_id, body.decision)
-    return case_output(case)
+    return case_output(
+        case, hosted_mode=isinstance(service, OrderResolutionService) and service.hosted_mode
+    )

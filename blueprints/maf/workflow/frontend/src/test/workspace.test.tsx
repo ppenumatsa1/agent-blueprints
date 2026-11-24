@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -86,6 +86,74 @@ describe("workflow workspace", () => {
     expect(api.decide).toHaveBeenCalledWith(id, "approved");
   });
 
+  it("refreshes asynchronous submissions until completion", async () => {
+    vi.useFakeTimers();
+    try {
+      const created = { ...pending, status: "created" as const };
+      const complete = { ...pending, status: "completed" as const, decision: "approved" as const, execution_complete: true };
+      const api = client({
+        submit: vi.fn().mockResolvedValue(created),
+        read: vi.fn().mockResolvedValueOnce(pending).mockResolvedValueOnce(complete),
+      });
+
+      const { unmount } = render(workspace(api));
+      fireEvent.change(screen.getByLabelText("Reviewer object ID"), { target: { value: reviewer } });
+      await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Submit request" })); });
+      expect(screen.getByRole("heading", { name: "Case status: created" })).toBeVisible();
+      await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
+      expect(screen.getByRole("heading", { name: "Case status: pending" })).toBeVisible();
+      await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
+      expect(screen.getByRole("heading", { name: "Case status: completed" })).toBeVisible();
+      await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+      expect(api.read).toHaveBeenCalledTimes(2);
+      unmount();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("discards a stale refresh when another case is opened", async () => {
+        vi.useFakeTimers();
+        try {
+          const other = { ...pending, id: "90000000-0000-4000-8000-000000000009" };
+          let finish!: (value: WorkflowCase) => void;
+          const read = vi.fn()
+            .mockResolvedValueOnce(pending)
+            .mockReturnValueOnce(new Promise<WorkflowCase>((resolve) => { finish = resolve; }))
+            .mockResolvedValueOnce(other);
+          const { unmount } = render(workspace(client({ read })));
+          fireEvent.change(screen.getByLabelText("Case ID"), { target: { value: id } });
+          await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Open" })); });
+          await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
+          fireEvent.change(screen.getByLabelText("Case ID"), { target: { value: other.id } });
+          await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Open" })); });
+          await act(async () => { finish({ ...pending, status: "completed", execution_complete: true }); });
+          expect(screen.getByText(other.id)).toBeVisible();
+          expect(screen.getByRole("heading", { name: "Case status: pending" })).toBeVisible();
+          unmount();
+        } finally {
+          vi.useRealTimers();
+        }
+      });
+
+      it("clears the case and stops refreshing when read access is revoked", async () => {
+        vi.useFakeTimers();
+        try {
+          const read = vi.fn().mockResolvedValueOnce(pending)
+            .mockRejectedValueOnce(new WorkflowClientError("Access revoked.", true));
+          const { unmount } = render(workspace(client({ read })));
+          fireEvent.change(screen.getByLabelText("Case ID"), { target: { value: id } });
+          await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Open" })); });
+          await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
+          expect(screen.getByRole("alert")).toHaveTextContent("Access revoked.");
+          expect(screen.queryByRole("heading", { name: "Case status: pending" })).not.toBeInTheDocument();
+          await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+          expect(read).toHaveBeenCalledTimes(2);
+          unmount();
+        } finally {
+          vi.useRealTimers();
+        }
+      });
   it("opens a record and displays rejection", async () => {
     const api = client({
       decide: vi.fn().mockResolvedValue({ ...pending, status: "rejected", decision: "rejected", execution_complete: true }),

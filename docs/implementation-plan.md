@@ -52,6 +52,19 @@ configuration remain unverified. Next: integrate the separate fix into the
 draft and run exact-head CI. This does not establish trusted deployment
 provenance, proxy safety or isolation for same-identity approval.
 
+## Hosted approval UI repair above #62
+
+**In progress**, based on `19e1837e2cb4d0781aa34ec7e345c5fed30b7a03`.
+Acceptance: local and hosted decisions carry the server-selected channel;
+asynchronous case changes become visible without stale case replacement or
+retaining a case after read authorization is revoked. Source frontend tests
+passed 57; independently generated profile tests passed 61, with build and
+CSP check; two generated backend channel tests and Ruff checks passed.
+The isolated repository suite passed 114 tests with two adapter-selection
+skips. These are local fixture checks, not proof of actual Foundry execution.
+Next: integrate into #62 and run exact-head CI and authorized live approval,
+rejection, checkpoint/resume, restart, idempotency and recovery checks.
+
 ## Fixed offline synthetic manual tests above PR #61
 
 **In progress; local implementation and validation completed, draft/CI review

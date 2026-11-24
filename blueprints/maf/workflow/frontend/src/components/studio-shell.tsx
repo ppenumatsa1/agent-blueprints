@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import { WorkflowClientError, type WorkflowCase, type WorkflowClient } from "../api";
 import type { WorkflowStudioProfile } from "../studio-profile";
@@ -44,6 +44,38 @@ export function StudioShell({
   const [activityRefresh, setActivityRefresh] = useState(0);
   const submission = useRef<{ fingerprint: string; key: string } | null>(null);
   const recordRequest = useRef(0);
+
+  useEffect(() => {
+    if (!signedIn || busy || !record || record.execution_complete || record.failure_code) return;
+    const current = record;
+    const requestNumber = recordRequest.current;
+    let active = true;
+    let timer: ReturnType<typeof setTimeout>;
+    function schedule() {
+      timer = setTimeout(() => {
+        void client.read(current.id).then((updated) => {
+          if (active && recordRequest.current === requestNumber) {
+            setRecord(updated);
+            if (updated.status !== current.status || updated.decision !== current.decision || updated.execution_complete !== current.execution_complete) {
+              setHistoryRefresh((value) => value + 1);
+              setActivityRefresh((value) => value + 1);
+            }
+            schedule();
+          }
+        }).catch((reason: unknown) => {
+          if (active && recordRequest.current === requestNumber) {
+            if (reason instanceof WorkflowClientError && reason.authorizationFailure) setRecord(null);
+            setError(message(reason));
+          }
+        });
+      }, 5_000);
+    }
+    schedule();
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [signedIn, busy, record, client]);
 
   async function run(operation: () => Promise<void>) {
     setError("");
@@ -106,6 +138,7 @@ export function StudioShell({
 
   async function decide(decision: "approved" | "rejected") {
     if (!record) return;
+    recordRequest.current += 1;
     const binding = profile.decisionBinding?.(record);
     await run(async () => {
       const updated = binding
@@ -199,7 +232,7 @@ export function StudioShell({
                 )}
                 <ApprovalPanel
                   decision={record.decision}
-                  pending={record.status === "pending" && record.decision === "pending"}
+                  pending={record.status === "pending" && record.decision === "pending" && (!profile.decisionBinding || !!profile.decisionBinding(record))}
                   busy={busy}
                   profile={profile}
                   onDecide={(value) => void decide(value)}

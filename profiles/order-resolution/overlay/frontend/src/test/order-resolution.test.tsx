@@ -1,7 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 
-import type { WorkflowCase } from "../api";
+import type { WorkflowCase, WorkflowClient } from "../api";
 import { orderResolutionProfile } from "../order-resolution";
+import { WorkflowWorkspace } from "../workspace";
 
 
 describe("order resolution case", () => {
@@ -50,6 +52,7 @@ describe("order resolution case", () => {
         },
       },
       decision_handle: "opaque-handle",
+      decision_channel: "foundry-responses",
       execution_complete: false,
       failure_code: null,
     };
@@ -58,7 +61,41 @@ describe("order resolution case", () => {
       action: "manual_review",
       destination_id: "synthetic-destination",
       handle: "opaque-handle",
-      channel: "api",
+      channel: "foundry-responses",
     });
+    expect(orderResolutionProfile.decisionBinding?.({ ...record, decision_channel: "api" })?.channel).toBe("api");
+    expect(orderResolutionProfile.decisionBinding?.({ ...record, decision_channel: null })).toBeUndefined();
+  });
+
+  it.each(["approved", "rejected"] as const)("sends the hosted binding for %s", async (decision) => {
+    const record: WorkflowCase = {
+      id: "80000000-0000-4000-8000-000000000008",
+      correlation_id: "80000000-0000-4000-8000-000000000008",
+      status: "pending",
+      decision: "pending",
+      payload: { proposal: { version: 3, action: "manual_review", destination_id: "synthetic" } },
+      decision_handle: "opaque-handle",
+      decision_channel: "foundry-responses",
+      execution_complete: false,
+      failure_code: null,
+    };
+    const client: WorkflowClient = {
+      submit: vi.fn(),
+      read: vi.fn().mockResolvedValue(record),
+      decide: vi.fn().mockResolvedValue({ ...record, status: decision, decision, execution_complete: true }),
+      listHistory: vi.fn().mockResolvedValue({ schema_version: "workflow-history/1", items: [], next_cursor: null }),
+      activity: vi.fn().mockResolvedValue({ schema_version: "workflow-activity/1", items: [], next_cursor: null }),
+    };
+    render(<WorkflowWorkspace signedIn client={client} profile={orderResolutionProfile} signIn={vi.fn()} signOut={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText("Case ID"), { target: { value: record.id } });
+    fireEvent.click(screen.getByRole("button", { name: "Open" }));
+    fireEvent.click(await screen.findByRole("button", { name: decision === "approved" ? "Approve" : "Reject" }));
+    await waitFor(() => expect(client.decide).toHaveBeenCalledWith(record.id, decision, {
+      proposal_version: 3,
+      action: "manual_review",
+      destination_id: "synthetic",
+      handle: "opaque-handle",
+      channel: "foundry-responses",
+    }));
   });
 });

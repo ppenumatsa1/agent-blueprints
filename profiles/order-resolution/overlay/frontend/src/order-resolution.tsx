@@ -43,12 +43,13 @@ function decisionBinding(record: WorkflowCase): DecisionBinding | undefined {
     && typeof proposal.action === "string"
     && typeof proposal.destination_id === "string"
     && typeof record.decision_handle === "string"
+    && (record.decision_channel === "api" || record.decision_channel === "foundry-responses")
     ? {
         proposal_version: proposal.version,
         action: proposal.action,
         destination_id: proposal.destination_id,
         handle: record.decision_handle,
-        channel: "api",
+        channel: record.decision_channel,
       }
     : undefined;
 }
