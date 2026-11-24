@@ -979,6 +979,74 @@ class ApiSecurityTests(unittest.TestCase):
         self.assertEqual(response.status_code, 503)
         self.assertEqual(response.json(), {"detail": "Workflow history scan budget exceeded."})
 
+    def test_healthy_poll_reads_work_at_the_supported_minimum_pool_size(self):
+        self.store.close()
+        self.settings = replace(
+            self.settings,
+            database_pool_max_size=2,
+            database_pool_timeout_seconds=0.1,
+        )
+        self.store = PostgresStore.from_settings(self.settings)
+        self.addCleanup(self.store.close)
+        with self.client() as client:
+            response = self.submit(client)
+            self.assertEqual(response.status_code, 200, response.text)
+            case_id = response.json()["id"]
+            for path in ("/api/cases", f"/api/cases/{case_id}", f"/api/cases/{case_id}/activity"):
+                with self.subTest(path=path):
+                    read = client.get(path, headers=self.headers(self.owner_token))
+                    self.assertEqual(read.status_code, 200, read.text)
+
+    def test_minimum_pool_poll_capacity_is_held_until_worker_finishes(self):
+        self.store.close()
+        self.store = PostgresStore(
+            self.settings.database_url, pool_min_size=0, pool_max_size=2, pool_timeout_seconds=0.1
+        )
+        self.addCleanup(self.store.close)
+        with self.client() as client:
+            case_id = self.submit(client).json()["id"]
+            service = client.app.state.service
+            paths = ("/api/cases", f"/api/cases/{case_id}", f"/api/cases/{case_id}/activity")
+            entered, release = Event(), Event()
+            original = service.read
+
+            def stalled(*args, **kwargs):
+                with self.store.connect() as connection:
+                    connection.execute("SELECT 1")
+                    entered.set()
+                    if not release.wait(10):
+                        raise TimeoutError("Test worker was not released.")
+                return original(*args, **kwargs)
+
+            with (
+                patch.object(service, "read", side_effect=stalled),
+                ThreadPoolExecutor(max_workers=1) as executor,
+            ):
+                future = executor.submit(
+                    client.get, paths[1], headers=self.headers(self.owner_token)
+                )
+                try:
+                    self.assertTrue(entered.wait(5))
+                    for path in paths:
+                        for _ in range(2):
+                            response = client.get(path, headers=self.headers(self.owner_token))
+                            self.assertEqual(response.status_code, 503)
+                    self.assertEqual(client.get(paths[1]).status_code, 401)
+                    with self.store.connect() as connection:
+                        connection.execute("SELECT 1")
+                        with self.assertRaisesRegex(TimeoutError, "pool is exhausted"):
+                            with self.store.connect():
+                                self.fail("A third connection exceeded the pool maximum.")
+                finally:
+                    release.set()
+                self.assertEqual(future.result(timeout=10).status_code, 200)
+            for path in paths:
+                self.assertEqual(
+                    client.get(path, headers=self.headers(self.owner_token)).status_code, 200
+                )
+            stranger = self.tokens.token(subject=STRANGER, scopes="workflow.read")
+            self.assertEqual(client.get(paths[1], headers=self.headers(stranger)).status_code, 403)
+
     def test_poll_stalls_reserve_pool_capacity_until_worker_finishes(self):
         self.store.close()
         self.store = PostgresStore(

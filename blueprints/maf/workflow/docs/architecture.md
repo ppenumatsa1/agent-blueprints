@@ -89,16 +89,21 @@ DNS hangs, TLS/network black holes, and process-wide shutdown are not proven
 bounded.
 
 The case, activity, and history GET handlers share a nonblocking, per-store
-polling admission limit of `min(4, max(0, pool_max_size - 2))` for PostgreSQL
-stores, including the generated Order Resolution store. At capacity they
-return 503 after authentication. A slot stays occupied until the synchronous
-handler actually exits, even if its caller stops waiting. The two remaining
-pool slots accommodate the standard local workflow's advisory-lock connection
-and a nested business transaction, but are not exclusively reserved: other
-business traffic can also exhaust the pool. At the supported minimum pool size
-of two, all three reads return 503; configure at least three for polling.
-Tests reproduce exhaustion without admission and exercise repeated stalled
-reads, rejection, cleanup and generated Order Resolution with local PostgreSQL.
+polling admission limit for PostgreSQL stores, including the generated Order
+Resolution store. At the supported minimum pool size of two, one read is
+admitted so healthy polling remains available. This is a compatibility
+exception, not a two-connection business reservation: a stalled read can
+leave only one connection, while the standard local workflow needs one for its
+advisory lock and another for a nested transaction. In a disposable PostgreSQL
+reproduction, a simulated stalled read caused a business submission to time
+out. Configure at least three connections to leave two outside the polling
+limit; at sizes of three or more the limit is `min(4, pool_max_size - 2)`.
+Those two slots are not exclusively reserved: other traffic can still exhaust
+the pool. At capacity reads return 503 after authentication. A slot stays
+occupied until the synchronous handler actually exits, even if its caller
+stops waiting. Tests exercise repeated stalled reads, rejection, cleanup and
+generated Order Resolution with local PostgreSQL; simulated stalls hold
+connections but do not reproduce network black holes.
 This is containment, not cancellation or an I/O deadline: a stalled worker
 and connection can remain occupied indefinitely. Authentication occurs before
 admission and can itself stall. Non-PostgreSQL stores remain unchanged; custom

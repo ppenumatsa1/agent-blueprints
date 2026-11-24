@@ -114,9 +114,13 @@ class PostgresStore:
             open_connection=self._open_connection,
             checkout_failure=self._record_checkout_failure,
         )
-        self._poll_read_slots = BoundedSemaphore(
-            min(MAX_CONCURRENT_POLL_READS, max(0, pool_max_size - BUSINESS_POOL_RESERVATION))
+        # Preserve reads at the supported minimum, without a two-connection reservation.
+        poll_limit = (
+            1
+            if pool_max_size == 2
+            else min(MAX_CONCURRENT_POLL_READS, max(0, pool_max_size - BUSINESS_POOL_RESERVATION))
         )
+        self._poll_read_slots = BoundedSemaphore(poll_limit)
         self.telemetry = None
 
     @classmethod

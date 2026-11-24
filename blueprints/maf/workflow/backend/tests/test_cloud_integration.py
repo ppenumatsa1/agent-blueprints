@@ -186,7 +186,7 @@ class CloudConfigurationTests(unittest.TestCase):
         pool.close()
 
     def test_poll_read_limits_follow_pool_size_and_release_on_error(self):
-        for size, limit in ((1, 0), (2, 0), (3, 1), (4, 2), (8, 4), (32, 4)):
+        for size, limit in ((1, 0), (2, 1), (3, 1), (4, 2), (5, 3), (6, 4), (8, 4), (32, 4)):
             with self.subTest(pool_size=size):
                 store = PostgresStore("postgresql://localhost/test", pool_max_size=size)
                 with ExitStack() as stack:

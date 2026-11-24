@@ -153,6 +153,31 @@ class OrderResolutionApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200, response.text)
         return response.json()
 
+    def test_healthy_poll_reads_at_minimum_pool_size(self):
+        self.store.close()
+        self.store = OrderResolutionStore(
+            self.settings.database_url, pool_max_size=2, pool_timeout_seconds=1
+        )
+        self.addCleanup(self.store.close)
+        with self.client() as client:
+            record = self.submit(client, payload("POLL-MIN", "185.00", 5, [late_policy()]))
+            service = client.app.state.service
+            self.assertIsInstance(service, OrderResolutionService)
+            case_id = record["id"]
+            paths = ("/api/cases", f"/api/cases/{case_id}", f"/api/cases/{case_id}/activity")
+            self.assertEqual(
+                client.get(
+                    paths[2] + "/stream", headers=self.headers(self.owner_token)
+                ).status_code,
+                503,
+            )
+            for path in paths:
+                with self.subTest(path=path):
+                    response = client.get(path, headers=self.headers(self.owner_token))
+                    self.assertEqual(response.status_code, 200, response.text)
+            stranger = self.tokens.token(subject=str(uuid4()), scopes="workflow.read")
+            self.assertEqual(client.get(paths[1], headers=self.headers(stranger)).status_code, 403)
+
     def test_poll_stalls_leave_order_resolution_business_capacity(self):
         self.store.close()
         self.store = OrderResolutionStore(

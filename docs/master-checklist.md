@@ -18,18 +18,27 @@ prototype objective has not yet been measured.
 shared-pool starvation without read admission and exercise bounded synchronous
 GET admission, repeated stalls, fail-closed 503s, cancellation of a waiter,
 real worker completion, business submission and rejection. The generated Order
-Resolution path is also exercised. The limit is per store, at most four, and
-leaves two pool slots outside polling; a pool of two cannot serve these reads.
-On local PostgreSQL 17.12, focused source tests pass 4/4 and generated profile
-tests pass 2/2; full source and independent base suites pass 168 each and the
-independent profile passes 235 with one real-provider opt-in skip, using the
-Windows selector event loop. Instantiation tests pass 8/8; generated base and
-profile Ruff checks pass. Default Windows Proactor runs failed in all three
-suites (each two Psycopg async errors and one stream assertion failure); the
-selector reruns do not erase those failures. This does not terminate stalled
-threads, guarantee business availability under other traffic, or prove custom
-adapters, managed identity or network black-hole recovery. Exact-head CI is
-pending.
+Resolution path is also exercised. The limit is per store and at most four.
+At the supported minimum pool size of two, one read is admitted for
+compatibility; one stalled read can leave too few connections for the standard
+business workflow. A local reproduction showed a submission timeout while a
+simulated stall held a pool connection. At sizes of three or more, the limit
+leaves two pool slots outside polling, but they are not reserved against other
+traffic. Configure at least three for that limited protection.
+
+On local PostgreSQL 17.12, the minimum-size correction passes six focused
+source tests, six in an independently generated base project, and nine in an
+independently generated Order Resolution project; both generated Ruff checks
+pass. These include healthy minimum-size reads, the single-slot boundary and
+release, and size-four business continuity. On the preceding head, full source
+and independent base suites passed 168 each, and the independent profile
+passed 235 with one real-provider opt-in skip, using the Windows selector
+event loop; instantiation tests passed 8/8. Default Windows Proactor runs
+failed in all three suites (each two Psycopg async errors and one stream
+assertion failure); the selector reruns do not erase those failures. This does
+not terminate stalled threads, guarantee business availability under other
+traffic, or prove custom adapters, managed identity or network black-hole
+recovery. Exact-head CI is pending.
 
 Next action: review the draft and its exact-head CI; separately address bounded
 I/O, authentication stalls, network recovery and production capacity.
