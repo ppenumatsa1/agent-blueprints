@@ -2,7 +2,8 @@
 
 ## UX stack Layer 3: authenticated live activity
 
-**In progress; exact-parent integration and draft CI pending.** A bounded
+**In progress; rebased on PR #51 head
+`14a709e0f682db3776e92ed9cdc194369fecaf47`; draft CI pending.** A bounded
 SSE channel emits privacy-safe refresh signals after token and per-case policy
 revalidation. React uses bearer fetch and independently authorized activity
 reads to reconcile whole snapshots, avoiding the false assumption that audit
@@ -14,17 +15,16 @@ MSAL operation is not cancelled. Scans start at most every 15 seconds and stop
 at 50 pages or 60 seconds, displaying an explicit limit error. This is eventually reconciled activity, not
 an exactly-once stream or a point-in-time snapshot under concurrent writes.
 
-An isolated PostgreSQL 17 source core/security suite passes 44 tests,
-including late-commit and stream authorization checks; independently generated
-base and profile backends each pass five focused tests. Source frontend passes
-38 tests, build and history/browser specs; CSP passed before the liveness
-change. Earlier generated base and
-profile frontend runs passed 25 and 27 tests, builds and browser specs;
-they predate the final capability-gating change. Required isolated repository
-validation passes 105 tests with two adapter-selection skips. Fresh generated
-verification after the corrected parent rebase and exact-head CI remain pending. The inherited
-profile telemetry fixture mismatch is not changed or relabeled. Next action:
-complete those checks and open the stacked draft; do not merge or deploy.
+Rebased focused checks pass 33 UI tests, build and both history browser specs,
+plus six stream-security tests and backend lint. Before rebase, isolated
+PostgreSQL 17 CI-selected generated base/profile backend suites passed 128
+and 177 tests (one profile opt-in skip), and generated UI suites passed 38 and
+40 tests, builds and browser specs. The isolated repository suite passed 105
+tests with two adapter-selection skips. Fresh generated and exact-head checks
+remain pending. The inherited profile telemetry fixture mismatch is unchanged.
+Timed-out synchronous identity/database workers cannot be cancelled by the
+stream and may hold a pooled connection until they return. Next action: open
+the draft, finish verification, and do not merge or deploy.
 
 ## UX stack Layer 1: reusable workflow studio shell
 

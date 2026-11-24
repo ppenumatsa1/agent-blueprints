@@ -39,7 +39,6 @@ export function ActivityTimeline({ caseId, client, profile, refreshKey = 0 }: Ac
     const controller = new AbortController();
     loadMoreController.current?.abort();
     loadingMoreRef.current = false;
-    setLoadingMore(false);
     ready.current = false;
     setItems([]);
     setCursor(null);
