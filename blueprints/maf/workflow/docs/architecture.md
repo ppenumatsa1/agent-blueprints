@@ -298,9 +298,12 @@ Applications may provide `syntheticManualTests` and enable `manualTests` for
 development. Each function receives no workflow client and runs only on an
 explicit click. Return a real pass/fail and safe summary; failures and thrown
 errors are not converted to successes. Application code is trusted, not
-sandboxed: authors must use synthetic fixtures only and prohibit network and
-business effects. The standard production build excludes the manual-test UI;
-it is not a production endpoint or an authorization bypass. Applications must
+sandboxed: not passing a client does not prevent network access or real
+business effects. Authors must use synthetic fixtures and a separately
+isolated synthetic development backend; the blueprint does not enforce this
+isolation. Production builds exclude the manual-test UI without an opt-in,
+because a build flag cannot sandbox code in an authenticated browser origin.
+It is not a production endpoint or an authorization bypass. Applications must
 not import their test adapters into production entrypoints. Neither adapter
 establishes release evidence or changes authentication, idempotency, or
 business state.

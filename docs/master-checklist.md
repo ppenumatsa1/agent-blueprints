@@ -19,7 +19,7 @@ prototype objective has not yet been measured.
 | Acceptance criterion | Evidence and limits |
 | --- | --- |
 | Safe evidence | An optional typed profile projection displays text only for an already selected authorized case. The application must explicitly allowlist safe values; the UI neither fetches evidence nor verifies the projection's privacy. |
-| Synthetic manual tests | Application-owned synthetic tests are explicitly invoked, receive no workflow client, report failures, and are excluded from the standard production build. Their code is trusted, not sandboxed; owners must prevent real effects and network access. |
+| Synthetic manual tests | Application-owned synthetic tests are explicitly invoked, receive no workflow client, report failures, and are excluded from production builds; production opt-in is not supported. Their code is trusted, not sandboxed: not passing a client does not prevent real effects. Use a separately isolated synthetic development backend; the blueprint does not enforce that isolation or prohibit network access. |
 | Isolation | Missing, disabled, throwing, or failed adapters leave the base workflow usable; focused adapter and accessibility tests cover these boundaries. |
 | Standalone and browser | Browser and independently generated build/test checks are pending. Existing protected local/live specs remain unchanged. |
 

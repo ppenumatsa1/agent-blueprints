@@ -16,9 +16,12 @@ the application must allowlist safe fields and must not return raw model,
 tool, checkpoint, actor or sensitive payload data. The shell performs no
 additional fetch and cannot verify that application-supplied values are safe.
 Manual tests run only after a click in development, with no workflow client
-passed in; standard production builds omit the test UI. Application code is
-trusted rather than sandboxed, so its owner must ensure fixtures are synthetic
-and test functions have no network or business effects. Errors are visible
+passed in; production builds omit the test UI and do not support opt-in,
+because a build flag cannot sandbox code running in an authenticated browser
+origin. Application code is trusted rather than sandboxed, and omitting the
+client cannot prevent network access or real effects. Manual tests require a
+separately isolated synthetic development backend; the blueprint does not
+enforce this isolation. Owners must ensure fixtures are synthetic. Errors are visible
 without disabling the base workflow. This is not authorization, artifact
 verification, or evidence of production readiness.
 

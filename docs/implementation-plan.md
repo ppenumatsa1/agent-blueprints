@@ -8,9 +8,13 @@ project explicitly allowlisted evidence as text from an already authorized
 selected case, or expose explicitly initiated synthetic tests in development.
 The base makes no evidence request and provides no workflow client to test
 adapters. Adapter code is trusted application code, not a sandbox: owners
-must enforce safe projections, synthetic data and no business or network
-effects. Default profiles disable both, and the standard production build
-excludes the manual-test UI. Adapter errors are surfaced without preventing
+must enforce safe projections and synthetic data. Manual tests require a
+separately isolated synthetic development backend; the blueprint does not
+enforce isolation or prevent network access and real effects. Not passing a
+workflow client is not a security boundary. Default profiles disable both,
+and production builds exclude the manual-test UI without an opt-in: a build
+flag alone cannot confine code running in an authenticated browser origin.
+Adapter errors are surfaced without preventing
 the normal workflow. Focused UI checks are available; generated-project,
 browser and exact-head CI verification remain pending. Next: finish those
 checks and retain draft status.
