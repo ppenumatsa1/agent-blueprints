@@ -10,6 +10,7 @@ import { HistorySidebar } from "./history-sidebar";
 import { RequestComposer } from "./request-composer";
 import { EvidencePanel } from "./evidence-panel";
 import { OptionalBoundary } from "./optional-boundary";
+import { ProtocolContextPanel } from "./protocol-context-panel";
 
 const SyntheticManualTests = import.meta.env.DEV
   ? lazy(() => import("./synthetic-manual-tests").then((module) => ({ default: module.SyntheticManualTests })))
@@ -190,6 +191,7 @@ export function StudioShell({
                 )}
                 <CaseMetadataPanel record={record} status={status} profile={profile} />
                 <CaseSummaryPanel record={record} profile={profile} />
+                <ProtocolContextPanel key={record.id} record={record} profile={profile} />
                 {profile.capabilities.evidence && profile.projectEvidence && (
                   <EvidencePanel record={record} project={profile.projectEvidence} />
                 )}

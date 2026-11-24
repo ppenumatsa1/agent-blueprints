@@ -11,6 +11,21 @@ The original [interactive architecture](software-factory.html) is a preserved
 historical source; this checklist records current status. The 2–3 hour
 prototype objective has not yet been measured.
 
+## UX stack Layer 5: read-only protocol context
+
+**Status: In Progress.** Stacked on PR #53 head
+`3bdf2646095383583445e0cea04d34d0658c694f`.
+
+| Acceptance criterion | Evidence and limitations |
+| --- | --- |
+| Explicit, limited context | Each installed adapter requires a click for a selected authorized case. Only a validated status enum is provided; a consumer may transmit it on a later agent run. No workflow client, IDs, payload, prompt, output, or tool contents are provided. |
+| Protocol boundary | AG-UI `Context` input and CopilotKit v2 context hook integration points only; no agent run, events, tools, mutations, or protocol-conformance claim. Trusted adapter code is not sandboxed; cleanup cannot be enforced. |
+| Failure isolation and accessibility | Focused synthetic unit/axe, failure, and browser checks pass; adapters cannot be sandboxed and cleanup can fail. |
+| Independence and evidence | Default dependencies contain no optional protocol packages. A separate local check type-checks and exercises AG-UI core 1.0.4's schema and CopilotKit React core 2.0.0-rc.53's actual hook against a synthetic consumer; no real provider or remote service is verified. Clean generated base/profile and exact-head CI remain pending; preserved local/live E2E specs must remain unchanged. |
+
+Next action: complete validation and open a stacked draft, without merging or
+deploying. The inherited profile telemetry fixture mismatch remains disclosed.
+
 ## UX stack Layer 4: optional studio adapters
 
 **Status: In Progress.** Stacked on PR #52 head

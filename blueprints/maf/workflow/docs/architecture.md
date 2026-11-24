@@ -69,6 +69,52 @@ wall-clock deadline cannot cancel a blocked synchronous identity/database
 worker; a borrowed connection can remain occupied until the worker returns,
 within the existing pool bound.
 
+## Optional protocol context
+
+The studio has opt-in, read-only context integration points. For a selected
+case already returned by the authorized case API, it constructs an AG-UI
+`Context` entry containing only a fixed description and JSON-encoded
+allowlisted status enum. No ID, payload, checkpoint, actor, prompt, model
+output, tool content, client, or mutation callback is passed. The user must
+explicitly enable each configured integration for that selection; it is
+disabled by default and the UI requests cleanup on stop, case change, or
+sign-out. An invalid status is rejected. Status itself may be sensitive:
+the configured consumer can transmit it to an agent or service on a later run.
+
+The optional `createAgUiContextAdapter(register)` registers this entry with
+an application-owned local consumer, whose returned function unregisters it.
+It is the `Context` input shape from [AG-UI 1.0](https://docs.ag-ui.com/sdk/js/core/types),
+not an event stream, transport, agent run, or claim of protocol conformance.
+No events are fabricated. For CopilotKit v2, an application that explicitly
+installs and configures its provider can pass the documented
+[`useAgentContext`](https://docs.copilotkit.ai/reference/v2/hooks/useAgentContext)
+to `createCopilotKitContextAdapter`; the hook registers the context until
+unmount. No optional package is needed by the default application.
+
+For example, after explicitly installing and configuring CopilotKit v2 and
+its provider, the application composition root can import
+`useAgentContext` from `@copilotkit/react-core` and set
+`protocolAdapters.copilotKit = createCopilotKitContextAdapter(useAgentContext)`,
+alongside `capabilities.copilotKit = true`. The AG-UI registration receives
+the `{ description, value }` context entry and must return a cleanup function;
+its consumer decides how to use that entry in a future separately authorized
+run. The adapters themselves have no run or transport interface.
+The installed `@copilotkit/react-core@2.0.0-rc.53` prerelease exports this
+hook from its package root; despite current documentation, that release does
+not export the `/v2` subpath. Check the actual package exports when upgrading.
+
+Adapter and provider code is trusted application code, not a sandbox. Owners
+must ensure the provider and registration/cleanup do not cause automatic
+network or model calls, retain data after revocation, register tools, or
+perform mutations. Cleanup is requested, not verifiably enforced; removal
+failure is logged generically. Configure an independently authorized endpoint
+and data handling before any later run. A protocol integration does not grant
+case access, verify authorization, or replace the normal approval workflow.
+Local verification used `@ag-ui/core@1.0.4`'s `ContextSchema` and the real
+`@copilotkit/react-core@2.0.0-rc.53` hook against a synthetic in-process
+consumer. This does not establish real provider configuration, remote
+service, model, event-stream, or production compatibility.
+
 ## Typed MAF extension patterns
 
 Hosted composition is a separate infrastructure adapter, not a second
