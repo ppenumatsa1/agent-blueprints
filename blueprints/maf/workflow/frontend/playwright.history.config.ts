@@ -4,7 +4,7 @@ const baseURL = "http://127.0.0.1:4175";
 
 export default defineConfig({
   testDir: "./e2e",
-  testMatch: ["history.spec.ts", "activity-live.spec.ts"],
+  testMatch: ["history.spec.ts", "activity-live.spec.ts", "optional-adapters.spec.ts"],
   outputDir: "test-results-history",
   workers: 1,
   retries: 0,

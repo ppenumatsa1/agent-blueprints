@@ -1,5 +1,20 @@
 # Phased implementation plan
 
+## UX stack Layer 4: optional evidence and synthetic tests
+
+**In progress; stacked on PR #52** at
+`f16a4f504f3a80f98819a8750058cabf6778559d`. Typed optional profile adapters
+project explicitly allowlisted evidence as text from an already authorized
+selected case, or expose explicitly initiated synthetic tests in development.
+The base makes no evidence request and provides no workflow client to test
+adapters. Adapter code is trusted application code, not a sandbox: owners
+must enforce safe projections, synthetic data and no business or network
+effects. Default profiles disable both, and the standard production build
+excludes the manual-test UI. Adapter errors are surfaced without preventing
+the normal workflow. Focused UI checks are available; generated-project,
+browser and exact-head CI verification remain pending. Next: finish those
+checks and retain draft status.
+
 ## UX stack Layer 3: authenticated live activity
 
 **In progress; rebased on PR #51 head

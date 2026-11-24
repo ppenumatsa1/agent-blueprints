@@ -8,6 +8,20 @@ contracts and documented engineering patterns where they have demonstrated
 value; do not hide MAF, LangGraph, or a harness behind a universal runtime.
 Generated projects must not import this repository at runtime.
 
+## Optional studio projections
+
+Layer 4 adds opt-in, application-owned typed evidence and synthetic-test
+adapters. Evidence is rendered as text after authorized case selection;
+the application must allowlist safe fields and must not return raw model,
+tool, checkpoint, actor or sensitive payload data. The shell performs no
+additional fetch and cannot verify that application-supplied values are safe.
+Manual tests run only after a click in development, with no workflow client
+passed in; standard production builds omit the test UI. Application code is
+trusted rather than sandboxed, so its owner must ensure fixtures are synthetic
+and test functions have no network or business effects. Errors are visible
+without disabling the base workflow. This is not authorization, artifact
+verification, or evidence of production readiness.
+
 ## Live activity reconciliation
 
 The Layer 3 stream is an authenticated, case-authorized invalidation channel,

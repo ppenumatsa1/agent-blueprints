@@ -11,6 +11,22 @@ The original [interactive architecture](software-factory.html) is a preserved
 historical source; this checklist records current status. The 2–3 hour
 prototype objective has not yet been measured.
 
+## UX stack Layer 4: optional studio adapters
+
+**Status: In Progress.** Stacked on PR #52 head
+`f16a4f504f3a80f98819a8750058cabf6778559d`; draft and exact-head CI pending.
+
+| Acceptance criterion | Evidence and limits |
+| --- | --- |
+| Safe evidence | An optional typed profile projection displays text only for an already selected authorized case. The application must explicitly allowlist safe values; the UI neither fetches evidence nor verifies the projection's privacy. |
+| Synthetic manual tests | Application-owned synthetic tests are explicitly invoked, receive no workflow client, report failures, and are excluded from the standard production build. Their code is trusted, not sandboxed; owners must prevent real effects and network access. |
+| Isolation | Missing, disabled, throwing, or failed adapters leave the base workflow usable; focused adapter and accessibility tests cover these boundaries. |
+| Standalone and browser | Browser and independently generated build/test checks are pending. Existing protected local/live specs remain unchanged. |
+
+Next action: finish generated-project and exact-head CI verification; do not
+merge or deploy. The inherited profile telemetry fixture mismatch remains
+unmodified and broader profile backend success is not claimed.
+
 ## UX stack Layer 3: live activity
 
 **Status: In Progress.** This work is rebased on PR #51 head
