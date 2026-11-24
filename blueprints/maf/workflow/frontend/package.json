@@ -10,6 +10,7 @@
     "test": "vitest run",
     "e2e:local": "playwright test e2e/local.spec.ts",
     "e2e:studio": "playwright test --config playwright.studio.config.ts",
+    "e2e:history": "playwright test --config playwright.history.config.ts",
     "e2e:live": "playwright test e2e/live.spec.ts",
     "check-csp": "node scripts/check-csp.mjs"
   },

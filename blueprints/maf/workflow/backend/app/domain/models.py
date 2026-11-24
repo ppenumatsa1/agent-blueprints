@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, ContextManager, Literal, Protocol
 from uuid import UUID
 
@@ -32,6 +33,29 @@ class Case:
     failure_code: str | None
 
 
+@dataclass(frozen=True)
+class HistoryCandidate:
+    case: Case
+    created_at: datetime
+    updated_at: datetime
+
+
+@dataclass(frozen=True)
+class CaseHistory:
+    id: UUID
+    status: str
+    decision: Decision | None
+    created_at: datetime
+    updated_at: datetime
+
+
+@dataclass(frozen=True)
+class DurableActivity:
+    cursor_id: int
+    event_type: str
+    created_at: datetime
+
+
 class BusinessRules(Protocol):
     def validate(self, payload: dict[str, Any]) -> dict[str, Any]: ...
 
@@ -56,6 +80,14 @@ class StateRepository(Protocol):
     def connect(self) -> Connection: ...
 
     def get(self, case_id: UUID) -> Case: ...
+
+    def list_history(
+        self, actor: Principal, status: str | None, cursor: Any, limit: int
+    ) -> tuple[list[HistoryCandidate], bool]: ...
+
+    def list_activity(
+        self, actor: Principal, case_id: UUID, cursor: Any, limit: int
+    ) -> tuple[list[DurableActivity], bool]: ...
 
     def create(
         self,

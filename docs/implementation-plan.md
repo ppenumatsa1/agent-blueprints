@@ -34,6 +34,71 @@ Vite chunk-size warning remains non-blocking and is not relabeled as a pass.
 Next action: obtain exact-head CI on the stacked draft PR and keep later UX
 layers separate.
 
+## UX stack Layer 2: authorized history and activity
+
+**Implemented locally; draft PR #51 is open and the authorization/pagination
+correction is locally verified; exact-head CI passed.** This increment is a
+distinct draft PR stacked directly above PR #50's
+`ppenumatsa1-ux-layer-1-studio-shell` branch. It reuses the PostgreSQL
+`wf_cases` owner/reviewer/tenant fields and committed `wf_audit` events; it
+does not add a competing business-state store or inspect MAF checkpoint
+contents. Case history uses bounded keyset pagination and optional status
+filtering. Fixed SQL tenant/owner/reviewer predicates scope candidates; the
+configured `AccessPolicy.authorize_read` is then applied to complete internal
+records before public pagination is calculated. At most 1,000 candidates are
+authorized per request over 10 batches of at most 100; if more candidates
+remain before the authorized page is complete, the service returns a generic
+503 without partial items or a cursor. Permitted records are not silently
+dropped, and no application policy input is translated into SQL. Record
+activity first follows
+the configured case-read policy and repeats the same SQL authorization
+predicate. Responses omit payloads, actor
+identifiers, request/checkpoint identifiers, prompts, model output, and tool
+content. Only explicitly mapped audit event names are returned; unknown and
+Order Resolution-specific audit rows are not exposed by the generic endpoint.
+
+The React profile supplies generic history/activity labels and event text. The
+sidebar and timeline use the existing scoped HTTP client, validate the
+versioned response shapes, and discard stale responses when the filter or
+selected case changes. Existing `/api/cases/{id}` and decision behavior remain
+unchanged. No migration is needed because the required generic tables and
+columns already exist in the immutable baseline. No cloud changes, streaming,
+evidence, manual-test, AG-UI, or CopilotKit work is included.
+
+Local evidence for this correction: six focused PostgreSQL authorization/
+privacy/status/cursor/event/budget tests and all 136 source backend tests pass. The
+stricter-policy regression denies owner- and reviewer-accessible cases and
+verifies that items, cursors, and empty-page metadata include only
+policy-authorized records. A 1,001-candidate deny-all test verifies that the
+1,000-candidate limit raises an explicit typed error; the API maps it to a
+generic 503 with no partial page or cursor. An existing within-budget
+regression verifies successful pagination across denied candidates. The
+focused six-test PostgreSQL/security selection, full 136-test backend suite,
+and isolated 105-test repository suite pass. Exact-head CI run
+[45294440225](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/45294440225)
+passed all seven jobs on `bfcbe1e6ee31945942c45422799374ddb026aeb1`.
+Frontend unit/axe tests pass (21), as do the production build, CSP check, and
+the source history/studio production-browser specs. Deferred frontend tests
+verify that new history-filter and activity-case generations clear stale
+load-more state. The required isolated repository suite passes 105 tests with
+two documented adapter-selection skips. Prior generated base/Order Resolution
+verification suites passed 52 and 61 tests, and generated Order Resolution
+hosted-agent tests passed 63; exact-head CI passed all generated validation.
+PR #49's existing local/live E2E files remain unchanged byte-for-byte
+against the parent. Vite continues to report a >500 kB bundle warning.
+
+The generated Order Resolution backend suite ran 190 tests, with two explicit
+skips (Agent A source opt-in and real-provider evaluation opt-in) and one
+pre-existing unrelated failure:
+`test_live_client_uses_response_correlation_id_for_telemetry_pair` expects a
+telemetry projection without `http_status`, while the current client includes
+it. The history/activity tests pass. Do not suppress or relabel this failure;
+exact-head CI passed, and this local gap remains disclosed in the draft PR.
+No Azure state, streaming, evidence, manual-test, AG-UI, or CopilotKit work is
+included. **Next action:** obtain human review of PR #51; retain disclosure of
+the inherited local generated Order Resolution test failure. Do not merge or
+enable auto-merge.
+
 ## Local Azure/Foundry integration checkpoint
 
 **Completed locally, validated, and partially provisioned for E2E.** The C -> A -> B -> D integration from

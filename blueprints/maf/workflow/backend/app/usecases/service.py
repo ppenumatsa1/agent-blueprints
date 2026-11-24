@@ -4,16 +4,30 @@ import re
 from typing import Any
 from uuid import UUID
 
-from app.domain.errors import InvalidInput
+from app.domain.errors import AccessDenied, HistoryScanLimitExceeded, InvalidInput
 from app.domain.models import (
     AccessPolicy,
     BusinessRules,
     Case,
+    CaseHistory,
     Decision,
     Principal,
     StateRepository,
     WorkflowHost,
 )
+from app.usecases.history import (
+    ActivityPage,
+    CursorPosition,
+    HistoryPage,
+    activity_page,
+    decode_activity_cursor,
+    decode_history_cursor,
+    history_page,
+)
+
+HISTORY_CANDIDATE_BATCH_SIZE = 100
+HISTORY_CANDIDATE_SCAN_BUDGET = 1000
+HISTORY_CANDIDATE_BATCH_BUDGET = HISTORY_CANDIDATE_SCAN_BUDGET // HISTORY_CANDIDATE_BATCH_SIZE
 
 
 class WorkflowService:
@@ -53,6 +67,93 @@ class WorkflowService:
         case = self.store.get(case_id)
         self.policy.authorize_read(actor, case)
         return case
+
+    def history(
+        self,
+        actor: Principal,
+        *,
+        status: str | None,
+        cursor: str | None,
+        limit: int,
+    ) -> HistoryPage:
+        if "workflow.read" not in actor.scopes:
+            raise AccessDenied("Record access is not authorized.")
+        if not 1 <= limit <= 100:
+            raise InvalidInput("The history page size is invalid.")
+        if status is not None and status not in (
+            "created",
+            "pending",
+            "approved",
+            "rejected",
+            "completed",
+            "failed",
+        ):
+            raise InvalidInput("The history status is invalid.")
+        position = decode_history_cursor(cursor, status)
+        candidate_cursor = position
+        items: list[CaseHistory] = []
+        has_more = False
+        scanned_candidates = 0
+        scanned_batches = 0
+        while len(items) <= limit:
+            remaining_budget = HISTORY_CANDIDATE_SCAN_BUDGET - scanned_candidates
+            if remaining_budget <= 0:
+                raise HistoryScanLimitExceeded()
+            candidates, candidate_has_more = self.store.list_history(
+                actor,
+                status,
+                candidate_cursor,
+                min(HISTORY_CANDIDATE_BATCH_SIZE, remaining_budget),
+            )
+            scanned_batches += 1
+            if not candidates:
+                if candidate_has_more:
+                    raise HistoryScanLimitExceeded()
+                break
+            if len(candidates) > remaining_budget:
+                raise HistoryScanLimitExceeded()
+            scanned_candidates += len(candidates)
+            for candidate in candidates:
+                candidate_cursor = CursorPosition(candidate.created_at, candidate.case.id)
+                try:
+                    self.policy.authorize_read(actor, candidate.case)
+                except AccessDenied:
+                    continue
+                items.append(
+                    CaseHistory(
+                        id=candidate.case.id,
+                        status=candidate.case.status,
+                        decision=candidate.case.decision,
+                        created_at=candidate.created_at,
+                        updated_at=candidate.updated_at,
+                    )
+                )
+                if len(items) > limit:
+                    has_more = True
+                    break
+            if has_more or not candidate_has_more:
+                break
+            if (
+                scanned_candidates >= HISTORY_CANDIDATE_SCAN_BUDGET
+                or scanned_batches >= HISTORY_CANDIDATE_BATCH_BUDGET
+            ):
+                raise HistoryScanLimitExceeded()
+        return history_page(items[:limit], has_more, status)
+
+    def activity(
+        self,
+        actor: Principal,
+        case_id: UUID,
+        *,
+        cursor: str | None,
+        limit: int,
+    ) -> ActivityPage:
+        self.read(actor, case_id)
+        if not 1 <= limit <= 100:
+            raise InvalidInput("The activity page size is invalid.")
+        position = decode_activity_cursor(cursor)
+        items, has_more = self.store.list_activity(actor, case_id, position, limit)
+        return activity_page(items, has_more)
 
     async def decide(self, actor: Principal, case_id: UUID, decision: Decision) -> Case:
         case = self.store.get(case_id)

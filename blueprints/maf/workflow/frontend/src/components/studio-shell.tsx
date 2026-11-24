@@ -5,6 +5,8 @@ import type { WorkflowStudioProfile } from "../studio-profile";
 import { ApprovalPanel } from "./approval-panel";
 import { CaseMetadataPanel } from "./case-metadata-panel";
 import { CaseSummaryPanel } from "./case-summary-panel";
+import { ActivityTimeline } from "./activity-timeline";
+import { HistorySidebar } from "./history-sidebar";
 import { RequestComposer } from "./request-composer";
 
 export interface StudioShellProps {
@@ -36,7 +38,10 @@ export function StudioShell({
   const [record, setRecord] = useState<WorkflowCase | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [historyRefresh, setHistoryRefresh] = useState(0);
+  const [activityRefresh, setActivityRefresh] = useState(0);
   const submission = useRef<{ fingerprint: string; key: string } | null>(null);
+  const recordRequest = useRef(0);
 
   async function run(operation: () => Promise<void>) {
     setError("");
@@ -69,27 +74,45 @@ export function StudioShell({
         submission.current = { fingerprint, key: globalThis.crypto.randomUUID() };
       }
       const result = await client.submit(reviewer, data as Record<string, unknown>, submission.current.key);
+      recordRequest.current += 1;
       setRecord(result);
       setRecordId(result.id);
+      setHistoryRefresh((value) => value + 1);
     });
   }
 
   async function open(event: FormEvent) {
     event.preventDefault();
+    const requestNumber = ++recordRequest.current;
     await run(async () => {
       if (!uuid.test(recordId)) throw new WorkflowClientError("Enter a valid case ID.");
-      setRecord(await client.read(recordId));
+      setRecord(null);
+      const result = await client.read(recordId);
+      if (recordRequest.current === requestNumber) setRecord(result);
+    });
+  }
+
+  async function selectHistoryRecord(id: string) {
+    const requestNumber = ++recordRequest.current;
+    setRecordId(id);
+    setRecord(null);
+    await run(async () => {
+      const result = await client.read(id);
+      if (recordRequest.current === requestNumber) setRecord(result);
     });
   }
 
   async function decide(decision: "approved" | "rejected") {
     if (!record) return;
     const binding = profile.decisionBinding?.(record);
-    await run(async () => setRecord(
-      binding
+    await run(async () => {
+      const updated = binding
         ? await client.decide(record.id, decision, binding)
-        : await client.decide(record.id, decision),
-    ));
+        : await client.decide(record.id, decision);
+      setRecord(updated);
+      setHistoryRefresh((value) => value + 1);
+      setActivityRefresh((value) => value + 1);
+    });
   }
 
   const status = record?.status === "completed" && !record.execution_complete ? "recovering" : record?.status;
@@ -126,6 +149,16 @@ export function StudioShell({
             onPayloadChange={setPayload}
             onSubmit={(event) => void create(event)}
           />
+          {profile.capabilities.history && (
+            <HistorySidebar
+              profile={profile}
+              client={client}
+              selectedId={record?.id ?? null}
+              refreshKey={historyRefresh}
+              disabled={busy}
+              onSelect={(id) => void selectHistoryRecord(id)}
+            />
+          )}
           <section className="card">
             <h2>{profile.labels.openCase}</h2>
             <form onSubmit={open}>
@@ -144,6 +177,14 @@ export function StudioShell({
                 )}
                 <CaseMetadataPanel record={record} status={status} profile={profile} />
                 <CaseSummaryPanel record={record} profile={profile} />
+                {profile.capabilities.history && (
+                  <ActivityTimeline
+                    caseId={record.id}
+                    client={client}
+                    profile={profile}
+                    refreshKey={activityRefresh}
+                  />
+                )}
                 <ApprovalPanel
                   decision={record.decision}
                   pending={record.status === "pending" && record.decision === "pending"}

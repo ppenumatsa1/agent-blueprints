@@ -6,7 +6,14 @@ from psycopg.types.json import Jsonb
 
 from app.config import Settings
 from app.domain.errors import ActionError, Conflict, NotFound
-from app.domain.models import Case, Decision, Principal, TransactionalAction
+from app.domain.models import (
+    Case,
+    Decision,
+    DurableActivity,
+    HistoryCandidate,
+    Principal,
+    TransactionalAction,
+)
 from app.infrastructure.database import (
     BoundedConnectionPool,
     DatabaseConnectionOptions,
@@ -14,6 +21,7 @@ from app.infrastructure.database import (
     TokenProvider,
 )
 from app.infrastructure.telemetry import instrumented
+from app.usecases.history import CursorPosition
 
 
 _CASE_QUERY = """
@@ -22,6 +30,19 @@ _CASE_QUERY = """
     LEFT JOIN wf_decisions AS d ON d.case_id = c.id
     WHERE c.id = %s
 """
+_AUDIT_ACTIVITY_TYPES = {
+    "created": "created",
+    "checkpoint_saved": "review_requested",
+    "hosted_request_saved": "request_recorded",
+    "decision_recorded": "decision_recorded",
+    "action_applied": "action_applied",
+    "automatic_action_applied": "action_applied",
+    "action_failed": "action_failed",
+    "workflow_finished": "workflow_finished",
+    "hosted_workflow_finished": "workflow_finished",
+    "recovery_failed": "recovery_failed",
+    "resolution_failed": "workflow_failed",
+}
 
 
 def _case(row: dict) -> Case:
@@ -153,6 +174,93 @@ class PostgresStore:
         if row is None:
             raise NotFound("Record not found.")
         return _case(row)
+
+    @instrumented("database.history")
+    def list_history(
+        self,
+        actor: Principal,
+        status: str | None,
+        cursor: CursorPosition | None,
+        limit: int,
+    ) -> tuple[list[HistoryCandidate], bool]:
+        conditions = [
+            "c.tenant_id = %s",
+            "(c.owner_id = %s OR c.reviewer_id = %s)",
+        ]
+        parameters: list[object] = [actor.tenant_id, actor.subject, actor.subject]
+        if status is not None:
+            conditions.append("c.status = %s")
+            parameters.append(status)
+        if cursor is not None:
+            conditions.append("(c.created_at, c.id) < (%s, %s)")
+            parameters.extend((cursor.created_at, cursor.row_id))
+        query = f"""
+            SELECT c.*, d.decision
+            FROM wf_cases AS c
+            LEFT JOIN wf_decisions AS d ON d.case_id = c.id
+            WHERE {" AND ".join(conditions)}
+            ORDER BY c.created_at DESC, c.id DESC
+            LIMIT %s
+        """
+        parameters.append(limit + 1)
+        with self.connect() as connection:
+            rows = connection.execute(query, parameters).fetchall()
+        has_more = len(rows) > limit
+        entries = [
+            HistoryCandidate(
+                case=_case(row),
+                created_at=row["created_at"],
+                updated_at=row["updated_at"],
+            )
+            for row in rows[:limit]
+        ]
+        return entries, has_more
+
+    @instrumented("database.activity")
+    def list_activity(
+        self,
+        actor: Principal,
+        case_id: UUID,
+        cursor: CursorPosition | None,
+        limit: int,
+    ) -> tuple[list[DurableActivity], bool]:
+        conditions = [
+            "c.id = %s",
+            "c.tenant_id = %s",
+            "(c.owner_id = %s OR c.reviewer_id = %s)",
+            "a.event = ANY(%s)",
+        ]
+        parameters: list[object] = [
+            case_id,
+            actor.tenant_id,
+            actor.subject,
+            actor.subject,
+            list(_AUDIT_ACTIVITY_TYPES),
+        ]
+        if cursor is not None:
+            conditions.append("(a.created_at, a.id) < (%s, %s)")
+            parameters.extend((cursor.created_at, cursor.row_id))
+        query = f"""
+            SELECT a.id, a.event, a.created_at
+            FROM wf_audit AS a
+            JOIN wf_cases AS c ON c.id = a.case_id
+            WHERE {" AND ".join(conditions)}
+            ORDER BY a.created_at DESC, a.id DESC
+            LIMIT %s
+        """
+        parameters.append(limit + 1)
+        with self.connect() as connection:
+            rows = connection.execute(query, parameters).fetchall()
+        has_more = len(rows) > limit
+        entries = [
+            DurableActivity(
+                cursor_id=row["id"],
+                event_type=_AUDIT_ACTIVITY_TYPES[row["event"]],
+                created_at=row["created_at"],
+            )
+            for row in rows[:limit]
+        ]
+        return entries, has_more
 
     @instrumented("database.create")
     def create(

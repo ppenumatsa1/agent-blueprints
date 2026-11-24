@@ -217,9 +217,14 @@ class InstantiationTests(unittest.TestCase):
                 "backend/tests/test_evaluation.py",
                 "backend/tests/hosted_failure_runner.py",
                 "backend/tests/test_hosted_failure_runner.py",
+                "backend/app/usecases/history.py",
                 "frontend/playwright.config.ts",
                 "frontend/e2e/local.spec.ts",
                 "frontend/e2e/live.spec.ts",
+                "frontend/e2e/history.html",
+                "frontend/e2e/history-fixture.tsx",
+                "frontend/e2e/history.spec.ts",
+                "frontend/playwright.history.config.ts",
             ):
                 self.assertEqual(
                     (ROOT / "blueprints" / "maf" / "workflow" / relative).read_bytes(),
@@ -233,7 +238,10 @@ class InstantiationTests(unittest.TestCase):
                 "frontend/src/components/case-summary-panel.tsx",
                 "frontend/src/components/approval-panel.tsx",
                 "frontend/src/components/case-metadata-panel.tsx",
+                "frontend/src/components/history-sidebar.tsx",
+                "frontend/src/components/activity-timeline.tsx",
                 "frontend/src/test/profile.test.tsx",
+                "frontend/src/test/history.test.tsx",
                 "frontend/playwright.studio.config.ts",
                 "frontend/e2e/studio-shell.spec.ts",
             ):
@@ -458,6 +466,9 @@ class InstantiationTests(unittest.TestCase):
                 "backend/app/order_resolution/rules.py",
                 "backend/app/order_resolution/service.py",
                 "backend/app/order_resolution/workflow.py",
+                "backend/app/api/routes/cases.py",
+                "backend/app/api/schemas.py",
+                "backend/app/usecases/history.py",
                 "backend/order_resolution_hosted/__init__.py",
                 "backend/order_resolution_hosted/bridge.py",
                 "backend/order_resolution_hosted/client.py",
@@ -478,10 +489,22 @@ class InstantiationTests(unittest.TestCase):
                 "scripts/foundry/publish_order_resolution_hosted.py",
                 "backend/tests/test_order_resolution_real_provider.py",
                 "frontend/src/order-resolution.tsx",
+                "frontend/src/components/history-sidebar.tsx",
+                "frontend/src/components/activity-timeline.tsx",
+                "frontend/e2e/history.spec.ts",
+                "frontend/e2e/history-fixture.tsx",
                 "frontend/src/test/order-resolution.test.tsx",
                 "docs/order-resolution.md",
             ):
                 self.assertTrue((target / relative).is_file(), relative)
+            self.assertEqual(
+                (ROOT / "profiles" / "order-resolution" / "backend" / "app" / "api" / "routes" / "cases.py").read_bytes(),
+                (target / "backend" / "app" / "api" / "routes" / "cases.py").read_bytes(),
+            )
+            order_profile = (target / "frontend" / "src" / "order-resolution.tsx").read_text(
+                encoding="utf-8"
+            )
+            self.assertIn("history: true", order_profile)
             for name in instantiator.ORDER_RESOLUTION_API_BRIDGE_MODULES:
                 self.assertEqual(
                     (

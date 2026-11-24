@@ -1,5 +1,16 @@
 export type Decision = "pending" | "approved" | "rejected";
 export type Scope = "read" | "write" | "approve";
+export type WorkflowStatus = "created" | "pending" | "approved" | "rejected" | "completed" | "failed";
+export type ActivityType =
+  | "created"
+  | "review_requested"
+  | "request_recorded"
+  | "decision_recorded"
+  | "action_applied"
+  | "action_failed"
+  | "workflow_finished"
+  | "recovery_failed"
+  | "workflow_failed";
 
 export interface WorkflowCase {
   id: string;
@@ -10,6 +21,31 @@ export interface WorkflowCase {
   decision_handle?: string | null;
   execution_complete: boolean;
   failure_code: string | null;
+}
+
+export interface WorkflowHistoryItem {
+  id: string;
+  status: WorkflowStatus;
+  decision: Decision;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WorkflowHistoryPage {
+  schema_version: "workflow-history/1";
+  items: WorkflowHistoryItem[];
+  next_cursor: string | null;
+}
+
+export interface WorkflowActivityItem {
+  type: ActivityType;
+  created_at: string;
+}
+
+export interface WorkflowActivityPage {
+  schema_version: "workflow-activity/1";
+  items: WorkflowActivityItem[];
+  next_cursor: string | null;
 }
 
 export interface DecisionBinding {
@@ -23,6 +59,12 @@ export interface DecisionBinding {
 export interface WorkflowClient {
   submit(reviewer: string, payload: Record<string, unknown>, idempotencyKey: string): Promise<WorkflowCase>;
   read(id: string): Promise<WorkflowCase>;
+  listHistory(options?: {
+    status?: WorkflowStatus;
+    limit?: number;
+    cursor?: string;
+  }): Promise<WorkflowHistoryPage>;
+  activity(id: string, options?: { limit?: number; cursor?: string }): Promise<WorkflowActivityPage>;
   decide(
     id: string,
     decision: "approved" | "rejected",
@@ -64,14 +106,80 @@ function isWorkflowCase(value: unknown): value is WorkflowCase {
   );
 }
 
+const workflowStatuses: WorkflowStatus[] = ["created", "pending", "approved", "rejected", "completed", "failed"];
+const activityTypes: ActivityType[] = [
+  "created",
+  "review_requested",
+  "request_recorded",
+  "decision_recorded",
+  "action_applied",
+  "action_failed",
+  "workflow_finished",
+  "recovery_failed",
+  "workflow_failed",
+];
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const timestampPattern = /^\d{4}-\d{2}-\d{2}T.*(?:Z|[+-]\d{2}:\d{2})$/;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function hasExactKeys(value: Record<string, unknown>, expected: string[]): boolean {
+  return Object.keys(value).length === expected.length && expected.every((key) => key in value);
+}
+
+function isTimestamp(value: unknown): value is string {
+  return typeof value === "string" && timestampPattern.test(value) && Number.isFinite(Date.parse(value));
+}
+
+function isCursor(value: unknown): value is string | null {
+  return value === null || (typeof value === "string" && value.length > 0 && value.length <= 512);
+}
+
+function isHistoryPage(value: unknown): value is WorkflowHistoryPage {
+  if (!isRecord(value) || !hasExactKeys(value, ["schema_version", "items", "next_cursor"])) return false;
+  return (
+    value.schema_version === "workflow-history/1" &&
+    isCursor(value.next_cursor) &&
+    Array.isArray(value.items) &&
+    value.items.every((item) =>
+      isRecord(item) &&
+      hasExactKeys(item, ["id", "status", "decision", "created_at", "updated_at"]) &&
+      typeof item.id === "string" &&
+      uuidPattern.test(item.id) &&
+      workflowStatuses.includes(item.status as WorkflowStatus) &&
+      ["pending", "approved", "rejected"].includes(String(item.decision)) &&
+      isTimestamp(item.created_at) &&
+      isTimestamp(item.updated_at),
+    )
+  );
+}
+
+function isActivityPage(value: unknown): value is WorkflowActivityPage {
+  if (!isRecord(value) || !hasExactKeys(value, ["schema_version", "items", "next_cursor"])) return false;
+  return (
+    value.schema_version === "workflow-activity/1" &&
+    isCursor(value.next_cursor) &&
+    Array.isArray(value.items) &&
+    value.items.every((item) =>
+      isRecord(item) &&
+      hasExactKeys(item, ["type", "created_at"]) &&
+      activityTypes.includes(item.type as ActivityType) &&
+      isTimestamp(item.created_at),
+    )
+  );
+}
+
 export class HttpWorkflowClient implements WorkflowClient {
   constructor(private readonly tokenFor: (scope: Scope) => Promise<string>) {}
 
-  private async request(
+  private async request<T>(
     scope: Scope,
     path: string,
+    validate: (value: unknown) => value is T,
     options: { body?: unknown; idempotencyKey?: string } = {},
-  ): Promise<WorkflowCase> {
+  ): Promise<T> {
     let token: string;
     try {
       token = await this.tokenFor(scope);
@@ -103,19 +211,40 @@ export class HttpWorkflowClient implements WorkflowClient {
       throw new WorkflowClientError("The request failed. Check the record before retrying.");
     }
     const data: unknown = await response.json();
-    if (!isWorkflowCase(data)) throw new WorkflowClientError("The service returned an invalid response.");
+    if (!validate(data)) throw new WorkflowClientError("The service returned an invalid response.");
     return data;
   }
 
   submit(reviewer: string, payload: Record<string, unknown>, idempotencyKey: string): Promise<WorkflowCase> {
-    return this.request("write", "/api/cases", {
+    return this.request("write", "/api/cases", isWorkflowCase, {
       body: { reviewer_id: reviewer, payload },
       idempotencyKey,
     });
   }
 
   read(id: string): Promise<WorkflowCase> {
-    return this.request("read", `/api/cases/${encodeURIComponent(id)}`);
+    return this.request("read", `/api/cases/${encodeURIComponent(id)}`, isWorkflowCase);
+  }
+
+  listHistory(options: { status?: WorkflowStatus; limit?: number; cursor?: string } = {}): Promise<WorkflowHistoryPage> {
+    const query = new URLSearchParams();
+    if (options.status) query.set("status", options.status);
+    if (options.limit !== undefined) query.set("limit", String(options.limit));
+    if (options.cursor) query.set("cursor", options.cursor);
+    const suffix = query.size ? `?${query.toString()}` : "";
+    return this.request("read", `/api/cases${suffix}`, isHistoryPage);
+  }
+
+  activity(id: string, options: { limit?: number; cursor?: string } = {}): Promise<WorkflowActivityPage> {
+    const query = new URLSearchParams();
+    if (options.limit !== undefined) query.set("limit", String(options.limit));
+    if (options.cursor) query.set("cursor", options.cursor);
+    const suffix = query.size ? `?${query.toString()}` : "";
+    return this.request(
+      "read",
+      `/api/cases/${encodeURIComponent(id)}/activity${suffix}`,
+      isActivityPage,
+    );
   }
 
   decide(
@@ -123,7 +252,7 @@ export class HttpWorkflowClient implements WorkflowClient {
     decision: "approved" | "rejected",
     binding?: DecisionBinding,
   ): Promise<WorkflowCase> {
-    return this.request("approve", `/api/cases/${encodeURIComponent(id)}/decision`, {
+    return this.request("approve", `/api/cases/${encodeURIComponent(id)}/decision`, isWorkflowCase, {
       body: { decision, ...binding },
     });
   }

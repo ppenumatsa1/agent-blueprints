@@ -1,14 +1,53 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter, Depends, Header, Query
 
 from app.api.dependencies import current_identity, workflow_service
-from app.api.schemas import CaseOutput, DecisionInput, Submission, case_output
+from app.api.schemas import (
+    ActivityOutput,
+    CaseHistoryOutput,
+    CaseOutput,
+    DecisionInput,
+    Submission,
+    case_output,
+)
 from app.infrastructure.identity import AuthenticatedRequest
 from app.usecases.service import WorkflowService
 
 router = APIRouter(tags=["cases"])
+
+
+@router.get("/cases", response_model=CaseHistoryOutput)
+def history(
+    actor: Annotated[AuthenticatedRequest, Depends(current_identity)],
+    service: Annotated[WorkflowService, Depends(workflow_service)],
+    status: Annotated[
+        str | None,
+        Query(pattern="^(created|pending|approved|rejected|completed|failed)$"),
+    ] = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    cursor: Annotated[str | None, Query(max_length=512)] = None,
+) -> CaseHistoryOutput:
+    page = service.history(
+        actor.principal,
+        status=status,
+        cursor=cursor,
+        limit=limit,
+    )
+    return CaseHistoryOutput(
+        items=[
+            {
+                "id": item.id,
+                "status": item.status,
+                "decision": item.decision or "pending",
+                "created_at": item.created_at,
+                "updated_at": item.updated_at,
+            }
+            for item in page.items
+        ],
+        next_cursor=page.next_cursor,
+    )
 
 
 @router.post("/cases", response_model=CaseOutput)
@@ -22,6 +61,21 @@ async def submit(
         actor.principal, str(body.reviewer_id), body.payload, idempotency_key
     )
     return case_output(case)
+
+
+@router.get("/cases/{case_id}/activity", response_model=ActivityOutput)
+def activity(
+    case_id: UUID,
+    actor: Annotated[AuthenticatedRequest, Depends(current_identity)],
+    service: Annotated[WorkflowService, Depends(workflow_service)],
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    cursor: Annotated[str | None, Query(max_length=512)] = None,
+) -> ActivityOutput:
+    page = service.activity(actor.principal, case_id, cursor=cursor, limit=limit)
+    return ActivityOutput(
+        items=[{"type": item.event_type, "created_at": item.created_at} for item in page.items],
+        next_cursor=page.next_cursor,
+    )
 
 
 @router.get("/cases/{case_id}", response_model=CaseOutput)

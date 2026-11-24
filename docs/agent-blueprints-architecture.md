@@ -328,11 +328,22 @@ projection/rendering, and optional application-owned decision binding.
 `CaseMetadataPanel` reuse the existing protected `WorkflowClient` contract.
 MSAL token acquisition, delegated scopes, API paths, server-authoritative
 record authorization, reviewer UUID validation, secure idempotency reuse,
-approval/rejection, and recovery remain outside profile control. History,
-live activity, evidence, manual tests, AG-UI, and CopilotKit are explicit
-disabled flags, not implemented services. The generated repository owns all
-profile/component source and has no runtime or source dependency on this
-repository or the reference repository.
+approval/rejection, and recovery remain outside profile control. UX Layer 2
+adds versioned generic history and activity projections over the existing
+`wf_cases` and `wf_audit` tables. Fixed list SQL constrains tenant, owner, and
+assigned reviewer for candidate selection; the configured application read
+policy is then applied to each complete candidate before public pagination
+and cursor metadata are derived, with a budget of 1,000 candidates over 10
+batches of at most 100. Budget exhaustion before the authorized page is
+complete returns a generic 503 rather than partial history or a cursor.
+Activity repeats record authorization and maps only committed allowlisted event
+names. Both projections omit
+payloads, actor IDs, request/checkpoint IDs, and model/tool content. The
+profile-driven sidebar and timeline use the same delegated read client and
+discard stale responses. Evidence, manual tests, AG-UI, and CopilotKit remain
+disabled flags. The generated repository owns all profile/component source
+and has no runtime or source dependency on this repository or the reference
+repository.
 
 The tooling branch adds a Python 3.12 uv lock, Ruff, portable development
 commands and editor configurations. CI uses the public lock; container

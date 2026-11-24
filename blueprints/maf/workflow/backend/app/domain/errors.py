@@ -40,3 +40,7 @@ class HostedWorkflowError(BlueprintError):
 
 class InvalidInput(BlueprintError):
     pass
+
+
+class HistoryScanLimitExceeded(BlueprintError):
+    pass
