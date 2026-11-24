@@ -27,6 +27,10 @@ three failures, followed by ten-second polling. Token acquisition and
 connection establishment have 15-second deadlines; idle reads have a
 20-second deadline. Cancellation stops waiting for token acquisition and
 prevents a late request, but cannot cancel MSAL's underlying token operation.
+The server's wall-clock deadline ends the stream, but cannot cancel a blocked
+synchronous identity or PostgreSQL worker; a borrowed connection can remain
+occupied until that worker returns, within the existing pool bound. Network
+stall behavior and production resource limits remain unverified.
 Scans start no more often than every 15 seconds and are limited to 50 pages
 and 60 seconds;
 exceeding either limit surfaces an error instead of silently truncating.

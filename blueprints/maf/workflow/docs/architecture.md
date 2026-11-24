@@ -63,7 +63,10 @@ seconds and stop after 50 pages or 60 seconds, surfacing
 an error rather than showing a silently truncated snapshot. A supplied
 `Last-Event-ID` must be a valid activity cursor but is only a hint, never a
 watermark. Switching accounts or cases cancels the stream and reads. Local
-tests do not establish live Entra or cloud proxy behavior.
+tests do not establish live Entra or cloud proxy behavior. The stream
+wall-clock deadline cannot cancel a blocked synchronous identity/database
+worker; a borrowed connection can remain occupied until the worker returns,
+within the existing pool bound.
 
 ## Typed MAF extension patterns
 

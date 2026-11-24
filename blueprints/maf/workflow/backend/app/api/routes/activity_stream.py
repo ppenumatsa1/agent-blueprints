@@ -32,14 +32,29 @@ async def activity_stream(
     await run_in_threadpool(service.activity, actor.principal, case_id, cursor=None, limit=1)
 
     async def events() -> AsyncIterator[str]:
-        for _ in range(STREAM_SECONDS // HEARTBEAT_SECONDS):
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + STREAM_SECONDS
+        for _ in range(int(STREAM_SECONDS / HEARTBEAT_SECONDS)):
             try:
-                current = await run_in_threadpool(
-                    request.app.state.identity.authenticate, actor.access_token
+                remaining = deadline - loop.time()
+                if remaining <= 0:
+                    return
+                current = await asyncio.wait_for(
+                    run_in_threadpool(request.app.state.identity.authenticate, actor.access_token),
+                    timeout=remaining,
                 )
-                await run_in_threadpool(
-                    service.activity, current.principal, case_id, cursor=None, limit=1
+                remaining = deadline - loop.time()
+                if remaining <= 0:
+                    return
+                await asyncio.wait_for(
+                    run_in_threadpool(
+                        service.activity, current.principal, case_id, cursor=None, limit=1
+                    ),
+                    timeout=remaining,
                 )
+            except TimeoutError:
+                yield "event: retry\ndata: {}\n\n"
+                return
             except (AccessDenied, AuthenticationFailed, NotFound):
                 yield "event: unavailable\ndata: {}\n\n"
                 return
@@ -47,7 +62,10 @@ async def activity_stream(
                 yield "event: retry\ndata: {}\n\n"
                 return
             yield "event: activity.refresh\ndata: {}\n\n: heartbeat\n\n"
-            await asyncio.sleep(HEARTBEAT_SECONDS)
+            remaining = deadline - loop.time()
+            if remaining <= 0:
+                return
+            await asyncio.sleep(min(HEARTBEAT_SECONDS, remaining))
 
     return StreamingResponse(
         events(),

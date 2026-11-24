@@ -192,6 +192,25 @@ class ActivityStreamTests(unittest.TestCase):
         self.assertNotIn("private-canary", response.text)
         self.assertEqual(self.service.activity.call_count, 2)
 
+    def test_slow_tick_ends_stream_at_deadline_with_retry(self):
+        identity = self.identity.authenticate.return_value
+
+        def authenticate(token):
+            if self.identity.authenticate.call_count == 1:
+                return identity
+            time.sleep(0.5)
+            return identity
+
+        self.identity.authenticate.side_effect = authenticate
+        with (
+            patch("app.api.routes.activity_stream.STREAM_SECONDS", 0.1),
+            patch("app.api.routes.activity_stream.HEARTBEAT_SECONDS", 0.1),
+        ):
+            response = self.client.get(self.path, headers=self.headers)
+        self.assertIn("event: retry", response.text)
+        self.assertNotIn("event: activity.refresh", response.text)
+        self.assertEqual(self.service.activity.call_count, 1)
+
 
 class IdentityTests(unittest.TestCase):
     @classmethod
