@@ -58,27 +58,32 @@ deployed endpoint, trusted factory, proxy, or real credential handling.
 Synthetic checks cover the source and independently generated Order Resolution
 profile; no live Entra or Azure call is evidence. Existing local browser suites
 remain intact. Exact-head CI and a trusted configured origin remain unverified.
-Next: integrate the independently reviewable fix into the draft and run CI.
+Next: review exact-head CI and independently authorize the live origin.
 See [cloud readiness](azure-foundry/readiness.md) for configuration and limits.
 
-## Hosted approval UI repair above #62
+## Hosted approval UI repair in PR #62
 
 **Status: In Progress.** Based on `19e1837e2cb4d0781aa34ec7e345c5fed30b7a03`.
 The generated Order Resolution API returns the selected host's decision channel
 only alongside a pending handle; the UI binds that value instead of assuming
 the local channel. The studio refreshes incomplete cases with authorized
-reads and discards stale results, stopping on failures or completion.
-Source frontend: 57 tests; independently generated profile frontend: 61 tests,
-build and CSP check; generated backend: two focused channel tests and Ruff
-checks. The isolated repository suite passed 114 tests with two
-adapter-selection skips, after installing the declared development
-requirements. These use mocks and local fixtures, not a deployed hosted agent.
+reads, retries timed-out and transient refreshes, discards stale results, and
+clears the case on authorization failure or sign-out. Source frontend: 59
+tests; independently generated profile: 64 tests, build, CSP and three
+Chromium origin checks. The isolated repository suite passed 114 tests with
+two adapter-selection skips. A generated profile passed local automatic and
+human-approval API/MAF/PostgreSQL happy paths and an Agent A loopback
+composition with synthetic identities and a Foundry fixture. These are not a
+deployed hosted agent or live identity evidence.
 
-Next: integrate the local commit into #62 and verify exact-head CI and authorized
-end-to-end hosted approval, rejection, restart and recovery. No Azure resource,
-credential, checkpoint/resume or production-readiness validation is claimed.
+A default-Windows-Proactor run of the full generated backend suite failed
+three of 251 tests: two Psycopg async errors and a stream 503 instead of 200;
+one real-provider test was skipped. This remains a failed check, not a pass.
+Next: verify exact-head CI and separately establish authorized live approval,
+rejection, restart and recovery after provenance and isolation prerequisites.
+No Azure resource or production-readiness validation is claimed.
 
-## Acceptance harness contract repairs above PR #62
+## Acceptance harness contract repairs in PR #62
 
 **Status: In Progress.** Starting revision: `19e1837e2cb4d0781aa34ec7e345c5fed30b7a03`.
 The generated profile factory accepts the runner's target metadata and uses its
@@ -90,10 +95,11 @@ the case ID from the form. Focused source runner tests and independently
 generated backend and UI tests pass; the generated frontend build succeeds.
 These are local fixture checks, not Azure evidence.
 
-Next action: integrate the separately owned recovery-evidence and token-safety
-fixes, then rerun exact-head checks. Native interruption, reconciliation,
-deployment, actual identities and live browser behavior remain unverified;
-the existing failure-injection provenance hard stop remains in place.
+The recovery-evidence and token-safety fixes are integrated in the
+[draft](https://github.com/ppenumatsa1/agent-blueprints/pull/62). Next: review
+exact-head checks. Native interruption, reconciliation, deployment, actual
+identities and live browser behavior remain unverified; the existing
+failure-injection provenance hard stop remains in place.
 
 ## Fixed offline synthetic manual tests above PR #61
 

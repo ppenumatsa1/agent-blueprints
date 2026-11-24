@@ -35,9 +35,12 @@ it("continues without tracing when browser randomness is unavailable", async () 
 });
 
 it("reports an authorization failure without reflecting the response", async () => {
-  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 403 }));
-  await expect(new HttpWorkflowClient(async () => "synthetic-token").read("id"))
+  const fetcher = vi.fn().mockResolvedValue({ ok: false, status: 403 });
+  const signal = new AbortController().signal;
+  vi.stubGlobal("fetch", fetcher);
+  await expect(new HttpWorkflowClient(async () => "synthetic-token").read("id", { signal }))
     .rejects.toThrow(new WorkflowClientError("You are not authorized for this record.", true));
+  expect(fetcher.mock.calls[0][1].signal).toBe(signal);
 });
 
 it("uses the read scope and validates the versioned history response", async () => {

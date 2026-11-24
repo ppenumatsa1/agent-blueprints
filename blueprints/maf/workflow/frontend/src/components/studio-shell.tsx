@@ -40,6 +40,7 @@ export function StudioShell({
   const [record, setRecord] = useState<WorkflowCase | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [refreshError, setRefreshError] = useState("");
   const [historyRefresh, setHistoryRefresh] = useState(0);
   const [activityRefresh, setActivityRefresh] = useState(0);
   const submission = useRef<{ fingerprint: string; key: string } | null>(null);
@@ -51,10 +52,22 @@ export function StudioShell({
     const requestNumber = recordRequest.current;
     let active = true;
     let timer: ReturnType<typeof setTimeout>;
+    let timeout: ReturnType<typeof setTimeout>;
+    let controller: AbortController | undefined;
     function schedule() {
       timer = setTimeout(() => {
-        void client.read(current.id).then((updated) => {
+        const request = new AbortController();
+        controller = request;
+        const expired = new Promise<never>((_resolve, reject) => {
+          timeout = setTimeout(() => {
+            request.abort();
+            reject(new WorkflowClientError("Case refresh timed out."));
+          }, 15_000);
+        });
+        const read = Promise.resolve().then(() => client.read(current.id, { signal: request.signal }));
+        void Promise.race([read, expired]).then((updated) => {
           if (active && recordRequest.current === requestNumber) {
+            setRefreshError("");
             setRecord(updated);
             if (updated.status !== current.status || updated.decision !== current.decision || updated.execution_complete !== current.execution_complete) {
               setHistoryRefresh((value) => value + 1);
@@ -64,9 +77,15 @@ export function StudioShell({
           }
         }).catch((reason: unknown) => {
           if (active && recordRequest.current === requestNumber) {
-            if (reason instanceof WorkflowClientError && reason.authorizationFailure) setRecord(null);
-            setError(message(reason));
+            if (reason instanceof WorkflowClientError && reason.authorizationFailure) {
+              setRecord(null);
+            } else {
+              schedule();
+            }
+            setRefreshError(message(reason));
           }
+        }).finally(() => {
+          clearTimeout(timeout);
         });
       }, 5_000);
     }
@@ -74,11 +93,14 @@ export function StudioShell({
     return () => {
       active = false;
       clearTimeout(timer);
+      clearTimeout(timeout);
+      controller?.abort();
     };
   }, [signedIn, busy, record, client]);
 
   async function run(operation: () => Promise<void>) {
     setError("");
+    setRefreshError("");
     setBusy(true);
     try {
       await operation();
@@ -165,7 +187,7 @@ export function StudioShell({
           </button>
         )}
       </header>
-      {error && <p className="alert" role="alert">{error}</p>}
+      {(error || refreshError) && <p className="alert" role="alert">{error || refreshError}</p>}
       {authBusy && <p role="status">Completing sign-in...</p>}
       {!signedIn ? (
         <section className="card">

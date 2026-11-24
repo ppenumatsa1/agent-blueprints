@@ -481,6 +481,10 @@ redirects. A potentially applied hosted POST remains unknown, not retried.
 These controls do not constrain top-level navigation or establish trust in
 custom factories, configured endpoints, the host, or its proxy.
 
+Case refreshes abort a stalled read and retry transient failures; access
+revocation clears the displayed case instead of retrying it. Account changes
+and sign-out remount the workspace, discarding the previous account's state.
+
 The hosted failure runner blocks its interruption scenario before invoking an
 adapter because its current interface does not verify native continuation.
 The Order Resolution live adapter also refuses reconciliation rather than

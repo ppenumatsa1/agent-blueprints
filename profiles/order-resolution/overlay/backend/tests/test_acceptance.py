@@ -18,7 +18,11 @@ from app.order_resolution.acceptance import AcceptanceFaults
 from app.order_resolution.durability import Proposal
 from app.order_resolution.persistence import OrderResolutionStore
 from app.order_resolution.service import OrderResolutionService
-from tests.hosted_failure_runner import ReconciliationRequired, UnsupportedScenario, _load_adapter
+from tests.hosted_failure_runner import (
+    ReconciliationRequired,
+    UnsupportedScenario,
+    _load_adapter,
+)
 from tests.live_acceptance import (
     FoundryModelEvaluator,
     LiveClient,
@@ -93,7 +97,8 @@ class AcceptanceFaultTests(unittest.TestCase):
             with (
                 self.subTest(endpoint=endpoint),
                 patch.dict(
-                    "os.environ", {"MAF_MODEL_AUTHORIZED_ORIGIN": "https://model.example.test"}
+                    "os.environ",
+                    {"MAF_MODEL_AUTHORIZED_ORIGIN": "https://model.example.test"},
                 ),
                 patch("tests.live_acceptance._read_auth", return_value=auth),
                 self.assertRaises(ValueError),
@@ -126,7 +131,10 @@ class AcceptanceFaultTests(unittest.TestCase):
             }
         }
         with (
-            patch.dict("os.environ", {"MAF_MODEL_AUTHORIZED_ORIGIN": "https://model.example.test"}),
+            patch.dict(
+                "os.environ",
+                {"MAF_MODEL_AUTHORIZED_ORIGIN": "https://model.example.test"},
+            ),
             patch("tests.live_acceptance._read_auth", return_value=auth),
             patch("tests.live_acceptance.urllib.request.build_opener", return_value=opener),
         ):
@@ -140,14 +148,24 @@ class AcceptanceFaultTests(unittest.TestCase):
                 asyncio.run(evaluator.evaluate([item], eval_name="test"))
         self.assertEqual(
             observed,
-            [("https://model.example.test/v1?api-version=1", "Bearer synthetic-canary")],
+            [
+                (
+                    "https://model.example.test/v1?api-version=1",
+                    "Bearer synthetic-canary",
+                )
+            ],
         )
 
-    def test_live_hosted_interruption_cannot_stop_a_session_without_verified_continuation(self):
+    def test_live_hosted_interruption_cannot_stop_a_session_without_verified_continuation(
+        self,
+    ):
         adapter = object.__new__(LiveHostedFailureAdapter)
         adapter.client = Mock()
         with (
-            patch.dict("os.environ", {"HOSTED_ROOT": "synthetic-root", "AZURE_ENV_NAME": "test"}),
+            patch.dict(
+                "os.environ",
+                {"HOSTED_ROOT": "synthetic-root", "AZURE_ENV_NAME": "test"},
+            ),
             patch("tests.live_acceptance.subprocess.run") as run,
             self.assertRaises(UnsupportedScenario),
         ):
@@ -168,7 +186,9 @@ class AcceptanceFaultTests(unittest.TestCase):
         with self.assertRaises(ReconciliationRequired):
             adapter.retry("synthetic-case")
 
-    def test_live_origin_must_be_https_and_explicitly_authorized_before_auth_is_read(self):
+    def test_live_origin_must_be_https_and_explicitly_authorized_before_auth_is_read(
+        self,
+    ):
         invalid = (
             "",
             "http://api.example.test",
@@ -233,7 +253,8 @@ class AcceptanceFaultTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "redirects are not permitted"):
                     client.request("GET", "/api/cases", {"access_token": "synthetic-canary"})
                 self.assertEqual(
-                    observed, [("https://api.example.test/api/cases", "Bearer synthetic-canary")]
+                    observed,
+                    [("https://api.example.test/api/cases", "Bearer synthetic-canary")],
                 )
 
     def test_live_client_rejects_non_origin_relative_request_paths(self):

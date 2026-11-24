@@ -47,29 +47,39 @@ browser limits injected storage to that origin and rejects cross-origin state
 and all cookies. The model evaluator requires its own independently authorized
 HTTPS origin and also refuses redirects. Focused checks use synthetic tokens and
 routed browser pages; the independently generated profile is checked without
-live Azure or Entra access. Existing local browser suites remain intact. CI and real deployment
-configuration remain unverified. Next: integrate the separate fix into the
-draft and run exact-head CI. This does not establish trusted deployment
-provenance, proxy safety or isolation for same-identity approval.
+live Azure or Entra access. Existing local browser suites remain intact. CI
+and real deployment configuration remain unverified. Next: review exact-head
+CI and independently authorize the live origin. This does not establish
+trusted deployment provenance, proxy safety or isolation for same-identity
+approval.
 The same trace found a hosted Responses POST using default redirect handling
 and browser API/stream fetches that followed redirects. Both now reject
 redirects; the hosted client records an ambiguous outcome as unknown. Synthetic
 loopback and transport checks do not prove live service or proxy behavior.
 
-## Hosted approval UI repair above #62
+## Hosted approval UI repair in PR #62
 
 **In progress**, based on `19e1837e2cb4d0781aa34ec7e345c5fed30b7a03`.
 Acceptance: local and hosted decisions carry the server-selected channel;
 asynchronous case changes become visible without stale case replacement or
-retaining a case after read authorization is revoked. Source frontend tests
-passed 57; independently generated profile tests passed 61, with build and
-CSP check; two generated backend channel tests and Ruff checks passed.
-The isolated repository suite passed 114 tests with two adapter-selection
-skips. These are local fixture checks, not proof of actual Foundry execution.
-Next: integrate into #62 and run exact-head CI and authorized live approval,
-rejection, checkpoint/resume, restart, idempotency and recovery checks.
+retaining a case after read authorization is revoked. Timed-out or transient
+refreshes retry while authorization failures stop and clear the case; sign-out
+discards the prior workspace. Source frontend tests passed 59; independently
+generated profile tests passed 64, with build, CSP and three Chromium origin
+checks. The isolated repository suite passed 114 tests with two
+adapter-selection skips. A generated profile passed local automatic and
+human-approval API/MAF/PostgreSQL happy paths and Agent A loopback composition
+using synthetic identities and a Foundry fixture. These are not proof of
+actual Foundry execution.
 
-## Acceptance harness contract repairs above PR #62
+The default Windows Proactor full generated-backend run failed three of 251
+tests (two Psycopg async errors and a stream 503 instead of 200); one
+real-provider test was skipped. Do not relabel that failure. Next: review
+exact-head CI and, after trust and isolation are established, separately run
+authorized live approval, rejection, checkpoint/resume, restart, idempotency
+and recovery checks.
+
+## Acceptance harness contract repairs in PR #62
 
 **In progress**, starting at `19e1837e2cb4d0781aa34ec7e345c5fed30b7a03`.
 Acceptance criteria: load the profile adapter using the runner's target and
@@ -80,9 +90,10 @@ generated backend and UI fixture tests pass, as does the generated frontend
 build. These checks do not verify a hosted recovery, human identity, effect,
 deployment provenance or a live browser session.
 
-Next: coordinate the separate recovery-evidence and credential-safety changes
-before exact-head integration checks. Keep failure injection blocked by the
-existing provenance hard stop; no Azure call or live evidence is claimed.
+The recovery-evidence and credential-safety changes are integrated in
+[draft #62](https://github.com/ppenumatsa1/agent-blueprints/pull/62). Next:
+review exact-head checks. Keep failure injection blocked by the existing
+provenance hard stop; no Azure call or live evidence is claimed.
 
 ## Fixed offline synthetic manual tests above PR #61
 

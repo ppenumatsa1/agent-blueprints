@@ -63,4 +63,13 @@ it("clears record data and ignores stale active accounts when the signed-in user
   await userEvent.type(screen.getByLabelText("Case ID"), id);
   await userEvent.click(screen.getByRole("button", { name: "Open" }));
   expect(instance.acquireTokenSilent).toHaveBeenLastCalledWith({ account: second, scopes: ["read"] });
+  expect(await screen.findByRole("heading", { name: "Case status: pending" })).toBeVisible();
+
+  useMsal.mockReturnValue({ instance, accounts: [], inProgress: InteractionStatus.None });
+  rerender(<AuthenticatedApplication config={config} />);
+  expect(screen.getByRole("heading", { name: "Sign in to continue" })).toBeVisible();
+  useMsal.mockReturnValue({ instance, accounts: [second], inProgress: InteractionStatus.None });
+  rerender(<AuthenticatedApplication config={config} />);
+  expect(screen.queryByRole("heading", { name: "Case status: pending" })).not.toBeInTheDocument();
+  expect(screen.getByLabelText("Case ID")).toHaveValue("");
 });

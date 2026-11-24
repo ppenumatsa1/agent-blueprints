@@ -59,7 +59,7 @@ export interface DecisionBinding {
 
 export interface WorkflowClient {
   submit(reviewer: string, payload: Record<string, unknown>, idempotencyKey: string): Promise<WorkflowCase>;
-  read(id: string): Promise<WorkflowCase>;
+  read(id: string, options?: { signal?: AbortSignal }): Promise<WorkflowCase>;
   listHistory(options?: {
     status?: WorkflowStatus;
     limit?: number;
@@ -268,8 +268,8 @@ export class HttpWorkflowClient implements WorkflowClient {
     });
   }
 
-  read(id: string): Promise<WorkflowCase> {
-    return this.request("read", `/api/cases/${encodeURIComponent(id)}`, isWorkflowCase);
+  read(id: string, options: { signal?: AbortSignal } = {}): Promise<WorkflowCase> {
+    return this.request("read", `/api/cases/${encodeURIComponent(id)}`, isWorkflowCase, options);
   }
 
   listHistory(options: { status?: WorkflowStatus; limit?: number; cursor?: string } = {}): Promise<WorkflowHistoryPage> {

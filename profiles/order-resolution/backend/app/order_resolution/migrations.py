@@ -78,13 +78,16 @@ def validate_connection(connection) -> None:
         raise OrderResolutionSchemaError(
             "The Order Resolution schema is not migrated: " + ", ".join(missing)
         )
-    if connection.execute(
-        """
+    if (
+        connection.execute(
+            """
         SELECT 1 FROM pg_constraint
         WHERE conrelid = 'order_resolution_hosted_operations'::regclass
             AND conname = 'order_resolution_hosted_operations_outcome_check'
         """
-    ).fetchone() is None:
+        ).fetchone()
+        is None
+    ):
         raise OrderResolutionSchemaError("The hosted response outcome migration is required.")
 
 

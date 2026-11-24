@@ -112,6 +112,57 @@ describe("workflow workspace", () => {
     }
   });
 
+  it("retries a transient refresh failure and clears its alert after recovery", async () => {
+    vi.useFakeTimers();
+    try {
+      const complete = { ...pending, status: "completed" as const, execution_complete: true };
+      const read = vi.fn().mockResolvedValueOnce(pending)
+        .mockRejectedValueOnce(new WorkflowClientError("Refresh unavailable."))
+        .mockResolvedValueOnce(complete);
+      const { unmount } = render(workspace(client({ read })));
+      fireEvent.change(screen.getByLabelText("Case ID"), { target: { value: id } });
+      await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Open" })); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
+      expect(screen.getByRole("alert")).toHaveTextContent("Refresh unavailable.");
+      expect(screen.getByRole("heading", { name: "Case status: pending" })).toBeVisible();
+      await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
+      expect(screen.getByRole("heading", { name: "Case status: completed" })).toBeVisible();
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      expect(read).toHaveBeenCalledTimes(3);
+      unmount();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("aborts a stalled refresh and resumes polling", async () => {
+    vi.useFakeTimers();
+    try {
+      const complete = { ...pending, status: "completed" as const, execution_complete: true };
+      let stalledSignal: AbortSignal | undefined;
+      const read = vi.fn().mockResolvedValueOnce(pending)
+        .mockImplementationOnce((_id, options) => {
+          stalledSignal = options.signal;
+          return new Promise<WorkflowCase>(() => {});
+        })
+        .mockResolvedValueOnce(complete);
+      const { unmount } = render(workspace(client({ read })));
+      fireEvent.change(screen.getByLabelText("Case ID"), { target: { value: id } });
+      await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Open" })); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
+      expect(stalledSignal?.aborted).toBe(false);
+      await act(async () => { await vi.advanceTimersByTimeAsync(15_000); });
+      expect(stalledSignal?.aborted).toBe(true);
+      expect(screen.getByRole("alert")).toHaveTextContent("Case refresh timed out.");
+      await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
+      expect(screen.getByRole("heading", { name: "Case status: completed" })).toBeVisible();
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      unmount();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("discards a stale refresh when another case is opened", async () => {
         vi.useFakeTimers();
         try {
