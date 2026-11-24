@@ -1,5 +1,31 @@
 # Phased implementation plan
 
+## Advisory deployment-provenance preflight
+
+**In progress; deployment provenance and rollout remain blocked.** The
+independently copied [preflight](../blueprints/maf/workflow/docs/build-attestations.md)
+uses GitHub CLI to verify three exact OCI build attestations against an
+externally supplied policy. Certificate, numeric source IDs, event revision and
+ref, pinned signer, GitHub-hosted runner, standard GitHub Actions SLSA
+predicate, invocation and exact name/digest must agree in one verified result.
+Malformed, duplicate, mismatched and ambiguous input fails closed; the result
+always disclaims deployment provenance and release authorization. Local unit
+tests exercise the three-role flow and negative mutations. A real public OCI
+attestation passed with `gh` 2.103.3 and failed with a wrong source repository
+ID; this does not verify a target artifact.
+
+An external path is not proof of independently controlled policy or trusted
+execution. A separately governed builder must bind the event SHA to the actual
+reviewed checkout and all generated build inputs and derive each digest from
+its own output. A separately governed observer must bind fresh authenticated
+deployment identity, image, route, target, time and nonce to those subjects
+under controlled deployment concurrency. Current ACA local-context builds,
+Foundry `remote_build`, target attestations, observer, and protected environment
+do not establish those guarantees. The pre-OIDC hard stop remains unchanged.
+Next: obtain these independently controlled trust decisions and target evidence,
+then separately validate any deployment; do not mutate Azure or the firewall as
+part of this preflight.
+
 ## Fixed offline synthetic manual tests above PR #61
 
 **In progress; local implementation and validation completed, draft/CI review

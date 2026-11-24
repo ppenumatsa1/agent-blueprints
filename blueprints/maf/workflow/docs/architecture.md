@@ -15,6 +15,16 @@ coordinates transitions; checkpoint and database writes are not one atomic
 transaction. Recovery reconciles them. Neither a conversation nor a
 checkpoint is a human approval.
 
+## Advisory build-attestation preflight
+
+The [build-attestation preflight](build-attestations.md) checks three
+independently specified OCI subjects using GitHub CLI signature verification
+and exact source, signer and predicate matching. The policy path, verifier,
+builder and trust roots require independent administration; a path check
+cannot establish that trust. This preflight does not inspect a deployment,
+prove a builder's actual checkout or generated inputs, or authorize release.
+The cloud failure-injection hard stop remains in force.
+
 ## Fixed offline synthetic runner
 
 The [operator-only runner](offline-synthetic-tests.md) builds a separate image

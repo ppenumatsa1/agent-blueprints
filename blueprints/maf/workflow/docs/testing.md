@@ -5,6 +5,18 @@ graph, see [offline synthetic manual tests](offline-synthetic-tests.md).
 This fixed runner is separate from application tests below and does not
 enable browser callbacks, same-user approval, business effects or recovery.
 
+The [build-attestation preflight](build-attestations.md) has credential-free
+unit tests for strict policy, source, signer, predicate and subject matching:
+
+```text
+python -m unittest discover -s scripts/tests -p test_verify_build_attestations.py -v
+```
+
+These mock CLI results and are not cryptographic or deployment evidence. A
+separate local check verified one real public GitHub-signed OCI attestation
+and rejected an incorrect pinned repository ID; it did not verify any target
+deployment image. Successful preflight results never authorize a release.
+
 Install dependencies as described in [setup](setup.md). Set
 `MAF_TEST_DATABASE_URL` to a disposable, isolated PostgreSQL database. From
 `backend`, run:

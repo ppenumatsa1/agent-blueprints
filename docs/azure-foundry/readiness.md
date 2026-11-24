@@ -238,10 +238,13 @@ role-assignment scope.
 The active-revision verifier checks health, traffic, digest shape, and
 revision fields in supplied JSON; it does not independently attest that the
 image digest was built from the requested source or that the hosted inspection
-is authentic. No signed source-to-image or hosted-deployment attestation
-verifier is present. Therefore the failure-injection job contains a deliberate
-hard stop before `azure/login` and before loading/running the adapter. Setting
-dispatch inputs or environment markers cannot bypass that stop.
+is authentic. The [advisory build-attestation preflight](../../blueprints/maf/workflow/docs/build-attestations.md)
+can verify exact signed OCI subjects against an externally supplied policy, but
+does not prove independent policy or builder control, actual checkout, or live
+deployment identity. No trusted deployment-provenance verifier or observer is
+present. Therefore the failure-injection job contains a deliberate hard stop
+before `azure/login` and before loading/running the adapter. Setting dispatch
+inputs or environment markers cannot bypass that stop.
 
 These settings and marker checks are necessary gates, not proof of isolation.
 The adapter is trusted executable code, and the repository does not contain a

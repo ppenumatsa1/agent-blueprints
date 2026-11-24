@@ -11,6 +11,31 @@ The original [interactive architecture](software-factory.html) is a preserved
 historical source; this checklist records current status. The 2–3 hour
 prototype objective has not yet been measured.
 
+## Deployment-provenance preflight above PR #61
+
+**Status: In Progress; deployment provenance remains blocked.** The
+[copied advisory preflight](../blueprints/maf/workflow/docs/build-attestations.md)
+requires an independently administered external policy and verifies three
+exact OCI attestations through GitHub CLI. It matches the source and signer
+identities and commits, numeric repository IDs, GitHub-hosted runner, standard
+SLSA predicate, invocation, and exact subject name/digest in the same verified
+result. It rejects malformed, mismatched and ambiguous evidence. A genuine
+public GitHub-signed OCI attestation passed locally with `gh` 2.103.3; changing
+the independently pinned repository ID failed. This was not a target image.
+Synthetic unit tests cover the three-subject control flow and adversarial
+mutations, not cryptographic verification.
+
+The policy path alone does not establish independent administration. The
+current local-context ACA builds and Foundry ZIP `remote_build` lack a trusted
+source-to-built-image binding; no independent observer binds a live
+revision/route/identity to these subjects. The preflight does not authenticate
+the policy or verifier, inspect Azure, or authorize release. The existing
+pre-OIDC failure-injection hard stop is unchanged. Next: independently
+administer the trust policy and producer, establish exact checkout/input/output
+binding and fresh independently controlled deployment observation, and verify
+target isolation before any separately authorized rollout. Do not infer this
+from synthetic tests or the public fixture.
+
 ## Fixed offline synthetic manual tests above PR #61
 
 **Status: In Progress (local implementation and checks completed; draft/CI

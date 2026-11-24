@@ -8,6 +8,17 @@ contracts and documented engineering patterns where they have demonstrated
 value; do not hide MAF, LangGraph, or a harness behind a universal runtime.
 Generated projects must not import this repository at runtime.
 
+## Advisory build-attestation preflight
+
+The [independent project](../blueprints/maf/workflow/docs/build-attestations.md)
+can use GitHub CLI to verify exact API, web and Foundry OCI build subjects
+against an externally supplied policy. The same verified result must bind
+the certificate, source and signer IDs/revisions, GitHub-hosted runner,
+standard build predicate and subject digest. An external path does not prove
+independent trust, and a signed build claim does not prove the actual checkout,
+generated inputs, or live image. The preflight is not a release gate or an
+Azure observer; the failure-injection hard stop remains in place.
+
 ## Operator-only isolated synthetic manual tests
 
 Above PR #61 (`a78854c5fff4d4f518e9fea729d0bba0123ce2bb`), the blueprint
