@@ -25,10 +25,15 @@ coarse prefilter, not the complete application authorization policy. The
 service applies the configured `AccessPolicy.authorize_read` to each complete
 candidate before adding it to the public page. It continues stable descending
 `(created_at, id)` keyset scans until it has an additional authorized record
-or exhausts the candidates. Public pages remain capped at 100 rows, contain no
-counts or payload/identity/checkpoint fields, and only expose a versioned,
-status-bound cursor from the last returned authorized record when another
-authorized record exists. Policy input is never converted into SQL.
+or exhausts the candidates, with at most 1,000 candidate authorizations over
+10 batches of at most 100 per request. If the budget is exhausted while further
+candidates remain and the authorized page is not complete, the service raises
+`HistoryScanLimitExceeded`; the API returns a generic 503 without a partial
+page, count, or cursor. Permitted records are never silently dropped. Public
+pages remain capped at 100 rows, contain no counts or
+payload/identity/checkpoint fields, and only expose a versioned, status-bound
+cursor from the last returned authorized record when another authorized
+record exists. Policy input is never converted into SQL.
 
 Per-record activity reads only committed `wf_audit` rows, repeats the same
 tenant/owner/reviewer predicate in SQL, and filters to a fixed event allowlist

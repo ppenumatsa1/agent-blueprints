@@ -7,19 +7,27 @@ import sys
 import tempfile
 import time
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from agent_framework import FileCheckpointStorage
 
-from app.domain.errors import AccessDenied, ActionError, CheckpointError, Conflict, InvalidInput
-from app.domain.models import Principal
+from app.domain.errors import (
+    AccessDenied,
+    ActionError,
+    CheckpointError,
+    Conflict,
+    HistoryScanLimitExceeded,
+    InvalidInput,
+)
+from app.domain.models import Case, HistoryCandidate, Principal
 from app.domain.policy import CaseAccessPolicy, JsonObjectRules
 from app.infrastructure.migrations import upgrade
 from app.infrastructure.store import PostgresStore
 from app.usecases.history import decode_history_cursor
-from app.usecases.service import WorkflowService
+from app.usecases.service import HISTORY_CANDIDATE_SCAN_BUDGET, WorkflowService
 from app.workflows.host import LocalWorkflowHost
 from app.workflows.workflow import create_workflow
 from examples.synthetic_application import build_application, prepare
@@ -311,6 +319,55 @@ class WorkflowIntegrationTests(unittest.IsolatedAsyncioTestCase):
         denied_page = deny_all.history(owner, status=None, cursor=None, limit=1)
         self.assertEqual(denied_page.items, ())
         self.assertIsNone(denied_page.next_cursor)
+
+    async def test_history_fails_explicitly_when_scan_budget_exhausts_on_denied_candidates(self):
+        tenant = f"history-budget-tenant-{uuid4()}"
+        owner = Principal(
+            tenant, f"history-budget-owner-{uuid4()}", frozenset({"workflow.read"}), frozenset()
+        )
+        timestamp = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        candidates = [
+            HistoryCandidate(
+                Case(
+                    id=UUID(int=index + 1),
+                    tenant_id=tenant,
+                    owner_id=owner.subject,
+                    reviewer_id="reviewer",
+                    payload={},
+                    status="pending",
+                    decision=None,
+                    request_id=None,
+                    checkpoint_id=None,
+                    terminal_checkpoint_id=None,
+                    execution_complete=False,
+                    failure_code=None,
+                ),
+                created_at=timestamp,
+                updated_at=timestamp,
+            )
+            for index in range(HISTORY_CANDIDATE_SCAN_BUDGET + 1)
+        ]
+
+        def list_candidates(_actor, _status, cursor, limit):
+            start = 0 if cursor is None else cursor.row_id.int
+            page = candidates[start : start + limit]
+            return page, start + len(page) < len(candidates)
+
+        policy = CaseAccessPolicy()
+        service = WorkflowService(self.store, self.host, self.service.rules, policy)
+        with (
+            patch.object(self.store, "list_history", side_effect=list_candidates) as list_history,
+            patch.object(
+                policy,
+                "authorize_read",
+                side_effect=AccessDenied("Record access is not authorized."),
+            ) as authorize_read,
+        ):
+            with self.assertRaises(HistoryScanLimitExceeded):
+                service.history(owner, status=None, cursor=None, limit=1)
+
+        self.assertEqual(authorize_read.call_count, HISTORY_CANDIDATE_SCAN_BUDGET)
+        self.assertEqual(list_history.call_count, HISTORY_CANDIDATE_SCAN_BUDGET // 100)
 
     async def test_history_cursor_order_is_stable_and_status_bound(self):
         tenant = f"history-tenant-{uuid4()}"

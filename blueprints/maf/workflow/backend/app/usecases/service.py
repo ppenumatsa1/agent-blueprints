@@ -4,7 +4,7 @@ import re
 from typing import Any
 from uuid import UUID
 
-from app.domain.errors import AccessDenied, InvalidInput
+from app.domain.errors import AccessDenied, HistoryScanLimitExceeded, InvalidInput
 from app.domain.models import (
     AccessPolicy,
     BusinessRules,
@@ -26,6 +26,8 @@ from app.usecases.history import (
 )
 
 HISTORY_CANDIDATE_BATCH_SIZE = 100
+HISTORY_CANDIDATE_SCAN_BUDGET = 1000
+HISTORY_CANDIDATE_BATCH_BUDGET = HISTORY_CANDIDATE_SCAN_BUDGET // HISTORY_CANDIDATE_BATCH_SIZE
 
 
 class WorkflowService:
@@ -91,12 +93,26 @@ class WorkflowService:
         candidate_cursor = position
         items: list[CaseHistory] = []
         has_more = False
+        scanned_candidates = 0
+        scanned_batches = 0
         while len(items) <= limit:
+            remaining_budget = HISTORY_CANDIDATE_SCAN_BUDGET - scanned_candidates
+            if remaining_budget <= 0:
+                raise HistoryScanLimitExceeded()
             candidates, candidate_has_more = self.store.list_history(
-                actor, status, candidate_cursor, HISTORY_CANDIDATE_BATCH_SIZE
+                actor,
+                status,
+                candidate_cursor,
+                min(HISTORY_CANDIDATE_BATCH_SIZE, remaining_budget),
             )
+            scanned_batches += 1
             if not candidates:
+                if candidate_has_more:
+                    raise HistoryScanLimitExceeded()
                 break
+            if len(candidates) > remaining_budget:
+                raise HistoryScanLimitExceeded()
+            scanned_candidates += len(candidates)
             for candidate in candidates:
                 candidate_cursor = CursorPosition(candidate.created_at, candidate.case.id)
                 try:
@@ -117,6 +133,11 @@ class WorkflowService:
                     break
             if has_more or not candidate_has_more:
                 break
+            if (
+                scanned_candidates >= HISTORY_CANDIDATE_SCAN_BUDGET
+                or scanned_batches >= HISTORY_CANDIDATE_BATCH_BUDGET
+            ):
+                raise HistoryScanLimitExceeded()
         return history_page(items[:limit], has_more, status)
 
     def activity(

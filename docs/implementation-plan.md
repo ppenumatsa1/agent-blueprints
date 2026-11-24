@@ -45,9 +45,12 @@ does not add a competing business-state store or inspect MAF checkpoint
 contents. Case history uses bounded keyset pagination and optional status
 filtering. Fixed SQL tenant/owner/reviewer predicates scope candidates; the
 configured `AccessPolicy.authorize_read` is then applied to complete internal
-records before public pagination is calculated. Candidate batches are fixed
-and bounded, only an additional authorized record yields a next cursor, and no
-application policy input is translated into SQL. Record activity first follows
+records before public pagination is calculated. At most 1,000 candidates are
+authorized per request over 10 batches of at most 100; if more candidates
+remain before the authorized page is complete, the service returns a generic
+503 without partial items or a cursor. Permitted records are not silently
+dropped, and no application policy input is translated into SQL. Record
+activity first follows
 the configured case-read policy and repeats the same SQL authorization
 predicate. Responses omit payloads, actor
 identifiers, request/checkpoint identifiers, prompts, model output, and tool
@@ -62,11 +65,16 @@ unchanged. No migration is needed because the required generic tables and
 columns already exist in the immutable baseline. No cloud changes, streaming,
 evidence, manual-test, AG-UI, or CopilotKit work is included.
 
-Local evidence for this correction: four focused PostgreSQL authorization/
-privacy/status/cursor/event tests and all 134 source backend tests pass. The
+Local evidence for this correction: six focused PostgreSQL authorization/
+privacy/status/cursor/event/budget tests and all 136 source backend tests pass. The
 stricter-policy regression denies owner- and reviewer-accessible cases and
 verifies that items, cursors, and empty-page metadata include only
-policy-authorized records.
+policy-authorized records. A 1,001-candidate deny-all test verifies that the
+1,000-candidate limit raises an explicit typed error; the API maps it to a
+generic 503 with no partial page or cursor. An existing within-budget
+regression verifies successful pagination across denied candidates. The
+focused six-test PostgreSQL/security selection, full 136-test backend suite,
+and isolated 105-test repository suite pass; exact-head CI remains pending.
 Frontend unit/axe tests pass (21), as do the production build, CSP check, and
 the source history/studio production-browser specs. Deferred frontend tests
 verify that new history-filter and activity-case generations clear stale

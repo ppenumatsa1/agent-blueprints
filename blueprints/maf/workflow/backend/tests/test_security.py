@@ -24,12 +24,18 @@ from app.application import ApplicationComponents
 from app.composition import create_app
 from app.config import Settings
 from app.infrastructure.delegation import OnBehalfOf
-from app.domain.errors import AuthenticationFailed, AuthenticationUnavailable, DelegationError
+from app.domain.errors import (
+    AuthenticationFailed,
+    AuthenticationUnavailable,
+    DelegationError,
+    HistoryScanLimitExceeded,
+)
 from app.infrastructure.identity import EntraIdentity
 from app.infrastructure.migrations import upgrade
 from app.domain.policy import CaseAccessPolicy, JsonObjectRules
 from app.infrastructure.store import PostgresStore
 from app.infrastructure.telemetry import Telemetry
+from app.usecases.service import WorkflowService
 from tests.fixture_application import FixtureAction, action_count, initialize_fixture
 
 
@@ -444,6 +450,16 @@ class ApiSecurityTests(unittest.TestCase):
                 ).status_code,
                 422,
             )
+
+    def test_history_scan_budget_returns_explicit_private_error(self):
+        with (
+            self.client() as client,
+            patch.object(WorkflowService, "history", side_effect=HistoryScanLimitExceeded()),
+        ):
+            response = client.get("/api/cases", headers=self.headers(self.owner_token))
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.json(), {"detail": "Workflow history scan budget exceeded."})
 
     def test_api_rejects_forged_expired_wrong_issuer_audience_and_tenant_tokens(self):
         invalid = (

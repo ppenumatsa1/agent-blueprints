@@ -333,8 +333,11 @@ adds versioned generic history and activity projections over the existing
 `wf_cases` and `wf_audit` tables. Fixed list SQL constrains tenant, owner, and
 assigned reviewer for candidate selection; the configured application read
 policy is then applied to each complete candidate before public pagination
-and cursor metadata are derived. Activity repeats record authorization and
-maps only committed allowlisted event names. Both projections omit
+and cursor metadata are derived, with a budget of 1,000 candidates over 10
+batches of at most 100. Budget exhaustion before the authorized page is
+complete returns a generic 503 rather than partial history or a cursor.
+Activity repeats record authorization and maps only committed allowlisted event
+names. Both projections omit
 payloads, actor IDs, request/checkpoint IDs, and model/tool content. The
 profile-driven sidebar and timeline use the same delegated read client and
 discard stale responses. Evidence, manual tests, AG-UI, and CopilotKit remain
