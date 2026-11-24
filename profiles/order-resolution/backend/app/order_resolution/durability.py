@@ -461,6 +461,7 @@ def require_action_authorization(
         or decision.action_identity != proposal.action_identity
         or decision.tenant_id != proposal.tenant_id
         or decision.actor_id != proposal.reviewer_id
+        or decision.actor_id == proposal.owner_id
         or decision.scope != DECISION_SCOPE
         or decision.channel != proposal.decision_channel
     ):

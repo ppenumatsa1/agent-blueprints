@@ -424,7 +424,10 @@ remove a temporary exact-IP `deployment-operator` rule, but that path and the
 API allowlist have not been jointly validated with the broad rule absent.
 Firewall hardening is deferred; no firewall or network mutation was made.
 Do not treat successful managed-identity authentication as a network firewall
-substitute.
+substitute. The broad public access is a **HIGH production blocker**, tracked
+in [#56](https://github.com/ppenumatsa1/agent-blueprints/issues/56); production
+readiness remains blocked until both API and operator paths are verified with
+the broad rule absent.
 
 The version-9 bounded signal comparison now verifies two real hosted synthetic
 invocations and exact privacy-safe telemetry correlation. It does not verify a

@@ -5,7 +5,6 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { WorkflowCase, WorkflowClient } from "../api";
 import { defaultWorkflowStudioProfile } from "../default-profile";
-import { OptionalBoundary } from "../components/optional-boundary";
 import type { WorkflowStudioProfile } from "../studio-profile";
 import { WorkflowWorkspace } from "../workspace";
 
@@ -81,34 +80,39 @@ describe("optional studio adapters", () => {
     expect(client.decide).toHaveBeenCalledWith(record.id, "approved");
   });
 
-  it("runs synthetic tests only on request and reports failures without synthetic success", async () => {
-    const run = vi.fn().mockRejectedValueOnce(new Error("private diagnostic")).mockResolvedValueOnce({ outcome: "failed", summary: "Assertion failed" });
+  it("never exposes or invokes manual tests even when explicitly enabled in development", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    const run = vi.fn(async () => {
+      await fetch("/api/real-business-action", { method: "POST" });
+      return { outcome: "passed" as const, summary: "Unexpected success" };
+    });
     const { client } = setup({
       ...defaultWorkflowStudioProfile,
       capabilities: { ...defaultWorkflowStudioProfile.capabilities, manualTests: true },
       syntheticManualTests: [{ label: "Run synthetic", run }],
     });
-    const button = await screen.findByRole("button", { name: "Run synthetic" });
+    expect(screen.getByRole("region", { name: "Synthetic manual tests" })).toHaveTextContent("Unavailable");
+    expect(screen.queryByRole("button", { name: "Run synthetic" })).not.toBeInTheDocument();
+    await openCase();
+    expect(screen.getByText("Manual tests: Not enabled")).toBeVisible();
     expect(run).not.toHaveBeenCalled();
-    await userEvent.click(button);
-    expect(await screen.findByText("Manual test could not be completed.")).toBeVisible();
-    expect(screen.queryByText("private diagnostic")).not.toBeInTheDocument();
-    await userEvent.click(button);
-    expect(await screen.findByText("Failed: Assertion failed")).toBeVisible();
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(screen.queryByText("Unexpected success")).not.toBeInTheDocument();
     expect(client.submit).not.toHaveBeenCalled();
-    expect(client.read).not.toHaveBeenCalled();
+    expect(client.read).toHaveBeenCalledOnce();
     expect(client.decide).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
   });
 
-  it("isolates an optional component load failure", () => {
-    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
-    function Broken(): never { throw new Error("load failed"); }
-    try {
-      render(<><OptionalBoundary><Broken /></OptionalBoundary><p>Workflow remains available</p></>);
-      expect(screen.getByRole("alert")).toHaveTextContent("Synthetic tests could not be loaded");
-      expect(screen.getByText("Workflow remains available")).toBeVisible();
-    } finally {
-      consoleError.mockRestore();
-    }
+  it("does not even inspect legacy test configuration when enabled", async () => {
+    const getTests = vi.fn((): never => { throw new Error("test configuration accessed"); });
+    setup({
+      ...defaultWorkflowStudioProfile,
+      capabilities: { ...defaultWorkflowStudioProfile.capabilities, manualTests: true },
+      get syntheticManualTests() { return getTests(); },
+    });
+    await openCase();
+    expect(screen.getByText("Manual tests: Not enabled")).toBeVisible();
+    expect(getTests).not.toHaveBeenCalled();
   });
 });

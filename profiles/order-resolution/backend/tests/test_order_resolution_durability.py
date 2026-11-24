@@ -229,6 +229,7 @@ class RequestAndDecisionTests(unittest.TestCase):
             (actor(subject="REVIEWER-B"), command(), NOW),
             (actor(tenant_id="tenant-2"), command(), NOW),
             (actor(scopes=frozenset()), command(), NOW),
+            (actor(roles=frozenset()), command(), NOW),
             (actor(), command(proposal_version=2), NOW),
             (actor(), command(action="replacement_shipment"), NOW),
             (actor(), command(handle="forged"), NOW),
@@ -239,6 +240,20 @@ class RequestAndDecisionTests(unittest.TestCase):
                 with self.assertRaises(AuthorizationDenied):
                     record_decision(self.store, self.proposal, bad_actor, bad_command, now=now)
         self.assertEqual(self.store.decisions, {})
+
+    def test_owner_cannot_decide_even_when_assigned_and_fully_privileged(self):
+        same_identity = replace(self.proposal, reviewer_id=self.proposal.owner_id)
+        store = MemoryStore(same_identity)
+        for value in (Decision.APPROVED, Decision.REJECTED):
+            with self.subTest(decision=value), self.assertRaises(AuthorizationDenied):
+                record_decision(
+                    store,
+                    same_identity,
+                    actor(subject=same_identity.owner_id),
+                    command(decision=value),
+                    now=NOW,
+                )
+        self.assertEqual(store.decisions, {})
 
     def test_duplicate_decision_is_idempotent_and_conflicting_decision_loses(self):
         approved = record_decision(self.store, self.proposal, actor(), command(), now=NOW)
@@ -397,6 +412,14 @@ class EffectTests(unittest.TestCase):
                 self.decision,
                 {"amount": "18.50"},
             )
+        self.assertEqual(self.destination.effect_count(), 0)
+
+    def test_stored_self_approval_never_authorizes_an_effect(self):
+        same_identity = replace(self.proposal, reviewer_id=self.proposal.owner_id)
+        decision = replace(self.decision, actor_id=same_identity.owner_id)
+        with self.assertRaises(AuthorizationDenied):
+            self.coordinator().apply(same_identity, same_identity, decision, {"amount": "18.50"})
+        self.assertEqual(self.store.effects, {})
         self.assertEqual(self.destination.effect_count(), 0)
 
     def test_downstream_calls_share_one_bounded_deadline(self):

@@ -558,6 +558,214 @@ class OrderResolutionApiTests(unittest.TestCase):
         self.assertEqual(token_provider.calls, 2)
         self.assertEqual(len(requests), 1)
 
+    def test_hosted_lost_ack_survives_restart_and_requires_reconciliation(self):
+        from order_resolution_hosted.client import (
+            AmbiguousCreate,
+            ConversationBinding,
+            OperationStatus,
+            ResponsesClient,
+        )
+
+        from app.order_resolution.hosted_journal import PostgresOperationJournal
+
+        _, case, _ = self.hosted_case("ORDER-JOURNAL-LOST-ACK", "79.00")
+        operation_id = f"case:{case.id}:start"
+        binding = ConversationBinding("conversation-lost-ack")
+        sent = []
+
+        class Token:
+            def authorization_header(self):
+                return "Bearer test"
+
+        def lost_ack(*_args, **kwargs):
+            sent.append(kwargs["json"])
+            raise TimeoutError("ack lost after remote acceptance")
+
+        def make_client(store):
+            return ResponsesClient(
+                "http://127.0.0.1:1/responses",
+                PostgresOperationJournal(store),
+                token_provider=Token(),
+                post=lost_ack,
+            )
+
+        with self.assertRaises(AmbiguousCreate):
+            make_client(self.store).start(
+                operation_id=operation_id, binding=binding, case_id=str(case.id)
+            )
+        restarted = OrderResolutionStore(self.settings.database_url)
+        self.addCleanup(restarted.close)
+        client = make_client(restarted)
+        journal = PostgresOperationJournal(restarted)
+        self.assertEqual(journal.get(operation_id).status, OperationStatus.UNKNOWN)
+        with self.assertRaises(AmbiguousCreate):
+            client.start(operation_id=operation_id, binding=binding, case_id=str(case.id))
+        self.assertEqual(len(sent), 1)
+        self.assertEqual(
+            client.reconcile_acknowledgment(operation_id, []).status,
+            OperationStatus.UNKNOWN,
+        )
+        with self.assertRaises(AmbiguousCreate):
+            client.start(operation_id=operation_id, binding=binding, case_id=str(case.id))
+        reconciled = client.reconcile_acknowledgment(operation_id, ["remote-confirmed"])
+        self.assertEqual(
+            (reconciled.status, reconciled.remote_id),
+            (OperationStatus.ACKNOWLEDGED, "remote-confirmed"),
+        )
+        self.assertEqual(
+            client.start(operation_id=operation_id, binding=binding, case_id=str(case.id)),
+            "remote-confirmed",
+        )
+        self.assertEqual(len(sent), 1)
+        with self.store.connect() as connection:
+            rows = connection.execute(
+                "SELECT status, remote_id FROM order_resolution_hosted_operations "
+                "WHERE operation_id = %s",
+                (operation_id,),
+            ).fetchall()
+        self.assertEqual(
+            [(row["status"], row["remote_id"]) for row in rows],
+            [("acknowledged", "remote-confirmed")],
+        )
+
+    def test_hosted_concurrent_first_use_claim_sends_at_most_once(self):
+        from order_resolution_hosted.client import (
+            AmbiguousCreate,
+            ConversationBinding,
+            OperationStatus,
+            ResponsesClient,
+        )
+
+        from app.order_resolution.hosted_journal import PostgresOperationJournal
+
+        _, case, _ = self.hosted_case("ORDER-JOURNAL-RACE", "79.00")
+        operation_id = f"case:{case.id}:start"
+        barrier = threading.Barrier(2)
+        entered = threading.Event()
+        release = threading.Event()
+        calls = []
+
+        class RacingJournal(PostgresOperationJournal):
+            def get(self, operation_id):
+                result = super().get(operation_id)
+                barrier.wait(timeout=10)
+                return result
+
+        class Token:
+            def authorization_header(self):
+                return "Bearer test"
+
+        class Response:
+            status_code = 200
+
+            def json(self):
+                return {"id": "race-response"}
+
+        def post(*_args, **_kwargs):
+            calls.append(1)
+            entered.set()
+            if not release.wait(timeout=10):
+                raise TimeoutError("test release timed out")
+            return Response()
+
+        def attempt():
+            store = OrderResolutionStore(self.settings.database_url)
+            try:
+                client = ResponsesClient(
+                    "http://127.0.0.1:1/responses",
+                    RacingJournal(store),
+                    token_provider=Token(),
+                    post=post,
+                )
+                try:
+                    return client.start(
+                        operation_id=operation_id,
+                        binding=ConversationBinding("race-conversation"),
+                        case_id=str(case.id),
+                    )
+                except AmbiguousCreate:
+                    return "unknown"
+            finally:
+                store.close()
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            futures = [pool.submit(attempt) for _ in range(2)]
+            try:
+                self.assertTrue(entered.wait(timeout=10))
+                deadline = time.monotonic() + 10
+                while time.monotonic() < deadline:
+                    if (
+                        PostgresOperationJournal(self.store).get(operation_id).status
+                        is OperationStatus.UNKNOWN
+                    ):
+                        break
+                    time.sleep(0.01)
+                else:
+                    self.fail("Concurrent loser did not mark the pending claim unknown")
+            finally:
+                release.set()
+            results = [future.result(timeout=10) for future in futures]
+        self.assertCountEqual(results, ["unknown", "race-response"])
+        self.assertEqual(len(calls), 1)
+        record = PostgresOperationJournal(self.store).get(operation_id)
+        self.assertEqual(
+            (record.status, record.remote_id),
+            (OperationStatus.ACKNOWLEDGED, "race-response"),
+        )
+        with self.store.connect() as connection:
+            count = connection.execute(
+                "SELECT count(*) AS count FROM order_resolution_hosted_operations "
+                "WHERE operation_id = %s",
+                (operation_id,),
+            ).fetchone()["count"]
+        self.assertEqual(count, 1)
+
+    def test_legacy_hosted_unbound_pending_approval_is_repaired_once(self):
+        owner, case, _ = self.hosted_case("ORDER-LEGACY-HOSTED", "185.00")
+        request_id = f"case:{case.id}:approval:v1"
+        PostgresHostedAuthorityBindings(self.store).bind_start(
+            case.id,
+            owner,
+            conversation_id="legacy-conversation",
+            channel=HOSTED_CHANNEL,
+        )
+        with self.store.connect() as connection:
+            connection.execute(
+                "UPDATE wf_cases SET status = 'pending', request_id = %s WHERE id = %s",
+                (request_id, case.id),
+            )
+            connection.execute(
+                "UPDATE order_resolution_hosted_bindings SET hosted_status = 'pending', "
+                "pending_request_id = %s WHERE case_id = %s",
+                (request_id, case.id),
+            )
+        self.assertIsNone(self.store.get_current_proposal(str(case.id)).decision_handle_digest)
+        with self.assertRaises(Conflict):
+            self.store.prepare_hosted_approval(
+                case.id, request_id + "-wrong", channel=HOSTED_CHANNEL
+            )
+        self.assertIsNone(self.store.get_current_proposal(str(case.id)).decision_handle_digest)
+        restarted = OrderResolutionStore(self.settings.database_url)
+        self.addCleanup(restarted.close)
+        repaired = restarted.prepare_hosted_approval(case.id, request_id, channel=HOSTED_CHANNEL)
+        self.assertEqual(
+            repaired.decision_handle_digest,
+            hashlib.sha256(request_id.encode()).hexdigest(),
+        )
+        self.assertEqual(repaired.decision_channel, HOSTED_CHANNEL)
+        self.assertIsNotNone(repaired.decision_expires_at)
+        self.assertEqual(
+            restarted.prepare_hosted_approval(case.id, request_id, channel=HOSTED_CHANNEL),
+            repaired,
+        )
+        with self.store.connect() as connection:
+            events = connection.execute(
+                "SELECT count(*) AS count FROM wf_audit "
+                "WHERE case_id = %s AND event = 'hosted_request_saved'",
+                (case.id,),
+            ).fetchone()["count"]
+        self.assertEqual(events, 0)
+
     def test_hosted_service_endpoints_are_authorized_durable_and_idempotent(self):
         owner, case, proposal = self.hosted_case("ORDER-HOSTED-SERVICE", "185.00")
         case_id = case.id
@@ -1730,6 +1938,116 @@ class OrderResolutionApiTests(unittest.TestCase):
                         "denials": 0,
                     },
                 )
+
+    def test_legacy_local_pending_repair_then_crash_resume_is_idempotent(self):
+        with self.client() as client:
+            pending = self.submit(
+                client, payload("ORDER-LEGACY-LOCAL", "185.00", 5, [late_policy()])
+            )
+        case_id = UUID(pending["id"])
+        with self.store.connect() as connection:
+            connection.execute(
+                """
+                UPDATE order_resolution_proposals
+                SET decision_handle_digest = NULL, decision_expires_at = NULL,
+                    decision_channel = NULL
+                WHERE case_id = %s AND is_current
+                """,
+                (case_id,),
+            )
+        self.assertIsNone(self.store.get_current_proposal(str(case_id)).decision_handle_digest)
+
+        restarted = OrderResolutionStore(self.settings.database_url)
+        self.addCleanup(restarted.close)
+        with TestClient(
+            create_app(
+                self.settings,
+                build_application(),
+                store=restarted,
+                identity=self.identity,
+            )
+        ) as client:
+            stranger = self.tokens.token(
+                subject=str(uuid4()),
+                scopes="workflow.read workflow.approve",
+                roles=["Workflow.Approver"],
+            )
+            unauthorized = client.post(
+                f"/api/cases/{case_id}/decision",
+                headers=self.headers(stranger),
+                json=self.decision_body(pending, "approved"),
+            )
+            self.assertEqual(unauthorized.status_code, 403, unauthorized.text)
+            self.assertIsNone(restarted.get_current_proposal(str(case_id)).decision_handle_digest)
+            denied = client.post(
+                f"/api/cases/{case_id}/decision",
+                headers=self.headers(self.reviewer_token),
+                json={**self.decision_body(pending, "approved"), "handle": "forged"},
+            )
+            self.assertEqual(denied.status_code, 403, denied.text)
+        repaired = restarted.get_current_proposal(str(case_id))
+        self.assertEqual(
+            repaired.decision_handle_digest,
+            hashlib.sha256(pending["decision_handle"].encode()).hexdigest(),
+        )
+        self.assertEqual(repaired.decision_channel, "api")
+        self.assertIsNotNone(repaired.decision_expires_at)
+        self.assertEqual(self.crash_worker("after-decision", pending).returncode, 82)
+        self.assertEqual(self.crash_worker("after-effect", pending).returncode, 84)
+        self.assertEqual(self.durability_counts(case_id)["synthetic_effects"], 1)
+        self.assertIsNone(self.action(case_id))
+
+        with TestClient(
+            create_app(
+                self.settings,
+                build_application(),
+                store=restarted,
+                identity=self.identity,
+            )
+        ) as client:
+            for _ in range(2):
+                response = client.get(
+                    f"/api/cases/{case_id}", headers=self.headers(self.owner_token)
+                )
+                self.assertEqual(response.status_code, 200, response.text)
+                self.assertTrue(response.json()["execution_complete"])
+        self.assertEqual(
+            self.durability_counts(case_id),
+            {
+                "proposal_decisions": 1,
+                "effect_claims": 1,
+                "synthetic_effects": 1,
+                "denials": 2,
+            },
+        )
+        self.assertEqual(self.database_counts(case_id)["actions"], 1)
+        self.assertEqual(restarted.get_current_proposal(str(case_id)), repaired)
+
+    def test_legacy_local_unbound_approval_can_be_decided(self):
+        with self.client() as client:
+            pending = self.submit(
+                client, payload("ORDER-LEGACY-DECIDE", "185.00", 5, [late_policy()])
+            )
+            case_id = UUID(pending["id"])
+            with self.store.connect() as connection:
+                connection.execute(
+                    """
+                    UPDATE order_resolution_proposals
+                    SET decision_handle_digest = NULL, decision_expires_at = NULL,
+                        decision_channel = NULL
+                    WHERE case_id = %s AND is_current
+                    """,
+                    (case_id,),
+                )
+            response = client.post(
+                f"/api/cases/{case_id}/decision",
+                headers=self.headers(self.reviewer_token),
+                json=self.decision_body(pending, "approved"),
+            )
+            self.assertEqual(response.status_code, 200, response.text)
+            self.assertTrue(response.json()["execution_complete"])
+        self.assertEqual(self.durability_counts(case_id)["synthetic_effects"], 1)
+        self.assertEqual(self.durability_counts(case_id)["proposal_decisions"], 1)
 
     def test_effect_process_death_before_and_after_send_reconciles_once(self):
         for mode, return_code, effects_after_crash in (

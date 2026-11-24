@@ -135,7 +135,7 @@ class LiveClient:
         }
         if len(tenants) != 1:
             raise ValueError("Live acceptance identities must use one tenant.")
-        self.correlations: list[dict[str, str]] = []
+        self.correlations: list[dict[str, str | int]] = []
 
     def request(
         self,

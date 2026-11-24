@@ -32,7 +32,7 @@ export function CaseMetadataPanel({
           <span className="capability" key={capability}>
             {capabilityLabels[capability as StudioCapability]}: {enabled &&
               (capability !== "evidence" || !!profile.projectEvidence) &&
-              (capability !== "manualTests" || (import.meta.env.DEV && !!profile.syntheticManualTests?.length)) &&
+              capability !== "manualTests" &&
               (capability !== "agUi" || !!profile.protocolAdapters?.agUi) &&
               (capability !== "copilotKit" || !!profile.protocolAdapters?.copilotKit)
               ? "Enabled" : "Not enabled"}

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useRef, useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 
 import { WorkflowClientError, type WorkflowCase, type WorkflowClient } from "../api";
 import type { WorkflowStudioProfile } from "../studio-profile";
@@ -9,12 +9,7 @@ import { ActivityTimeline } from "./activity-timeline";
 import { HistorySidebar } from "./history-sidebar";
 import { RequestComposer } from "./request-composer";
 import { EvidencePanel } from "./evidence-panel";
-import { OptionalBoundary } from "./optional-boundary";
 import { ProtocolContextPanel } from "./protocol-context-panel";
-
-const SyntheticManualTests = import.meta.env.DEV
-  ? lazy(() => import("./synthetic-manual-tests").then((module) => ({ default: module.SyntheticManualTests })))
-  : null;
 
 export interface StudioShellProps {
   profile: WorkflowStudioProfile;
@@ -156,12 +151,11 @@ export function StudioShell({
             onPayloadChange={setPayload}
             onSubmit={(event) => void create(event)}
           />
-          {profile.capabilities.manualTests && SyntheticManualTests && profile.syntheticManualTests?.length ? (
-            <OptionalBoundary>
-              <Suspense fallback={<p role="status">Loading synthetic tests...</p>}>
-                <SyntheticManualTests tests={profile.syntheticManualTests} />
-              </Suspense>
-            </OptionalBoundary>
+          {profile.capabilities.manualTests ? (
+            <section className="card" aria-label="Synthetic manual tests">
+              <h2>Synthetic manual tests</h2>
+              <p>Unavailable: application-supplied test code is not isolated from real systems.</p>
+            </section>
           ) : null}
           {profile.capabilities.history && (
             <HistorySidebar

@@ -31,6 +31,14 @@ class VerificationWorkflowTests(unittest.TestCase):
         self.assertIn("cd ../hosted-agent", workflow)
         self.assertIn("uv pip install --python", workflow)
         self.assertIn("python -m unittest discover -s tests -v", workflow)
+        order_resolution_backend = workflow.split(
+            "      - name: Run generated Order Resolution API, workflow, database, and UI tests\n",
+            1,
+        )[1].split("      - name:", 1)[0]
+        self.assertIn(
+            "uv run --locked python -m unittest discover -s tests -v",
+            order_resolution_backend,
+        )
 
     def test_generated_evidence_is_produced_from_the_exact_source_head(self):
         workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(

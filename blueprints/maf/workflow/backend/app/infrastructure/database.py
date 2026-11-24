@@ -101,6 +101,9 @@ class BoundedConnectionPool:
         self._max_lifetime = max_lifetime_seconds
         self._available: queue.LifoQueue[tuple[psycopg.Connection, float]] = queue.LifoQueue()
         self._borrowers = threading.BoundedSemaphore(max_size)
+        self._stream_borrowers = threading.BoundedSemaphore(max_size - 1) if max_size > 1 else None
+        self._stream_work_slots = threading.BoundedSemaphore(max_size - 1) if max_size > 1 else None
+        self._stream_context = threading.local()
         self._opened = False
         self._closed = False
         self._lock = threading.Lock()
@@ -149,7 +152,33 @@ class BoundedConnectionPool:
             raise
 
     @contextmanager
+    def stream_work(self) -> Iterator[None]:
+        previous = getattr(self._stream_context, "active", False)
+        if previous:
+            raise RuntimeError("Nested stream work is not supported.")
+        if self._stream_work_slots is None or not self._stream_work_slots.acquire(blocking=False):
+            raise TimeoutError("The PostgreSQL stream capacity is exhausted.")
+        self._stream_context.active = True
+        try:
+            yield
+        finally:
+            self._stream_context.active = previous
+            self._stream_work_slots.release()
+
+    @contextmanager
     def connection(self) -> Iterator[psycopg.Connection]:
+        stream_slot = None
+        if getattr(self._stream_context, "active", False):
+            stream_slot = self._stream_borrowers
+            if stream_slot is None or not stream_slot.acquire(blocking=False):
+                raise TimeoutError("The PostgreSQL stream capacity is exhausted.")
+        try:
+            yield from self._connection()
+        finally:
+            if stream_slot is not None:
+                stream_slot.release()
+
+    def _connection(self) -> Iterator[psycopg.Connection]:
         connection, created_at = self._borrow()
         reusable = True
         try:

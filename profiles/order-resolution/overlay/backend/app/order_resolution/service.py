@@ -168,6 +168,17 @@ class OrderResolutionService(WorkflowService):
                 self.store.audit_authorization_denial(case_id, actor.subject)
                 raise AccessDenied("Decision is not authorized.") from exc
         else:
+            case = self.store.get(case_id)
+            if (
+                case.status == "pending"
+                and self.store.get_current_proposal(str(case_id)).decision_handle_digest is None
+            ):
+                try:
+                    self.policy.authorize_decision(actor, case)
+                except AccessDenied:
+                    self.store.audit_authorization_denial(case_id, actor.subject)
+                    raise
+                await self.host.resume(case_id, actor)
             self.record_bound_decision(
                 actor,
                 case_id,
