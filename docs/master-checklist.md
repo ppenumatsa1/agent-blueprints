@@ -51,6 +51,7 @@ independently before enabling the scenario. See
 **Status: In Progress.** Acceptance: require an independently configured HTTPS
 origin before reading authentication; prevent bearer redirects and restrict
 browser storage injection to that origin without weakening live assertions.
+The model endpoint has a separate authorized HTTPS origin and redirect block.
 Synthetic checks cover the source and independently generated Order Resolution
 profile; no live Entra or Azure call is evidence. Existing local browser suites
 remain intact. Exact-head CI and a trusted configured origin remain unverified.

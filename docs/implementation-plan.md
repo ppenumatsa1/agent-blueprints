@@ -44,9 +44,10 @@ An independent review identified bearer disclosure on redirects and unrestricted
 browser session-storage injection. The acceptance client now requires a
 separately configured matching HTTPS origin and refuses all redirects; the
 browser limits injected storage to that origin and rejects cross-origin state
-and all cookies. Focused checks use synthetic tokens and routed browser pages;
-the independently generated profile is checked without live Azure or Entra
-access. Existing local browser suites remain intact. CI and real deployment
+and all cookies. The model evaluator requires its own independently authorized
+HTTPS origin and also refuses redirects. Focused checks use synthetic tokens and
+routed browser pages; the independently generated profile is checked without
+live Azure or Entra access. Existing local browser suites remain intact. CI and real deployment
 configuration remain unverified. Next: integrate the separate fix into the
 draft and run exact-head CI. This does not establish trusted deployment
 provenance, proxy safety or isolation for same-identity approval.

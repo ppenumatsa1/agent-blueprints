@@ -178,6 +178,7 @@ jobs:
           MAF_REAL_RESULT_FACTORY: ${{ vars.MAF_REAL_RESULT_FACTORY }}
           MAF_REAL_BASE_URL: ${{ inputs.base_url }}
           MAF_LIVE_AUTHORIZED_ORIGIN: ${{ vars.MAF_LIVE_AUTHORIZED_ORIGIN }}
+          MAF_MODEL_AUTHORIZED_ORIGIN: ${{ vars.MAF_MODEL_AUTHORIZED_ORIGIN }}
           MAF_REAL_AUTH_FILE: ${{ runner.temp }}/real-provider-auth.json
           MAF_REAL_EVALUATION_MINIMUM_SCORE: ${{ vars.MAF_REAL_EVALUATION_MINIMUM_SCORE }}
           SOURCE_REVISION: ${{ inputs.source_revision }}

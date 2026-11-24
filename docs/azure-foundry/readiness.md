@@ -204,6 +204,8 @@ The `azure-foundry-validation` GitHub environment must provide:
   `E2E_ENTRA_SPA_CLIENT_ID`, and `E2E_ENTRA_API_APP_ID_URI`;
 - `MAF_LIVE_AUTHORIZED_ORIGIN`, independently configured by an authorized
   operator as the exact HTTPS origin of the trusted deployed frontend/API;
+- `MAF_MODEL_AUTHORIZED_ORIGIN`, independently configured by an authorized
+  operator as the exact HTTPS origin of the trusted model endpoint;
 - variables `MAF_REAL_EVALUATION_PROVIDER`,
   `MAF_REAL_EVALUATION_MODEL`, `MAF_REAL_EVALUATOR_FACTORY`,
   `MAF_REAL_RESULT_FACTORY`, and
@@ -220,6 +222,9 @@ set `MAF_LIVE_AUTHORIZED_ORIGIN` for the Python client and
 `E2E_AUTHORIZED_ORIGIN` for the browser. The configured origin and endpoint
 must be trusted; these checks do not attest the deployment, protect against
 a compromised authorized origin or trusted proxy, or verify Entra login.
+The model evaluator separately checks its endpoint against
+`MAF_MODEL_AUTHORIZED_ORIGIN` and refuses all redirects. Its endpoint may
+include a path and query, but not user info or a fragment.
 
 The distinct `azure-foundry-failure-injection-nonproduction` GitHub
 environment must be configured with required reviewers and an OIDC federated

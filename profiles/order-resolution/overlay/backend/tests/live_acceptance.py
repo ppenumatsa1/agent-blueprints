@@ -523,6 +523,7 @@ class FoundryModelEvaluator:
     name = "foundry-order-resolution-quality"
 
     def __init__(self, *, provider_id: str, model_id: str, auth_file: str):
+        authorized_origin = _https_origin(os.environ.get("MAF_MODEL_AUTHORIZED_ORIGIN", ""))
         auth = _read_auth(auth_file)
         model = auth.get("model")
         if not isinstance(model, dict):
@@ -531,10 +532,14 @@ class FoundryModelEvaluator:
         self.model_id = model_id
         self.endpoint = model.get("endpoint")
         self.token = model.get("access_token")
-        if not isinstance(self.endpoint, str) or not self.endpoint.startswith("https://"):
-            raise ValueError("The model endpoint must be an explicit HTTPS URL.")
+        if not isinstance(self.endpoint, str) or re.search(r"[\x00-\x20\x7f\\#]", self.endpoint):
+            raise ValueError("The model endpoint must be an explicit authorized HTTPS URL.")
+        parsed = urllib.parse.urlsplit(self.endpoint)
+        if _https_origin(f"{parsed.scheme}://{parsed.netloc}") != authorized_origin:
+            raise ValueError("The model endpoint does not match the authorized origin.")
         if not isinstance(self.token, str) or not self.token:
             raise ValueError("The model access token is missing.")
+        self.opener = urllib.request.build_opener(_RejectRedirects())
 
     async def evaluate(self, items, *, eval_name: str) -> EvalResults:
         results = []
@@ -577,7 +582,7 @@ class FoundryModelEvaluator:
                 },
                 method="POST",
             )
-            response = urllib.request.urlopen(request, timeout=120)
+            response = self.opener.open(request, timeout=120)
             payload = json.loads(response.read())
             judged = json.loads(payload["choices"][0]["message"]["content"])
             score = judged.get("score")

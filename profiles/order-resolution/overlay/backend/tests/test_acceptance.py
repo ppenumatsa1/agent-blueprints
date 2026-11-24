@@ -1,9 +1,11 @@
+import asyncio
 import io
 from email.message import Message
 import urllib.error
 import urllib.request
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 from uuid import UUID
 
@@ -18,6 +20,7 @@ from app.order_resolution.persistence import OrderResolutionStore
 from app.order_resolution.service import OrderResolutionService
 from tests.hosted_failure_runner import ReconciliationRequired, UnsupportedScenario
 from tests.live_acceptance import (
+    FoundryModelEvaluator,
     LiveClient,
     LiveHostedFailureAdapter,
     _https_origin,
@@ -65,6 +68,81 @@ class FakeConnection:
 
 
 class AcceptanceFaultTests(unittest.TestCase):
+    def test_model_endpoint_requires_separately_authorized_https_origin(self):
+        auth = {
+            "model": {
+                "endpoint": "https://model.example.test/v1?api-version=1",
+                "access_token": "synthetic",
+            }
+        }
+        with (
+            patch.dict("os.environ", {"MAF_MODEL_AUTHORIZED_ORIGIN": ""}),
+            patch("tests.live_acceptance._read_auth") as read_auth,
+            self.assertRaises(ValueError),
+        ):
+            FoundryModelEvaluator(provider_id="test", model_id="test", auth_file="unused")
+        read_auth.assert_not_called()
+        for endpoint in (
+            "http://model.example.test/v1",
+            "https://attacker.example/v1",
+            "https://model.example.test@attacker.example/v1",
+            "https://model.example.test\\@attacker.example/v1",
+            "https://model.example.test/v1#fragment",
+        ):
+            auth["model"]["endpoint"] = endpoint
+            with (
+                self.subTest(endpoint=endpoint),
+                patch.dict(
+                    "os.environ", {"MAF_MODEL_AUTHORIZED_ORIGIN": "https://model.example.test"}
+                ),
+                patch("tests.live_acceptance._read_auth", return_value=auth),
+                self.assertRaises(ValueError),
+            ):
+                FoundryModelEvaluator(provider_id="test", model_id="test", auth_file="unused")
+
+    def test_model_evaluator_rejects_redirect_without_forwarding_bearer(self):
+        observed = []
+
+        class FakeHTTPS(urllib.request.BaseHandler):
+            handler_order = 100
+
+            def https_open(self, request):
+                observed.append((request.full_url, request.get_header("Authorization")))
+                headers = Message()
+                headers["Location"] = "https://attacker.example/steal"
+                response = urllib.response.addinfourl(
+                    io.BytesIO(b""), headers, request.full_url, 302
+                )
+                response.msg = "Found"
+                return response
+
+        opener = urllib.request.build_opener(
+            urllib.request.ProxyHandler({}), _RejectRedirects(), FakeHTTPS()
+        )
+        auth = {
+            "model": {
+                "endpoint": "https://model.example.test/v1?api-version=1",
+                "access_token": "synthetic-canary",
+            }
+        }
+        with (
+            patch.dict("os.environ", {"MAF_MODEL_AUTHORIZED_ORIGIN": "https://model.example.test"}),
+            patch("tests.live_acceptance._read_auth", return_value=auth),
+            patch("tests.live_acceptance.urllib.request.build_opener", return_value=opener),
+        ):
+            evaluator = FoundryModelEvaluator(
+                provider_id="test", model_id="test", auth_file="unused"
+            )
+            item = SimpleNamespace(
+                query="synthetic", response="synthetic", expected_output="synthetic"
+            )
+            with self.assertRaisesRegex(RuntimeError, "redirects are not permitted"):
+                asyncio.run(evaluator.evaluate([item], eval_name="test"))
+        self.assertEqual(
+            observed,
+            [("https://model.example.test/v1?api-version=1", "Bearer synthetic-canary")],
+        )
+
     def test_live_hosted_interruption_cannot_stop_a_session_without_verified_continuation(self):
         adapter = object.__new__(LiveHostedFailureAdapter)
         adapter.client = Mock()
