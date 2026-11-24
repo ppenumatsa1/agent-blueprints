@@ -12,6 +12,7 @@ from pathlib import Path
 from unittest.mock import patch
 from uuid import UUID, uuid4
 
+import psycopg
 from agent_framework import FileCheckpointStorage
 
 from app.domain.errors import (
@@ -165,6 +166,27 @@ class WorkflowIntegrationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(action_count(self.store, second.id), 0)
         self.assertNotEqual(first.checkpoint_id, second.checkpoint_id)
         self.assertNotEqual(first.request_id, second.request_id)
+
+    async def test_activity_snapshot_reconciles_an_older_late_commit(self):
+        case = await self.submit()
+        dsn = os.environ["MAF_TEST_DATABASE_URL"]
+        with psycopg.connect(dsn) as older, psycopg.connect(dsn) as newer:
+            older.execute(
+                "INSERT INTO wf_audit (case_id, event) VALUES (%s, 'recovery_failed')",
+                (case.id,),
+            )
+            newer.execute(
+                "INSERT INTO wf_audit (case_id, event) VALUES (%s, 'action_failed')",
+                (case.id,),
+            )
+            newer.commit()
+            before = self.service.activity(OWNER, case.id, cursor=None, limit=100)
+            self.assertIn("action_failed", [item.event_type for item in before.items])
+            self.assertNotIn("recovery_failed", [item.event_type for item in before.items])
+            older.commit()
+        after = self.service.activity(OWNER, case.id, cursor=None, limit=100)
+        self.assertIn("recovery_failed", [item.event_type for item in after.items])
+        self.assertIn("action_failed", [item.event_type for item in after.items])
 
     async def test_history_filters_authorized_records_before_pagination(self):
         tenant = f"history-tenant-{uuid4()}"

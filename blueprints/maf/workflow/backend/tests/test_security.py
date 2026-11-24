@@ -7,8 +7,9 @@ import tempfile
 import time
 import unittest
 from dataclasses import replace
+from datetime import datetime, timezone
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from uuid import UUID, uuid4
 
@@ -25,12 +26,14 @@ from app.composition import create_app
 from app.config import Settings
 from app.infrastructure.delegation import OnBehalfOf
 from app.domain.errors import (
+    AccessDenied,
     AuthenticationFailed,
     AuthenticationUnavailable,
     DelegationError,
     HistoryScanLimitExceeded,
 )
-from app.infrastructure.identity import EntraIdentity
+from app.domain.models import Principal
+from app.infrastructure.identity import AuthenticatedRequest, EntraIdentity
 from app.infrastructure.migrations import upgrade
 from app.domain.policy import CaseAccessPolicy, JsonObjectRules
 from app.infrastructure.store import PostgresStore
@@ -105,6 +108,108 @@ class StaticKeys:
         if kid not in self.keys:
             raise jwt.PyJWKClientError("Unknown signing key.")
         return type("SigningKey", (), {"key": self.keys[kid]})()
+
+
+class ActivityStreamTests(unittest.TestCase):
+    def setUp(self):
+        from app.api.errors import install_exception_handlers
+        from app.api.routes.activity_stream import router
+
+        principal = Principal(TENANT, OWNER, frozenset({"workflow.read"}), frozenset())
+        self.identity = Mock()
+        self.identity.authenticate.return_value = AuthenticatedRequest(principal, "private-token")
+        self.service = Mock()
+        self.app = FastAPI()
+        self.app.state.identity = self.identity
+        self.app.state.service = self.service
+        install_exception_handlers(self.app)
+        self.app.include_router(router, prefix="/api")
+        self.client = TestClient(self.app)
+        self.path = f"/api/cases/{uuid4()}/activity/stream"
+        self.headers = {"Authorization": "Bearer private-token"}
+
+    def test_requires_auth_and_rejects_bad_resume_cursor(self):
+        self.assertEqual(self.client.get(self.path).status_code, 401)
+        response = self.client.get(self.path, headers={**self.headers, "Last-Event-ID": "bad!"})
+        self.assertEqual(response.status_code, 422)
+        self.service.activity.assert_not_called()
+
+    def test_reauthorizes_each_tick_and_stops_on_policy_revocation(self):
+        self.service.activity.side_effect = [None, None, AccessDenied("private-canary")]
+        with (
+            patch("app.api.routes.activity_stream.STREAM_SECONDS", 2),
+            patch("app.api.routes.activity_stream.HEARTBEAT_SECONDS", 1),
+            patch("app.api.routes.activity_stream.asyncio.sleep", new_callable=AsyncMock),
+        ):
+            response = self.client.get(self.path, headers=self.headers)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["x-accel-buffering"], "no")
+        self.assertEqual(response.headers["cache-control"], "no-store")
+        self.assertEqual(response.text.count("event: activity.refresh"), 1)
+        self.assertIn("event: unavailable", response.text)
+        self.assertNotIn("private", response.text)
+        self.assertEqual(self.identity.authenticate.call_count, 3)
+        self.assertEqual(self.service.activity.call_count, 3)
+
+    def test_initial_policy_denial_is_an_http_error(self):
+        self.service.activity.side_effect = AccessDenied("private-canary")
+        response = self.client.get(self.path, headers=self.headers)
+        self.assertEqual(response.status_code, 403)
+        self.assertNotIn("private-canary", response.text)
+
+    def test_valid_resume_hint_forces_fresh_authorized_refresh_and_bounded_stream(self):
+        from app.usecases.history import _encode_cursor
+
+        cursor = _encode_cursor("activity", datetime.now(timezone.utc), 1, None)
+        with (
+            patch("app.api.routes.activity_stream.STREAM_SECONDS", 2),
+            patch("app.api.routes.activity_stream.HEARTBEAT_SECONDS", 1),
+            patch("app.api.routes.activity_stream.asyncio.sleep", new_callable=AsyncMock),
+        ):
+            response = self.client.get(self.path, headers={**self.headers, "Last-Event-ID": cursor})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.text.count("event: activity.refresh"), 2)
+        self.assertEqual(self.service.activity.call_count, 3)
+        for call in self.service.activity.call_args_list:
+            self.assertIsNone(call.kwargs["cursor"])
+        self.assertNotIn(cursor, response.text)
+
+    def test_token_is_revalidated_until_it_expires(self):
+        identity = self.identity.authenticate.return_value
+        self.identity.authenticate.side_effect = [
+            identity,
+            identity,
+            AuthenticationFailed("private-canary"),
+        ]
+        with (
+            patch("app.api.routes.activity_stream.STREAM_SECONDS", 2),
+            patch("app.api.routes.activity_stream.HEARTBEAT_SECONDS", 1),
+            patch("app.api.routes.activity_stream.asyncio.sleep", new_callable=AsyncMock),
+        ):
+            response = self.client.get(self.path, headers=self.headers)
+        self.assertEqual(response.text.count("event: activity.refresh"), 1)
+        self.assertIn("event: unavailable", response.text)
+        self.assertNotIn("private-canary", response.text)
+        self.assertEqual(self.service.activity.call_count, 2)
+
+    def test_slow_tick_ends_stream_at_deadline_with_retry(self):
+        identity = self.identity.authenticate.return_value
+
+        def authenticate(token):
+            if self.identity.authenticate.call_count == 1:
+                return identity
+            time.sleep(0.5)
+            return identity
+
+        self.identity.authenticate.side_effect = authenticate
+        with (
+            patch("app.api.routes.activity_stream.STREAM_SECONDS", 0.1),
+            patch("app.api.routes.activity_stream.HEARTBEAT_SECONDS", 0.1),
+        ):
+            response = self.client.get(self.path, headers=self.headers)
+        self.assertIn("event: retry", response.text)
+        self.assertNotIn("event: activity.refresh", response.text)
+        self.assertEqual(self.service.activity.call_count, 1)
 
 
 class IdentityTests(unittest.TestCase):
@@ -411,7 +516,18 @@ class ApiSecurityTests(unittest.TestCase):
                 all(set(item) == {"type", "created_at"} for item in activity.json()["items"])
             )
             self.assertIn("review_requested", {item["type"] for item in activity.json()["items"]})
-            public_output = history.text + activity.text
+            with (
+                patch("app.api.routes.activity_stream.STREAM_SECONDS", 1),
+                patch("app.api.routes.activity_stream.HEARTBEAT_SECONDS", 1),
+                patch("app.api.routes.activity_stream.asyncio.sleep", new_callable=AsyncMock),
+            ):
+                stream = client.get(
+                    f"/api/cases/{case_id}/activity/stream",
+                    headers=self.headers(self.owner_token),
+                )
+            self.assertEqual(stream.status_code, 200)
+            self.assertIn("event: activity.refresh", stream.text)
+            public_output = history.text + activity.text + stream.text
             for private_value in (
                 "PAYLOAD-CANARY",
                 "REQUEST-CANARY",
@@ -429,6 +545,12 @@ class ApiSecurityTests(unittest.TestCase):
             self.assertEqual(
                 client.get(
                     f"/api/cases/{case_id}/activity", headers=self.headers(stranger)
+                ).status_code,
+                403,
+            )
+            self.assertEqual(
+                client.get(
+                    f"/api/cases/{case_id}/activity/stream", headers=self.headers(stranger)
                 ).status_code,
                 403,
             )

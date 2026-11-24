@@ -1,5 +1,31 @@
 # Phased implementation plan
 
+## UX stack Layer 3: authenticated live activity
+
+**In progress; rebased on PR #51 head
+`14a709e0f682db3776e92ed9cdc194369fecaf47`; draft CI pending.** A bounded
+SSE channel emits privacy-safe refresh signals after token and per-case policy
+revalidation. React uses bearer fetch and independently authorized activity
+reads to reconcile whole snapshots, avoiding the false assumption that audit
+IDs or timestamps follow commit order. A disconnect causes a fresh scan; a
+valid refresh on a stream sustained for 20 seconds resets the renewal failure
+budget; three short or failed streams fall back to ten-second polling. Token
+acquisition is cancellable from this caller and bounded, though the underlying
+MSAL operation is not cancelled. Scans start at most every 15 seconds and stop
+at 50 pages or 60 seconds, displaying an explicit limit error. This is eventually reconciled activity, not
+an exactly-once stream or a point-in-time snapshot under concurrent writes.
+
+Rebased focused checks pass 33 UI tests, build and both history browser specs,
+plus six stream-security tests and backend lint. Before rebase, isolated
+PostgreSQL 17 CI-selected generated base/profile backend suites passed 128
+and 177 tests (one profile opt-in skip), and generated UI suites passed 38 and
+40 tests, builds and browser specs. The isolated repository suite passed 105
+tests with two adapter-selection skips. Fresh generated and exact-head checks
+remain pending. The inherited profile telemetry fixture mismatch is unchanged.
+Timed-out synchronous identity/database workers cannot be cancelled by the
+stream and may hold a pooled connection until they return. Next action: open
+the draft, finish verification, and do not merge or deploy.
+
 ## UX stack Layer 1: reusable workflow studio shell
 
 **Implemented locally on a frontend-only branch stacked above draft PR #49;

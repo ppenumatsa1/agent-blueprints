@@ -133,7 +133,7 @@ describe("workflow workspace", () => {
     expect(await screen.findByRole("heading", { name: "Case status: recovering" })).toBeVisible();
     expect(screen.getByText(/recovery or action failed/i)).toBeVisible();
     expect(screen.getByRole("heading", { name: "Workflow history" })).toBeVisible();
-    expect(screen.getByText("Live activity: Not enabled")).toBeVisible();
+    expect(screen.getByText("Live activity: Enabled")).toBeVisible();
     expect(screen.getByText("Evidence: Not enabled")).toBeVisible();
     expect(screen.getByText("Manual tests: Not enabled")).toBeVisible();
     expect(screen.getByText("AG-UI: Not enabled")).toBeVisible();

@@ -11,6 +11,25 @@ The original [interactive architecture](software-factory.html) is a preserved
 historical source; this checklist records current status. The 2–3 hour
 prototype objective has not yet been measured.
 
+## UX stack Layer 3: live activity
+
+**Status: In Progress.** This work is rebased on PR #51 head
+`14a709e0f682db3776e92ed9cdc194369fecaf47`; the stacked draft and its
+exact-head CI remain pending.
+
+| Acceptance criterion | Evidence and limits |
+| --- | --- |
+| Privacy and authorization | Stream ticks revalidate the token and case policy; only a fixed refresh and heartbeat are emitted. Security tests cover unauthenticated, denied, revoked and invalid-cursor requests. |
+| Late commits and replay | PostgreSQL 17 late-commit test shows a fresh authorized snapshot includes an older late commit. Browser reconciliation replaces snapshots and does not infer a commit watermark; concurrent inserts may need another scan. |
+| Lifecycle and failure | Case/account cleanup aborts requests and stops waiting for token acquisition. Streams end after 30 seconds; refresh plus 20 seconds of sustained connection resets the failure budget. Three short or failed attempts lead to reauthorized polling. Scans start at most every 15 seconds and cap at 50 pages/60 seconds; overflow is explicitly shown in the UI. |
+| Local and generated verification | Rebased focused UI tests (33), build, both history/browser specs, and six stream-security tests pass. Before rebase, fresh independent base/profile UI suites passed 38/40 tests, builds and browser specs; their CI-selected PostgreSQL backend suites passed 128/177 tests (one profile opt-in skip). Isolated repository suite passed 105 tests with two documented skips; full exact-parent revalidation remains pending. |
+
+Inherited Layer 2 profile telemetry fixture mismatch remains disclosed and
+unchanged. No cloud changes or later adapters are included. **Next action:**
+open the stacked draft, finish generated and exact-head checks, and keep merge
+disabled. The stream deadline cannot cancel a stalled synchronous database or
+identity worker, which can retain a pooled connection until it returns.
+
 ## UX stack Layer 1 acceptance
 
 **Status: implemented locally; stacked draft PR and exact-head CI pending.**

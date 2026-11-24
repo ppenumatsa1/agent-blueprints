@@ -218,12 +218,16 @@ class InstantiationTests(unittest.TestCase):
                 "backend/tests/hosted_failure_runner.py",
                 "backend/tests/test_hosted_failure_runner.py",
                 "backend/app/usecases/history.py",
+                "backend/app/api/routes/activity_stream.py",
                 "frontend/playwright.config.ts",
                 "frontend/e2e/local.spec.ts",
                 "frontend/e2e/live.spec.ts",
                 "frontend/e2e/history.html",
                 "frontend/e2e/history-fixture.tsx",
                 "frontend/e2e/history.spec.ts",
+                "frontend/e2e/activity-live.html",
+                "frontend/e2e/activity-live-fixture.tsx",
+                "frontend/e2e/activity-live.spec.ts",
                 "frontend/playwright.history.config.ts",
             ):
                 self.assertEqual(
