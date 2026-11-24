@@ -36,6 +36,17 @@ binding and fresh independently controlled deployment observation, and verify
 target isolation before any separately authorized rollout. Do not infer this
 from synthetic tests or the public fixture.
 
+## Live acceptance credential boundary
+
+**Status: In Progress.** Acceptance: require an independently configured HTTPS
+origin before reading authentication; prevent bearer redirects and restrict
+browser storage injection to that origin without weakening live assertions.
+Synthetic checks cover the source and independently generated Order Resolution
+profile; no live Entra or Azure call is evidence. Existing local browser suites
+remain intact. Exact-head CI and a trusted configured origin remain unverified.
+Next: integrate the independently reviewable fix into the draft and run CI.
+See [cloud readiness](azure-foundry/readiness.md) for configuration and limits.
+
 ## Fixed offline synthetic manual tests above PR #61
 
 **Status: In Progress (local implementation and checks completed; draft/CI

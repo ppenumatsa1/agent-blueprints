@@ -1,8 +1,10 @@
 import io
+from email.message import Message
 import urllib.error
+import urllib.request
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from uuid import UUID
 
 from app.api.routes.acceptance import _authorized, case_control
@@ -14,7 +16,7 @@ from app.order_resolution.acceptance import AcceptanceFaults
 from app.order_resolution.durability import Proposal
 from app.order_resolution.persistence import OrderResolutionStore
 from app.order_resolution.service import OrderResolutionService
-from tests.live_acceptance import LiveClient
+from tests.live_acceptance import LiveClient, _https_origin, _RejectRedirects
 
 
 CASE_ID = UUID("10000000-0000-4000-8000-000000000001")
@@ -57,6 +59,89 @@ class FakeConnection:
 
 
 class AcceptanceFaultTests(unittest.TestCase):
+    def test_live_origin_must_be_https_and_explicitly_authorized_before_auth_is_read(self):
+        invalid = (
+            "",
+            "http://api.example.test",
+            "https://api.example.test/path",
+            "https://api.example.test?query",
+            "https://api.example.test#fragment",
+            "https://api.example.test@attacker.example",
+            "https://api.example.test\\@attacker.example",
+            "https://api.example.test:",
+            "https://api.example.test:0",
+        )
+        for value in invalid:
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                _https_origin(value)
+        self.assertEqual(_https_origin("HTTPS://API.EXAMPLE.TEST:443/"), "https://api.example.test")
+        with (
+            patch.dict("os.environ", {"MAF_LIVE_AUTHORIZED_ORIGIN": "https://api.example.test"}),
+            patch("tests.live_acceptance._read_auth") as read_auth,
+            self.assertRaises(ValueError),
+        ):
+            LiveClient("https://attacker.example", "unused", REVISION)
+        read_auth.assert_not_called()
+        with (
+            patch.dict("os.environ", {"MAF_LIVE_AUTHORIZED_ORIGIN": ""}),
+            patch("tests.live_acceptance._read_auth") as read_auth,
+            self.assertRaises(ValueError),
+        ):
+            LiveClient("https://api.example.test", "unused", REVISION)
+        read_auth.assert_not_called()
+
+    def test_live_client_rejects_redirect_before_sending_bearer_to_other_origin(self):
+        observed = []
+        location = ""
+
+        class FakeHTTPS(urllib.request.BaseHandler):
+            handler_order = 100
+
+            def https_open(self, request):
+                observed.append((request.full_url, request.get_header("Authorization")))
+                headers = Message()
+                headers["Location"] = location
+                response = urllib.response.addinfourl(
+                    io.BytesIO(b""), headers, request.full_url, 302
+                )
+                response.msg = "Found"
+                return response
+
+        client = object.__new__(LiveClient)
+        client.base_url = "https://api.example.test"
+        client.opener = urllib.request.build_opener(
+            urllib.request.ProxyHandler({}), _RejectRedirects(), FakeHTTPS()
+        )
+        client.deployment_revision = REVISION
+        client.correlations = []
+        for location in (
+            "https://attacker.example/steal",
+            "http://api.example.test/steal",
+            "https://api.example.test/other",
+        ):
+            with self.subTest(location=location):
+                observed.clear()
+                with self.assertRaisesRegex(RuntimeError, "redirects are not permitted"):
+                    client.request("GET", "/api/cases", {"access_token": "synthetic-canary"})
+                self.assertEqual(
+                    observed, [("https://api.example.test/api/cases", "Bearer synthetic-canary")]
+                )
+
+    def test_live_client_rejects_non_origin_relative_request_paths(self):
+        client = object.__new__(LiveClient)
+        client.base_url = "https://api.example.test"
+        client.opener = Mock()
+        for path in (
+            "//attacker.example",
+            "https://attacker.example",
+            "/\\attacker",
+            "/x\nHeader: x",
+            "/x#fragment",
+        ):
+            with self.subTest(path=path), self.assertRaises(ValueError):
+                client.request("GET", path, {"access_token": "synthetic-canary"})
+        client.opener.open.assert_not_called()
+
     def test_live_client_uses_response_correlation_id_for_telemetry_pair(self):
         case_id = "20000000-0000-4000-8000-000000000002"
         request_id = "30000000-0000-4000-8000-000000000003"
@@ -81,10 +166,11 @@ class AcceptanceFaultTests(unittest.TestCase):
 
         client = object.__new__(LiveClient)
         client.base_url = "https://api.example.test"
+        client.opener = Mock()
+        client.opener.open.return_value = Response()
         client.deployment_revision = REVISION
         client.correlations = []
         with (
-            patch("tests.live_acceptance.urllib.request.urlopen", return_value=Response()),
             patch.dict("os.environ", {"AGENT_VERSION": "1"}),
         ):
             status, _, _ = client.request(
@@ -122,19 +208,17 @@ class AcceptanceFaultTests(unittest.TestCase):
 
         client = object.__new__(LiveClient)
         client.base_url = "https://api.example.test"
+        client.opener = Mock()
+        client.opener.open.side_effect = urllib.error.HTTPError(
+            "https://api.example.test/api/cases",
+            403,
+            "Forbidden",
+            headers,
+            io.BytesIO(f'{{"id":"{case_id}"}}'.encode()),
+        )
         client.deployment_revision = REVISION
         client.correlations = []
         with (
-            patch(
-                "tests.live_acceptance.urllib.request.urlopen",
-                side_effect=urllib.error.HTTPError(
-                    "https://api.example.test/api/cases",
-                    403,
-                    "Forbidden",
-                    headers,
-                    io.BytesIO(f'{{"id":"{case_id}"}}'.encode()),
-                ),
-            ),
             patch.dict("os.environ", {"AGENT_VERSION": "1"}),
         ):
             status, _, _ = client.request(

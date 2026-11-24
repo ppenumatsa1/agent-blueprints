@@ -195,16 +195,31 @@ producer. It is intentionally not guessed in this repository.
 The `azure-foundry-validation` GitHub environment must provide:
 
 - secrets `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`,
-  `AZURE_SUBSCRIPTION_ID`, `E2E_STORAGE_STATE_JSON`, and
-  `E2E_SESSION_STORAGE_JSON`; and a short-lived, narrowly scoped
+  `AZURE_SUBSCRIPTION_ID`, `E2E_OWNER_STORAGE_STATE_JSON`,
+  `E2E_OWNER_SESSION_STORAGE_JSON`, `E2E_REVIEWER_STORAGE_STATE_JSON`, and
+  `E2E_REVIEWER_SESSION_STORAGE_JSON`; and a short-lived, narrowly scoped
   `MAF_REAL_PROVIDER_AUTH_JSON`;
-- variables `AZURE_LOG_ANALYTICS_WORKSPACE_ID`, `E2E_REVIEWER_ID`,
+- variables `AZURE_LOG_ANALYTICS_WORKSPACE_ID`, `E2E_OWNER_ID`, `E2E_REVIEWER_ID`,
   a synthetic `E2E_PAYLOAD_JSON`, `E2E_ENTRA_TENANT_ID`,
   `E2E_ENTRA_SPA_CLIENT_ID`, and `E2E_ENTRA_API_APP_ID_URI`;
+- `MAF_LIVE_AUTHORIZED_ORIGIN`, independently configured by an authorized
+  operator as the exact HTTPS origin of the trusted deployed frontend/API;
 - variables `MAF_REAL_EVALUATION_PROVIDER`,
   `MAF_REAL_EVALUATION_MODEL`, `MAF_REAL_EVALUATOR_FACTORY`,
   `MAF_REAL_RESULT_FACTORY`, and
   `MAF_REAL_EVALUATION_MINIMUM_SCORE`.
+
+The dispatch `base_url` must be that origin, without a path, query, user info
+or fragment. The Python acceptance client rejects all redirects, including
+same-origin redirects. The browser injects session storage only at the
+authorized origin, including in frames; supplied browser storage state must
+contain no cookies and no other origin. Cookies cannot be restricted to a
+port, so even secure cookies are rejected. Curate state accordingly; do not
+disable these checks to make a run pass. Direct local use must separately
+set `MAF_LIVE_AUTHORIZED_ORIGIN` for the Python client and
+`E2E_AUTHORIZED_ORIGIN` for the browser. The configured origin and endpoint
+must be trusted; these checks do not attest the deployment, protect against
+a compromised authorized origin or trusted proxy, or verify Entra login.
 
 The distinct `azure-foundry-failure-injection-nonproduction` GitHub
 environment must be configured with required reviewers and an OIDC federated
@@ -217,6 +232,7 @@ credential restricted to this repository/environment. Its secrets are
 (exactly `synthetic-nonproduction`), `MAF_HOSTED_FAILURE_RESOURCE_GROUP`,
 `MAF_HOSTED_FAILURE_API_CONTAINER_APP_NAME`,
 `MAF_HOSTED_FAILURE_AZD_ENVIRONMENT`,
+`MAF_LIVE_AUTHORIZED_ORIGIN` (the separately authorized HTTPS origin),
 `MAF_HOSTED_FAILURE_HOSTED_AGENT_NAME`,
 `MAF_HOSTED_FAILURE_HOSTED_AGENT_VERSION`,
 `MAF_HOSTED_FAILURE_API_REVISION`, `MAF_HOSTED_FAILURE_HOSTED_ROOT`, and

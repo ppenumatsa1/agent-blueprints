@@ -3,9 +3,11 @@ from __future__ import annotations
 import base64
 import json
 import os
+import re
 import subprocess
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 from uuid import UUID, uuid4
@@ -35,6 +37,40 @@ GOLDEN_CASES = json.loads(
     )
 )["cases"]
 MODEL_CRITERION = "order-resolution-model-quality"
+
+
+def _https_origin(value: str) -> str:
+    if not isinstance(value, str) or not re.fullmatch(
+        r"https://[a-zA-Z0-9.-]+(?::[0-9]+)?/?", value, re.IGNORECASE
+    ):
+        raise ValueError("An explicit HTTPS origin is required.")
+    try:
+        parsed = urllib.parse.urlsplit(value)
+        host = parsed.hostname
+        port = parsed.port
+        if (
+            parsed.scheme.lower() != "https"
+            or not host
+            or not re.fullmatch(r"[a-z0-9.-]+", host)
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.netloc.endswith(":")
+            or parsed.path not in ("", "/")
+            or parsed.query
+            or parsed.fragment
+            or "?" in value
+            or "#" in value
+            or port == 0
+        ):
+            raise ValueError
+    except ValueError as exc:
+        raise ValueError("An explicit HTTPS origin is required.") from exc
+    return f"https://{host}" + (f":{port}" if port and port != 443 else "")
+
+
+class _RejectRedirects(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise RuntimeError("Live acceptance redirects are not permitted.")
 
 
 def _read_auth(path: str) -> dict:
@@ -108,7 +144,10 @@ def _payload(case: dict, evidence_items: list[dict] | None = None) -> dict:
 
 class LiveClient:
     def __init__(self, base_url: str, auth_file: str, deployment_revision: str):
-        self.base_url = base_url.rstrip("/")
+        self.base_url = _https_origin(base_url)
+        if self.base_url != _https_origin(os.environ.get("MAF_LIVE_AUTHORIZED_ORIGIN", "")):
+            raise ValueError("The live base URL does not match the authorized origin.")
+        self.opener = urllib.request.build_opener(_RejectRedirects())
         self.deployment_revision = deployment_revision
         auth = _read_auth(auth_file)
         self.owner = _identity(
@@ -148,6 +187,13 @@ class LiveClient:
         case_id: str | None = None,
         hosted_phase: str | None = None,
     ) -> tuple[int, dict, dict[str, str]]:
+        if (
+            not isinstance(path, str)
+            or not path.startswith("/")
+            or path.startswith("//")
+            or re.search(r"[\x00-\x20\x7f\\#]", path)
+        ):
+            raise ValueError("The live request path must be origin-relative.")
         trace_id = uuid4().hex
         headers = {
             "Authorization": f"Bearer {identity['access_token']}",
@@ -165,7 +211,7 @@ class LiveClient:
             method=method,
         )
         try:
-            response = urllib.request.urlopen(request, timeout=90)
+            response = self.opener.open(request, timeout=90)
             status = response.status
             payload = response.read()
             response_headers = {name.lower(): value for name, value in response.headers.items()}

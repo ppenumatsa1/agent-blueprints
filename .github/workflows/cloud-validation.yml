@@ -177,6 +177,7 @@ jobs:
           MAF_REAL_EVALUATOR_FACTORY: ${{ vars.MAF_REAL_EVALUATOR_FACTORY }}
           MAF_REAL_RESULT_FACTORY: ${{ vars.MAF_REAL_RESULT_FACTORY }}
           MAF_REAL_BASE_URL: ${{ inputs.base_url }}
+          MAF_LIVE_AUTHORIZED_ORIGIN: ${{ vars.MAF_LIVE_AUTHORIZED_ORIGIN }}
           MAF_REAL_AUTH_FILE: ${{ runner.temp }}/real-provider-auth.json
           MAF_REAL_EVALUATION_MINIMUM_SCORE: ${{ vars.MAF_REAL_EVALUATION_MINIMUM_SCORE }}
           SOURCE_REVISION: ${{ inputs.source_revision }}
@@ -234,6 +235,7 @@ jobs:
         env:
           E2E_LIVE: "true"
           E2E_BASE_URL: ${{ inputs.base_url }}
+          E2E_AUTHORIZED_ORIGIN: ${{ vars.MAF_LIVE_AUTHORIZED_ORIGIN }}
           E2E_OWNER_STORAGE_STATE: ${{ runner.temp }}/e2e-owner-storage.json
           E2E_OWNER_SESSION_STORAGE: ${{ runner.temp }}/e2e-owner-session.json
           E2E_REVIEWER_STORAGE_STATE: ${{ runner.temp }}/e2e-reviewer-storage.json
@@ -425,6 +427,7 @@ jobs:
           MAF_HOSTED_FAILURE_EXPECTED_TARGET_ID: ${{ vars.MAF_HOSTED_FAILURE_TARGET_ID }}
           MAF_HOSTED_FAILURE_AUTH_FILE: ${{ runner.temp }}/hosted-failure-auth.json
           MAF_HOSTED_BASE_URL: ${{ inputs.base_url }}
+          MAF_LIVE_AUTHORIZED_ORIGIN: ${{ vars.MAF_LIVE_AUTHORIZED_ORIGIN }}
           AZURE_RESOURCE_GROUP: ${{ vars.MAF_HOSTED_FAILURE_RESOURCE_GROUP }}
           AZURE_API_CONTAINER_APP_NAME: ${{ vars.MAF_HOSTED_FAILURE_API_CONTAINER_APP_NAME }}
           AZURE_ENV_NAME: ${{ vars.MAF_HOSTED_FAILURE_AZD_ENVIRONMENT }}

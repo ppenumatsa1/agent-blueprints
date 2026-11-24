@@ -26,6 +26,19 @@ Next: obtain these independently controlled trust decisions and target evidence,
 then separately validate any deployment; do not mutate Azure or the firewall as
 part of this preflight.
 
+## Live acceptance credential boundary
+
+An independent review identified bearer disclosure on redirects and unrestricted
+browser session-storage injection. The acceptance client now requires a
+separately configured matching HTTPS origin and refuses all redirects; the
+browser limits injected storage to that origin and rejects cross-origin state
+and all cookies. Focused checks use synthetic tokens and routed browser pages;
+the independently generated profile is checked without live Azure or Entra
+access. Existing local browser suites remain intact. CI and real deployment
+configuration remain unverified. Next: integrate the separate fix into the
+draft and run exact-head CI. This does not establish trusted deployment
+provenance, proxy safety or isolation for same-identity approval.
+
 ## Fixed offline synthetic manual tests above PR #61
 
 **In progress; local implementation and validation completed, draft/CI review

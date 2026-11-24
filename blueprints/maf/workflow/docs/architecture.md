@@ -458,3 +458,13 @@ does not provide working Foundry or monitoring private connectivity, API databas
 token authentication, or the hosted-agent service. A project-wide agent-consumer
 grant is opt-in and disabled; its eventual scope and inherited grants require
 review. Offline compilation is not cloud integration evidence.
+
+## Live acceptance credential boundary
+
+The opt-in live browser harness confines session storage to a separately
+authorized HTTPS origin and rejects supplied cookies or foreign-origin storage
+state. The Order Resolution live acceptance client validates the same kind of
+origin before reading auth material and refuses redirects. The operator must
+independently authorize and trust that origin and the network path; this does
+not verify Entra authentication, deployment provenance, or a compromised
+authorized page.

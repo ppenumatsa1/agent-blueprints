@@ -421,6 +421,7 @@ jobs:
           npm run e2e:local
           npm run e2e:history
           npm run e2e:studio
+          E2E_LIVE=true E2E_BASE_URL=https://app.example.test npx playwright test e2e/live-origin.spec.ts
       - name: Retain browser diagnostics
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
