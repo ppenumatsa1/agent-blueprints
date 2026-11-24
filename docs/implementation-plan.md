@@ -26,6 +26,18 @@ Next: obtain these independently controlled trust decisions and target evidence,
 then separately validate any deployment; do not mutate Azure or the firewall as
 part of this preflight.
 
+## Hosted interruption evidence
+
+**Blocked.** The previous live adapter cleared in-memory interrupted/unknown
+markers and read the case without proving native continuation or authoritative
+reconciliation. The hosted-interruption runner now blocks before any adapter
+operation, and the live adapter refuses interruption and reconciliation
+without clearing markers. Timeout/reconciliation scenarios using that adapter
+therefore also remain blocked. Synthetic unit tests check these fail-closed
+behaviors; they are not live recovery evidence. Next: establish independently
+verifiable native continuation and durable outcome evidence before enabling
+the scenarios. No Azure operations or live tests were performed.
+
 ## Live acceptance credential boundary
 
 An independent review identified bearer disclosure on redirects and unrestricted

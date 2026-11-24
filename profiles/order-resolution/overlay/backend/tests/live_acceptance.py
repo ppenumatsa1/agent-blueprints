@@ -22,6 +22,7 @@ from tests.hosted_failure_runner import (
     StaleApproval,
     TransientFailure,
     UnknownOutcome,
+    UnsupportedScenario,
 )
 
 
@@ -469,26 +470,9 @@ class LiveHostedFailureAdapter:
         raise RuntimeError("The API revision did not recover after restart.")
 
     def interrupt_host(self, case_id: str) -> None:
-        control = self.client.control("GET", f"/acceptance/cases/{case_id}")
-        root = os.environ["MAF_HOSTED_AGENT_ROOT"]
-        environment = os.environ["AZURE_ENV_NAME"]
-        command = [
-            "azd",
-            "ai",
-            "agent",
-            "sessions",
-            "stop",
-            control["platform_session_id"],
-            "--cwd",
-            root,
-            "--environment",
-            environment,
-            "--no-prompt",
-        ]
-        process_environment = dict(os.environ)
-        process_environment["AZURE_DEV_USER_AGENT"] = "microsoft_foundry_skill"
-        subprocess.run(command, check=True, timeout=180, env=process_environment)
-        self.interrupted.add(case_id)
+        raise UnsupportedScenario(
+            "Hosted interruption requires independently verified native continuation evidence."
+        )
 
     def set_postgres_transient(self, enabled: bool) -> None:
         self.client.control(
@@ -506,9 +490,7 @@ class LiveHostedFailureAdapter:
         return self.read(case_id)
 
     def reconcile(self, case_id: str) -> HostedRecord:
-        self.interrupted.discard(case_id)
-        self.unknown.discard(case_id)
-        return self.read(case_id)
+        raise UnsupportedScenario("Authoritative hosted reconciliation is not available.")
 
     def correlations(self) -> list[dict[str, str | int]]:
         unique = {}

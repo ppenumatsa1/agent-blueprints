@@ -291,6 +291,16 @@ faults. The runner does not serialize the target resource ID into evidence. A
 missing capability is `blocked`; a failed observation is `failed`; neither is
 converted to success.
 
+The hosted-interruption scenario is blocked before creating or interrupting a
+case: its existing adapter cannot verify native continuation after a stopped
+session. The live adapter also refuses direct interruption and reconciliation;
+it retains unknown/interrupted flags rather than treating an ordinary database
+read as recovery. Consequently its timeout/reconciliation scenarios cannot
+pass until an authoritative reconciliation mechanism exists. A future
+implementation must independently verify native continuation and durable
+outcome evidence before restoring these scenarios. The synthetic fixture tests
+are not evidence of live Foundry recovery.
+
 The browser gate restores explicit Playwright cookie/local-storage state and
 an explicit MSAL session-storage snapshot only after npm and browser
 installation. The snapshot must match the configured tenant, SPA client, and

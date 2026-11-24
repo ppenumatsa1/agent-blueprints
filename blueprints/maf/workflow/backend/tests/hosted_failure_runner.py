@@ -138,15 +138,9 @@ def _api_restart(adapter):
 
 
 def _hosted_interruption(adapter):
-    created = adapter.create(_key("hosted-interruption"))
-    adapter.interrupt_host(created.case_id)
-    interrupted = adapter.read(created.case_id)
-    if interrupted.technical_status not in {"interrupted", "unknown"}:
-        raise AssertionError("Hosted interruption was not visible.")
-    recovered = adapter.reconcile(created.case_id)
-    if not _same_record(created, recovered) or recovered.effect_count != 0:
-        raise AssertionError("Hosted resume did not preserve the pending request.")
-    return recovered
+    raise UnsupportedScenario(
+        "Hosted interruption requires independently verified native continuation evidence."
+    )
 
 
 def _postgres_transient(adapter):

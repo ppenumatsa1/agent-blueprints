@@ -16,7 +16,13 @@ from app.order_resolution.acceptance import AcceptanceFaults
 from app.order_resolution.durability import Proposal
 from app.order_resolution.persistence import OrderResolutionStore
 from app.order_resolution.service import OrderResolutionService
-from tests.live_acceptance import LiveClient, _https_origin, _RejectRedirects
+from tests.hosted_failure_runner import ReconciliationRequired, UnsupportedScenario
+from tests.live_acceptance import (
+    LiveClient,
+    LiveHostedFailureAdapter,
+    _https_origin,
+    _RejectRedirects,
+)
 
 
 CASE_ID = UUID("10000000-0000-4000-8000-000000000001")
@@ -59,6 +65,30 @@ class FakeConnection:
 
 
 class AcceptanceFaultTests(unittest.TestCase):
+    def test_live_hosted_interruption_cannot_stop_a_session_without_verified_continuation(self):
+        adapter = object.__new__(LiveHostedFailureAdapter)
+        adapter.client = Mock()
+        with (
+            patch("tests.live_acceptance.subprocess.run") as run,
+            self.assertRaises(UnsupportedScenario),
+        ):
+            adapter.interrupt_host("synthetic-case")
+        run.assert_not_called()
+        self.assertEqual(adapter.client.mock_calls, [])
+
+    def test_unverified_reconciliation_preserves_unknown_and_interrupted_state(self):
+        adapter = object.__new__(LiveHostedFailureAdapter)
+        adapter.interrupted = {"synthetic-case"}
+        adapter.unknown = {"synthetic-case"}
+        adapter.read = Mock()
+        with self.assertRaises(UnsupportedScenario):
+            adapter.reconcile("synthetic-case")
+        self.assertEqual(adapter.interrupted, {"synthetic-case"})
+        self.assertEqual(adapter.unknown, {"synthetic-case"})
+        adapter.read.assert_not_called()
+        with self.assertRaises(ReconciliationRequired):
+            adapter.retry("synthetic-case")
+
     def test_live_origin_must_be_https_and_explicitly_authorized_before_auth_is_read(self):
         invalid = (
             "",

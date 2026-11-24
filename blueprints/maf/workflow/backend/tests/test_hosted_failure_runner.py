@@ -3,7 +3,7 @@ import os
 import sys
 import unittest
 from dataclasses import replace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from uuid import uuid4
 
 from tests.hosted_failure_runner import (
@@ -13,6 +13,8 @@ from tests.hosted_failure_runner import (
     StaleApproval,
     TransientFailure,
     UnknownOutcome,
+    UnsupportedScenario,
+    _hosted_interruption,
     main,
     run_scenarios,
 )
@@ -137,7 +139,7 @@ class FixtureHostedAdapter:
 
 
 class HostedFailureRunnerTests(unittest.TestCase):
-    def test_all_required_hosted_failure_scenarios_are_explicit_and_pass(self):
+    def test_unsupported_hosted_interruption_is_blocked_without_hiding_other_results(self):
         result = run_scenarios(
             FixtureHostedAdapter(),
             source_revision="source-123",
@@ -147,14 +149,26 @@ class HostedFailureRunnerTests(unittest.TestCase):
             target_id="synthetic-target",
         )
         self.assertEqual(len(result["scenarios"]), 9)
+        self.assertEqual(result["scenarios"]["hosted_interruption"]["status"], "blocked")
         self.assertEqual(
-            {item["status"] for item in result["scenarios"].values()},
-            {"passed"},
+            {
+                name: item["status"]
+                for name, item in result["scenarios"].items()
+                if name != "hosted_interruption"
+            },
+            {name: "passed" for name in result["scenarios"] if name != "hosted_interruption"},
         )
         self.assertEqual(result["source_revision"], "source-123")
         self.assertEqual(result["deployment_revision"], "deployment-456")
         self.assertNotIn("synthetic-target", json.dumps(result))
         self.assertTrue(result["correlations"])
+
+    def test_hosted_interruption_blocks_before_any_adapter_call(self):
+        adapter = Mock()
+        with self.assertRaises(UnsupportedScenario):
+            _hosted_interruption(adapter)
+        adapter.assert_not_called()
+        self.assertEqual(adapter.mock_calls, [])
 
     def test_exact_active_revision_is_required(self):
         with self.assertRaisesRegex(ValueError, "source revision"):

@@ -468,3 +468,9 @@ origin before reading auth material and refuses redirects. The operator must
 independently authorize and trust that origin and the network path; this does
 not verify Entra authentication, deployment provenance, or a compromised
 authorized page.
+
+The hosted failure runner blocks its interruption scenario before invoking an
+adapter because its current interface does not verify native continuation.
+The Order Resolution live adapter also refuses reconciliation rather than
+clearing unknown/interrupted markers on an ordinary case read. This is not a
+verified recovery mechanism.

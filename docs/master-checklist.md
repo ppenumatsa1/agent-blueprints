@@ -36,6 +36,16 @@ binding and fresh independently controlled deployment observation, and verify
 target isolation before any separately authorized rollout. Do not infer this
 from synthetic tests or the public fixture.
 
+## Hosted interruption evidence
+
+**Status: Blocked.** A database read and clearing local flags cannot prove
+native hosted continuation. The interruption scenario now blocks before any
+adapter call; the live adapter refuses interruption and reconciliation and
+keeps unresolved markers. Focused synthetic checks cover the refusal, not live
+Foundry recovery. Next: verify native continuation and durable outcome evidence
+independently before enabling the scenario. See
+[cloud readiness](azure-foundry/readiness.md).
+
 ## Live acceptance credential boundary
 
 **Status: In Progress.** Acceptance: require an independently configured HTTPS
