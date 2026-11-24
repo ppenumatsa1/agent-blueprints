@@ -17,19 +17,21 @@ prototype objective has not yet been measured.
 `11b4bb04c92626fddc3a50b135a8a6d0e379d52a`. Independent validation and
 exact-head CI are required before drawing conclusions. Broad public
 PostgreSQL firewall access remains a **HIGH production blocker**, tracked in
-[#56](https://github.com/ppenumatsa1/agent-blueprints/issues/56); neither
-firewall changes nor deployment are authorized by this work.
+[#56](https://github.com/ppenumatsa1/agent-blueprints/issues/56). Firewall
+changes are not authorized; deployment is conditional on exact-head tests
+and verified safe target, isolation, permissions, and provenance.
 
 | Acceptance criterion | Evidence and limitations |
 | --- | --- |
 | Same-identity development approval | **Blocked.** Same-user approval remains denied, including at the effect boundary. The synthetic adapter uses configured PostgreSQL; the runtime cannot verify isolation of storage, credentials, permissions, or network access. A flag or adapter declaration cannot establish that isolation. Independently verified isolation, trusted deployment provenance, and an atomic exception audit are prerequisites. |
 | Manual test safety | The studio does not execute application-supplied manual-test callbacks, even in development. This is an interim control, not an isolated synthetic execution capability. Trusted profile code itself is not sandboxed; an audited fixed test path and its execution boundary require separate design and verification. |
-| Stream availability | A dedicated bounded worker pool and a per-pool connection reservation limit stream work; synchronous calls cannot be cancelled. Custom services/stores, including Order Resolution, fall back to polling when their connection behavior cannot be established. Focused tests cover the 503, authenticated polling, changed activity, and revocation clearing displayed activity; the profile backend test uses a mocked store. The UI does not indicate polling mode. Limits are per-process and production-scale tuning remains unverified. |
+| Stream availability | A dedicated bounded worker pool and a per-pool connection reservation limit stream work; synchronous calls cannot be cancelled. A permanently stalled executor worker can prevent process exit. Polling also uses synchronous database calls, which a browser abort cannot cancel; repeated stalled polls can exhaust shared capacity. Enforceable I/O deadlines and recovery remain **blocked**. Custom services/stores, including Order Resolution, fall back to polling. Focused tests cover the 503, authenticated polling, changed activity, and revocation clearing displayed activity; the profile backend test uses a mocked store. The UI does not indicate polling mode. Limits are per-process and production-scale tuning remains unverified. |
 | Rollout and live acceptance | Parent's read-only preflight reports that isolation and usable delegated consent are unverified and the default deployment configuration touches the deferred firewall. The committed cloud failure-injection job does not supply the live adapter's auth file, agent version, Azure API revision, hosted root, and related environment inputs. These are separate blockers; no rollout or live acceptance is claimed. |
-| Local checks | Isolated repository suite: 105 tests, two adapter-not-selected skips. Source backend and independently generated base backend: 141 tests each with disposable PostgreSQL. Source frontend: 54 tests; earlier independently generated base/profile frontends: 53/55 tests before the added fallback regression. Builds and CSP checks passed, with >500 kB chunk warnings. Focused profile PostgreSQL API suite: 22 passed. Final generated profile backend and exact-head draft CI checks remain required. |
+| Local checks | Isolated repository suite: 105 tests, two adapter-not-selected skips. Source backend and independently generated base backend: 141 tests each with disposable PostgreSQL. Source frontend: 54 tests; earlier independently generated base/profile frontends: 53/55 tests before the added fallback regression. Builds and CSP checks passed, with >500 kB chunk warnings. Focused profile PostgreSQL API suite: 22 passed. [CI run 45309564583](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/45309564583) at `b7004af4316a419f7b5afd0048a388e9c2af9705` failed generated-profile formatting before profile tests; six jobs passed. Final generated profile backend and exact-head follow-on CI checks remain required. |
 
-Next action: establish a separately verified isolation boundary before
-considering any same-identity exception; retain production separation of duties.
+Next action: establish enforceable I/O deadlines and recovery, and a separately
+verified isolation boundary before considering any same-identity exception;
+retain production separation of duties.
 
 ## UX stack Layer 5: read-only protocol context
 

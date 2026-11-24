@@ -27,15 +27,13 @@ adapters. Evidence is rendered as text after authorized case selection;
 the application must allowlist safe fields and must not return raw model,
 tool, checkpoint, actor or sensitive payload data. The shell performs no
 additional fetch and cannot verify that application-supplied values are safe.
-Manual tests run only after a click in development, with no workflow client
-passed in; production builds omit the test UI and do not support opt-in,
-because a build flag cannot sandbox code running in an authenticated browser
-origin. Application code is trusted rather than sandboxed, and omitting the
-client cannot prevent network access or real effects. Manual tests require a
-separately isolated synthetic development backend; the blueprint does not
-enforce this isolation. Owners must ensure fixtures are synthetic. Errors are visible
-without disabling the base workflow. This is not authorization, artifact
-verification, or evidence of production readiness.
+Application-supplied manual-test execution is disabled in all environments.
+This interim control is not an isolated synthetic execution capability:
+application code is trusted rather than sandboxed, and a build flag or
+omitting the workflow client cannot prevent network access or real effects.
+A future implementation requires a separately verified isolation boundary.
+Evidence projections are not authorization, artifact verification, or
+evidence of production readiness.
 
 ## Live activity reconciliation
 
@@ -59,8 +57,12 @@ connection establishment have 15-second deadlines; idle reads have a
 prevents a late request, but cannot cancel MSAL's underlying token operation.
 The server's wall-clock deadline ends the stream, but cannot cancel a blocked
 synchronous identity or PostgreSQL worker; a borrowed connection can remain
-occupied until that worker returns, within the existing pool bound. Network
-stall behavior and production resource limits remain unverified.
+occupied until that worker returns, within the existing pool bound. A
+permanently stalled executor worker can also prevent process exit. Polling
+requests use synchronous database work and client cancellation does not stop
+that work on the server. Enforceable I/O deadlines and recovery from network
+stalls remain unverified; these are reliability blockers, not production-scale
+tuning.
 Scans start no more often than every 15 seconds and are limited to 50 pages
 and 60 seconds;
 exceeding either limit surfaces an error instead of silently truncating.

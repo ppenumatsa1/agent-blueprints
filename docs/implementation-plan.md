@@ -7,7 +7,9 @@
 and on the exact draft-PR head; do not infer production readiness from local
 checks. Broad public PostgreSQL firewall access remains a **HIGH production
 blocker** ([#56](https://github.com/ppenumatsa1/agent-blueprints/issues/56)).
-No firewall mutation, Azure deployment, or live calls are part of this work.
+Firewall mutation is not authorized. Deployment and live acceptance are
+conditional on exact-head tests and verified safe target, isolation,
+permissions, and immutable provenance.
 
 The requested same-identity exception is **blocked**, not implemented: the
 synthetic adapter uses configured PostgreSQL and the runtime cannot verify
@@ -28,9 +30,12 @@ SSE work uses bounded dedicated workers and reserves a connection in the
 standard PostgreSQL pool. Unverifiable custom service/store implementations,
 including Order Resolution, fall back to polling. A blocked synchronous call
 retains its slot until it returns, and limits are per-process rather than
-production-scale guarantees.
-Next: verify the changes and obtain exact-head CI without claiming production
-readiness or an operational self-approval path.
+production-scale guarantees. A permanently stalled executor worker can prevent
+process exit; client-side polling cancellation also does not cancel server-side
+database calls, so repeated stalls can exhaust shared capacity. Enforceable I/O
+deadlines and recovery remain reliability blockers.
+Next: resolve those blockers and obtain exact-head CI without claiming
+production readiness or an operational self-approval path.
 
 Local validation includes 105 isolated repository tests with two
 adapter-not-selected skips, 54 source frontend tests plus build and CSP
@@ -40,8 +45,10 @@ Focused fallback tests cover mocked profile 503, authorized polling,
 displayed updates, and revocation clearing activity. Independently generated base and profile
 frontends passed 53 and 55 tests, respectively, plus builds and CSP checks,
 before the additional fallback regression.
-Builds retain the >500 kB chunk warning. Independent generated backend and
-exact-head CI checks remain pending.
+Builds retain the >500 kB chunk warning. [CI run 45309564583](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/45309564583)
+at `b7004af4316a419f7b5afd0048a388e9c2af9705` failed generated-profile
+formatting before executing its profile tests; six jobs passed. Independent
+generated profile backend and exact-head follow-on CI checks remain pending.
 
 The coordinating session's read-only preflight reports that the existing
 target lacks established isolation, usable delegated consent is unverified,
