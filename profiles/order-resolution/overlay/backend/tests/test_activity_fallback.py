@@ -22,9 +22,7 @@ from tests.test_security import API, OWNER, REVIEWER, STRANGER, TENANT, TokenFix
 class OrderResolutionActivityFallbackTests(unittest.TestCase):
     def test_unsupported_stream_never_grants_poll_access(self):
         tokens = TokenFixture()
-        settings = Settings(
-            TENANT, API, "postgresql://localhost/test", Path("test-checkpoints")
-        )
+        settings = Settings(TENANT, API, "postgresql://localhost/test", Path("test-checkpoints"))
         store = OrderResolutionStore(settings.database_url)
         case_id = uuid4()
         store.get = Mock(
@@ -45,9 +43,7 @@ class OrderResolutionActivityFallbackTests(unittest.TestCase):
         )
         store.list_activity = Mock(return_value=([], False))
         app = FastAPI()
-        app.state.service = OrderResolutionService(
-            store, Mock(), Mock(), CaseAccessPolicy()
-        )
+        app.state.service = OrderResolutionService(store, Mock(), Mock(), CaseAccessPolicy())
         app.state.identity = EntraIdentity(settings, tokens.client())
         install_exception_handlers(app)
         app.include_router(stream_router, prefix="/api")
