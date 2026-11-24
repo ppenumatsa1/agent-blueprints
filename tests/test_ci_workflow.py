@@ -80,7 +80,7 @@ class VerificationWorkflowTests(unittest.TestCase):
             'assert report["dimensions"]["azure_runtime"]["status"] == "passed"',
             workflow,
         )
-        self.assertEqual(workflow.count("id-token: write"), 1)
+        self.assertEqual(workflow.count("id-token: write"), 2)
         self.assertIn("E2E_OWNER_SESSION_STORAGE_JSON", workflow)
         self.assertIn("E2E_REVIEWER_SESSION_STORAGE_JSON", workflow)
         self.assertIn("E2E_EXPECTED_TENANT_ID", workflow)
@@ -103,8 +103,71 @@ class VerificationWorkflowTests(unittest.TestCase):
             "az deployment",
             "az containerapp update",
             "az containerapp revision activate",
+            "az postgres flexible-server firewall-rule create",
+            "az postgres flexible-server firewall-rule update",
+            "az postgres flexible-server firewall-rule delete",
+            "az postgres flexible-server start",
+            "az postgres flexible-server stop",
         ):
             self.assertNotIn(forbidden, workflow)
+
+    def test_cloud_failure_injection_is_opt_in_and_bound_to_nonproduction(self):
+        workflow = (ROOT / ".github" / "workflows" / "cloud-validation.yml").read_text(
+            encoding="utf-8"
+        )
+        failure_input = workflow.split("      run_failure_injection:\n", 1)[1].split(
+            "      failure_target_id:\n", 1
+        )[0]
+        self.assertIn("default: false", failure_input)
+        job = workflow.split("  failure-injection:\n", 1)[1].split(
+            "\n  telemetry-correlation:\n", 1
+        )[0]
+        self.assertIn("needs: exact-active-revision", job)
+        self.assertIn("environment: azure-foundry-failure-injection-nonproduction", job)
+        self.assertIn("ubuntu-24.04", job)
+        self.assertIn("Azure/setup-azd@", job)
+        self.assertIn("version: 1.39.1", job)
+        self.assertIn("azure/login@", job)
+        self.assertIn("FAILURE_TARGET_KIND", job)
+        self.assertIn('test "$FAILURE_TARGET_KIND" = "synthetic-nonproduction"', job)
+        self.assertIn("workstream-d-active-revision", job)
+        self.assertIn("MAF_HOSTED_FAILURE_AUTH_FILE", job)
+        self.assertIn("MAF_HOSTED_FAILURE_TARGET_ID", job)
+        self.assertIn("gh run view", workflow)
+        self.assertIn("--json headSha,conclusion,workflowName", workflow)
+        self.assertIn("MAF_HOSTED_DEPLOYMENT_WORKFLOW_PATH", workflow)
+        self.assertIn(
+            'test "$(jq -r .path <<<"$run_json")" = "$DEPLOYMENT_WORKFLOW_PATH"',
+            workflow,
+        )
+        self.assertIn("workstream-d-active-revision", job)
+        self.assertLess(
+            job.index("uv sync --locked"),
+            job.index("azure/login@"),
+        )
+        self.assertLess(
+            job.index("Require synthetic nonproduction target"),
+            job.index("azure/login@"),
+        )
+        self.assertLess(
+            job.index("Restore hosted adapter authentication material"),
+            job.index("Run bounded hosted failure injection"),
+        )
+        provenance_gate = "Block injection without independent source-to-image provenance"
+        self.assertIn(provenance_gate, job)
+        provenance_step = job.split(f"- name: {provenance_gate}", 1)[1].split(
+            "\n      - name:", 1
+        )[0]
+        self.assertIn("exit 1", provenance_step)
+        self.assertLess(
+            job.index(provenance_gate),
+            job.index("azure/login@"),
+        )
+        self.assertLess(
+            job.index(provenance_gate),
+            job.index("Run bounded hosted failure injection"),
+        )
+        self.assertIn('ACTIONS_ID_TOKEN_REQUEST_TOKEN: ""', job)
 
     def test_postgres_readiness_waits_for_tcp_and_fails_after_timeout(self):
         bash = shutil.which("bash")

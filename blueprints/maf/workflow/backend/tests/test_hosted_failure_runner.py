@@ -1,5 +1,9 @@
+import json
+import os
+import sys
 import unittest
 from dataclasses import replace
+from unittest.mock import patch
 from uuid import uuid4
 
 from tests.hosted_failure_runner import (
@@ -9,6 +13,7 @@ from tests.hosted_failure_runner import (
     StaleApproval,
     TransientFailure,
     UnknownOutcome,
+    main,
     run_scenarios,
 )
 
@@ -16,6 +21,8 @@ from tests.hosted_failure_runner import (
 class FixtureHostedAdapter:
     source_revision = "source-123"
     deployment_revision = "deployment-456"
+    target_kind = "synthetic-nonproduction"
+    target_id = "synthetic-target"
 
     def __init__(self):
         self.records = {}
@@ -136,6 +143,8 @@ class HostedFailureRunnerTests(unittest.TestCase):
             source_revision="source-123",
             deployment_revision="deployment-456",
             environment="synthetic-hosted",
+            target_kind="synthetic-nonproduction",
+            target_id="synthetic-target",
         )
         self.assertEqual(len(result["scenarios"]), 9)
         self.assertEqual(
@@ -144,6 +153,7 @@ class HostedFailureRunnerTests(unittest.TestCase):
         )
         self.assertEqual(result["source_revision"], "source-123")
         self.assertEqual(result["deployment_revision"], "deployment-456")
+        self.assertNotIn("synthetic-target", json.dumps(result))
         self.assertTrue(result["correlations"])
 
     def test_exact_active_revision_is_required(self):
@@ -153,6 +163,8 @@ class HostedFailureRunnerTests(unittest.TestCase):
                 source_revision="different",
                 deployment_revision="deployment-456",
                 environment="synthetic-hosted",
+                target_kind="synthetic-nonproduction",
+                target_id="synthetic-target",
             )
         with self.assertRaisesRegex(ValueError, "deployment revision"):
             run_scenarios(
@@ -160,7 +172,50 @@ class HostedFailureRunnerTests(unittest.TestCase):
                 source_revision="source-123",
                 deployment_revision="different",
                 environment="synthetic-hosted",
+                target_kind="synthetic-nonproduction",
+                target_id="synthetic-target",
             )
+
+    def test_synthetic_nonproduction_target_must_match_exactly(self):
+        adapter = FixtureHostedAdapter()
+        with self.assertRaisesRegex(ValueError, "synthetic nonproduction"):
+            run_scenarios(
+                adapter,
+                source_revision="source-123",
+                deployment_revision="deployment-456",
+                environment="synthetic-hosted",
+                target_kind="production",
+                target_id="synthetic-target",
+            )
+        with self.assertRaisesRegex(ValueError, "approved target"):
+            run_scenarios(
+                adapter,
+                source_revision="source-123",
+                deployment_revision="deployment-456",
+                environment="synthetic-hosted",
+                target_kind="synthetic-nonproduction",
+                target_id="different-target",
+            )
+
+    def test_runner_rejects_unsafe_target_before_loading_adapter(self):
+        environment = {
+            "MAF_HOSTED_FAILURE_ENABLED": "true",
+            "MAF_HOSTED_FAILURE_ADAPTER": "unsafe:factory",
+            "MAF_HOSTED_FAILURE_TARGET_KIND": "production",
+            "MAF_HOSTED_FAILURE_TARGET_ID": "target-a",
+            "MAF_HOSTED_FAILURE_EXPECTED_TARGET_ID": "target-a",
+            "MAF_HOSTED_BASE_URL": "https://example.invalid",
+            "SOURCE_REVISION": "source-123",
+            "DEPLOYMENT_REVISION": "deployment-456",
+            "EVIDENCE_ENVIRONMENT": "production",
+        }
+        with (
+            patch.dict(os.environ, environment, clear=True),
+            patch.object(sys, "argv", ["hosted_failure_runner", "--output", "unused.json"]),
+            patch("tests.hosted_failure_runner._load_adapter") as load_adapter,
+        ):
+            self.assertEqual(main(), 2)
+        load_adapter.assert_not_called()
 
     def test_failures_record_only_exception_type_not_payload(self):
         adapter = FixtureHostedAdapter()
@@ -174,6 +229,8 @@ class HostedFailureRunnerTests(unittest.TestCase):
             source_revision="source-123",
             deployment_revision="deployment-456",
             environment="synthetic-hosted",
+            target_kind="synthetic-nonproduction",
+            target_id="synthetic-target",
         )
         record = result["scenarios"]["api_restart"]
         self.assertEqual(record["status"], "failed")
@@ -192,6 +249,8 @@ class HostedFailureRunnerTests(unittest.TestCase):
             source_revision="source-123",
             deployment_revision="deployment-456",
             environment="synthetic-hosted",
+            target_kind="synthetic-nonproduction",
+            target_id="synthetic-target",
         )
         self.assertEqual(result["scenarios"]["duplicate_approval"]["status"], "failed")
 
@@ -212,6 +271,8 @@ class HostedFailureRunnerTests(unittest.TestCase):
                 source_revision="source-123",
                 deployment_revision="deployment-456",
                 environment="synthetic-hosted",
+                target_kind="synthetic-nonproduction",
+                target_id="synthetic-target",
             )
 
     def test_live_correlation_metadata_survives_and_invalid_status_is_rejected(self):
@@ -236,6 +297,8 @@ class HostedFailureRunnerTests(unittest.TestCase):
             "source_revision": "source-123",
             "deployment_revision": "deployment-456",
             "environment": "synthetic-hosted",
+            "target_kind": "synthetic-nonproduction",
+            "target_id": "synthetic-target",
         }
         result = run_scenarios(adapter, **args)
         self.assertEqual(result["correlations"][0]["http_status"], 403)
