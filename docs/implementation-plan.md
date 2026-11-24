@@ -6,15 +6,19 @@
 SSE channel emits privacy-safe refresh signals after token and per-case policy
 revalidation. React uses bearer fetch and independently authorized activity
 reads to reconcile whole snapshots, avoiding the false assumption that audit
-IDs or timestamps follow commit order. A disconnect causes a fresh scan; three
-bounded connection attempts fall back to ten-second polling. Scans stop at 1,000 pages
-or 60 seconds and report failure. This is eventually reconciled activity, not
+IDs or timestamps follow commit order. A disconnect causes a fresh scan; a
+valid refresh on a stream sustained for 20 seconds resets the renewal failure
+budget; three short or failed streams fall back to ten-second polling. Token
+acquisition is cancellable from this caller and bounded, though the underlying
+MSAL operation is not cancelled. Scans start at most every 15 seconds and stop
+at 50 pages or 60 seconds, displaying an explicit limit error. This is eventually reconciled activity, not
 an exactly-once stream or a point-in-time snapshot under concurrent writes.
 
 An isolated PostgreSQL 17 source core/security suite passes 44 tests,
 including late-commit and stream authorization checks; independently generated
 base and profile backends each pass five focused tests. Source frontend passes
-27 tests, build, CSP and history/browser specs. Earlier generated base and
+38 tests, build and history/browser specs; CSP passed before the liveness
+change. Earlier generated base and
 profile frontend runs passed 25 and 27 tests, builds and browser specs;
 they predate the final capability-gating change. Required isolated repository
 validation passes 105 tests with two adapter-selection skips. Fresh generated

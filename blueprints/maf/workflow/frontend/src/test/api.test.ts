@@ -109,3 +109,93 @@ it("reports revoked live access without reflecting server content", async () => 
     vi.fn(),
   )).rejects.toMatchObject({ authorizationFailure: true });
 });
+
+it("rejects malformed live events rather than silently losing refreshes", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(
+    "event: activity.refresh\ndata: {\"private\":\"canary\"}\n\n",
+    { headers: { "Content-Type": "text/event-stream" } },
+  )));
+  const refresh = vi.fn();
+  await expect(new HttpWorkflowClient(async () => "synthetic-token").activityStream(
+    "80000000-0000-4000-8000-000000000008",
+    new AbortController().signal,
+    refresh,
+  )).rejects.toThrow("invalid response");
+  expect(refresh).not.toHaveBeenCalled();
+});
+
+it("times out a stalled stream so the caller can reconnect", async () => {
+  vi.useFakeTimers();
+  try {
+    const body = new ReadableStream<Uint8Array>({ start() {} });
+    let signal: AbortSignal | undefined;
+    vi.stubGlobal("fetch", vi.fn((_path: string, options: RequestInit) => {
+      signal = options.signal ?? undefined;
+      return Promise.resolve(new Response(body, {
+        headers: { "Content-Type": "text/event-stream" },
+      }));
+    }));
+    const result = new HttpWorkflowClient(async () => "synthetic-token").activityStream(
+      "80000000-0000-4000-8000-000000000008",
+      new AbortController().signal,
+      vi.fn(),
+    );
+    const rejected = expect(result).rejects.toThrow("timed out");
+    await vi.advanceTimersByTimeAsync(20_001);
+    await rejected;
+    expect(signal?.aborted).toBe(true);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("cancels a stalled token acquisition without starting a fetch", async () => {
+  const fetcher = vi.fn();
+  vi.stubGlobal("fetch", fetcher);
+  const controller = new AbortController();
+  const client = new HttpWorkflowClient(() => new Promise<string>(() => {}));
+  const operation = client.activityStream(
+    "80000000-0000-4000-8000-000000000008",
+    controller.signal,
+    vi.fn(),
+  );
+  controller.abort();
+  await expect(operation).rejects.toThrow("cancelled");
+  expect(fetcher).not.toHaveBeenCalled();
+});
+
+it("cancels snapshot token acquisition and never sends a late fetch", async () => {
+  const fetcher = vi.fn();
+  vi.stubGlobal("fetch", fetcher);
+  let finish!: (token: string) => void;
+  const client = new HttpWorkflowClient(() => new Promise<string>((resolve) => { finish = resolve; }));
+  const controller = new AbortController();
+  const operation = client.activity("80000000-0000-4000-8000-000000000008", {
+    signal: controller.signal,
+  });
+  controller.abort();
+  await expect(operation).rejects.toThrow("cancelled");
+  finish("late-token");
+  await Promise.resolve();
+  expect(fetcher).not.toHaveBeenCalled();
+});
+
+it("times out a stalled token acquisition so live retry can continue", async () => {
+  vi.useFakeTimers();
+  try {
+    const fetcher = vi.fn();
+    vi.stubGlobal("fetch", fetcher);
+    const client = new HttpWorkflowClient(() => new Promise<string>(() => {}));
+    const operation = client.activityStream(
+      "80000000-0000-4000-8000-000000000008",
+      new AbortController().signal,
+      vi.fn(),
+    );
+    const rejected = expect(operation).rejects.toThrow("timed out");
+    await vi.advanceTimersByTimeAsync(15_001);
+    await rejected;
+    expect(fetcher).not.toHaveBeenCalled();
+  } finally {
+    vi.useRealTimers();
+  }
+});

@@ -4,6 +4,10 @@ import { WorkflowClientError, type WorkflowActivityItem, type WorkflowClient } f
 import type { WorkflowStudioProfile } from "../studio-profile";
 
 const pageSize = 20;
+const reconcileIntervalMs = 15_000;
+const maxSnapshotPages = 50;
+
+class SnapshotLimitError extends Error {}
 
 export interface ActivityTimelineProps {
   caseId: string;
@@ -17,7 +21,7 @@ export function ActivityTimeline({ caseId, client, profile, refreshKey = 0 }: Ac
   const [cursor, setCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<"history" | "limit" | false>(false);
   const [refreshVersion, setRefreshVersion] = useState(0);
   const [loadedCaseId, setLoadedCaseId] = useState(caseId);
   const [snapshotComplete, setSnapshotComplete] = useState(false);
@@ -51,7 +55,7 @@ export function ActivityTimeline({ caseId, client, profile, refreshKey = 0 }: Ac
         setCursor(page.next_cursor);
       }
     }).catch(() => {
-      if (active && generation.current === requestGeneration) setError(true);
+      if (active && generation.current === requestGeneration) setError("history");
     }).finally(() => {
       if (active && generation.current === requestGeneration) {
         ready.current = true;
@@ -72,17 +76,35 @@ export function ActivityTimeline({ caseId, client, profile, refreshKey = 0 }: Ac
     let scan: AbortController | null = null;
     let pending = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let scanTimer: ReturnType<typeof setTimeout> | undefined;
+    let nextScanAt = 0;
 
     function accessFailure(reason: unknown) {
       if (reason instanceof WorkflowClientError && reason.authorizationFailure) {
         setItems([]);
         setCursor(null);
-        setError(true);
+        setError("history");
         controller.abort();
         scan?.abort();
         return true;
       }
       return false;
+    }
+
+    function requestReconcile() {
+      if (controller.signal.aborted || !ready.current) return;
+      pending = true;
+      if (scan || loadingMoreRef.current || scanTimer) return;
+      const delay = Math.max(0, nextScanAt - Date.now());
+      if (delay) {
+        scanTimer = setTimeout(() => {
+          scanTimer = undefined;
+          requestReconcile();
+        }, delay);
+        return;
+      }
+      pending = false;
+      void reconcile();
     }
 
     async function reconcile() {
@@ -91,6 +113,7 @@ export function ActivityTimeline({ caseId, client, profile, refreshKey = 0 }: Ac
         pending = true;
         return;
       }
+      nextScanAt = Date.now() + reconcileIntervalMs;
       scan = new AbortController();
       const currentScan = scan;
       const currentRevision = pageRevision.current;
@@ -99,7 +122,7 @@ export function ActivityTimeline({ caseId, client, profile, refreshKey = 0 }: Ac
       const seen = new Set<string>();
       let next: string | null = null;
       try {
-        for (let pageNumber = 0; pageNumber < 1000; pageNumber += 1) {
+        for (let pageNumber = 0; pageNumber < maxSnapshotPages; pageNumber += 1) {
           const page = await client.activity(caseId, {
             limit: 100,
             ...(next ? { cursor: next } : {}),
@@ -121,17 +144,18 @@ export function ActivityTimeline({ caseId, client, profile, refreshKey = 0 }: Ac
           if (seen.has(next)) throw new WorkflowClientError("Activity pagination did not advance.");
           seen.add(next);
         }
-        throw new WorkflowClientError("Activity history exceeds the reconciliation limit.");
+        throw new SnapshotLimitError();
       } catch (reason) {
         if (!controller.signal.aborted) {
-          if (!accessFailure(reason)) setError(true);
+          if (!accessFailure(reason)) {
+            setError(reason instanceof SnapshotLimitError || currentScan.signal.aborted ? "limit" : "history");
+          }
         }
       } finally {
         clearTimeout(timeout);
         scan = null;
         if (pending && !controller.signal.aborted) {
-          pending = false;
-          void reconcile();
+          requestReconcile();
         }
       }
     }
@@ -149,19 +173,27 @@ export function ActivityTimeline({ caseId, client, profile, refreshKey = 0 }: Ac
     }
 
     async function watch() {
-      for (let attempt = 0; attempt < 3 && !controller.signal.aborted; attempt += 1) {
+      let failures = 0;
+      while (failures < 3 && !controller.signal.aborted) {
+        let refreshed = false;
+        const startedAt = Date.now();
         try {
-          await client.activityStream!(caseId, controller.signal, () => void reconcile());
+          await client.activityStream!(caseId, controller.signal, () => {
+            refreshed = true;
+            requestReconcile();
+          });
         } catch (reason) {
           if (controller.signal.aborted || accessFailure(reason)) return;
         }
         if (!controller.signal.aborted) {
-          void reconcile();
-          await pause(1000 * (attempt + 1));
+          if (refreshed && Date.now() - startedAt >= 20_000) failures = 0;
+          else failures += 1;
+          requestReconcile();
+          await pause(1000 * Math.max(failures, 1));
         }
       }
       while (!controller.signal.aborted) {
-        void reconcile();
+        requestReconcile();
         await pause(10_000);
       }
     }
@@ -170,6 +202,7 @@ export function ActivityTimeline({ caseId, client, profile, refreshKey = 0 }: Ac
       controller.abort();
       scan?.abort();
       clearTimeout(timer);
+      clearTimeout(scanTimer);
     };
   }, [caseId, client, profile.capabilities.liveActivity, refreshVersion, refreshKey]);
 
@@ -193,7 +226,7 @@ export function ActivityTimeline({ caseId, client, profile, refreshKey = 0 }: Ac
         setVisibleCount((count) => count + pageSize);
       }
     } catch {
-      if (generation.current === requestGeneration) setError(true);
+      if (generation.current === requestGeneration) setError("history");
     } finally {
       if (loadMoreController.current === controller) {
         loadingMoreRef.current = false;
@@ -217,7 +250,13 @@ export function ActivityTimeline({ caseId, client, profile, refreshKey = 0 }: Ac
         </button>
       </div>
       {(loading || stale) && <p role="status">{profile.history.loading}</p>}
-      {!loading && !stale && error && <p className="alert" role="alert">{profile.history.error}</p>}
+      {!loading && !stale && error && (
+        <p className="alert" role="alert">
+          {error === "limit"
+            ? "Live activity exceeds the reconciliation limits. Review this case using another authorized method."
+            : profile.history.error}
+        </p>
+      )}
       {!loading && !stale && !error && items.length === 0 && <p>{profile.history.empty}</p>}
       {!loading && !stale && !error && items.length > 0 && (
         <ol className="activity-list" aria-label={profile.history.activityHeading}>

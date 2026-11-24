@@ -54,8 +54,12 @@ its snapshot. Reconnects do not resume from a presumed commit watermark: an
 audit identity or transaction timestamp can be assigned before a later
 commit. Concurrent inserts may require another scan before they appear.
 
-Streams end after 30 seconds. After three connection attempts the browser polls every
-ten seconds; individual scans stop after 1,000 pages or 60 seconds and surface
+Streams end after 30 seconds; a refresh on a stream sustained for 20 seconds
+resets the failure budget. Three short or failed attempts lead to ten-second
+polling. Token acquisition and connection deadlines are 15 seconds; the idle
+deadline is 20 seconds. Cancellation stops awaiting a token and prevents a
+late fetch, but cannot cancel MSAL's underlying operation. Scans start at most once per 15
+seconds and stop after 50 pages or 60 seconds, surfacing
 an error rather than showing a silently truncated snapshot. A supplied
 `Last-Event-ID` must be a valid activity cursor but is only a hint, never a
 watermark. Switching accounts or cases cancels the stream and reads. Local

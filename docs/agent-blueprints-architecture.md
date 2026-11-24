@@ -21,8 +21,14 @@ commit, so late commits require subsequent full scans. A scan concurrent with
 inserts may be incomplete until a later scan; this is eventual reconciliation,
 not a point-in-time or exactly-once feed.
 
-Streams are limited to 30 seconds; three bounded connection attempts are
-followed by ten-second polling. A scan is limited to 1,000 pages and 60 seconds;
+Streams are limited to 30 seconds; a valid refresh on a stream sustained for
+20 seconds resets the failure budget. Short or failed streams count toward
+three failures, followed by ten-second polling. Token acquisition and
+connection establishment have 15-second deadlines; idle reads have a
+20-second deadline. Cancellation stops waiting for token acquisition and
+prevents a late request, but cannot cancel MSAL's underlying token operation.
+Scans start no more often than every 15 seconds and are limited to 50 pages
+and 60 seconds;
 exceeding either limit surfaces an error instead of silently truncating.
 Reconnection begins a fresh scan, and selection/account teardown aborts
 in-flight work. The existing activity pagination cursor is validated but is

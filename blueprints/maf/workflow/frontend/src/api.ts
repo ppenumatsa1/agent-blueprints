@@ -79,6 +79,35 @@ export class WorkflowClientError extends Error {
   }
 }
 
+class TokenWaitError extends Error {}
+
+function waitForToken(token: Promise<string>, signal: AbortSignal): Promise<string> {
+  return new Promise((resolve, reject) => {
+    let timer: ReturnType<typeof setTimeout>;
+    const cleanup = () => {
+      clearTimeout(timer);
+      signal.removeEventListener("abort", aborted);
+    };
+    const aborted = () => {
+      cleanup();
+      reject(new TokenWaitError("Token acquisition was cancelled."));
+    };
+    timer = setTimeout(() => {
+      cleanup();
+      reject(new TokenWaitError("Token acquisition timed out."));
+    }, 15_000);
+    token.then(
+      (value) => { cleanup(); resolve(value); },
+      (error: unknown) => { cleanup(); reject(error); },
+    );
+    if (signal.aborted) {
+      aborted();
+      return;
+    }
+    signal.addEventListener("abort", aborted, { once: true });
+  });
+}
+
 function newTraceparent(): string | undefined {
   try {
     const bytes = crypto.getRandomValues(new Uint8Array(24));
@@ -179,18 +208,23 @@ function isActivityPage(value: unknown): value is WorkflowActivityPage {
 export class HttpWorkflowClient implements WorkflowClient {
   constructor(private readonly tokenFor: (scope: Scope) => Promise<string>) {}
 
+  private async token(scope: Scope, signal?: AbortSignal): Promise<string> {
+    try {
+      const token = this.tokenFor(scope);
+      return await (signal ? waitForToken(token, signal) : token);
+    } catch (reason) {
+      if (reason instanceof TokenWaitError) throw new WorkflowClientError(reason.message);
+      throw new WorkflowClientError("Sign in again or grant the required permission.", true);
+    }
+  }
+
   private async request<T>(
     scope: Scope,
     path: string,
     validate: (value: unknown) => value is T,
     options: { body?: unknown; idempotencyKey?: string; signal?: AbortSignal } = {},
   ): Promise<T> {
-    let token: string;
-    try {
-      token = await this.tokenFor(scope);
-    } catch {
-      throw new WorkflowClientError("Sign in again or grant the required permission.", true);
-    }
+    const token = await this.token(scope, options.signal);
     let response: Response;
     try {
       const traceparent = newTraceparent();
@@ -255,49 +289,68 @@ export class HttpWorkflowClient implements WorkflowClient {
   }
 
   async activityStream(id: string, signal: AbortSignal, refresh: () => void): Promise<void> {
-    let token: string;
-    try {
-      token = await this.tokenFor("read");
-    } catch {
-      throw new WorkflowClientError("Sign in again or grant the required permission.", true);
-    }
+    const token = await this.token("read", signal);
     if (signal.aborted) return;
-    const response = await fetch(`/api/cases/${encodeURIComponent(id)}/activity/stream`, {
-      headers: { Authorization: `Bearer ${token}`, Accept: "text/event-stream" },
-      credentials: "omit",
-      signal,
-    });
-    if ([401, 403, 404].includes(response.status)) {
-      throw new WorkflowClientError("Activity access is no longer available.", true);
-    }
-    if (!response.ok || !response.body || !response.headers.get("content-type")?.startsWith("text/event-stream")) {
-      throw new WorkflowClientError("Live activity is unavailable.");
-    }
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
+    const connection = new AbortController();
+    const abort = () => connection.abort();
+    signal.addEventListener("abort", abort, { once: true });
+    const connectTimeout = setTimeout(abort, 15_000);
     try {
-      while (!signal.aborted) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true }).replace(/\r/g, "");
-        if (buffer.length > 8192) throw new WorkflowClientError("Live activity returned an invalid response.");
-        let boundary = buffer.indexOf("\n\n");
-        while (boundary !== -1) {
-          const event = buffer.slice(0, boundary);
-          buffer = buffer.slice(boundary + 2);
-          if (event === "event: activity.refresh\ndata: {}") refresh();
-          if (event === "event: unavailable\ndata: {}") {
-            throw new WorkflowClientError("Activity access is no longer available.", true);
+      const response = await fetch(`/api/cases/${encodeURIComponent(id)}/activity/stream`, {
+        headers: { Authorization: `Bearer ${token}`, Accept: "text/event-stream" },
+        credentials: "omit",
+        signal: connection.signal,
+      });
+      clearTimeout(connectTimeout);
+      if ([401, 403, 404].includes(response.status)) {
+        throw new WorkflowClientError("Activity access is no longer available.", true);
+      }
+      if (!response.ok || !response.body || !response.headers.get("content-type")?.startsWith("text/event-stream")) {
+        throw new WorkflowClientError("Live activity is unavailable.");
+      }
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      try {
+        while (!signal.aborted) {
+          let idleTimeout: ReturnType<typeof setTimeout> | undefined;
+          const idle = new Promise<never>((_resolve, reject) => {
+            idleTimeout = setTimeout(() => {
+              reject(new WorkflowClientError("Live activity timed out."));
+              connection.abort();
+            }, 20_000);
+          });
+          let part: ReadableStreamReadResult<Uint8Array>;
+          try {
+            part = await Promise.race([reader.read(), idle]);
+          } finally {
+            clearTimeout(idleTimeout);
           }
-          if (event === "event: retry\ndata: {}") {
-            throw new WorkflowClientError("Live activity is temporarily unavailable.");
+          if (part.done) break;
+          buffer += decoder.decode(part.value, { stream: true }).replace(/\r/g, "");
+          if (buffer.length > 8192) throw new WorkflowClientError("Live activity returned an invalid response.");
+          let boundary = buffer.indexOf("\n\n");
+          while (boundary !== -1) {
+            const event = buffer.slice(0, boundary);
+            buffer = buffer.slice(boundary + 2);
+            if (event === "event: activity.refresh\ndata: {}") refresh();
+            else if (event === "event: unavailable\ndata: {}") {
+              throw new WorkflowClientError("Activity access is no longer available.", true);
+            } else if (event === "event: retry\ndata: {}") {
+              throw new WorkflowClientError("Live activity is temporarily unavailable.");
+            } else if (event !== ": heartbeat") {
+              throw new WorkflowClientError("Live activity returned an invalid response.");
+            }
+            boundary = buffer.indexOf("\n\n");
           }
-          boundary = buffer.indexOf("\n\n");
         }
+      } finally {
+        await reader.cancel();
       }
     } finally {
-      await reader.cancel();
+      clearTimeout(connectTimeout);
+      signal.removeEventListener("abort", abort);
+      connection.abort();
     }
   }
 
