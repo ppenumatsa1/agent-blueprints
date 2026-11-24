@@ -7,10 +7,11 @@ import secrets
 import tempfile
 import time
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
-from threading import BoundedSemaphore
+from threading import BoundedSemaphore, Event, Lock
 from unittest.mock import AsyncMock, Mock, patch
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from uuid import UUID, uuid4
@@ -977,6 +978,153 @@ class ApiSecurityTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 503)
         self.assertEqual(response.json(), {"detail": "Workflow history scan budget exceeded."})
+
+    def test_poll_stalls_reserve_pool_capacity_until_worker_finishes(self):
+        self.store.close()
+        self.store = PostgresStore(
+            self.settings.database_url, pool_min_size=0, pool_max_size=4, pool_timeout_seconds=1
+        )
+        self.addCleanup(self.store.close)
+        with self.client() as client:
+            case_id = self.submit(client).json()["id"]
+            service = client.app.state.service
+            paths = ("/api/cases", f"/api/cases/{case_id}", f"/api/cases/{case_id}/activity")
+            for method, path in zip(("history", "read", "activity"), paths):
+                with self.subTest(method=method):
+                    entered, release = Event(), Event()
+                    lock = Lock()
+                    active = 0
+                    original = getattr(service, method)
+
+                    def stalled(*args, **kwargs):
+                        nonlocal active
+                        with self.store.connect() as connection:
+                            connection.execute("SELECT 1")
+                            with lock:
+                                active += 1
+                                if active == 2:
+                                    entered.set()
+                            if not release.wait(10):
+                                raise TimeoutError("Test worker was not released.")
+                        return original(*args, **kwargs)
+
+                    with patch.object(service, method, side_effect=stalled):
+                        with ThreadPoolExecutor(max_workers=2) as executor:
+                            futures = [
+                                executor.submit(
+                                    client.get, path, headers=self.headers(self.owner_token)
+                                )
+                                for _ in range(2)
+                            ]
+                            try:
+                                self.assertTrue(entered.wait(5))
+                                for retry_path in paths:
+                                    for _ in range(3):
+                                        response = client.get(
+                                            retry_path, headers=self.headers(self.owner_token)
+                                        )
+                                        self.assertEqual(response.status_code, 503)
+                                self.assertEqual(client.get(path).status_code, 401)
+                                business = self.submit(client)
+                                self.assertEqual(business.status_code, 200, business.text)
+                                decision = client.post(
+                                    f"/api/cases/{business.json()['id']}/decision",
+                                    headers=self.headers(self.reviewer_token),
+                                    json={"decision": "rejected"},
+                                )
+                                self.assertEqual(decision.status_code, 200, decision.text)
+                                self.assertEqual(decision.json()["status"], "rejected")
+                                self.assertEqual(
+                                    action_count(self.store, UUID(business.json()["id"])), 0
+                                )
+                            finally:
+                                release.set()
+                            for future in futures:
+                                self.assertEqual(future.result(timeout=10).status_code, 200)
+                    self.assertEqual(
+                        client.get(path, headers=self.headers(self.owner_token)).status_code, 200
+                    )
+            stranger = self.tokens.token(subject=STRANGER, scopes="workflow.read")
+            self.assertEqual(client.get(paths[1], headers=self.headers(stranger)).status_code, 403)
+        self.store.close()
+
+    def test_cancelled_async_waiter_does_not_release_poll_worker_capacity(self):
+        self.store.close()
+        self.store = PostgresStore(self.settings.database_url, pool_min_size=0, pool_max_size=3)
+        entered, release = Event(), Event()
+
+        def worker():
+            with self.store.poll_read() as admitted:
+                self.assertTrue(admitted)
+                entered.set()
+                if not release.wait(10):
+                    raise TimeoutError("Test worker was not released.")
+
+        async def exercise():
+            task = asyncio.create_task(asyncio.to_thread(worker))
+            self.assertTrue(await asyncio.to_thread(entered.wait, 5))
+            task.cancel()
+            with self.assertRaises(asyncio.CancelledError):
+                await task
+            with self.store.poll_read() as admitted:
+                self.assertFalse(admitted)
+            release.set()
+
+        try:
+            asyncio.run(exercise())
+            with self.store.poll_read() as admitted:
+                self.assertTrue(admitted)
+        finally:
+            release.set()
+            self.store.close()
+
+    def test_unrestricted_poll_reads_can_exhaust_the_business_pool(self):
+        self.store.close()
+        self.store = PostgresStore(
+            self.settings.database_url, pool_min_size=0, pool_max_size=2, pool_timeout_seconds=0.1
+        )
+        self.addCleanup(self.store.close)
+        with self.client() as client:
+            case_id = self.submit(client).json()["id"]
+            service = client.app.state.service
+            entered, release = Event(), Event()
+            lock = Lock()
+            active = 0
+            original = service.read
+
+            def stalled(*args, **kwargs):
+                nonlocal active
+                with self.store.connect() as connection:
+                    connection.execute("SELECT 1")
+                    with lock:
+                        active += 1
+                        if active == 2:
+                            entered.set()
+                    if not release.wait(10):
+                        raise TimeoutError("Test worker was not released.")
+                return original(*args, **kwargs)
+
+            # Model the former unrestricted polling admission.
+            with (
+                patch.object(self.store, "_poll_read_slots", BoundedSemaphore(2)),
+                patch.object(service, "read", side_effect=stalled),
+                ThreadPoolExecutor(max_workers=2) as executor,
+            ):
+                futures = [
+                    executor.submit(
+                        client.get, f"/api/cases/{case_id}", headers=self.headers(self.owner_token)
+                    )
+                    for _ in range(2)
+                ]
+                try:
+                    self.assertTrue(entered.wait(5))
+                    with self.assertRaisesRegex(TimeoutError, "pool is exhausted"):
+                        with self.store.connect():
+                            self.fail("A business operation unexpectedly acquired a connection.")
+                finally:
+                    release.set()
+                for future in futures:
+                    self.assertEqual(future.result(timeout=10).status_code, 200)
 
     def test_api_rejects_forged_expired_wrong_issuer_audience_and_tenant_tokens(self):
         invalid = (

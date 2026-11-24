@@ -1,5 +1,32 @@
 # Phased implementation plan
 
+## Polling fallback containment above PR #60
+
+**In progress**, based on `99b4303a209c983ca7d306fd6d23473476e85ff6`.
+The case, activity and history GET handlers share a per-PostgreSQL-store
+nonblocking admission limit of `min(4, max(0, pool_max_size - 2))`; a saturated
+handler returns 503 after authentication. Business operations bypass the
+limit, and the two unconsumed connections cover the tested local workflow's
+advisory lock plus a nested transaction. A pool of two admits no polling reads.
+Slots are released only after the actual synchronous handler exits, not when
+an asynchronous caller cancels. Tests reproduce pre-containment exhaustion
+and cover repeated stalls, rejection, cleanup and generated Order Resolution
+against disposable local PostgreSQL 17.12. Focused source tests pass 4/4 and
+generated profile tests 2/2. Full source and independent base suites pass 168
+each; the independent profile passes 235 with one real-provider opt-in skip,
+using the Windows selector event loop. Instantiation tests pass 8/8 and
+generated base/profile Ruff checks pass. Default Windows Proactor runs failed
+in all three suites with two Psycopg async errors and one stream assertion
+failure each; selector reruns do not erase those failures. Exact-head CI
+remains pending.
+
+This is not a network timeout, thread termination or exclusive business-pool
+reservation. Other traffic may still exhaust the pool, authentication is
+outside admission, and custom implementations may borrow more connections or
+spawn work. Managed-identity acquisition, network black holes, shutdown and
+deployment-wide capacity are unverified. Next: review the draft and exact-head
+CI, then separately address these production reliability limitations.
+
 ## Remediation above PR #54
 
 **In progress**, starting at
@@ -41,9 +68,9 @@ database credentials fall back to independently authorized polling. Regression
 tests cover actual locked-query cancellation, connection cleanup, HTTP cleanup,
 capacity recovery, token expiry, policy revocation, and server read-only/deadline
 enforcement. DNS may still use library executor threads; resolver shutdown and
-TLS/network-black-hole behavior are not verified. Polling still uses synchronous
-database calls and repeated stalls can exhaust shared capacity. Those remain
-reliability blockers; this is a bounded SSE mitigation, not full I/O resilience.
+TLS/network-black-hole behavior are not verified. Polling remains synchronous;
+the successor containment and limitations are recorded above. I/O deadlines
+remain a reliability blocker; this is not full I/O resilience.
 
 Successor local validation on 2026-11-24 uses complete backend discovery, not
 the former curated module list. Source and independent generated base backend:
