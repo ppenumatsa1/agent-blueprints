@@ -74,10 +74,18 @@ actual Foundry execution.
 
 The default Windows Proactor full generated-backend run failed three of 251
 tests (two Psycopg async errors and a stream 503 instead of 200); one
-real-provider test was skipped. Do not relabel that failure. Next: review
-exact-head CI and, after trust and isolation are established, separately run
-authorized live approval, rejection, checkpoint/resume, restart, idempotency
-and recovery checks.
+real-provider test was skipped. A separate Windows Selector-policy run
+completed 251 tests with the same real-provider skip, and all nine canonical
+scenario cases passed independently through the generated local adapter.
+Do not relabel the Proactor failure.
+
+The generated profile's signed-out Chromium check initially failed at
+`1591e20293bbfad351f54243f74fb471203bc274` because it inherited the base
+title expectation. A profile-specific title expectation passed locally, as
+did the unchanged base check; CI now runs the check on both generated
+frontends. Next: review exact-head CI and, after trust and isolation are
+established, separately run authorized live approval, rejection,
+checkpoint/resume, restart, idempotency and recovery checks.
 
 ## Acceptance harness contract repairs in PR #62
 

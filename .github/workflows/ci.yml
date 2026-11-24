@@ -410,11 +410,16 @@ jobs:
           destination="$RUNNER_TEMP/maf-browser-generated"
           python scripts/instantiate_maf.py "$destination"
           echo "GENERATED_FRONTEND=$destination/frontend" >> "$GITHUB_ENV"
+          profile_destination="$RUNNER_TEMP/maf-browser-order-resolution"
+          python scripts/instantiate_maf.py "$profile_destination" --profile order-resolution
+          echo "GENERATED_PROFILE_FRONTEND=$profile_destination/frontend" >> "$GITHUB_ENV"
       - name: Install locked browser dependencies and Chromium
         run: |
           cd "$GENERATED_FRONTEND"
           npm ci --no-audit --no-fund
           npx playwright install --with-deps chromium
+          cd "$GENERATED_PROFILE_FRONTEND"
+          npm ci --no-audit --no-fund
       - name: Run actual local Chromium E2E
         run: |
           cd "$GENERATED_FRONTEND"
@@ -422,6 +427,8 @@ jobs:
           npm run e2e:history
           npm run e2e:studio
           E2E_LIVE=true E2E_BASE_URL=https://app.example.test npx playwright test e2e/live-origin.spec.ts
+          cd "$GENERATED_PROFILE_FRONTEND"
+          npm run e2e:local
       - name: Retain browser diagnostics
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -430,5 +437,7 @@ jobs:
           path: |
             ${{ runner.temp }}/maf-browser-generated/frontend/playwright-report
             ${{ runner.temp }}/maf-browser-generated/frontend/test-results
+            ${{ runner.temp }}/maf-browser-order-resolution/frontend/playwright-report
+            ${{ runner.temp }}/maf-browser-order-resolution/frontend/test-results
           if-no-files-found: warn
           retention-days: 7

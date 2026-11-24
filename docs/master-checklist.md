@@ -79,6 +79,16 @@ deployed hosted agent or live identity evidence.
 A default-Windows-Proactor run of the full generated backend suite failed
 three of 251 tests: two Psycopg async errors and a stream 503 instead of 200;
 one real-provider test was skipped. This remains a failed check, not a pass.
+A separate Windows Selector-policy run completed 251 tests with the same
+real-provider skip. All nine canonical scenario cases and their nine contract
+test methods passed separately using the generated local API/MAF/PostgreSQL
+adapter. No real-provider or deployed hosted-agent evidence is implied.
+
+The generated profile's signed-out Chromium check initially failed at
+`1591e20293bbfad351f54243f74fb471203bc274` because it inherited the base
+title expectation. The profile now supplies its own title expectation; the
+updated generated profile and unchanged base each passed that browser check
+locally. CI is configured to exercise both independently generated frontends.
 Next: verify exact-head CI and separately establish authorized live approval,
 rejection, restart and recovery after provenance and isolation prerequisites.
 No Azure resource or production-readiness validation is claimed.
