@@ -1,4 +1,5 @@
-import type { WorkflowCase } from "./api";
+import type { DecisionBinding, WorkflowCase } from "./api";
+import type { PayloadProjection, WorkflowStudioProfile } from "./studio-profile";
 
 type JsonObject = Record<string, unknown>;
 
@@ -12,36 +13,69 @@ function text(value: unknown): string {
   return typeof value === "string" ? value : "Unavailable";
 }
 
-export function OrderResolutionCase({ record }: { record: WorkflowCase }) {
+function projectOrderResolution(record: WorkflowCase): PayloadProjection {
   const order = object(record.payload.order);
   const proposal = object(record.payload.proposal);
   if (!("id" in order) || !("action" in proposal)) {
-    return <pre>{JSON.stringify(record.payload, null, 2)}</pre>;
+    return { summary: "Order resolution details are unavailable.", fields: [] };
   }
   const amount = typeof proposal.amount === "string"
     ? `${text(proposal.currency)} ${proposal.amount}`
     : "Not applicable";
   const outcome = record.status === "rejected" ? "Escalated after rejection" : record.status;
-
-  return (
-    <dl aria-label="Order resolution details">
-      <dt>Order</dt>
-      <dd>{text(order.id)}</dd>
-      <dt>Issue</dt>
-      <dd>{text(order.issue)}</dd>
-      <dt>Proposed action</dt>
-      <dd>{text(proposal.action)}</dd>
-      <dt>Proposed amount</dt>
-      <dd>{amount}</dd>
-      <dt>Approval required</dt>
-      <dd>{proposal.approval_required === true ? "Yes" : "No"}</dd>
-      <dt>Outcome</dt>
-      <dd>{outcome}</dd>
-    </dl>
-  );
+  return {
+    summary: `Review ${text(proposal.action)} for ${text(order.id)}.`,
+    fields: [
+      { label: "Order", value: text(order.id) },
+      { label: "Issue", value: text(order.issue) },
+      { label: "Proposed action", value: text(proposal.action) },
+      { label: "Proposed amount", value: amount },
+      { label: "Approval required", value: proposal.approval_required === true ? "Yes" : "No" },
+      { label: "Outcome", value: outcome },
+    ],
+  };
 }
 
-export const orderResolutionUi = {
+function decisionBinding(record: WorkflowCase): DecisionBinding | undefined {
+  const proposal = object(record.payload.proposal);
+  return typeof proposal.version === "number"
+    && typeof proposal.action === "string"
+    && typeof proposal.destination_id === "string"
+    && typeof record.decision_handle === "string"
+    ? {
+        proposal_version: proposal.version,
+        action: proposal.action,
+        destination_id: proposal.destination_id,
+        handle: record.decision_handle,
+        channel: "api",
+      }
+    : undefined;
+}
+
+export const orderResolutionProfile: WorkflowStudioProfile = {
   title: "Order Resolution",
   description: "Resolve synthetic order issues with deterministic policy and authorized review.",
-} as const;
+  eyebrow: "Order resolution workflow",
+  labels: {
+    newRequest: "New order issue",
+    requestGuidance: "The assigned reviewer must authorize the proposed resolution.",
+    reviewer: "Reviewer object ID",
+    payload: "Order issue data (JSON)",
+    submit: "Submit issue",
+    openCase: "Open a resolution case",
+    caseId: "Case ID",
+    open: "Open",
+    approve: "Approve",
+    reject: "Reject",
+  },
+  capabilities: {
+    history: false,
+    liveActivity: false,
+    evidence: false,
+    manualTests: false,
+    agUi: false,
+    copilotKit: false,
+  },
+  projectPayload: (_payload, record) => projectOrderResolution(record),
+  decisionBinding,
+};

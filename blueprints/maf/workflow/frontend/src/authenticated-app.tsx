@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { HttpWorkflowClient, type Scope } from "./api";
 import type { ClientConfig } from "./config";
+import { defaultWorkflowStudioProfile } from "./default-profile";
 import { WorkflowWorkspace } from "./workspace";
 
 const accountKey = (account: AccountInfo) =>
@@ -44,6 +45,7 @@ export function AuthenticatedApplication({ config }: { config: ClientConfig }) {
       signIn={async () => { await instance.loginRedirect({ scopes }); }}
       signOut={async () => { await instance.logoutRedirect({ account: active }); }}
       client={client}
+      profile={defaultWorkflowStudioProfile}
     />
   );
 }

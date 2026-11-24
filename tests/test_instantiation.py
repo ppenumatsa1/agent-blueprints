@@ -225,6 +225,25 @@ class InstantiationTests(unittest.TestCase):
                     (ROOT / "blueprints" / "maf" / "workflow" / relative).read_bytes(),
                     (target / relative).read_bytes(),
                 )
+            for relative in (
+                "frontend/src/studio-profile.tsx",
+                "frontend/src/default-profile.tsx",
+                "frontend/src/components/studio-shell.tsx",
+                "frontend/src/components/request-composer.tsx",
+                "frontend/src/components/case-summary-panel.tsx",
+                "frontend/src/components/approval-panel.tsx",
+                "frontend/src/components/case-metadata-panel.tsx",
+                "frontend/src/test/profile.test.tsx",
+                "frontend/playwright.studio.config.ts",
+                "frontend/e2e/studio-shell.spec.ts",
+            ):
+                source = ROOT / "blueprints" / "maf" / "workflow" / relative
+                generated = target / relative
+                with self.subTest(studio_file=relative):
+                    self.assertEqual(source.read_bytes(), generated.read_bytes())
+                    text = generated.read_text(encoding="utf-8")
+                    self.assertNotIn("agent-blueprints", text)
+                    self.assertNotIn("maf-monorepo", text)
             self.assertTrue((target / "backend" / "Dockerfile").is_file())
             generated_dockerfile = (target / "backend" / "Dockerfile").read_bytes()
             self.assertEqual(

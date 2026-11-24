@@ -320,6 +320,20 @@ Python project metadata, lock, examples, migrations and backend tests are owned 
 `backend`.
 The verifier and exact contract bytes remain independent of the runtime.
 
+UX stack Layer 1 keeps the frontend independently deployable and adds no
+shared runtime. A generation-time `WorkflowStudioProfile` supplies generic
+titles, descriptions, labels, disabled capability flags, safe payload
+projection/rendering, and optional application-owned decision binding.
+`StudioShell`, `RequestComposer`, `CaseSummaryPanel`, `ApprovalPanel`, and
+`CaseMetadataPanel` reuse the existing protected `WorkflowClient` contract.
+MSAL token acquisition, delegated scopes, API paths, server-authoritative
+record authorization, reviewer UUID validation, secure idempotency reuse,
+approval/rejection, and recovery remain outside profile control. History,
+live activity, evidence, manual tests, AG-UI, and CopilotKit are explicit
+disabled flags, not implemented services. The generated repository owns all
+profile/component source and has no runtime or source dependency on this
+repository or the reference repository.
+
 The tooling branch adds a Python 3.12 uv lock, Ruff, portable development
 commands and editor configurations. CI uses the public lock; container
 installation exports its exact hashes and may use an operator-selected index.
