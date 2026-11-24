@@ -225,13 +225,7 @@ jobs:
           uv run --locked ruff check .
           uv run --locked ruff format --check .
           uv run --locked python -c "import app, pathlib; assert pathlib.Path(app.__file__).resolve().is_relative_to(pathlib.Path.cwd())"
-          uv run --locked python -m unittest -v \
-            tests.test_core tests.test_external_effect tests.test_security \
-            tests.test_evidence_runner tests.test_telemetry tests.test_migrations \
-            tests.test_extensions tests.test_evaluation \
-            tests.test_order_resolution tests.test_order_resolution_api \
-            tests.test_order_resolution_durability \
-            tests.test_order_resolution_evaluation
+          uv run --locked python -m unittest discover -s tests -v
           cd ../hosted-agent
           uv pip install --python "$ORDER_RESOLUTION_DIR/backend/.venv/bin/python" \
             -r requirements.txt

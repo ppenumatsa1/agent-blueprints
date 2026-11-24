@@ -19,6 +19,11 @@ export interface EvidenceProjection {
   items: ReadonlyArray<{ label: string; value: string }>;
 }
 
+/**
+ * Legacy configuration only. The studio never executes these callbacks: browser
+ * application code can access real services and is not a security sandbox.
+ * This does not isolate other trusted profile code or ordinary workflow actions.
+ */
 export interface SyntheticManualTest {
   label: string;
   run(): Promise<{ outcome: "passed" | "failed"; summary: string }>;
@@ -62,6 +67,7 @@ export interface WorkflowStudioProfile {
   renderPayload?(projection: PayloadProjection, record: WorkflowCase): ReactNode;
   decisionBinding?(record: WorkflowCase): DecisionBinding | undefined;
   projectEvidence?(record: WorkflowCase): EvidenceProjection;
+  /** @deprecated Manual test execution is disabled in all environments. */
   syntheticManualTests?: readonly SyntheticManualTest[];
   protocolAdapters?: {
     agUi?: StudioProtocolAdapter;

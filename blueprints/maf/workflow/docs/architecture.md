@@ -64,10 +64,23 @@ seconds and stop after 50 pages or 60 seconds, surfacing
 an error rather than showing a silently truncated snapshot. A supplied
 `Last-Event-ID` must be a valid activity cursor but is only a hint, never a
 watermark. Switching accounts or cases cancels the stream and reads. Local
-tests do not establish live Entra or cloud proxy behavior. The stream
-wall-clock deadline cannot cancel a blocked synchronous identity/database
-worker; a borrowed connection can remain occupied until the worker returns,
-within the existing pool bound.
+tests do not establish live Entra or cloud proxy behavior. Stream identity and
+database calls use a dedicated bounded worker pool and a bounded stream count.
+The standard PostgreSQL pool reserves at least one connection from stream work;
+timed-out work retains its slot until the synchronous call actually returns.
+Streams fail closed to polling for custom service or store implementations
+whose connection behavior cannot be established, including the Order Resolution
+service. This reservation is per process and cannot constrain arbitrary
+callbacks that start work on other threads. Four permanently blocked stream
+workers disable streams in that process; deployment-scale tuning and live
+proxy behavior remain unverified.
+
+An unsupported service receives a 503 from the stream endpoint before stream
+authentication; it sends no activity information. The browser then falls back
+to the existing activity API, which independently authenticates and
+authorizes each polling request. The failure budget and polling behavior are
+client-side recovery, not an exemption from authorization. The UI shows
+activity updates and access errors, but does not indicate that polling is active.
 
 ## Optional protocol context
 
@@ -342,19 +355,17 @@ data, or sensitive identifiers. The shell makes no evidence request and does
 not verify that the application projection is safe. Projection errors are
 reported locally without stopping approval.
 
-Applications may provide `syntheticManualTests` and enable `manualTests` for
-development. Each function receives no workflow client and runs only on an
-explicit click. Return a real pass/fail and safe summary; failures and thrown
-errors are not converted to successes. Application code is trusted, not
-sandboxed: not passing a client does not prevent network access or real
-business effects. Authors must use synthetic fixtures and a separately
-isolated synthetic development backend; the blueprint does not enforce this
-isolation. Production builds exclude the manual-test UI without an opt-in,
-because a build flag cannot sandbox code in an authenticated browser origin.
-It is not a production endpoint or an authorization bypass. Applications must
-not import their test adapters into production entrypoints. Neither adapter
-establishes release evidence or changes authentication, idempotency, or
-business state.
+The studio never executes `syntheticManualTests` callbacks, even in
+development. A browser build flag or omission of a workflow client cannot
+prevent trusted application code from accessing real systems. The legacy
+configuration remains typed for compatibility but cannot enable execution.
+This only disables the studio's manual-test execution path; it does not
+sandbox other trusted profile code or ordinary workflow actions. Neither
+adapter establishes release evidence or changes authentication, idempotency,
+or business state. This is an interim control, not isolated synthetic
+execution. A fixed in-process synthetic test would need its entire call graph
+and operating boundary audited for effects; restricting one callback
+interface does not sandbox the authenticated origin.
 
 The profile keeps framework and application state distinct. Low-risk proposals
 run through a concrete MAF `Executor` and `WorkflowBuilder` to a terminal native

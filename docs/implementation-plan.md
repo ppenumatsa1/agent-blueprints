@@ -1,5 +1,65 @@
 # Phased implementation plan
 
+## Remediation above PR #54
+
+**In progress**, starting at
+`11b4bb04c92626fddc3a50b135a8a6d0e379d52a`. Validate fixes independently
+and on the exact draft-PR head; do not infer production readiness from local
+checks. Broad public PostgreSQL firewall access remains a **HIGH production
+blocker** ([#56](https://github.com/ppenumatsa1/agent-blueprints/issues/56)).
+No firewall mutation, Azure deployment, or live calls are part of this work.
+
+The requested same-identity exception is **blocked**, not implemented: the
+synthetic adapter uses configured PostgreSQL and the runtime cannot verify
+storage, credential, permission, and network isolation or trusted deployment
+provenance. Production separation of duties remains enforced, including at
+the effect boundary. A separately verified isolated environment and atomic
+exception audit would be prerequisites; a flag is insufficient. The studio
+does not execute application-supplied manual-test callbacks in any environment.
+This interim control does not fulfill isolated synthetic test execution. An
+audited fixed in-process test path, without arbitrary callbacks, would still
+need proof that its dependencies and permitted operations cannot reach real
+business effects; general browser or application code is not sandboxed.
+Such a path could test pure transformations over bundled synthetic fixtures,
+without persistence, network calls, or client access. It would only cover that
+audited code under a trusted build/runtime, not the real workflow, a general
+sandbox, or release evidence.
+SSE work uses bounded dedicated workers and reserves a connection in the
+standard PostgreSQL pool. Unverifiable custom service/store implementations,
+including Order Resolution, fall back to polling. A blocked synchronous call
+retains its slot until it returns, and limits are per-process rather than
+production-scale guarantees.
+Next: verify the changes and obtain exact-head CI without claiming production
+readiness or an operational self-approval path.
+
+Local validation includes 105 isolated repository tests with two
+adapter-not-selected skips, 54 source frontend tests plus build and CSP
+verification, 141 source and 141 independently generated base backend tests
+with disposable PostgreSQL, and 22 focused profile PostgreSQL API tests.
+Focused fallback tests cover mocked profile 503, authorized polling,
+displayed updates, and revocation clearing activity. Independently generated base and profile
+frontends passed 53 and 55 tests, respectively, plus builds and CSP checks,
+before the additional fallback regression.
+Builds retain the >500 kB chunk warning. Independent generated backend and
+exact-head CI checks remain pending.
+
+The coordinating session's read-only preflight reports that the existing
+target lacks established isolation, usable delegated consent is unverified,
+and default deployment configuration touches the deferred firewall. Separately,
+the committed cloud failure-injection job does not supply the live adapter's
+authentication file, agent version, Azure API revision, hosted root, and
+other required Azure environment inputs (`AZURE_RESOURCE_GROUP`,
+`AZURE_API_CONTAINER_APP_NAME`, `AZURE_ENV_NAME`, `HOSTED_AGENT_NAME`, and
+`HOSTED_AGENT_VERSION`). The live adapter also invokes `az` revision restart
+and `azd` session stop, but this job has no scoped Azure login or established
+tool setup. Merely wiring environment variables would not bind those
+destructive operations to an authorized isolated target or establish least
+privilege. A separate reviewed workflow design must provision scoped identity,
+validate exact targets, install dependencies before exposing authentication
+material, and clean it up. Resolve and verify these gaps before any authorized
+rollout or live acceptance; this work neither supplies secrets nor changes
+Azure.
+
 ## UX stack Layer 5: read-only protocol context
 
 **In progress; stacked on PR #53** at
@@ -22,15 +82,10 @@ Next: verify those boundaries and retain draft status.
 **In progress; stacked on PR #52** at
 `f16a4f504f3a80f98819a8750058cabf6778559d`. Typed optional profile adapters
 project explicitly allowlisted evidence as text from an already authorized
-selected case, or expose explicitly initiated synthetic tests in development.
-The base makes no evidence request and provides no workflow client to test
-adapters. Adapter code is trusted application code, not a sandbox: owners
-must enforce safe projections and synthetic data. Manual tests require a
-separately isolated synthetic development backend; the blueprint does not
-enforce isolation or prevent network access and real effects. Not passing a
-workflow client is not a security boundary. Default profiles disable both,
-and production builds exclude the manual-test UI without an opt-in: a build
-flag alone cannot confine code running in an authenticated browser origin.
+selected case. Manual-test callback execution is now disabled in all
+environments: trusted application code is not sandboxed, and omitting a
+workflow client or using a build flag cannot prevent real effects. Default
+profiles disable both capabilities.
 Adapter errors are surfaced without preventing
 the normal workflow. Focused UI checks are available; generated-project,
 browser and exact-head CI verification remain pending. Next: finish those
@@ -59,8 +114,9 @@ and 177 tests (one profile opt-in skip), and generated UI suites passed 38 and
 tests with two adapter-selection skips. Fresh generated and exact-head checks
 remain pending. The inherited profile telemetry fixture mismatch is unchanged.
 Timed-out synchronous identity/database workers cannot be cancelled by the
-stream and may hold a pooled connection until they return. Next action: open
-the draft, finish verification, and do not merge or deploy.
+stream and may hold a pooled connection until they return; see the bounded
+remediation and polling limitation above. Next action: finish verification
+and do not merge or deploy.
 
 ## UX stack Layer 1: reusable workflow studio shell
 

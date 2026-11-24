@@ -39,6 +39,13 @@ A timeout or process exit after send is an unknown outcome, so recovery
 observes the destination before retrying. This proves only the generated
 synthetic adapter and is not evidence for a real refund or shipment service.
 
+Local regression coverage exercises a lost hosted acknowledgment across a
+new PostgreSQL store, a concurrent first-use journal claim, legacy-unbound
+hosted and local approvals, and local crash/resume recovery. A stored
+self-approval is also rejected at the effect boundary. These tests use
+synthetic identities and a disposable database; they do not prove downstream
+transport or cloud isolation.
+
 ## Verification assets and current integration limits
 
 `verification/scenarios/order-resolution/acceptance-contract.json` and

@@ -1,3 +1,5 @@
+import io
+import urllib.error
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -102,9 +104,49 @@ class AcceptanceFaultTests(unittest.TestCase):
                     "trace_id": trace_id,
                     "agent_version": "1",
                     "deployment_revision": REVISION,
+                    "http_status": 200,
                 }
             ],
         )
+        self.assertIs(type(client.correlations[0]["http_status"]), int)
+
+    def test_live_client_records_http_status_for_denied_requests(self):
+        case_id = "20000000-0000-4000-8000-000000000002"
+        request_id = "30000000-0000-4000-8000-000000000003"
+        trace_id = "4" * 32
+
+        headers = {
+            "X-Correlation-ID": request_id,
+            "traceparent": f"00-{trace_id}-{'5' * 16}-01",
+        }
+
+        client = object.__new__(LiveClient)
+        client.base_url = "https://api.example.test"
+        client.deployment_revision = REVISION
+        client.correlations = []
+        with (
+            patch(
+                "tests.live_acceptance.urllib.request.urlopen",
+                side_effect=urllib.error.HTTPError(
+                    "https://api.example.test/api/cases",
+                    403,
+                    "Forbidden",
+                    headers,
+                    io.BytesIO(f'{{"id":"{case_id}"}}'.encode()),
+                ),
+            ),
+            patch.dict("os.environ", {"AGENT_VERSION": "1"}),
+        ):
+            status, _, _ = client.request(
+                "POST",
+                "/api/cases",
+                {"access_token": "token"},
+                body={"synthetic": True},
+            )
+
+        self.assertEqual(status, 403)
+        self.assertEqual(client.correlations[0]["http_status"], 403)
+        self.assertIs(type(client.correlations[0]["http_status"]), int)
 
     def test_controls_are_revision_bound_and_one_shot(self):
         faults = AcceptanceFaults(enabled=True, deployment_revision=REVISION)

@@ -1,8 +1,10 @@
+import asyncio
 import io
 import json
 import logging
 import os
 import secrets
+import threading
 import tempfile
 import time
 import unittest
@@ -32,7 +34,7 @@ from app.domain.errors import (
     DelegationError,
     HistoryScanLimitExceeded,
 )
-from app.domain.models import Principal
+from app.domain.models import Case, Principal
 from app.infrastructure.identity import AuthenticatedRequest, EntraIdentity
 from app.infrastructure.migrations import upgrade
 from app.domain.policy import CaseAccessPolicy, JsonObjectRules
@@ -118,7 +120,9 @@ class ActivityStreamTests(unittest.TestCase):
         principal = Principal(TENANT, OWNER, frozenset({"workflow.read"}), frozenset())
         self.identity = Mock()
         self.identity.authenticate.return_value = AuthenticatedRequest(principal, "private-token")
-        self.service = Mock()
+        self.store = PostgresStore("postgresql://localhost/test", pool_max_size=2)
+        self.service = WorkflowService(self.store, Mock(), Mock(), Mock())
+        self.service.activity = Mock()
         self.app = FastAPI()
         self.app.state.identity = self.identity
         self.app.state.service = self.service
@@ -133,6 +137,54 @@ class ActivityStreamTests(unittest.TestCase):
         response = self.client.get(self.path, headers={**self.headers, "Last-Event-ID": "bad!"})
         self.assertEqual(response.status_code, 422)
         self.service.activity.assert_not_called()
+
+    def test_stream_capacity_rejects_before_authentication(self):
+        from app.api.routes.activity_stream import (
+            MAX_CONCURRENT_ACTIVITY_STREAMS,
+            _activity_stream_runtime,
+        )
+
+        acquired = 0
+        try:
+            for _ in range(MAX_CONCURRENT_ACTIVITY_STREAMS):
+                self.assertTrue(_activity_stream_runtime.try_acquire_stream())
+                acquired += 1
+            response = self.client.get(self.path, headers=self.headers)
+            self.assertEqual(response.status_code, 503)
+            self.identity.authenticate.assert_not_called()
+        finally:
+            for _ in range(acquired):
+                _activity_stream_runtime.release_stream()
+
+    def test_unknown_store_disables_stream(self):
+        self.service.store = Mock()
+        response = self.client.get(self.path, headers=self.headers)
+        self.assertEqual(response.status_code, 503)
+        self.service.activity.assert_not_called()
+
+    def test_overridden_store_connect_disables_stream(self):
+        class CustomStore(PostgresStore):
+            def connect(self):
+                return super().connect()
+
+        self.service.store = CustomStore("postgresql://localhost/test")
+        response = self.client.get(self.path, headers=self.headers)
+        self.assertEqual(response.status_code, 503)
+        self.service.activity.assert_not_called()
+
+    def test_pool_stream_saturation_returns_503_then_recovers(self):
+        with self.store._pool.stream_work():
+            response = self.client.get(self.path, headers=self.headers)
+        self.assertEqual(response.status_code, 503)
+        self.service.activity.assert_not_called()
+        with (
+            patch("app.api.routes.activity_stream.STREAM_SECONDS", 1),
+            patch("app.api.routes.activity_stream.HEARTBEAT_SECONDS", 1),
+            patch("app.api.routes.activity_stream.asyncio.sleep", new_callable=AsyncMock),
+        ):
+            response = self.client.get(self.path, headers=self.headers)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("event: activity.refresh", response.text)
 
     def test_reauthorizes_each_tick_and_stops_on_policy_revocation(self):
         self.service.activity.side_effect = [None, None, AccessDenied("private-canary")]
@@ -210,6 +262,107 @@ class ActivityStreamTests(unittest.TestCase):
         self.assertIn("event: retry", response.text)
         self.assertNotIn("event: activity.refresh", response.text)
         self.assertEqual(self.service.activity.call_count, 1)
+
+
+class ActivityStreamRuntimeTests(unittest.TestCase):
+    def test_stream_cannot_hold_multiple_connections_from_pool_of_two(self):
+        store = PostgresStore("postgresql://localhost/test", pool_min_size=0, pool_max_size=2)
+        store._pool._open_connection = lambda reason: Mock(closed=False)
+        try:
+            with store._pool.stream_work(), store.connect():
+                with self.assertRaises(TimeoutError), store.connect():
+                    self.fail("Stream borrowed the reserved connection.")
+        finally:
+            store.close()
+
+    def test_pool_two_reserves_one_connection_after_stream_timeout(self):
+        from app.api.routes.activity_stream import (
+            ActivityStreamRuntime,
+            stream_activity,
+        )
+
+        store = PostgresStore("postgresql://localhost/test", pool_min_size=0, pool_max_size=2)
+        store._pool._open_connection = lambda reason: Mock(closed=False)
+        service = WorkflowService(store, Mock(), Mock(), Mock())
+        started = threading.Event()
+        release = threading.Event()
+        actor = AuthenticatedRequest(
+            Principal(TENANT, OWNER, frozenset({"workflow.read"}), frozenset()),
+            "token",
+        )
+
+        def blocked_activity(*args, **kwargs):
+            with store.connect():
+                started.set()
+                release.wait(timeout=2)
+
+        service.activity = Mock(side_effect=blocked_activity)
+        runtime = ActivityStreamRuntime(workers=2)
+
+        async def exercise():
+            with self.assertRaises(TimeoutError):
+                await runtime.call(stream_activity, service, actor, uuid4(), timeout=0.01)
+            self.assertTrue(started.is_set())
+            with self.assertRaises(TimeoutError):
+                await runtime.call(stream_activity, service, actor, uuid4(), timeout=1)
+            with store.connect():
+                pass
+            release.set()
+            for _ in range(100):
+                try:
+                    await runtime.call(stream_activity, service, actor, uuid4(), timeout=1)
+                    return
+                except TimeoutError:
+                    await asyncio.sleep(0.01)
+            self.fail("Stream DB work slot was not released when work finished.")
+
+        try:
+            asyncio.run(exercise())
+        finally:
+            release.set()
+            runtime.shutdown()
+            store.close()
+
+    def test_timed_out_work_stays_bounded_until_the_worker_finishes(self):
+        from app.api.routes.activity_stream import (
+            ActivityStreamCapacityError,
+            ActivityStreamRuntime,
+        )
+
+        runtime = ActivityStreamRuntime(workers=1, max_streams=1)
+        started = threading.Event()
+        release = threading.Event()
+        second_started = threading.Event()
+
+        def blocked_work():
+            started.set()
+            release.wait(timeout=2)
+
+        async def exercise():
+            with self.assertRaises(TimeoutError):
+                await runtime.call(blocked_work, timeout=0.01)
+            self.assertTrue(started.is_set())
+            with self.assertRaises(ActivityStreamCapacityError):
+                await runtime.call(second_started.set, timeout=1)
+            self.assertFalse(second_started.is_set())
+
+            release.set()
+            for _ in range(100):
+                try:
+                    await runtime.call(lambda: None, timeout=1)
+                    return
+                except ActivityStreamCapacityError:
+                    await asyncio.sleep(0.01)
+            self.fail("The bounded worker slot was not released when work finished.")
+
+        self.assertTrue(runtime.try_acquire_stream())
+        self.assertFalse(runtime.try_acquire_stream())
+        runtime.release_stream()
+        try:
+            asyncio.run(exercise())
+        finally:
+            release.set()
+            runtime.shutdown()
 
 
 class IdentityTests(unittest.TestCase):
@@ -738,6 +891,62 @@ class ApiSecurityTests(unittest.TestCase):
         self.assertNotIn("SECRET-CANARY", output)
         self.assertNotIn(self.owner_token, output)
         self.assertNotIn(self.reviewer_token, output)
+
+
+class SeparationOfDutiesTests(unittest.TestCase):
+    def setUp(self):
+        self.policy = CaseAccessPolicy()
+        self.owner = Principal(
+            "tenant",
+            "owner",
+            frozenset({"workflow.write", "workflow.approve"}),
+            frozenset({"Workflow.Approver"}),
+        )
+        self.reviewer = replace(self.owner, subject="reviewer")
+        self.case = Case(
+            id=uuid4(),
+            tenant_id="tenant",
+            owner_id="owner",
+            reviewer_id="reviewer",
+            payload={},
+            status="pending",
+            decision=None,
+            request_id=None,
+            checkpoint_id=None,
+            terminal_checkpoint_id=None,
+            execution_complete=False,
+            failure_code=None,
+        )
+
+    def test_same_identity_is_denied_even_with_write_scope_and_approver_role(self):
+        with self.assertRaises(AccessDenied):
+            self.policy.authorize_submission(self.owner, self.owner.subject)
+        with self.assertRaises(AccessDenied):
+            self.policy.authorize_decision(
+                self.owner, replace(self.case, reviewer_id=self.owner.subject)
+            )
+
+    def test_distinct_reviewer_requires_matching_tenant_scope_and_role(self):
+        self.policy.authorize_submission(self.owner, self.reviewer.subject)
+        self.policy.authorize_decision(self.reviewer, self.case)
+        for actor in (
+            replace(self.reviewer, tenant_id="other"),
+            replace(self.reviewer, subject="other"),
+            replace(self.reviewer, scopes=frozenset()),
+            replace(self.reviewer, roles=frozenset()),
+        ):
+            with self.subTest(actor=actor), self.assertRaises(AccessDenied):
+                self.policy.authorize_decision(actor, self.case)
+
+    def test_submission_still_requires_write_scope_and_valid_reviewer(self):
+        for actor, reviewer in (
+            (replace(self.owner, scopes=frozenset({"workflow.approve"})), "reviewer"),
+            (replace(self.owner, tenant_id=""), "reviewer"),
+            (replace(self.owner, subject=""), "reviewer"),
+            (self.owner, ""),
+        ):
+            with self.subTest(actor=actor, reviewer=reviewer), self.assertRaises(AccessDenied):
+                self.policy.authorize_submission(actor, reviewer)
 
 
 if __name__ == "__main__":

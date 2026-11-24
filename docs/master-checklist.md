@@ -11,6 +11,26 @@ The original [interactive architecture](software-factory.html) is a preserved
 historical source; this checklist records current status. The 2–3 hour
 prototype objective has not yet been measured.
 
+## Remediation above PR #54
+
+**Status: In Progress.** This work starts at PR #54 head
+`11b4bb04c92626fddc3a50b135a8a6d0e379d52a`. Independent validation and
+exact-head CI are required before drawing conclusions. Broad public
+PostgreSQL firewall access remains a **HIGH production blocker**, tracked in
+[#56](https://github.com/ppenumatsa1/agent-blueprints/issues/56); neither
+firewall changes nor deployment are authorized by this work.
+
+| Acceptance criterion | Evidence and limitations |
+| --- | --- |
+| Same-identity development approval | **Blocked.** Same-user approval remains denied, including at the effect boundary. The synthetic adapter uses configured PostgreSQL; the runtime cannot verify isolation of storage, credentials, permissions, or network access. A flag or adapter declaration cannot establish that isolation. Independently verified isolation, trusted deployment provenance, and an atomic exception audit are prerequisites. |
+| Manual test safety | The studio does not execute application-supplied manual-test callbacks, even in development. This is an interim control, not an isolated synthetic execution capability. Trusted profile code itself is not sandboxed; an audited fixed test path and its execution boundary require separate design and verification. |
+| Stream availability | A dedicated bounded worker pool and a per-pool connection reservation limit stream work; synchronous calls cannot be cancelled. Custom services/stores, including Order Resolution, fall back to polling when their connection behavior cannot be established. Focused tests cover the 503, authenticated polling, changed activity, and revocation clearing displayed activity; the profile backend test uses a mocked store. The UI does not indicate polling mode. Limits are per-process and production-scale tuning remains unverified. |
+| Rollout and live acceptance | Parent's read-only preflight reports that isolation and usable delegated consent are unverified and the default deployment configuration touches the deferred firewall. The committed cloud failure-injection job does not supply the live adapter's auth file, agent version, Azure API revision, hosted root, and related environment inputs. These are separate blockers; no rollout or live acceptance is claimed. |
+| Local checks | Isolated repository suite: 105 tests, two adapter-not-selected skips. Source backend and independently generated base backend: 141 tests each with disposable PostgreSQL. Source frontend: 54 tests; earlier independently generated base/profile frontends: 53/55 tests before the added fallback regression. Builds and CSP checks passed, with >500 kB chunk warnings. Focused profile PostgreSQL API suite: 22 passed. Final generated profile backend and exact-head draft CI checks remain required. |
+
+Next action: establish a separately verified isolation boundary before
+considering any same-identity exception; retain production separation of duties.
+
 ## UX stack Layer 5: read-only protocol context
 
 **Status: In Progress.** Stacked on PR #53 head
@@ -34,7 +54,7 @@ deploying. The inherited profile telemetry fixture mismatch remains disclosed.
 | Acceptance criterion | Evidence and limits |
 | --- | --- |
 | Safe evidence | An optional typed profile projection displays text only for an already selected authorized case. The application must explicitly allowlist safe values; the UI neither fetches evidence nor verifies the projection's privacy. |
-| Synthetic manual tests | Application-owned synthetic tests are explicitly invoked, receive no workflow client, report failures, and are excluded from production builds; production opt-in is not supported. Their code is trusted, not sandboxed: not passing a client does not prevent real effects. Use a separately isolated synthetic development backend; the blueprint does not enforce that isolation or prohibit network access. |
+| Synthetic manual tests | Superseded by the remediation above: callback execution is disabled in all environments because the browser cannot enforce isolation from real effects. |
 | Isolation | Missing, disabled, throwing, or failed adapters leave the base workflow usable; focused adapter and accessibility tests cover these boundaries. |
 | Standalone and browser | Browser and independently generated build/test checks are pending. Existing protected local/live specs remain unchanged. |
 
@@ -59,7 +79,8 @@ Inherited Layer 2 profile telemetry fixture mismatch remains disclosed and
 unchanged. No cloud changes or later adapters are included. **Next action:**
 open the stacked draft, finish generated and exact-head checks, and keep merge
 disabled. The stream deadline cannot cancel a stalled synchronous database or
-identity worker, which can retain a pooled connection until it returns.
+identity worker, which can retain a pooled connection until it returns; see
+the bounded remediation and polling limitation above.
 
 ## UX stack Layer 1 acceptance
 
