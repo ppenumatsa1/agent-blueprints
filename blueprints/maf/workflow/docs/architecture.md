@@ -79,7 +79,8 @@ An unsupported service receives a 503 from the stream endpoint before stream
 authentication; it sends no activity information. The browser then falls back
 to the existing activity API, which independently authenticates and
 authorizes each polling request. The failure budget and polling behavior are
-client-side recovery, not an exemption from authorization.
+client-side recovery, not an exemption from authorization. The UI shows
+activity updates and access errors, but does not indicate that polling is active.
 
 ## Optional protocol context
 
