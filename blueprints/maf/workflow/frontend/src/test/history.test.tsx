@@ -331,6 +331,21 @@ describe("workflow activity timeline", () => {
     }
   });
 
+  it("uses authorized polling when the client has no stream implementation", async () => {
+    vi.useFakeTimers();
+    try {
+      const activity = vi.fn().mockResolvedValue(activityPage("created"));
+      const { unmount } = render(
+        <ActivityTimeline caseId={firstId} client={client({ activity })} profile={defaultWorkflowStudioProfile} />,
+      );
+      await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+      expect(activity.mock.calls.length).toBeGreaterThan(1);
+      unmount();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("renews healthy finite streams without exhausting the failure budget", async () => {
     vi.useFakeTimers();
     try {

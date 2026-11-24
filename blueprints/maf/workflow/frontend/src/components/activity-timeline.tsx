@@ -70,7 +70,7 @@ export function ActivityTimeline({ caseId, client, profile, refreshKey = 0 }: Ac
   }, [caseId, client, refreshVersion, refreshKey]);
 
   useEffect(() => {
-    if (!profile.capabilities.liveActivity || !client.activityStream) return;
+    if (!profile.capabilities.liveActivity) return;
     const controller = new AbortController();
     const requestGeneration = generation.current;
     let scan: AbortController | null = null;
@@ -174,7 +174,7 @@ export function ActivityTimeline({ caseId, client, profile, refreshKey = 0 }: Ac
 
     async function watch() {
       let failures = 0;
-      while (failures < 3 && !controller.signal.aborted) {
+      while (client.activityStream && failures < 3 && !controller.signal.aborted) {
         let refreshed = false;
         const startedAt = Date.now();
         try {

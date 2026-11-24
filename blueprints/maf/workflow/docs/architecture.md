@@ -56,7 +56,8 @@ commit. Concurrent inserts may require another scan before they appear.
 
 Streams end after 30 seconds; a refresh on a stream sustained for 20 seconds
 resets the failure budget. Three short or failed attempts lead to ten-second
-polling. Token acquisition and connection deadlines are 15 seconds; the idle
+polling; clients without a stream implementation also use polling. Token
+acquisition and connection deadlines are 15 seconds; the idle
 deadline is 20 seconds. Cancellation stops awaiting a token and prevents a
 late fetch, but cannot cancel MSAL's underlying operation. Scans start at most once per 15
 seconds and stop after 50 pages or 60 seconds, surfacing

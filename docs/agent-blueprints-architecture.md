@@ -23,7 +23,8 @@ not a point-in-time or exactly-once feed.
 
 Streams are limited to 30 seconds; a valid refresh on a stream sustained for
 20 seconds resets the failure budget. Short or failed streams count toward
-three failures, followed by ten-second polling. Token acquisition and
+three failures, followed by ten-second polling; clients without a stream
+implementation also poll. Token acquisition and
 connection establishment have 15-second deadlines; idle reads have a
 20-second deadline. Cancellation stops waiting for token acquisition and
 prevents a late request, but cannot cancel MSAL's underlying token operation.
