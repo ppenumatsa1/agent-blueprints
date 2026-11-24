@@ -35,6 +35,12 @@ A future implementation requires a separately verified isolation boundary.
 Evidence projections are not authorization, artifact verification, or
 evidence of production readiness.
 
+The hosted failure runner validates and preserves optional HTTP status and
+hosted phase metadata in correlation evidence for the independent App Insights
+consumer. This shape compatibility is not evidence that live telemetry exists
+or matches. Acceptance fault controls remain default-off and role- and
+revision-bound, but a non-production environment boundary is not enforced.
+
 ## Live activity reconciliation
 
 The Layer 3 stream is an authenticated, case-authorized invalidation channel,

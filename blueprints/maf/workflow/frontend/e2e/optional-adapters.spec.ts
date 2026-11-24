@@ -12,4 +12,5 @@ test("evidence remains available while synthetic manual execution is disabled", 
   await expect(page.getByText("Not projected")).toHaveCount(0);
   await expect(page.getByText("Manual tests: Not enabled")).toBeVisible();
   await expect(page.getByText("Synthetic assertion failed")).toHaveCount(0);
+  await expect(page.locator("body")).not.toHaveAttribute("data-manual-test-invoked");
 });

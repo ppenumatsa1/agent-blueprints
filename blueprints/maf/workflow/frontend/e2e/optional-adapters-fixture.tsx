@@ -41,7 +41,10 @@ createRoot(root).render(
       }),
       syntheticManualTests: [{
         label: "Run synthetic check",
-        run: async () => ({ outcome: "failed", summary: "Synthetic assertion failed" }),
+        run: async () => {
+          document.body.dataset.manualTestInvoked = "true";
+          return { outcome: "failed", summary: "Synthetic assertion failed" };
+        },
       }],
     }}
   />,

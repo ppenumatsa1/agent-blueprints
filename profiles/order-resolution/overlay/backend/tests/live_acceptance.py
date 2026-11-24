@@ -464,7 +464,7 @@ class LiveHostedFailureAdapter:
         self.unknown.discard(case_id)
         return self.read(case_id)
 
-    def correlations(self) -> list[dict[str, str]]:
+    def correlations(self) -> list[dict[str, str | int]]:
         unique = {}
         for item in list(self.client.correlations):
             value = dict(item)

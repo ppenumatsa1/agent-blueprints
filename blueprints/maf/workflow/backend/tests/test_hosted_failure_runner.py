@@ -214,6 +214,36 @@ class HostedFailureRunnerTests(unittest.TestCase):
                 environment="synthetic-hosted",
             )
 
+    def test_live_correlation_metadata_survives_and_invalid_status_is_rejected(self):
+        adapter = FixtureHostedAdapter()
+        original = adapter.correlations
+
+        def correlations():
+            return [
+                {
+                    **item,
+                    "http_status": 403,
+                    "hosted_phase": "resume",
+                    "conversation_id": "synthetic-conversation",
+                    "hosted_agent_name": "synthetic-agent",
+                    "hosted_agent_version": "1",
+                }
+                for item in original()
+            ]
+
+        adapter.correlations = correlations
+        args = {
+            "source_revision": "source-123",
+            "deployment_revision": "deployment-456",
+            "environment": "synthetic-hosted",
+        }
+        result = run_scenarios(adapter, **args)
+        self.assertEqual(result["correlations"][0]["http_status"], 403)
+        self.assertEqual(result["correlations"][0]["hosted_phase"], "resume")
+        adapter.correlations = lambda: [{**correlations()[0], "http_status": True}]
+        with self.assertRaisesRegex(ValueError, "HTTP status"):
+            run_scenarios(adapter, **args)
+
 
 if __name__ == "__main__":
     unittest.main()

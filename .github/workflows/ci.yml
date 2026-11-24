@@ -225,7 +225,9 @@ jobs:
           uv run --locked ruff check .
           uv run --locked ruff format --check .
           uv run --locked python -c "import app, pathlib; assert pathlib.Path(app.__file__).resolve().is_relative_to(pathlib.Path.cwd())"
-          uv run --locked python -m unittest discover -s tests -v
+          test -f "$ORDER_RESOLUTION_DIR/hosted-agent/src/order_resolution_hosted/application.py"
+          ORDER_RESOLUTION_AGENT_A_SOURCE="$ORDER_RESOLUTION_DIR/hosted-agent/src" \
+            uv run --locked python -m unittest discover -s tests -v
           cd ../hosted-agent
           uv pip install --python "$ORDER_RESOLUTION_DIR/backend/.venv/bin/python" \
             -r requirements.txt
@@ -392,6 +394,7 @@ jobs:
         run: |
           cd "$GENERATED_FRONTEND"
           npm run e2e:local
+          npx playwright test e2e/optional-adapters.spec.ts
       - name: Retain browser diagnostics
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
