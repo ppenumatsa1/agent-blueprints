@@ -4,17 +4,18 @@ import json
 import logging
 import os
 import secrets
-import threading
 import tempfile
 import time
 import unittest
 from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
+from threading import BoundedSemaphore
 from unittest.mock import AsyncMock, Mock, patch
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from uuid import UUID, uuid4
 
+import httpx
 import jwt
 import psycopg
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -121,8 +122,29 @@ class ActivityStreamTests(unittest.TestCase):
         self.identity = Mock()
         self.identity.authenticate.return_value = AuthenticatedRequest(principal, "private-token")
         self.store = PostgresStore("postgresql://localhost/test", pool_max_size=2)
-        self.service = WorkflowService(self.store, Mock(), Mock(), Mock())
-        self.service.activity = Mock()
+        self.store.get_for_activity_stream = AsyncMock(
+            return_value=Case(
+                id=uuid4(),
+                tenant_id=TENANT,
+                owner_id=OWNER,
+                reviewer_id=REVIEWER,
+                payload={},
+                status="pending",
+                decision=None,
+                request_id=None,
+                checkpoint_id=None,
+                terminal_checkpoint_id=None,
+                execution_complete=False,
+                failure_code=None,
+            )
+        )
+        self.service = WorkflowService(self.store, Mock(), Mock(), CaseAccessPolicy())
+        authenticate = patch(
+            "app.api.routes.activity_stream.stream_authenticate",
+            new=AsyncMock(side_effect=lambda request, token: self.identity.authenticate(token)),
+        )
+        authenticate.start()
+        self.addCleanup(authenticate.stop)
         self.app = FastAPI()
         self.app.state.identity = self.identity
         self.app.state.service = self.service
@@ -136,7 +158,7 @@ class ActivityStreamTests(unittest.TestCase):
         self.assertEqual(self.client.get(self.path).status_code, 401)
         response = self.client.get(self.path, headers={**self.headers, "Last-Event-ID": "bad!"})
         self.assertEqual(response.status_code, 422)
-        self.service.activity.assert_not_called()
+        self.store.get_for_activity_stream.assert_not_called()
 
     def test_stream_capacity_rejects_before_authentication(self):
         from app.api.routes.activity_stream import (
@@ -160,7 +182,7 @@ class ActivityStreamTests(unittest.TestCase):
         self.service.store = Mock()
         response = self.client.get(self.path, headers=self.headers)
         self.assertEqual(response.status_code, 503)
-        self.service.activity.assert_not_called()
+        self.store.get_for_activity_stream.assert_not_called()
 
     def test_overridden_store_connect_disables_stream(self):
         class CustomStore(PostgresStore):
@@ -170,13 +192,17 @@ class ActivityStreamTests(unittest.TestCase):
         self.service.store = CustomStore("postgresql://localhost/test")
         response = self.client.get(self.path, headers=self.headers)
         self.assertEqual(response.status_code, 503)
-        self.service.activity.assert_not_called()
+        self.store.get_for_activity_stream.assert_not_called()
 
-    def test_pool_stream_saturation_returns_503_then_recovers(self):
-        with self.store._pool.stream_work():
+    def test_async_io_saturation_returns_503_then_recovers(self):
+        from app.api.routes.activity_stream import _activity_stream_runtime
+
+        with patch.object(_activity_stream_runtime, "_worker_slots", BoundedSemaphore(1)):
+            _activity_stream_runtime._worker_slots.acquire()
             response = self.client.get(self.path, headers=self.headers)
+            _activity_stream_runtime._worker_slots.release()
         self.assertEqual(response.status_code, 503)
-        self.service.activity.assert_not_called()
+        self.store.get_for_activity_stream.assert_not_called()
         with (
             patch("app.api.routes.activity_stream.STREAM_SECONDS", 1),
             patch("app.api.routes.activity_stream.HEARTBEAT_SECONDS", 1),
@@ -187,7 +213,12 @@ class ActivityStreamTests(unittest.TestCase):
         self.assertIn("event: activity.refresh", response.text)
 
     def test_reauthorizes_each_tick_and_stops_on_policy_revocation(self):
-        self.service.activity.side_effect = [None, None, AccessDenied("private-canary")]
+        case = self.store.get_for_activity_stream.return_value
+        self.store.get_for_activity_stream.side_effect = [
+            case,
+            case,
+            replace(case, owner_id=STRANGER, reviewer_id=STRANGER),
+        ]
         with (
             patch("app.api.routes.activity_stream.STREAM_SECONDS", 2),
             patch("app.api.routes.activity_stream.HEARTBEAT_SECONDS", 1),
@@ -201,10 +232,14 @@ class ActivityStreamTests(unittest.TestCase):
         self.assertIn("event: unavailable", response.text)
         self.assertNotIn("private", response.text)
         self.assertEqual(self.identity.authenticate.call_count, 3)
-        self.assertEqual(self.service.activity.call_count, 3)
+        self.assertEqual(self.store.get_for_activity_stream.call_count, 3)
 
     def test_initial_policy_denial_is_an_http_error(self):
-        self.service.activity.side_effect = AccessDenied("private-canary")
+        self.store.get_for_activity_stream.return_value = replace(
+            self.store.get_for_activity_stream.return_value,
+            owner_id=STRANGER,
+            reviewer_id=STRANGER,
+        )
         response = self.client.get(self.path, headers=self.headers)
         self.assertEqual(response.status_code, 403)
         self.assertNotIn("private-canary", response.text)
@@ -221,9 +256,7 @@ class ActivityStreamTests(unittest.TestCase):
             response = self.client.get(self.path, headers={**self.headers, "Last-Event-ID": cursor})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.text.count("event: activity.refresh"), 2)
-        self.assertEqual(self.service.activity.call_count, 3)
-        for call in self.service.activity.call_args_list:
-            self.assertIsNone(call.kwargs["cursor"])
+        self.assertEqual(self.store.get_for_activity_stream.call_count, 3)
         self.assertNotIn(cursor, response.text)
 
     def test_token_is_revalidated_until_it_expires(self):
@@ -242,18 +275,21 @@ class ActivityStreamTests(unittest.TestCase):
         self.assertEqual(response.text.count("event: activity.refresh"), 1)
         self.assertIn("event: unavailable", response.text)
         self.assertNotIn("private-canary", response.text)
-        self.assertEqual(self.service.activity.call_count, 2)
+        self.assertEqual(self.store.get_for_activity_stream.call_count, 2)
 
     def test_slow_tick_ends_stream_at_deadline_with_retry(self):
-        identity = self.identity.authenticate.return_value
+        case = self.store.get_for_activity_stream.return_value
+        cancelled = []
 
-        def authenticate(token):
-            if self.identity.authenticate.call_count == 1:
-                return identity
-            time.sleep(0.5)
-            return identity
+        async def read(case_id):
+            if self.store.get_for_activity_stream.call_count == 1:
+                return case
+            try:
+                await asyncio.Event().wait()
+            finally:
+                cancelled.append(True)
 
-        self.identity.authenticate.side_effect = authenticate
+        self.store.get_for_activity_stream.side_effect = read
         with (
             patch("app.api.routes.activity_stream.STREAM_SECONDS", 0.1),
             patch("app.api.routes.activity_stream.HEARTBEAT_SECONDS", 0.1),
@@ -261,108 +297,250 @@ class ActivityStreamTests(unittest.TestCase):
             response = self.client.get(self.path, headers=self.headers)
         self.assertIn("event: retry", response.text)
         self.assertNotIn("event: activity.refresh", response.text)
-        self.assertEqual(self.service.activity.call_count, 1)
+        self.assertEqual(self.store.get_for_activity_stream.call_count, 2)
+        self.assertEqual(cancelled, [True])
+
+    def test_managed_identity_and_custom_policy_fall_back_without_sync_work(self):
+        self.store._connector.options = replace(
+            self.store._connector.options, auth_mode="managed-identity"
+        )
+        self.assertEqual(self.client.get(self.path, headers=self.headers).status_code, 503)
+        self.identity.authenticate.assert_not_called()
+        self.store.get_for_activity_stream.assert_not_called()
+        self.store._connector.options = replace(self.store._connector.options, auth_mode="password")
+        self.service.policy = Mock()
+        self.assertEqual(self.client.get(self.path, headers=self.headers).status_code, 503)
+        self.identity.authenticate.assert_not_called()
+
+    def test_database_failure_does_not_expose_details(self):
+        self.store.get_for_activity_stream.side_effect = psycopg.OperationalError("private-canary")
+        response = self.client.get(self.path, headers=self.headers)
+        self.assertEqual(response.status_code, 503)
+        self.assertNotIn("private-canary", response.text)
 
 
 class ActivityStreamRuntimeTests(unittest.TestCase):
-    def test_stream_cannot_hold_multiple_connections_from_pool_of_two(self):
-        store = PostgresStore("postgresql://localhost/test", pool_min_size=0, pool_max_size=2)
-        store._pool._open_connection = lambda reason: Mock(closed=False)
-        try:
-            with store._pool.stream_work(), store.connect():
-                with self.assertRaises(TimeoutError), store.connect():
-                    self.fail("Stream borrowed the reserved connection.")
-        finally:
-            store.close()
-
-    def test_pool_two_reserves_one_connection_after_stream_timeout(self):
-        from app.api.routes.activity_stream import (
-            ActivityStreamRuntime,
-            stream_activity,
-        )
-
-        store = PostgresStore("postgresql://localhost/test", pool_min_size=0, pool_max_size=2)
-        store._pool._open_connection = lambda reason: Mock(closed=False)
-        service = WorkflowService(store, Mock(), Mock(), Mock())
-        started = threading.Event()
-        release = threading.Event()
-        actor = AuthenticatedRequest(
-            Principal(TENANT, OWNER, frozenset({"workflow.read"}), frozenset()),
-            "token",
-        )
-
-        def blocked_activity(*args, **kwargs):
-            with store.connect():
-                started.set()
-                release.wait(timeout=2)
-
-        service.activity = Mock(side_effect=blocked_activity)
-        runtime = ActivityStreamRuntime(workers=2)
-
-        async def exercise():
-            with self.assertRaises(TimeoutError):
-                await runtime.call(stream_activity, service, actor, uuid4(), timeout=0.01)
-            self.assertTrue(started.is_set())
-            with self.assertRaises(TimeoutError):
-                await runtime.call(stream_activity, service, actor, uuid4(), timeout=1)
-            with store.connect():
-                pass
-            release.set()
-            for _ in range(100):
-                try:
-                    await runtime.call(stream_activity, service, actor, uuid4(), timeout=1)
-                    return
-                except TimeoutError:
-                    await asyncio.sleep(0.01)
-            self.fail("Stream DB work slot was not released when work finished.")
-
-        try:
-            asyncio.run(exercise())
-        finally:
-            release.set()
-            runtime.shutdown()
-            store.close()
-
-    def test_timed_out_work_stays_bounded_until_the_worker_finishes(self):
+    def test_timeout_cancels_work_and_releases_capacity(self):
         from app.api.routes.activity_stream import (
             ActivityStreamCapacityError,
             ActivityStreamRuntime,
         )
 
         runtime = ActivityStreamRuntime(workers=1, max_streams=1)
-        started = threading.Event()
-        release = threading.Event()
-        second_started = threading.Event()
+        cleaned = []
 
-        def blocked_work():
-            started.set()
-            release.wait(timeout=2)
+        async def blocked_work():
+            try:
+                with self.assertRaises(ActivityStreamCapacityError):
+                    await runtime.call(blocked_work, timeout=1)
+                await asyncio.Event().wait()
+            finally:
+                cleaned.append(True)
 
         async def exercise():
             with self.assertRaises(TimeoutError):
                 await runtime.call(blocked_work, timeout=0.01)
-            self.assertTrue(started.is_set())
-            with self.assertRaises(ActivityStreamCapacityError):
-                await runtime.call(second_started.set, timeout=1)
-            self.assertFalse(second_started.is_set())
-
-            release.set()
-            for _ in range(100):
-                try:
-                    await runtime.call(lambda: None, timeout=1)
-                    return
-                except ActivityStreamCapacityError:
-                    await asyncio.sleep(0.01)
-            self.fail("The bounded worker slot was not released when work finished.")
+            self.assertEqual(cleaned, [True])
+            self.assertEqual(await runtime.call(AsyncMock(return_value=42), timeout=1), 42)
+            self.assertEqual(len(asyncio.all_tasks()), 1)
 
         self.assertTrue(runtime.try_acquire_stream())
         self.assertFalse(runtime.try_acquire_stream())
         runtime.release_stream()
-        try:
-            asyncio.run(exercise())
-        finally:
-            release.set()
-            runtime.shutdown()
+        asyncio.run(exercise())
+
+    def test_disconnect_cancels_work_and_releases_capacity(self):
+        from app.api.routes.activity_stream import ActivityStreamRuntime
+
+        runtime = ActivityStreamRuntime(workers=1)
+
+        async def exercise():
+            started = asyncio.Event()
+            cleaned = asyncio.Event()
+
+            async def blocked_work():
+                started.set()
+                try:
+                    await asyncio.Event().wait()
+                finally:
+                    cleaned.set()
+
+            task = asyncio.create_task(runtime.call(blocked_work, timeout=1))
+            await started.wait()
+            task.cancel()
+            with self.assertRaises(asyncio.CancelledError):
+                await task
+            self.assertTrue(cleaned.is_set())
+            await runtime.call(AsyncMock(), timeout=1)
+            self.assertEqual(len(asyncio.all_tasks()), 1)
+
+        asyncio.run(exercise())
+
+
+class StreamIdentityTests(unittest.TestCase):
+    def test_async_keys_preserve_delegated_token_validation_without_sync_jwks(self):
+        from app.api.routes.activity_stream import stream_authenticate
+
+        tokens = TokenFixture()
+        identity = EntraIdentity(
+            Settings(TENANT, API, "postgresql://localhost/test", Path("test-checkpoints")),
+            Mock(),
+        )
+        request = Mock()
+        request.app.state.identity = identity
+
+        async def exercise():
+            fetch = Mock(
+                return_value=httpx.Response(200, json={"keys": [tokens.jwk(tokens.first, "one")]})
+            )
+            transport = httpx.MockTransport(fetch)
+            client = httpx.AsyncClient(transport=transport)
+            with patch(
+                "app.api.routes.activity_stream.httpx.AsyncClient", return_value=client
+            ) as factory:
+                with self.assertRaises(AuthenticationFailed):
+                    await stream_authenticate(request, "malformed")
+                factory.assert_not_called()
+                actor = await stream_authenticate(request, tokens.token())
+                await stream_authenticate(request, tokens.token())
+                with self.assertRaises(AuthenticationFailed):
+                    await stream_authenticate(request, tokens.token(aud="wrong-audience"))
+            self.assertEqual(actor.principal.subject, OWNER)
+            identity.jwks.get_signing_key_from_jwt.assert_not_called()
+            fetch.assert_called_once()
+            self.assertTrue(client.is_closed)
+
+        asyncio.run(exercise())
+
+    def test_key_rotation_is_refresh_throttled_and_expired_keys_fail_closed(self):
+        from app.api.routes.activity_stream import StreamSigningKeyCache, StreamSigningKeys
+
+        tokens = TokenFixture()
+        identity = EntraIdentity(
+            Settings(TENANT, API, "postgresql://localhost/test", Path("test-checkpoints"))
+        )
+        first = StreamSigningKeys({"keys": [tokens.jwk(tokens.first, "one")]})
+        second = StreamSigningKeys({"keys": [tokens.jwk(tokens.second, "two")]})
+        cache = StreamSigningKeyCache(identity)
+
+        async def exercise():
+            with patch(
+                "app.api.routes.activity_stream.stream_signing_keys",
+                new=AsyncMock(
+                    side_effect=[first, second, AuthenticationUnavailable("unavailable")]
+                ),
+            ) as fetch:
+                self.assertIs(await cache.get("one"), first)
+                self.assertIs(await cache.get("two"), first)
+                with self.assertRaises(AuthenticationFailed):
+                    EntraIdentity(identity.settings, first).authenticate(
+                        tokens.token(key=tokens.second, kid="two")
+                    )
+                fetch.assert_awaited_once()
+                cache.refresh_after = 0
+                self.assertIs(await cache.get("two"), second)
+                actor = EntraIdentity(identity.settings, second).authenticate(
+                    tokens.token(key=tokens.second, kid="two")
+                )
+                self.assertEqual(actor.principal.subject, OWNER)
+                cache.expires_at = 0
+                with self.assertRaises(AuthenticationUnavailable):
+                    await cache.get("two")
+                self.assertEqual(fetch.await_count, 2)
+                cache.refresh_after = 0
+                with self.assertRaises(AuthenticationUnavailable):
+                    await cache.get("two")
+                with self.assertRaises(AuthenticationUnavailable):
+                    await cache.get("two")
+                self.assertEqual(fetch.await_count, 3)
+
+        asyncio.run(exercise())
+
+    def test_concurrent_cold_cache_fetch_is_bounded_and_cancellation_releases_slot(self):
+        from app.api.routes.activity_stream import StreamSigningKeyCache, StreamSigningKeys
+
+        tokens = TokenFixture()
+        identity = EntraIdentity(
+            Settings(TENANT, API, "postgresql://localhost/test", Path("test-checkpoints"))
+        )
+        keys = StreamSigningKeys({"keys": [tokens.jwk(tokens.first, "one")]})
+        cache = StreamSigningKeyCache(identity)
+
+        async def exercise():
+            started = asyncio.Event()
+
+            async def blocked_fetch(identity):
+                started.set()
+                await asyncio.Event().wait()
+
+            with patch(
+                "app.api.routes.activity_stream.stream_signing_keys",
+                new=AsyncMock(side_effect=blocked_fetch),
+            ) as fetch:
+                task = asyncio.create_task(cache.get("one"))
+                await started.wait()
+                with self.assertRaises(AuthenticationUnavailable):
+                    await cache.get("one")
+                fetch.assert_awaited_once()
+                task.cancel()
+                with self.assertRaises(asyncio.CancelledError):
+                    await task
+                cache.refresh_after = 0
+                fetch.side_effect = None
+                fetch.return_value = keys
+                self.assertIs(await cache.get("one"), keys)
+                self.assertEqual(len(asyncio.all_tasks()), 1)
+
+        asyncio.run(exercise())
+
+    def test_jwks_read_is_cancellable_and_closes_http_resources(self):
+        from app.api.routes.activity_stream import ActivityStreamRuntime, stream_signing_keys
+
+        closed = []
+
+        class StalledBody(httpx.AsyncByteStream):
+            async def __aiter__(self):
+                yield b'{"keys":['
+                await asyncio.Event().wait()
+
+            async def aclose(self):
+                closed.append(True)
+
+        async def exercise():
+            client = httpx.AsyncClient(
+                transport=httpx.MockTransport(
+                    lambda request: httpx.Response(200, stream=StalledBody())
+                )
+            )
+            identity = EntraIdentity(
+                Settings(TENANT, API, "postgresql://localhost/test", Path("test-checkpoints"))
+            )
+            with patch("app.api.routes.activity_stream.httpx.AsyncClient", return_value=client):
+                with self.assertRaises(TimeoutError):
+                    await ActivityStreamRuntime().call(stream_signing_keys, identity, timeout=0.01)
+            self.assertEqual(closed, [True])
+            self.assertTrue(client.is_closed)
+            self.assertEqual(len(asyncio.all_tasks()), 1)
+
+        asyncio.run(exercise())
+
+    def test_invalid_or_oversized_jwks_fails_closed(self):
+        from app.api.routes.activity_stream import stream_signing_keys
+
+        async def exercise():
+            identity = EntraIdentity(
+                Settings(TENANT, API, "postgresql://localhost/test", Path("test-checkpoints"))
+            )
+            for body in (b"{}", b"[]", b'{"keys":null}', b"x" * 262_145, b"not-json"):
+                client = httpx.AsyncClient(
+                    transport=httpx.MockTransport(lambda request: httpx.Response(200, content=body))
+                )
+                with patch("app.api.routes.activity_stream.httpx.AsyncClient", return_value=client):
+                    with self.assertRaises(AuthenticationUnavailable):
+                        await stream_signing_keys(identity)
+                self.assertTrue(client.is_closed)
+
+        asyncio.run(exercise())
 
 
 class IdentityTests(unittest.TestCase):
@@ -538,6 +716,23 @@ class ApiSecurityTests(unittest.TestCase):
             JsonObjectRules(), CaseAccessPolicy(), FixtureAction(), initialize_fixture
         )
         self.identity = EntraIdentity(self.settings, self.tokens.client())
+        from app.api.routes.activity_stream import StreamSigningKeys
+
+        keys = patch(
+            "app.api.routes.activity_stream.stream_signing_keys",
+            new=AsyncMock(
+                return_value=StreamSigningKeys(
+                    {
+                        "keys": [
+                            self.tokens.jwk(self.tokens.first, "one"),
+                            self.tokens.jwk(self.tokens.second, "two"),
+                        ],
+                    }
+                )
+            ),
+        )
+        keys.start()
+        self.addCleanup(keys.stop)
         self.owner_token = self.tokens.token()
         self.reviewer_token = self.tokens.token(
             subject=REVIEWER, scopes="workflow.read workflow.approve", roles=["Workflow.Approver"]
@@ -553,6 +748,53 @@ class ApiSecurityTests(unittest.TestCase):
         return TestClient(
             create_app(self.settings, self.components, store=self.store, identity=self.identity)
         )
+
+    def test_async_stream_read_cancels_locked_query_without_borrowing_api_pool(self):
+        from app.api.routes.activity_stream import ActivityStreamRuntime
+
+        application_name = "stream_" + uuid4().hex
+        self.store._connector.options = replace(
+            self.store._connector.options,
+            dsn=self.settings.database_url + "&application_name=" + application_name,
+        )
+
+        async def exercise():
+            with psycopg.connect(self.settings.database_url) as blocker:
+                blocker.execute("LOCK TABLE wf_cases IN ACCESS EXCLUSIVE MODE")
+                with patch.object(self.store._pool, "connection") as pooled:
+                    with self.assertRaises(TimeoutError):
+                        await ActivityStreamRuntime().call(
+                            self.store.get_for_activity_stream, uuid4(), timeout=0.1
+                        )
+                    pooled.assert_not_called()
+            with psycopg.connect(self.dsn) as observer:
+                remaining = observer.execute(
+                    "SELECT count(*) FROM pg_stat_activity WHERE application_name = %s",
+                    (application_name,),
+                ).fetchone()[0]
+            self.assertEqual(remaining, 0)
+            self.assertEqual(len(asyncio.all_tasks()), 1)
+
+        asyncio.run(exercise())
+
+    def test_stream_database_has_server_deadline_and_is_read_only(self):
+        async def exercise():
+            async with await self.store._connector.connect_for_activity_stream() as connection:
+                for setting, expected in (
+                    ("statement_timeout", "5s"),
+                    ("lock_timeout", "5s"),
+                    ("default_transaction_read_only", "on"),
+                ):
+                    cursor = await connection.execute(f"SHOW {setting}")
+                    self.assertEqual((await cursor.fetchone())[setting], expected)
+                with self.assertRaises(psycopg.errors.ReadOnlySqlTransaction):
+                    await connection.execute("DELETE FROM wf_cases")
+                started = time.monotonic()
+                with self.assertRaises(psycopg.errors.QueryCanceled):
+                    await connection.execute("SELECT pg_sleep(30)")
+                self.assertLess(time.monotonic() - started, 10)
+
+        asyncio.run(exercise())
 
     @staticmethod
     def headers(token, key=None):

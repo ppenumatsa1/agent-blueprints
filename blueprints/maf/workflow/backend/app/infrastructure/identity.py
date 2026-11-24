@@ -21,6 +21,19 @@ class IdentityProvider(Protocol):
     def authenticate_service(self, access_token: str) -> AuthenticatedRequest: ...
 
 
+def signing_key_id(access_token: str) -> str:
+    if not isinstance(access_token, str) or not access_token or len(access_token) > 16_384:
+        raise AuthenticationFailed("A valid bearer access token is required.")
+    try:
+        header = jwt.get_unverified_header(access_token)
+        kid = header.get("kid")
+        if header.get("alg") != "RS256" or not isinstance(kid, str) or not 1 <= len(kid) <= 128:
+            raise AuthenticationFailed("A valid bearer access token is required.")
+        return kid
+    except (jwt.PyJWTError, ValueError, TypeError) as exc:
+        raise AuthenticationFailed("A valid bearer access token is required.") from exc
+
+
 class EntraIdentity:
     """Validate delegated, single-tenant Entra v2 access tokens for this API."""
 
@@ -38,13 +51,8 @@ class EntraIdentity:
         )
 
     def _claims(self, access_token: str, required: list[str]) -> dict:
-        if not isinstance(access_token, str) or not access_token or len(access_token) > 16_384:
-            raise AuthenticationFailed("A valid bearer access token is required.")
+        signing_key_id(access_token)
         try:
-            header = jwt.get_unverified_header(access_token)
-            kid = header.get("kid")
-            if header.get("alg") != "RS256" or not isinstance(kid, str) or not 1 <= len(kid) <= 128:
-                raise AuthenticationFailed("A valid bearer access token is required.")
             key = self.jwks.get_signing_key_from_jwt(access_token)
             claims = jwt.decode(
                 access_token,

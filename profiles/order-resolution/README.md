@@ -104,3 +104,39 @@ authorization must grant that hosted identity only the protected API access it
 needs, then rerun the same operation with `--require-active` without creating
 another version. The API remains the sole PostgreSQL owner and performs the
 idempotent prepare/decision/action/completion operations.
+
+## Independent local verification
+
+From the generated `backend`, use a disposable PostgreSQL database and select
+the generated Agent A source explicitly so the loopback test does not skip:
+
+```sh
+export MAF_TEST_DATABASE_URL="<isolated-local-test-database-url>"
+export ORDER_RESOLUTION_AGENT_A_SOURCE="$(cd ../hosted-agent/src && pwd)"
+uv run --locked ruff check .
+uv run --locked ruff format --check .
+uv run --locked python -m unittest discover -s tests -v
+```
+
+Only the real-provider evaluation is intentionally skipped when
+`MAF_REAL_EVALUATION_ENABLED` is unset. Do not enable it without separately
+verified authorization, target isolation, credentials, and provenance. Local
+loopback tests use synthetic tokens and local HTTP, not Azure.
+
+Then install the generated `hosted-agent/requirements.txt` in the test
+environment and run the complete Agent A suite, as CI does:
+
+```sh
+cd ../hosted-agent
+uv pip install --python ../backend/.venv/bin/python -r requirements.txt
+PYTHONPATH="$PWD/src:$(cd ../backend && pwd)" \
+  ../backend/.venv/bin/python -m unittest discover -s tests -v
+```
+
+These are local SDK and fixture checks, not live model or Foundry validation.
+From each generated frontend, run `npm test`, `npm run build`, and
+`npm run check-csp`. The base generated frontend additionally runs
+`npm run e2e:local`, `npm run e2e:history`, and `npm run e2e:studio` with
+Chromium installed. The optional-adapters browser tests retain evidence
+display, failure isolation, and ordinary approval coverage; callback execution
+remains disabled as an interim control, not completed isolated manual testing.

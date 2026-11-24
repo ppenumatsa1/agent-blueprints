@@ -26,39 +26,62 @@ Such a path could test pure transformations over bundled synthetic fixtures,
 without persistence, network calls, or client access. It would only cover that
 audited code under a trusted build/runtime, not the real workflow, a general
 sandbox, or release evidence.
-SSE work uses bounded dedicated workers and reserves a connection in the
-standard PostgreSQL pool. Unverifiable custom service/store implementations,
-including Order Resolution, fall back to polling. A blocked synchronous call
-retains its slot until it returns, and limits are per-process rather than
-production-scale guarantees. A permanently stalled executor worker can prevent
-process exit; client-side polling cancellation also does not cancel server-side
-database calls, so repeated stalls can exhaust shared capacity. Enforceable I/O
-deadlines and recovery remain reliability blockers.
-Next: resolve those blockers and obtain exact-head CI without claiming
-production readiness or an operational self-approval path.
+The successor starts from verified cloud head
+`766d8e46c13447deb10a9a1903e12af296163818`, independently of the interrupted
+cloud session. SSE no longer submits synchronous work to an executor or
+borrows API-pool connections. Four cancellable async operations and 32 streams
+are allowed per process. Malformed token headers fail before I/O. A five-minute
+per-application signing-key cache with single-flight fetch and 30-second
+unknown-key/failure refresh throttling addresses the independent review's
+repeated-JWKS-fetch finding; expired keys never serve as a failure fallback.
+Async HTTPS key retrieval and separate read-only
+PostgreSQL connections have five-second I/O/statement/lock deadlines. Unsupported
+custom service/store/policy/identity implementations and managed-identity
+database credentials fall back to independently authorized polling. Regression
+tests cover actual locked-query cancellation, connection cleanup, HTTP cleanup,
+capacity recovery, token expiry, policy revocation, and server read-only/deadline
+enforcement. DNS may still use library executor threads; resolver shutdown and
+TLS/network-black-hole behavior are not verified. Polling still uses synchronous
+database calls and repeated stalls can exhaust shared capacity. Those remain
+reliability blockers; this is a bounded SSE mitigation, not full I/O resilience.
 
-Local validation includes 105 isolated repository tests with two
-adapter-not-selected skips, 54 source frontend tests plus build and CSP
-verification, 141 source and 141 independently generated base backend tests
-with disposable PostgreSQL, and 22 focused profile PostgreSQL API tests.
-Focused fallback tests cover mocked profile 503, authorized polling,
-displayed updates, and revocation clearing activity. Independently generated base and profile
-frontends passed 53 and 55 tests, respectively, plus builds and CSP checks,
-before the additional fallback regression.
-Builds retain the >500 kB chunk warning. [CI run 45309564583](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/45309564583)
+Successor local validation on 2026-11-24 uses complete backend discovery, not
+the former curated module list. Source and independent generated base backend:
+**162 tests each, no skips**. Independent generated profile backend:
+**228 tests, one real-provider opt-in skip**, with the generated Agent A source
+explicitly selected and the PostgreSQL/HTTP loopback executed. Complete
+generated Agent A suite: **63 tests, no skips**, after installing its pinned
+requirements. Independent generated base verification: **52 tests, no skips**;
+profile canonical contract: **9 tests, no skips**. The isolated repository suite
+runs **105 tests, two adapter-not-selected skips**. Frontend suites:
+source/base **54 each**, profile **56**, with builds and CSP checks passing.
+Offline Chromium local/history/studio suites pass **1 + 5 + 1 tests** in both
+source and independent generated base. The optional-adapters spec now covers
+evidence projection failure and normal approval as well as disabled callbacks;
+it does not claim restored isolated manual execution. Protected `local.spec.ts`
+and `live.spec.ts` are unchanged. No live browser spec was executed.
+
+Locked Ruff 0.14.13 formatting is checked against the generated backend's
+100-column configuration, including the profile observability source. CI now
+uses full source/base discovery and all three offline generated browser suites.
+The independent read-only follow-up found no actionable issue in the cache
+correction; it retained the disclosed DNS/network/shutdown and polling
+limitations. Builds retain the >500 kB chunk warning; backend fixture runs emit non-fatal
+open synchronous-connection ResourceWarnings. These are not production
+readiness evidence. Exact-head CI is tracked on the successor draft PR.
+[Historical CI run 45309564583](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/45309564583)
 at `b7004af4316a419f7b5afd0048a388e9c2af9705` failed generated-profile
-formatting before executing its profile tests; six jobs passed. Exact-head
-follow-on CI remains pending.
-Independent generated profile backend discovery after the follow-on changes ran
-220 tests, with Agent A loopback passing and real-provider evaluation skipped.
-Generated local and optional-adapters browser specs passed. Follow-on CI selects
-the generated Agent A source and includes the optional-adapters browser spec;
-exact-head CI remains required. The hosted failure runner now
+formatting before executing its profile tests; six jobs passed. That failure
+is not relabeled by successor checks. The hosted failure runner now
 preserves validated HTTP status and hosted correlation fields for the existing
 App Insights verifier; no live telemetry has been checked. The lost-ack test
 supplies a remote ID rather than verifying an operational reconciliation source.
 Acceptance fault controls default off and require an operator role and exact
 revision, but lack an enforced non-production environment boundary.
+
+Next: inspect exact-head CI and independent review, retain both drafts, and
+resolve the disclosed polling/network and isolation blockers separately. Do
+not deploy, merge, or infer an operational self-approval path.
 
 The coordinating session's read-only preflight reports that the existing
 target lacks established isolation, usable delegated consent is unverified,

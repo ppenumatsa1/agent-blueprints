@@ -1,18 +1,29 @@
 import asyncio
-from collections.abc import AsyncIterator, Callable
-from concurrent.futures import Future, ThreadPoolExecutor
+import json
+import time
+from collections.abc import AsyncIterator, Awaitable, Callable
 from threading import BoundedSemaphore
 from typing import Annotated, TypeVar
 from uuid import UUID
 
+import httpx
+import jwt
+import psycopg
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials
 
 from app.api.dependencies import bearer
-from app.domain.errors import AccessDenied, AuthenticationFailed, BlueprintError, NotFound
-from app.infrastructure.database import BoundedConnectionPool
-from app.infrastructure.identity import AuthenticatedRequest
+from app.domain.errors import (
+    AccessDenied,
+    AuthenticationFailed,
+    AuthenticationUnavailable,
+    BlueprintError,
+    NotFound,
+)
+from app.domain.policy import CaseAccessPolicy
+from app.infrastructure.database import DatabaseConnector
+from app.infrastructure.identity import AuthenticatedRequest, EntraIdentity, signing_key_id
 from app.infrastructure.store import PostgresStore
 from app.usecases.history import decode_activity_cursor
 from app.usecases.service import WorkflowService
@@ -23,6 +34,7 @@ STREAM_SECONDS = 30
 HEARTBEAT_SECONDS = 5
 ACTIVITY_STREAM_WORKERS = 4
 MAX_CONCURRENT_ACTIVITY_STREAMS = 32
+IO_SECONDS = 5
 _T = TypeVar("_T")
 
 
@@ -31,7 +43,7 @@ class ActivityStreamCapacityError(Exception):
 
 
 class ActivityStreamRuntime:
-    """Keep synchronous stream work isolated and bounded from API request workers."""
+    """Bound cancellable async stream I/O independently of synchronous API workers."""
 
     def __init__(
         self,
@@ -39,10 +51,6 @@ class ActivityStreamRuntime:
         workers: int = ACTIVITY_STREAM_WORKERS,
         max_streams: int = MAX_CONCURRENT_ACTIVITY_STREAMS,
     ):
-        self._executor = ThreadPoolExecutor(
-            max_workers=workers,
-            thread_name_prefix="activity-stream",
-        )
         self._worker_slots = BoundedSemaphore(workers)
         self._stream_slots = BoundedSemaphore(max_streams)
 
@@ -52,12 +60,9 @@ class ActivityStreamRuntime:
     def release_stream(self) -> None:
         self._stream_slots.release()
 
-    def shutdown(self) -> None:
-        self._executor.shutdown(wait=True, cancel_futures=True)
-
     async def call(
         self,
-        function: Callable[..., _T],
+        function: Callable[..., Awaitable[_T]],
         *args: object,
         timeout: float,
         **kwargs: object,
@@ -65,27 +70,16 @@ class ActivityStreamRuntime:
         if not self._worker_slots.acquire(blocking=False):
             raise ActivityStreamCapacityError()
         try:
-            future: Future[_T] = self._executor.submit(function, *args, **kwargs)
-        except BaseException:
+            async with asyncio.timeout(min(timeout, IO_SECONDS)):
+                return await function(*args, **kwargs)
+        finally:
             self._worker_slots.release()
-            raise
-
-        def release_worker(completed: Future[_T]) -> None:
-            self._worker_slots.release()
-            try:
-                completed.exception()
-            except BaseException:
-                pass
-
-        future.add_done_callback(release_worker)
-        wrapped = asyncio.wrap_future(future)
-        return await asyncio.wait_for(wrapped, timeout=timeout)
 
 
 _activity_stream_runtime = ActivityStreamRuntime()
 
 
-def stream_pool(service: WorkflowService) -> BoundedConnectionPool:
+def stream_store(service: WorkflowService) -> PostgresStore:
     store = service.store
     if (
         type(service) is not WorkflowService
@@ -93,15 +87,91 @@ def stream_pool(service: WorkflowService) -> BoundedConnectionPool:
         or type(store).connect is not PostgresStore.connect
         or type(store).get is not PostgresStore.get
         or type(store).list_activity is not PostgresStore.list_activity
-        or type(store._pool) is not BoundedConnectionPool
+        or type(store).get_for_activity_stream is not PostgresStore.get_for_activity_stream
+        or type(store._connector) is not DatabaseConnector
+        or store._connector.options.auth_mode != "password"
+        or type(service.policy) is not CaseAccessPolicy
     ):
         raise ActivityStreamCapacityError()
-    return store._pool
+    return store
 
 
-def stream_authenticate(request: Request, token: str) -> AuthenticatedRequest:
-    with stream_pool(request.app.state.service).stream_work():
-        return request.app.state.identity.authenticate(token)
+class StreamSigningKeys:
+    def __init__(self, value: dict):
+        self.keys = jwt.PyJWKSet.from_dict(value)
+
+    def get_signing_key_from_jwt(self, token: str):
+        kid = jwt.get_unverified_header(token).get("kid")
+        for key in self.keys.keys:
+            if key.key_id == kid and key.public_key_use in (None, "sig"):
+                return key
+        raise jwt.PyJWKClientError("Unknown signing key.")
+
+    def has_key(self, kid: str) -> bool:
+        return any(
+            key.key_id == kid and key.public_key_use in (None, "sig") for key in self.keys.keys
+        )
+
+
+class StreamSigningKeyCache:
+    def __init__(self, identity: EntraIdentity):
+        self.identity = identity
+        self.keys: StreamSigningKeys | None = None
+        self.expires_at = 0.0
+        self.refresh_after = 0.0
+        self._refresh_slot = BoundedSemaphore(1)
+
+    async def get(self, kid: str) -> StreamSigningKeys:
+        now = time.monotonic()
+        cached = self.keys
+        if cached is not None and now < self.expires_at:
+            if cached.has_key(kid) or now < self.refresh_after:
+                return cached
+        elif now < self.refresh_after:
+            raise AuthenticationUnavailable("Signing keys are temporarily unavailable.")
+        if not self._refresh_slot.acquire(blocking=False):
+            raise AuthenticationUnavailable("Signing keys are temporarily unavailable.")
+        try:
+            # Unknown kids and failed fetches cannot cause unbounded refresh traffic.
+            self.refresh_after = now + 30
+            keys = await stream_signing_keys(self.identity)
+            self.keys = keys
+            self.expires_at = time.monotonic() + 300
+            return keys
+        finally:
+            self._refresh_slot.release()
+
+
+async def stream_signing_keys(identity: EntraIdentity) -> StreamSigningKeys:
+    url = f"https://login.microsoftonline.com/{identity.settings.tenant_id}/discovery/v2.0/keys"
+    try:
+        async with httpx.AsyncClient(timeout=IO_SECONDS, trust_env=False) as client:
+            async with client.stream("GET", url) as response:
+                response.raise_for_status()
+                body = bytearray()
+                async for chunk in response.aiter_bytes():
+                    body.extend(chunk)
+                    if len(body) > 262_144:
+                        raise ValueError("Signing key response is too large.")
+        value = json.loads(body)
+        if not isinstance(value, dict):
+            raise ValueError("Invalid signing key response.")
+        return StreamSigningKeys(value)
+    except (httpx.HTTPError, ValueError, jwt.PyJWTError, KeyError, TypeError) as exc:
+        raise AuthenticationUnavailable("Signing keys are temporarily unavailable.") from exc
+
+
+async def stream_authenticate(request: Request, token: str) -> AuthenticatedRequest:
+    identity = request.app.state.identity
+    if type(identity) is not EntraIdentity:
+        raise ActivityStreamCapacityError()
+    kid = signing_key_id(token)
+    cache = getattr(request.app.state, "activity_stream_keys", None)
+    if not isinstance(cache, StreamSigningKeyCache) or cache.identity is not identity:
+        cache = StreamSigningKeyCache(identity)
+        request.app.state.activity_stream_keys = cache
+    keys = await cache.get(kid)
+    return EntraIdentity(identity.settings, keys).authenticate(token)
 
 
 async def activity_stream_identity(
@@ -116,13 +186,14 @@ async def activity_stream_identity(
         )
     try:
         try:
+            stream_store(request.app.state.service)
             actor = await _activity_stream_runtime.call(
                 stream_authenticate,
                 request,
                 credentials.credentials,
                 timeout=STREAM_SECONDS,
             )
-        except (ActivityStreamCapacityError, TimeoutError) as exc:
+        except (ActivityStreamCapacityError, TimeoutError, psycopg.Error) as exc:
             raise HTTPException(
                 status_code=503,
                 detail="Activity streaming is temporarily unavailable.",
@@ -136,9 +207,11 @@ async def activity_stream_service(request: Request) -> WorkflowService:
     return request.app.state.service
 
 
-def stream_activity(service: WorkflowService, actor: AuthenticatedRequest, case_id: UUID) -> None:
-    with stream_pool(service).stream_work():
-        service.activity(actor.principal, case_id, cursor=None, limit=1)
+async def stream_activity(
+    service: WorkflowService, actor: AuthenticatedRequest, case_id: UUID
+) -> None:
+    case = await stream_store(service).get_for_activity_stream(case_id)
+    service.policy.authorize_read(actor.principal, case)
 
 
 @router.get("/cases/{case_id}/activity/stream")
@@ -159,7 +232,7 @@ async def activity_stream(
             case_id,
             timeout=STREAM_SECONDS,
         )
-    except (ActivityStreamCapacityError, TimeoutError) as exc:
+    except (ActivityStreamCapacityError, TimeoutError, psycopg.Error) as exc:
         raise HTTPException(
             status_code=503,
             detail="Activity streaming is temporarily unavailable.",
@@ -189,7 +262,7 @@ async def activity_stream(
                     case_id,
                     timeout=remaining,
                 )
-            except (ActivityStreamCapacityError, TimeoutError):
+            except (ActivityStreamCapacityError, TimeoutError, psycopg.Error):
                 yield "event: retry\ndata: {}\n\n"
                 return
             except (AccessDenied, AuthenticationFailed, NotFound):
