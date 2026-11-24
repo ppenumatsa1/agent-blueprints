@@ -7,6 +7,9 @@
       "request": "launch",
       "module": "uvicorn",
       "args": ["app.main:app", "--host", "127.0.0.1", "--port", "8000", "--no-access-log"],
+      "windows": {
+        "args": ["app.main:app", "--host", "127.0.0.1", "--port", "8000", "--no-access-log", "--loop", "asyncio:SelectorEventLoop"]
+      },
       "cwd": "${workspaceFolder}/backend",
       "envFile": "${workspaceFolder}/.env",
       "justMyCode": true

@@ -27,6 +27,15 @@ uv run --locked ruff format --check .
 uv run --locked python -m unittest discover -s tests -v
 ```
 
+On Windows, the real asynchronous PostgreSQL security tests use Python's
+`asyncio.run(loop_factory=...)` and AnyIO/TestClient's `loop_factory` option
+to select the native Selector loop. The ordinary discovery command above
+needs no outer event-loop-policy override. Other platforms keep their
+default loop selection, and the tests assert that the process-wide policy
+is unchanged. A real loopback Uvicorn HTTP test exercises the same supported
+Windows startup option documented in [development](development.md), including
+authorized activity delivery and unauthorized-reader denial.
+
 Complete backend discovery includes hosted failure-runner regression tests. SSE tests
 use synthetic signing keys/HTTP transports and disposable PostgreSQL; they
 exercise cancellation of a locked read, HTTP resource cleanup, capacity

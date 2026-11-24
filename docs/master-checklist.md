@@ -11,6 +11,35 @@ The original [interactive architecture](software-factory.html) is a preserved
 historical source; this checklist records current status. The 2–3 hour
 prototype objective has not yet been measured.
 
+## Windows asynchronous PostgreSQL startup in PR #62
+
+**Status: In Progress; local acceptance passed, exact-head CI pending.**
+Acceptance: the ordinary generated backend discovery command must exercise
+the real asynchronous PostgreSQL security checks on Windows without a
+process-wide policy override, skipped checks, or changed authorization.
+At `1d36ebf0e920705c188344e7c15e9ca138706186`, the original three cases were
+reproduced with two Psycopg Proactor `InterfaceError`s and one stream 503
+assertion. Those failed runs remain evidence.
+
+Windows tests now select native Selector loops through Python/AnyIO's scoped
+`loop_factory` options; the process-wide policy is asserted unchanged.
+Windows Uvicorn development/debug startup uses its supported
+`--loop asyncio:SelectorEventLoop` option. Other platforms retain their
+defaults; incompatible existing/embedded Proactor loops are not replaced.
+Four focused checks passed, including real loopback Uvicorn HTTP activity
+delivery and unauthorized-reader denial. The ordinary
+`python -m unittest discover -s tests -v` passed 176 generated base tests
+and 273 profile tests with one existing real-provider skip. Psycopg connection
+ResourceWarnings remain disclosed. The isolated root suite ran 114 tests with
+two existing adapter-selection skips; generated backend lint/format passed.
+Selector socket/subprocess limitations
+remain Windows development constraints, not proven production capacity.
+
+Next: bind this candidate to exact-head CI on the existing draft
+[#62](https://github.com/ppenumatsa1/agent-blueprints/pull/62).
+Deployment provenance, firewall-preserving migrations and hosted recovery
+gates remain unchanged and blocked.
+
 ## Hosted failure visibility and acceptance corrections in PR #62
 
 **Status: In Progress; current-head CI and Azure validation remain pending.**
@@ -62,8 +91,9 @@ path-relative adapter ignores; the CI-style generated-directory lint and
 format checks pass. An initial shorter HTTPS timeout probe did not establish
 that its server handler was reached and is inconclusive. Corrected runs are
 reported separately above. The previous
-default-Windows-Proactor backend run remains failed, and the real-provider
-test remains skipped. Historical
+default-Windows-Proactor backend run remains recorded as failed; the scoped
+startup correction above does not relabel it. The real-provider test remains
+skipped. Historical
 [CI run 45487881616](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/45487881616)
 passed all eight jobs for `8c2a8c909b27b23802b4ee71450e82a5ebfcd2e7`, not
 this candidate; [run 45496167774](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/45496167774)

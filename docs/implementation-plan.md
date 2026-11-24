@@ -1,5 +1,30 @@
 # Phased implementation plan
 
+## Windows asynchronous PostgreSQL startup in PR #62
+
+**Local acceptance passed; exact-head CI pending.** The default generated
+backend discovery command reproduced two Psycopg Proactor `InterfaceError`s
+and the related activity-stream 503 at `1d36ebf`. Native Python and AnyIO
+`loop_factory` options now select Selector loops only for Windows asynchronous
+PostgreSQL security tests, without changing the global policy or bypassing
+cancellation, read-only, server-deadline or authorization assertions.
+Windows Uvicorn development/debug startup uses its supported native
+`--loop asyncio:SelectorEventLoop` option; other platforms keep their defaults.
+
+Evidence: four focused checks passed, including real loopback Uvicorn
+authorized activity and unauthorized-reader denial; ordinary
+`python -m unittest discover -s tests -v` passed 176 generated base tests
+and 273 profile tests with one existing real-provider skip. The original
+three-case failure remains recorded, as do Psycopg connection ResourceWarnings.
+The isolated root suite ran 114 tests with two existing adapter-selection
+skips; generated backend lint and format checks passed.
+This does not make existing embedded Proactor loops compatible, lift Windows
+Selector socket/subprocess restrictions, or establish production capacity.
+
+Next: publish and verify exact-head CI on the existing draft
+[#62](https://github.com/ppenumatsa1/agent-blueprints/pull/62).
+No Azure, firewall, provenance or recovery gate is changed.
+
 ## Hosted failure and acceptance review in PR #62
 
 **In progress; deployment remains blocked.** Immediate failed Responses
@@ -42,8 +67,8 @@ mirror-backed Docker pass is a separate run. An additional root-level Ruff invoc
 did not apply the generated project's path-relative adapter ignores; lint and
 format checks pass from both generated backend directories. A shorter first
 HTTPS probe did not establish that its server handler was reached and remains
-inconclusive. The earlier default-Proactor backend
-failure remains unresolved. Historical
+inconclusive. The earlier default-Proactor backend failure remains recorded;
+the scoped startup correction above does not relabel the original run. Historical
 [run 45487881616](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/45487881616)
 passed at exact head `8c2a8c909b27b23802b4ee71450e82a5ebfcd2e7`, not this
 candidate; [run 45496167774](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/45496167774)

@@ -8,6 +8,21 @@ contracts and documented engineering patterns where they have demonstrated
 value; do not hide MAF, LangGraph, or a harness behind a universal runtime.
 Generated projects must not import this repository at runtime.
 
+## Windows asynchronous PostgreSQL startup
+
+Psycopg's asynchronous connections require a compatible event loop; Windows'
+default Proactor loop is unsupported. The Windows local Uvicorn launch uses
+its native `--loop asyncio:SelectorEventLoop` option before the server starts.
+Real PostgreSQL tests use Python/AnyIO's scoped loop-factory interfaces and
+assert that the process-wide policy is unchanged. Other platforms retain
+their default loops. No application import or lifespan callback mutates a
+running loop, and no synchronous database fallback replaces stream
+cancellation, read-only connections, server deadlines or authorization.
+Embedded Windows hosts must select a compatible loop themselves. Native
+Selector socket/subprocess restrictions remain development limitations;
+Linux containers and the deployment/recovery gates are unchanged. See the
+[development guide](../blueprints/maf/workflow/docs/development.md).
+
 ## Advisory build-attestation preflight
 
 The [independent project](../blueprints/maf/workflow/docs/build-attestations.md)

@@ -4,6 +4,8 @@ import json
 import logging
 import os
 import secrets
+import socket
+import sys
 import tempfile
 import time
 import unittest
@@ -19,6 +21,7 @@ from uuid import UUID, uuid4
 import httpx
 import jwt
 import psycopg
+import uvicorn
 from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -53,6 +56,9 @@ REVIEWER = "40000000-0000-4000-8000-000000000004"
 STRANGER = "50000000-0000-4000-8000-000000000005"
 HOSTED_SERVICE = "60000000-0000-4000-8000-000000000006"
 HOSTED_SERVICE_ROLE = "Hosted.Workflow.Invoke"
+ACTIVITY_LOOP_OPTIONS = (
+    {"loop_factory": asyncio.SelectorEventLoop} if sys.platform == "win32" else {}
+)
 
 
 def scoped_url(dsn: str, schema: str) -> str:
@@ -747,8 +753,65 @@ class ApiSecurityTests(unittest.TestCase):
 
     def client(self):
         return TestClient(
-            create_app(self.settings, self.components, store=self.store, identity=self.identity)
+            create_app(self.settings, self.components, store=self.store, identity=self.identity),
+            backend_options=ACTIVITY_LOOP_OPTIONS,
         )
+
+    def test_native_uvicorn_loop_serves_authorized_activity_without_changing_policy(self):
+        policy = asyncio.get_event_loop_policy()
+        config = uvicorn.Config(
+            create_app(self.settings, self.components, store=self.store, identity=self.identity),
+            loop="asyncio:SelectorEventLoop" if sys.platform == "win32" else "auto",
+            log_config=None,
+            access_log=False,
+        )
+        server = uvicorn.Server(config)
+
+        with socket.socket() as listener:
+            listener.bind(("127.0.0.1", 0))
+            port = listener.getsockname()[1]
+
+            async def exercise():
+                if sys.platform == "win32":
+                    self.assertIsInstance(asyncio.get_running_loop(), asyncio.SelectorEventLoop)
+                task = asyncio.create_task(server.serve(sockets=[listener]))
+                try:
+                    async with asyncio.timeout(10):
+                        while not server.started:
+                            if task.done():
+                                await task
+                                self.fail("The local Uvicorn server stopped before startup.")
+                            await asyncio.sleep(0.01)
+                        async with httpx.AsyncClient(
+                            base_url=f"http://127.0.0.1:{port}", timeout=5, trust_env=False
+                        ) as client:
+                            response = await client.post(
+                                "/api/cases",
+                                headers=self.headers(self.owner_token, str(uuid4())),
+                                json={"reviewer_id": REVIEWER, "payload": {"value": 42}},
+                            )
+                            self.assertEqual(response.status_code, 200, response.text)
+                            path = f"/api/cases/{response.json()['id']}/activity/stream"
+                            stranger = self.tokens.token(
+                                subject=STRANGER, scopes="workflow.read", roles=[]
+                            )
+                            denied = await client.get(path, headers=self.headers(stranger))
+                            self.assertEqual(denied.status_code, 403, denied.text)
+                            with (
+                                patch("app.api.routes.activity_stream.STREAM_SECONDS", 1),
+                                patch("app.api.routes.activity_stream.HEARTBEAT_SECONDS", 1),
+                            ):
+                                stream = await client.get(
+                                    path, headers=self.headers(self.owner_token)
+                                )
+                            self.assertEqual(stream.status_code, 200, stream.text)
+                            self.assertIn("event: activity.refresh", stream.text)
+                finally:
+                    server.should_exit = True
+                    await asyncio.wait_for(task, timeout=5)
+
+            asyncio.run(exercise(), loop_factory=config.get_loop_factory())
+        self.assertIs(asyncio.get_event_loop_policy(), policy)
 
     def test_async_stream_read_cancels_locked_query_without_borrowing_api_pool(self):
         from app.api.routes.activity_stream import ActivityStreamRuntime
@@ -776,7 +839,9 @@ class ApiSecurityTests(unittest.TestCase):
             self.assertEqual(remaining, 0)
             self.assertEqual(len(asyncio.all_tasks()), 1)
 
-        asyncio.run(exercise())
+        policy = asyncio.get_event_loop_policy()
+        asyncio.run(exercise(), **ACTIVITY_LOOP_OPTIONS)
+        self.assertIs(asyncio.get_event_loop_policy(), policy)
 
     def test_stream_database_has_server_deadline_and_is_read_only(self):
         async def exercise():
@@ -795,7 +860,9 @@ class ApiSecurityTests(unittest.TestCase):
                     await connection.execute("SELECT pg_sleep(30)")
                 self.assertLess(time.monotonic() - started, 10)
 
-        asyncio.run(exercise())
+        policy = asyncio.get_event_loop_policy()
+        asyncio.run(exercise(), **ACTIVITY_LOOP_OPTIONS)
+        self.assertIs(asyncio.get_event_loop_policy(), policy)
 
     @staticmethod
     def headers(token, key=None):
@@ -871,6 +938,8 @@ class ApiSecurityTests(unittest.TestCase):
             self.assertEqual(action_count(self.store, UUID(case_id)), 1)
 
     def test_history_and_activity_are_authorized_versioned_and_private(self):
+        policy = asyncio.get_event_loop_policy()
+        self.addCleanup(lambda: self.assertIs(asyncio.get_event_loop_policy(), policy))
         with self.client() as client:
             response = self.submit(
                 client,
