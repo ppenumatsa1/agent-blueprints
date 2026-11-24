@@ -1,9 +1,9 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
 import { describe, expect, it, vi } from "vitest";
 
-import type { WorkflowActivityPage, WorkflowClient, WorkflowHistoryPage } from "../api";
+import { WorkflowClientError, type WorkflowActivityPage, type WorkflowClient, type WorkflowHistoryPage } from "../api";
 import { defaultWorkflowStudioProfile } from "../default-profile";
 import { ActivityTimeline } from "../components/activity-timeline";
 import { HistorySidebar } from "../components/history-sidebar";
@@ -143,6 +143,142 @@ describe("workflow history sidebar", () => {
 });
 
 describe("workflow activity timeline", () => {
+  it("does not start a stream when the profile disables live activity", async () => {
+    const activityStream = vi.fn();
+    const profile = {
+      ...defaultWorkflowStudioProfile,
+      capabilities: { ...defaultWorkflowStudioProfile.capabilities, liveActivity: false },
+    };
+    render(
+      <ActivityTimeline caseId={firstId} client={client({ activityStream })} profile={profile} />,
+    );
+    await screen.findByText("No workflows found.");
+    expect(activityStream).not.toHaveBeenCalled();
+  });
+
+  it("reconciles all pages when an older event commits later", async () => {
+    let refresh!: () => void;
+    const activity = vi.fn()
+      .mockResolvedValueOnce(activityPage("created"))
+      .mockResolvedValueOnce({ ...activityPage("created"), next_cursor: "older" })
+      .mockResolvedValueOnce(activityPage("action_failed"));
+    const api = client({
+      activity,
+      activityStream: vi.fn((_id, _signal, callback) => {
+        refresh = callback;
+        return new Promise<void>(() => {});
+      }),
+    });
+    render(<ActivityTimeline caseId={firstId} client={api} profile={defaultWorkflowStudioProfile} />);
+    await screen.findByText("Workflow created");
+    act(() => refresh());
+    await screen.findByText("Action failed");
+    expect(activity.mock.calls[2][1]).toMatchObject({ cursor: "older", limit: 100 });
+  });
+
+  it("reports a nonadvancing snapshot cursor rather than showing a truncated result", async () => {
+    let refresh!: () => void;
+    const activity = vi.fn()
+      .mockResolvedValueOnce(activityPage("created"))
+      .mockResolvedValue({ ...activityPage("created"), next_cursor: "repeat" });
+    const api = client({
+      activity,
+      activityStream: vi.fn((_id, _signal, callback) => {
+        refresh = callback;
+        return new Promise<void>(() => {});
+      }),
+    });
+    render(<ActivityTimeline caseId={firstId} client={api} profile={defaultWorkflowStudioProfile} />);
+    await screen.findByText("Workflow created");
+    act(() => refresh());
+    expect(await screen.findByRole("alert")).toBeVisible();
+    expect(screen.queryByText("Workflow created")).not.toBeInTheDocument();
+  });
+
+  it("reconciles an older late commit and replaces replayed snapshots without duplication", async () => {
+    let refresh!: () => void;
+    const activity = vi.fn()
+      .mockResolvedValueOnce(activityPage("created"))
+      .mockResolvedValue({
+        schema_version: "workflow-activity/1",
+        items: [
+          { type: "created", created_at: "2026-01-02T03:04:05+00:00" },
+          { type: "action_failed", created_at: "2026-01-01T03:04:05+00:00" },
+        ],
+        next_cursor: null,
+      });
+    const api = client({
+      activity,
+      activityStream: vi.fn((_id, _signal, callback) => {
+        refresh = callback;
+        return new Promise<void>(() => {});
+      }),
+    });
+    render(<ActivityTimeline caseId={firstId} client={api} profile={defaultWorkflowStudioProfile} />);
+    await screen.findByText("Workflow created");
+    act(() => refresh());
+    await screen.findByText("Action failed");
+    act(() => refresh());
+    await waitFor(() => expect(activity).toHaveBeenCalledTimes(3));
+    expect(screen.getAllByText("Action failed")).toHaveLength(1);
+    expect(screen.getAllByText("Workflow created")).toHaveLength(1);
+  });
+
+  it("aborts live activity and in-flight reads when the case changes", async () => {
+    const signals: AbortSignal[] = [];
+    const activity = vi.fn().mockResolvedValue(activityPage("created"));
+    const api = client({
+      activity,
+      activityStream: vi.fn((_id, signal) => {
+        signals.push(signal);
+        return new Promise<void>(() => {});
+      }),
+    });
+    const { rerender, unmount } = render(
+      <ActivityTimeline caseId={firstId} client={api} profile={defaultWorkflowStudioProfile} />,
+    );
+    await screen.findByText("Workflow created");
+    const firstRead = activity.mock.calls[0][1].signal as AbortSignal;
+    rerender(<ActivityTimeline caseId={secondId} client={api} profile={defaultWorkflowStudioProfile} />);
+    expect(signals[0].aborted).toBe(true);
+    expect(firstRead.aborted).toBe(true);
+    await waitFor(() => expect(signals).toHaveLength(2));
+    unmount();
+    expect(signals[1].aborted).toBe(true);
+  });
+
+  it("clears the snapshot when access is revoked", async () => {
+    let fail!: (reason: Error) => void;
+    const api = client({
+      activity: vi.fn().mockResolvedValue(activityPage("created")),
+      activityStream: vi.fn(() => new Promise<void>((_resolve, reject) => { fail = reject; })),
+    });
+    render(<ActivityTimeline caseId={firstId} client={api} profile={defaultWorkflowStudioProfile} />);
+    await screen.findByText("Workflow created");
+    await act(async () => fail(new WorkflowClientError("revoked", true)));
+    expect(await screen.findByRole("alert")).toBeVisible();
+    expect(screen.queryByText("Workflow created")).not.toBeInTheDocument();
+  });
+
+  it("falls back to authorized snapshot polling after bounded reconnects", async () => {
+    vi.useFakeTimers();
+    try {
+      const activity = vi.fn().mockResolvedValue(activityPage("created"));
+      const activityStream = vi.fn().mockRejectedValue(new Error("network"));
+      const api = client({ activity, activityStream });
+      const { unmount } = render(
+        <ActivityTimeline caseId={firstId} client={api} profile={defaultWorkflowStudioProfile} />,
+      );
+      await act(async () => { await Promise.resolve(); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(7_000); });
+      expect(activityStream).toHaveBeenCalledTimes(3);
+      expect(activity.mock.calls.length).toBeGreaterThan(1);
+      unmount();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("discards a late response for a stale selection", async () => {
     let finishOld!: (page: WorkflowActivityPage) => void;
     const api = client({

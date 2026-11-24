@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.errors import install_exception_handlers
 from app.api.middleware import install_request_middleware
+from app.api.routes.activity_stream import router as activity_stream_router
 from app.api.routes.cases import router as cases_router
 from app.api.routes.health import router as health_router
 from app.config import Settings
@@ -62,6 +63,7 @@ def create_api_app(
     install_request_middleware(app, telemetry)
     install_exception_handlers(app)
     app.include_router(health_router)
+    app.include_router(activity_stream_router, prefix="/api")
     app.include_router(cases_router, prefix="/api")
     for router in additional_routers:
         app.include_router(router, prefix="/api/internal/hosted/v1")

@@ -59,7 +59,7 @@ export const defaultWorkflowStudioProfile: WorkflowStudioProfile = {
   },
   capabilities: {
     history: true,
-    liveActivity: false,
+    liveActivity: true,
     evidence: false,
     manualTests: false,
     agUi: false,

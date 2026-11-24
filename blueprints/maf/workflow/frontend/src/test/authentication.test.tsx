@@ -1,5 +1,5 @@
 import { InteractionStatus } from "@azure/msal-browser";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 
@@ -25,12 +25,23 @@ it("clears record data and ignores stale active accounts when the signed-in user
     acquireTokenSilent: vi.fn().mockResolvedValue({ accessToken: "synthetic-token" }),
   };
   const id = "80000000-0000-4000-8000-000000000008";
-  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
-    ok: true,
-    json: async () => ({
-      id, correlation_id: id, status: "pending", decision: "pending",
-      payload: { summary: "Private synthetic record" }, execution_complete: false, failure_code: null,
-    }),
+  let streamSignal: AbortSignal | undefined;
+  vi.stubGlobal("fetch", vi.fn((path: string, options: RequestInit) => {
+    if (path.endsWith("/activity/stream")) {
+      streamSignal = options.signal ?? undefined;
+      return new Promise<Response>((_resolve, reject) => {
+        options.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")));
+      });
+    }
+    const body = path.includes("/activity")
+      ? { schema_version: "workflow-activity/1", items: [], next_cursor: null }
+      : path === "/api/cases"
+        ? { schema_version: "workflow-history/1", items: [], next_cursor: null }
+        : {
+          id, correlation_id: id, status: "pending", decision: "pending",
+          payload: { summary: "Private synthetic record" }, execution_complete: false, failure_code: null,
+        };
+    return Promise.resolve({ ok: true, json: async () => body });
   }));
   const config = {
     tenantId: "10000000-0000-4000-8000-000000000001",
@@ -42,9 +53,11 @@ it("clears record data and ignores stale active accounts when the signed-in user
   await userEvent.type(screen.getByLabelText("Case ID"), id);
   await userEvent.click(screen.getByRole("button", { name: "Open" }));
   expect(await screen.findByRole("heading", { name: "Case status: pending" })).toBeVisible();
+  await waitFor(() => expect(streamSignal).toBeDefined());
 
   useMsal.mockReturnValue({ instance, accounts: [second], inProgress: InteractionStatus.None });
   rerender(<AuthenticatedApplication config={config} />);
+  expect(streamSignal?.aborted).toBe(true);
   expect(screen.queryByRole("heading", { name: "Case status: pending" })).not.toBeInTheDocument();
   expect(screen.getByLabelText("Case ID")).toHaveValue("");
   await userEvent.type(screen.getByLabelText("Case ID"), id);

@@ -44,6 +44,23 @@ projected. Application audit state and native MAF continuation/checkpoint
 state remain separate. Existing single-case reads and decision endpoints
 remain unchanged.
 
+### Live activity
+
+The authenticated activity stream sends only fixed refresh signals and
+heartbeats, not audit rows. Each tick revalidates the bearer token and case
+read policy; it returns its database connection before waiting. The browser
+reconciles by rescanning the existing authorized activity pages and replacing
+its snapshot. Reconnects do not resume from a presumed commit watermark: an
+audit identity or transaction timestamp can be assigned before a later
+commit. Concurrent inserts may require another scan before they appear.
+
+Streams end after 30 seconds. After three connection attempts the browser polls every
+ten seconds; individual scans stop after 1,000 pages or 60 seconds and surface
+an error rather than showing a silently truncated snapshot. A supplied
+`Last-Event-ID` must be a valid activity cursor but is only a hint, never a
+watermark. Switching accounts or cases cancels the stream and reads. Local
+tests do not establish live Entra or cloud proxy behavior.
+
 ## Typed MAF extension patterns
 
 Hosted composition is a separate infrastructure adapter, not a second

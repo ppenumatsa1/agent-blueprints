@@ -72,7 +72,7 @@ export const orderResolutionProfile: WorkflowStudioProfile = {
   history: defaultWorkflowStudioProfile.history,
   capabilities: {
     history: true,
-    liveActivity: false,
+    liveActivity: true,
     evidence: false,
     manualTests: false,
     agUi: false,

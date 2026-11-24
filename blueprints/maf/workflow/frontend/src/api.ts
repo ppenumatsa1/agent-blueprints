@@ -64,7 +64,8 @@ export interface WorkflowClient {
     limit?: number;
     cursor?: string;
   }): Promise<WorkflowHistoryPage>;
-  activity(id: string, options?: { limit?: number; cursor?: string }): Promise<WorkflowActivityPage>;
+  activity(id: string, options?: { limit?: number; cursor?: string; signal?: AbortSignal }): Promise<WorkflowActivityPage>;
+  activityStream?(id: string, signal: AbortSignal, refresh: () => void): Promise<void>;
   decide(
     id: string,
     decision: "approved" | "rejected",
@@ -72,7 +73,11 @@ export interface WorkflowClient {
   ): Promise<WorkflowCase>;
 }
 
-export class WorkflowClientError extends Error {}
+export class WorkflowClientError extends Error {
+  constructor(message: string, readonly authorizationFailure = false) {
+    super(message);
+  }
+}
 
 function newTraceparent(): string | undefined {
   try {
@@ -178,13 +183,13 @@ export class HttpWorkflowClient implements WorkflowClient {
     scope: Scope,
     path: string,
     validate: (value: unknown) => value is T,
-    options: { body?: unknown; idempotencyKey?: string } = {},
+    options: { body?: unknown; idempotencyKey?: string; signal?: AbortSignal } = {},
   ): Promise<T> {
     let token: string;
     try {
       token = await this.tokenFor(scope);
     } catch {
-      throw new WorkflowClientError("Sign in again or grant the required permission.");
+      throw new WorkflowClientError("Sign in again or grant the required permission.", true);
     }
     let response: Response;
     try {
@@ -199,14 +204,15 @@ export class HttpWorkflowClient implements WorkflowClient {
         },
         body: options.body === undefined ? undefined : JSON.stringify(options.body),
         credentials: "omit",
+        signal: options.signal,
       });
     } catch {
       throw new WorkflowClientError("The service could not be reached. Check the record before retrying.");
     }
     if (!response.ok) {
-      if (response.status === 401) throw new WorkflowClientError("Your session is invalid or expired.");
-      if (response.status === 403) throw new WorkflowClientError("You are not authorized for this record.");
-      if (response.status === 404) throw new WorkflowClientError("The record was not found.");
+      if (response.status === 401) throw new WorkflowClientError("Your session is invalid or expired.", true);
+      if (response.status === 403) throw new WorkflowClientError("You are not authorized for this record.", true);
+      if (response.status === 404) throw new WorkflowClientError("The record was not found.", true);
       if (response.status === 409) throw new WorkflowClientError("The request conflicts with the current record.");
       throw new WorkflowClientError("The request failed. Check the record before retrying.");
     }
@@ -235,7 +241,7 @@ export class HttpWorkflowClient implements WorkflowClient {
     return this.request("read", `/api/cases${suffix}`, isHistoryPage);
   }
 
-  activity(id: string, options: { limit?: number; cursor?: string } = {}): Promise<WorkflowActivityPage> {
+  activity(id: string, options: { limit?: number; cursor?: string; signal?: AbortSignal } = {}): Promise<WorkflowActivityPage> {
     const query = new URLSearchParams();
     if (options.limit !== undefined) query.set("limit", String(options.limit));
     if (options.cursor) query.set("cursor", options.cursor);
@@ -244,7 +250,55 @@ export class HttpWorkflowClient implements WorkflowClient {
       "read",
       `/api/cases/${encodeURIComponent(id)}/activity${suffix}`,
       isActivityPage,
+      { signal: options.signal },
     );
+  }
+
+  async activityStream(id: string, signal: AbortSignal, refresh: () => void): Promise<void> {
+    let token: string;
+    try {
+      token = await this.tokenFor("read");
+    } catch {
+      throw new WorkflowClientError("Sign in again or grant the required permission.", true);
+    }
+    if (signal.aborted) return;
+    const response = await fetch(`/api/cases/${encodeURIComponent(id)}/activity/stream`, {
+      headers: { Authorization: `Bearer ${token}`, Accept: "text/event-stream" },
+      credentials: "omit",
+      signal,
+    });
+    if ([401, 403, 404].includes(response.status)) {
+      throw new WorkflowClientError("Activity access is no longer available.", true);
+    }
+    if (!response.ok || !response.body || !response.headers.get("content-type")?.startsWith("text/event-stream")) {
+      throw new WorkflowClientError("Live activity is unavailable.");
+    }
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    try {
+      while (!signal.aborted) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true }).replace(/\r/g, "");
+        if (buffer.length > 8192) throw new WorkflowClientError("Live activity returned an invalid response.");
+        let boundary = buffer.indexOf("\n\n");
+        while (boundary !== -1) {
+          const event = buffer.slice(0, boundary);
+          buffer = buffer.slice(boundary + 2);
+          if (event === "event: activity.refresh\ndata: {}") refresh();
+          if (event === "event: unavailable\ndata: {}") {
+            throw new WorkflowClientError("Activity access is no longer available.", true);
+          }
+          if (event === "event: retry\ndata: {}") {
+            throw new WorkflowClientError("Live activity is temporarily unavailable.");
+          }
+          boundary = buffer.indexOf("\n\n");
+        }
+      }
+    } finally {
+      await reader.cancel();
+    }
   }
 
   decide(

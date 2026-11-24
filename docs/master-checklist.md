@@ -11,6 +11,23 @@ The original [interactive architecture](software-factory.html) is a preserved
 historical source; this checklist records current status. The 2–3 hour
 prototype objective has not yet been measured.
 
+## UX stack Layer 3: live activity
+
+**Status: In Progress.** This draft is stacked on PR #51; exact-parent
+integration and exact-head CI remain pending.
+
+| Acceptance criterion | Evidence and limits |
+| --- | --- |
+| Privacy and authorization | Stream ticks revalidate the token and case policy; only a fixed refresh and heartbeat are emitted. Security tests cover unauthenticated, denied, revoked and invalid-cursor requests. |
+| Late commits and replay | PostgreSQL 17 late-commit test shows a fresh authorized snapshot includes an older late commit. Browser reconciliation replaces snapshots and does not infer a commit watermark; concurrent inserts may need another scan. |
+| Lifecycle and failure | Case/account cleanup aborts requests; streams end after 30 seconds, reconnects are bounded and polling reauthorizes. Scans cap at 1,000 pages/60 seconds and surface failure. |
+| Local and generated verification | Source UI passes 27 unit tests, build, CSP and both history/browser specs. Earlier independent base and profile generations passed 25 and 27 UI tests respectively, builds and browser specs; both generated backends pass five focused PostgreSQL/security tests. Isolated repository suite passes 105 tests with two documented skips; exact-parent revalidation remains pending. |
+
+Inherited Layer 2 profile telemetry fixture mismatch remains disclosed and
+unchanged. No cloud changes or later adapters are included. **Next action:**
+integrate the corrected PR #51 head, finish generated and exact-head checks,
+then open a stacked draft without enabling merge.
+
 ## UX stack Layer 1 acceptance
 
 **Status: implemented locally; stacked draft PR and exact-head CI pending.**

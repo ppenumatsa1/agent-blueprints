@@ -8,6 +8,28 @@ contracts and documented engineering patterns where they have demonstrated
 value; do not hide MAF, LangGraph, or a harness behind a universal runtime.
 Generated projects must not import this repository at runtime.
 
+## Live activity reconciliation
+
+The Layer 3 stream is an authenticated, case-authorized invalidation channel,
+not an event log or a commit-order cursor. It emits only a fixed refresh signal
+and heartbeat; each tick revalidates the bearer token and the case read
+policy, and the database connection is returned before the wait. The browser
+uses bearer `fetch`, rescans the existing authorized activity projection, and
+atomically replaces its snapshot instead of appending or guessing a commit
+watermark. Audit identity values and transaction-start timestamps can precede
+commit, so late commits require subsequent full scans. A scan concurrent with
+inserts may be incomplete until a later scan; this is eventual reconciliation,
+not a point-in-time or exactly-once feed.
+
+Streams are limited to 30 seconds; three bounded connection attempts are
+followed by ten-second polling. A scan is limited to 1,000 pages and 60 seconds;
+exceeding either limit surfaces an error instead of silently truncating.
+Reconnection begins a fresh scan, and selection/account teardown aborts
+in-flight work. The existing activity pagination cursor is validated but is
+never treated as a stream watermark. No workflow effects or raw payloads are
+sent. Local tests do not establish cloud proxy behavior, live Entra consent,
+or production-scale limits.
+
 ## Locally integrated Azure/Foundry boundary
 
 The [local integration acceptance](master-checklist.md#local-azurefoundry-integration-acceptance)

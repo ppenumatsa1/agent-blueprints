@@ -36,7 +36,7 @@ it("continues without tracing when browser randomness is unavailable", async () 
 it("reports an authorization failure without reflecting the response", async () => {
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 403 }));
   await expect(new HttpWorkflowClient(async () => "synthetic-token").read("id"))
-    .rejects.toThrow(new WorkflowClientError("You are not authorized for this record."));
+    .rejects.toThrow(new WorkflowClientError("You are not authorized for this record.", true));
 });
 
 it("uses the read scope and validates the versioned history response", async () => {
@@ -75,4 +75,37 @@ it("rejects unknown activity events and unversioned history responses", async ()
       : client.activity("80000000-0000-4000-8000-000000000008");
     await expect(operation).rejects.toThrow("invalid response");
   }
+});
+
+it("uses bearer fetch for fragmented refresh signals without exposing event content", async () => {
+  const encoder = new TextEncoder();
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(encoder.encode("event: activity.ref"));
+      controller.enqueue(encoder.encode("resh\ndata: {}\n\n: heartbeat\n\n"));
+      controller.close();
+    },
+  });
+  const fetcher = vi.fn().mockResolvedValue(new Response(body, {
+    headers: { "Content-Type": "text/event-stream; charset=utf-8" },
+  }));
+  vi.stubGlobal("fetch", fetcher);
+  const refresh = vi.fn();
+  await new HttpWorkflowClient(async () => "synthetic-token").activityStream(
+    "80000000-0000-4000-8000-000000000008",
+    new AbortController().signal,
+    refresh,
+  );
+  expect(refresh).toHaveBeenCalledTimes(1);
+  expect(fetcher.mock.calls[0][1].headers.Authorization).toBe("Bearer synthetic-token");
+  expect(fetcher.mock.calls[0][1].credentials).toBe("omit");
+});
+
+it("reports revoked live access without reflecting server content", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("private-canary", { status: 403 })));
+  await expect(new HttpWorkflowClient(async () => "synthetic-token").activityStream(
+    "80000000-0000-4000-8000-000000000008",
+    new AbortController().signal,
+    vi.fn(),
+  )).rejects.toMatchObject({ authorizationFailure: true });
 });
