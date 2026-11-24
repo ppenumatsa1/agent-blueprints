@@ -566,10 +566,14 @@ connections before the final TCP server starts. Issue [#38](https://github.com/p
 records this on disposable PostgreSQL 16.15 and 17, including a failed initial
 `createdb` and a successful 72/72 source/generated retry at historical head
 `8b3c357`. CI startup loops and Compose health checks use bounded loopback TCP
-probes; these remain in current `main` at
+probes; these remained in `main` at
 `49932ee0cd61ee653a5f86be0f43873cec197ff9`, whose exact-main run
 [45041465032](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/45041465032)
-passed all six jobs. This does not establish managed PostgreSQL readiness.
+passed all six jobs. The correction merged in #17 as `0c1297c`; its
+[exact-head run 45027444227](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/45027444227)
+passed source and generated Compose checks. Later stacked heads require their
+own CI evidence; local and CI checks do not establish Azure managed PostgreSQL
+readiness.
 
 The local integration at `af3955a` combined the engineering layers. Source and
 independently generated backends each passed 68 tests on PostgreSQL 16.15 and
