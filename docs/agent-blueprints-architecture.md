@@ -78,6 +78,10 @@ outcome. Empty, unknown, duplicate, and unsupported selections fail before
 live client construction. Default selection still includes all nine and
 refuses ORS-005. Same-identity POC owner-database mode must also exclude
 ORS-009, whose official oracle requires distinct actor identities.
+For cases without an explicit reviewer, this mode uses a stable reserved nil
+UUID and refuses an operator collision; the value does not grant approval.
+The ORS-001, 004, and 006–008 selection has a mocked driver regression that
+does not call the grant or decision paths, not evidence of live execution.
 Partial results do not satisfy the full canonical acceptance contract or
 authorize deployment, recovery injection, or a provenance bypass.
 

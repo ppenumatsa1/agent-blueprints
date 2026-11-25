@@ -13,8 +13,12 @@ from unittest.mock import AsyncMock, Mock, patch
 from uuid import UUID, uuid4
 
 import httpx
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
+from app.api.dependencies import current_identity, workflow_service
 from app.api.routes.acceptance import _authorized, case_control
+from app.api.routes.cases import router as cases_router
 from app.config import Settings
 from app.domain.errors import AccessDenied, NotFound
 from app.domain.models import Case, Principal
@@ -132,6 +136,87 @@ class AcceptanceFaultTests(unittest.TestCase):
                     REVISION,
                     poc_owner_database_url="synthetic-poc-owner-url",
                 )
+
+    def test_live_submission_body_passes_generated_api_schema(self):
+        owner_id = str(uuid4())
+        reviewer_id = str(uuid4())
+        principal = object()
+        identity = SimpleNamespace(principal=principal)
+        payload = {"order": {"id": "synthetic-order"}}
+        service = SimpleNamespace(
+            submit=AsyncMock(
+                return_value=SimpleNamespace(
+                    id=CASE_ID,
+                    status="completed",
+                    decision=None,
+                    payload=payload,
+                    execution_complete=True,
+                    failure_code=None,
+                )
+            )
+        )
+        app = FastAPI()
+        app.include_router(cases_router, prefix="/api")
+        app.dependency_overrides[current_identity] = lambda: identity
+        app.dependency_overrides[workflow_service] = lambda: service
+        client = object.__new__(LiveClient)
+        client.base_url = "https://example.invalid"
+        client.owner = {"object_id": owner_id, "access_token": "synthetic"}
+        client.correlations = []
+        request_bodies = []
+
+        with TestClient(app) as api:
+
+            def open_request(request, timeout):
+                request_bodies.append(request.data)
+                response = api.request(
+                    request.method,
+                    request.full_url,
+                    content=request.data,
+                    headers=dict(request.header_items()),
+                )
+                return SimpleNamespace(
+                    status=response.status_code,
+                    headers=response.headers,
+                    read=lambda: response.content,
+                )
+
+            client.opener = SimpleNamespace(open=open_request)
+            for mode, poc_url, assigned, explicit, expected in (
+                ("poc-unassigned", "synthetic-poc-url", owner_id, None, None),
+                ("poc-explicit", "synthetic-poc-url", owner_id, owner_id, owner_id),
+                ("ordinary", None, reviewer_id, None, reviewer_id),
+            ):
+                with self.subTest(mode=mode):
+                    service.submit.reset_mock()
+                    client.poc_owner_database_url = poc_url
+                    client.reviewer = {"object_id": assigned}
+                    client.submit(payload, "synthetic-key", reviewer_id=explicit)
+                    service.submit.assert_awaited_once()
+                    actual_principal, actual_reviewer, actual_payload, actual_key = (
+                        service.submit.await_args.args
+                    )
+                    self.assertIs(actual_principal, principal)
+                    self.assertEqual(actual_payload, payload)
+                    self.assertEqual(actual_key, "synthetic-key")
+                    if expected is None:
+                        self.assertNotEqual(UUID(actual_reviewer), UUID(owner_id))
+                        first_body = request_bodies[-1]
+                        client.submit(payload, "synthetic-key")
+                        self.assertEqual(request_bodies[-1], first_body)
+                        self.assertEqual(service.submit.await_args.args[1], actual_reviewer)
+                    else:
+                        self.assertEqual(UUID(actual_reviewer), UUID(expected))
+
+    def test_poc_unassigned_reviewer_cannot_equal_operator(self):
+        client = object.__new__(LiveClient)
+        client.owner = {"object_id": str(UUID(int=0))}
+        client.reviewer = client.owner
+        client.poc_owner_database_url = "synthetic-poc-url"
+        client.request = Mock(return_value=(200, {}, {}))
+        with self.assertRaisesRegex(ValueError, "unassigned reviewer"):
+            client.submit({}, "synthetic-key")
+        client.request.assert_not_called()
 
     def test_selected_poc_decisions_grant_before_resuming_as_same_actor(self):
         actor = {"object_id": str(uuid4())}
@@ -531,6 +616,88 @@ class AcceptanceFaultTests(unittest.TestCase):
             self.assertNotIn("business_outcome", results[case_id])
         client.submit.assert_called_once()
         result.assert_called_once_with(snapshot, native_pause=False, extras={})
+
+    def test_single_identity_no_decision_subset_never_grants_or_decides(self):
+        actor_id = str(uuid4())
+        client = object.__new__(LiveClient)
+        client.owner = {"object_id": actor_id}
+        client.reviewer = client.owner
+        client.poc_owner_database_url = "synthetic-poc-url"
+        client.grant_poc_decision = Mock(side_effect=AssertionError("unexpected grant"))
+        client.decide = Mock(side_effect=AssertionError("unexpected decision"))
+        client.wait_for_pending = Mock(side_effect=AssertionError("unexpected pending case"))
+        client.wait_for_completion = Mock(side_effect=lambda record, _status: record)
+        submissions = []
+        records = {}
+        records_by_id = {}
+
+        def request(method, path, identity, *, body, idempotency_key, hosted_phase):
+            self.assertEqual((method, path, hosted_phase), ("POST", "/api/cases", "start"))
+            self.assertIs(identity, client.owner)
+            self.assertNotEqual(UUID(body["reviewer_id"]), UUID(actor_id))
+            submissions.append((idempotency_key, body))
+            if idempotency_key not in records:
+                failed = not idempotency_key.startswith("live-") or idempotency_key.startswith(
+                    ("live-ors-006-", "live-ors-007-")
+                )
+                record = {
+                    "id": str(uuid4()),
+                    "status": "failed" if failed else "completed",
+                    "failure_code": "synthetic-failure" if failed else None,
+                }
+                records[idempotency_key] = record
+                records_by_id[record["id"]] = record
+            return 200, records[idempotency_key], {}
+
+        def snapshot(case_id):
+            record = records_by_id[case_id]
+            return {
+                "status": record["status"],
+                "proposal": (
+                    None
+                    if record["status"] == "failed"
+                    else {
+                        "action": "partial_refund_10",
+                        "amount": "7.90",
+                        "currency": "USD",
+                        "approval_required": False,
+                    }
+                ),
+                "decision": None,
+                "verified_actions": [],
+                "counts": {"approved": 0, "claims": 0, "effects": 0, "terminal": 1},
+            }
+
+        client.request = Mock(side_effect=request)
+        client.snapshot = Mock(side_effect=snapshot)
+        selected = ["ORS-001", "ORS-004", "ORS-006", "ORS-007", "ORS-008"]
+        with (
+            patch.dict("os.environ", {"MAF_LIVE_POC_OWNER_DATABASE_URL": "synthetic-poc-url"}),
+            patch("tests.live_acceptance.LiveClient", return_value=client),
+        ):
+            results = create_results(
+                base_url="https://example.invalid",
+                auth_file="unused",
+                source_revision=REVISION,
+                deployment_revision=REVISION,
+                case_ids=selected,
+            )
+
+        for case_id in selected:
+            self.assertIn("business_outcome", results[case_id])
+        for case_id in ("ORS-002", "ORS-003", "ORS-005", "ORS-009"):
+            self.assertEqual(results[case_id]["status"], "not_run")
+            self.assertNotIn("business_outcome", results[case_id])
+        client.grant_poc_decision.assert_not_called()
+        client.decide.assert_not_called()
+        client.wait_for_pending.assert_not_called()
+        repeated = [item for item in submissions if item[0].startswith("live-ors-004-")]
+        self.assertEqual(len(repeated), 2)
+        self.assertEqual(repeated[0], repeated[1])
+        self.assertEqual(
+            {body["reviewer_id"] for _, body in submissions}, {repeated[0][1]["reviewer_id"]}
+        )
+        self.assertTrue(results["ORS-004"]["technical_execution"]["request_identity_reused"])
 
     def test_invalid_or_blocked_subset_fails_before_constructing_live_client(self):
         selections = ([], ["ORS-010"], ["ORS-001", "ORS-001"], ["ORS-001", "ORS-005"])

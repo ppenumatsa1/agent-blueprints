@@ -44,6 +44,7 @@ GOLDEN_CASES = json.loads(
 MODEL_CRITERION = "order-resolution-model-quality"
 CASE_POLL_TIMEOUT_SECONDS = 60
 CASE_POLL_INTERVAL_SECONDS = 2
+POC_UNASSIGNED_REVIEWER_ID = UUID(int=0)
 
 
 def _https_origin(value: str) -> str:
@@ -292,17 +293,16 @@ class LiveClient:
         *,
         reviewer_id: str | None = None,
     ) -> tuple[dict, dict[str, str]]:
+        if not reviewer_id and self.poc_owner_database_url:
+            if UUID(self.owner["object_id"]) == POC_UNASSIGNED_REVIEWER_ID:
+                raise ValueError("The POC operator cannot be the unassigned reviewer.")
+            reviewer_id = str(POC_UNASSIGNED_REVIEWER_ID)
         status, record, headers = self.request(
             "POST",
             "/api/cases",
             self.owner,
             body={
-                "reviewer_id": reviewer_id
-                or (
-                    "poc-unassigned-reviewer"
-                    if self.poc_owner_database_url
-                    else self.reviewer["object_id"]
-                ),
+                "reviewer_id": reviewer_id or self.reviewer["object_id"],
                 "payload": payload,
             },
             idempotency_key=key,

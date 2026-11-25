@@ -40,7 +40,12 @@ empty, unknown, duplicate, or unsupported selections before constructing a
 live client. Default all-nine selection still fails closed on ORS-005.
 Same-identity POC mode cannot select the distinct-actor ORS-009 oracle.
 Evidence: three isolated generated-backend regressions passed on the change
-based on `28b7da3541d4d24e2d7b5e6e76873d937c7c1349`; no live case was submitted.
+based on `28b7da3541d4d24e2d7b5e6e76873d937c7c1349`. A later generated API
+reproduction returned HTTP 422 for the old POC reviewer placeholder. Six focused
+generated-backend tests subsequently passed with a stable reserved UUID,
+collision refusal, and a mocked five-case driver that never grants or decides;
+the complete 33-test acceptance module and Ruff checks also passed. An initial
+format check failed before formatting was corrected. No live case was submitted.
 Next: verify the integrated POC driver and record actual selected-case outcomes
 without declaring omitted cases or the full matrix passed.
 

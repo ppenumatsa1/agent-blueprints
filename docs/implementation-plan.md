@@ -29,10 +29,15 @@ constructing a live client. ORS-009 requires distinct actors and is refused
 when same-identity POC owner-database mode is configured.
 
 Evidence: three isolated generated-backend selection/guard tests passed on
-the change based on `28b7da3`. Next: verify the integrated POC approval/rejection
-seam and execute the explicitly selected live
-subset. All-nine acceptance, native hosted recovery, deployment provenance,
-and production authorization remain unverified or blocked; none is waived.
+the change based on `28b7da3`. A generated API test reproduced HTTP 422 for
+the old POC reviewer placeholder; six focused tests then passed for a stable
+reserved UUID, operator-collision refusal, and a mocked five-case driver with
+no grant or decision calls. The generated acceptance module passed 33 tests
+and Ruff after an initial formatting failure was corrected. Next: verify the
+integrated POC approval/rejection seam and execute an explicitly selected
+live subset only when its deployment prerequisites are satisfied. All-nine
+acceptance, native hosted recovery, deployment provenance, and production
+authorization remain unverified or blocked; none is waived.
 
 ## Opt-in hosted image publication for PR #62
 

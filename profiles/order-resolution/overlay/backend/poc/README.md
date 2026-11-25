@@ -57,8 +57,10 @@ operator; these checks are not satisfied by the PostgreSQL token.
 The golden live driver uses this grant path only when
 `MAF_LIVE_POC_OWNER_DATABASE_URL` is explicitly set. ORS-002 and ORS-003 take
 the same-identity path; cases not needing a decision use a reserved reviewer
-placeholder that is not an Entra user and cannot approve. Do not claim a case
-requiring multiple distinct principals from this single-identity mode.
+nil UUID that is not an Entra user. The driver rejects a collision with the
+operator and reuses the same placeholder for idempotent submissions. It does
+not grant approval authority. Do not claim a case requiring multiple distinct
+principals from this single-identity mode.
 
 Inspect `ors_poc.decision_audit` as the database owner. The protected audit
 append and durable decision are atomic. An approved effect is restricted to
