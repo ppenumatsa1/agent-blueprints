@@ -2,13 +2,14 @@ import hashlib
 import unittest
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from uuid import uuid4
 
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
+from app.domain.errors import AccessDenied
 from app.domain.models import Case, Principal
 from app.domain.policy import CaseAccessPolicy
 from app.order_resolution.durability import DecisionRecord, Proposal
@@ -21,6 +22,7 @@ from order_resolution_hosted.application import (
     GeneratedOrderResolutionApplication,
     build_generated_application,
 )
+from order_resolution_hosted.business import _BoundBusinessStore
 
 
 class FakeStore:
@@ -281,6 +283,48 @@ class ApplicationTests(unittest.IsolatedAsyncioTestCase):
                 started["request_id"],
                 self.decision(handle=started["request_id"]),
             )
+
+    def test_self_review_uses_only_the_opted_in_bound_api_authority(self):
+        case = replace(self.case, reviewer_id="owner", status="pending", request_id="request")
+        principal = replace(
+            self.principal,
+            subject="owner",
+            roles=frozenset({"Workflow.Approver", "Acceptance.Operator"}),
+        )
+        bound = _BoundBusinessStore(Mock(), self.caller, "conversation-1", "reviewer")
+        remote = Mock(for_binding=Mock(return_value=bound))
+        local = FakeStore(case, self.proposal)
+        with (
+            patch.object(bound, "get", return_value=case),
+            patch.object(
+                bound,
+                "record_hosted_decision",
+                side_effect=PermissionError("The protected grant was denied."),
+            ) as callback,
+        ):
+            for enabled, store, error in (
+                (False, remote, AccessDenied),
+                (True, local, AccessDenied),
+                (True, remote, PermissionError),
+            ):
+                application = GeneratedOrderResolutionApplication(
+                    store=store,
+                    action=object(),
+                    policy=CaseAccessPolicy(),
+                    identity_bindings=FakeBindings(principal),
+                    workflow_factory=Mock(),
+                    protected_self_decision_enabled=enabled,
+                )
+                with (
+                    self.subTest(enabled=enabled, remote=store is remote),
+                    self.assertRaises(error),
+                ):
+                    application.authorize_resume(
+                        self.caller, "conversation-1", "request", self.decision(handle="request")
+                    )
+        callback.assert_called_once()
+        self.assertEqual(callback.call_args.args[0].handle, "request")
+        self.assertEqual(local.decisions, [])
 
     def test_repeated_start_reuses_business_pending_request(self):
         first = self.application.authorize_start(

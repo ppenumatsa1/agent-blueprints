@@ -8,6 +8,22 @@ contracts and documented engineering patterns where they have demonstrated
 value; do not hide MAF, LangGraph, or a harness behind a universal runtime.
 Generated projects must not import this repository at runtime.
 
+## Protected synthetic POC self-decisions
+
+The default Order Resolution API and Agent A require a distinct reviewer.
+In the opt-in hosted synthetic POC only, the API can admit the configured
+operator to stage a self-reviewed case. The API must use the protected
+database scope under strict managed identity and verified TLS. No caller
+flag, review field, acceptance fault setting, or model response can substitute
+for an owner-issued grant bound to the exact pending case, proposal, handle,
+and outcome. Agent A still uses the native approval request and authenticated
+business API, never a database credential or local workflow checkpoint.
+PostgreSQL atomically appends the protected exception audit when the
+durable decision succeeds. Approved effects recheck that audit and use only
+the built-in PostgreSQL synthetic destination. Local relational checks and
+mocked Azure catalog mapping are not live workload identity or artifact
+provenance.
+
 ## Windows asynchronous PostgreSQL startup
 
 Psycopg's asynchronous connections require a compatible event loop; Windows'

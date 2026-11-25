@@ -43,10 +43,14 @@ class OrderResolutionService(WorkflowService):
         payload: dict[str, Any],
         idempotency_key: str,
     ) -> Case:
-        self.policy.authorize_submission(actor, reviewer_id)
+        self_review = actor.subject == reviewer_id
+        if not self_review or not self.hosted_mode or not self.store.permits_poc_submission(actor):
+            self.policy.authorize_submission(actor, reviewer_id)
         if not re.fullmatch(r"[A-Za-z0-9._:-]{1,128}", idempotency_key):
             raise InvalidInput("The idempotency key must be 1-128 safe characters.")
         validated = self.rules.validate(payload)
+        if self_review and (validated.get("proposal") or {}).get("approval_required") is not True:
+            raise AccessDenied("POC self-review requires a synthetic proposal awaiting approval.")
         canonical = json.dumps(
             {"reviewer_id": reviewer_id, "payload": validated},
             ensure_ascii=False,
@@ -89,12 +93,18 @@ class OrderResolutionService(WorkflowService):
     ):
         case = self.store.get(case_id)
         try:
+            poc_decision = (
+                self.hosted_mode
+                and hosted_callback
+                and case.owner_id == case.reviewer_id == actor.subject
+                and self.store.permits_poc_decision(case_id, actor, decision)
+            )
             idempotent_repeat = case.decision == decision and case.status in (
                 "approved",
                 "rejected",
                 "completed",
             )
-            if not idempotent_repeat:
+            if not idempotent_repeat and not poc_decision:
                 self.policy.authorize_decision(actor, case)
             proposal = self.store.get_current_proposal(str(case_id))
             decision_store = self.store
@@ -121,6 +131,7 @@ class OrderResolutionService(WorkflowService):
                     channel=channel,
                 ),
                 now=now or datetime.now(timezone.utc),
+                protected_self_decision=poc_decision,
             )
         except (AccessDenied, AuthorizationDenied) as exc:
             self.store.audit_authorization_denial(case_id, actor.subject)

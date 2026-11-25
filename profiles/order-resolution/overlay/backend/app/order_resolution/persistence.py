@@ -24,6 +24,7 @@ from app.order_resolution.effects import (
     EffectStatus,
     Observation,
 )
+from app.order_resolution.poc import decision_allowed, operator_allowed
 
 
 _CASE_FOR_UPDATE = """
@@ -119,6 +120,40 @@ class OrderResolutionStore(PostgresStore):
     """PostgreSQL business state correlated with, but separate from, MAF checkpoints."""
 
     acceptance_faults = None
+    poc_enabled = False
+
+    def permits_poc_submission(self, actor: Principal) -> bool:
+        if not self.poc_enabled:
+            return False
+        with self.connect() as connection:
+            return operator_allowed(connection, actor)
+
+    def permits_poc_decision(
+        self, case_id: UUID, actor: Principal, decision: str, *, connection=None
+    ) -> bool:
+        if not self.poc_enabled:
+            return False
+        if connection is None:
+            with self.connect() as conn:
+                return self.permits_poc_decision(case_id, actor, decision, connection=conn)
+        return operator_allowed(connection, actor) and decision_allowed(
+            connection,
+            case_id,
+            actor.tenant_id,
+            actor.subject,
+            decision,
+            require_audit=False,
+        )
+
+    def permits_poc_effect(self, connection, decision: DecisionRecord) -> bool:
+        return self.poc_enabled and decision_allowed(
+            connection,
+            UUID(decision.case_id),
+            decision.tenant_id,
+            decision.actor_id,
+            decision.decision.value,
+            require_audit=True,
+        )
 
     def connect(self):
         if self.acceptance_faults is not None and self.acceptance_faults.postgres_transient():
@@ -328,7 +363,7 @@ class OrderResolutionStore(PostgresStore):
             ).fetchone()
         return _decision(row) if row is not None else None
 
-    def claim_decision(self, decision: DecisionRecord) -> DecisionRecord:
+    def claim_decision(self, decision: DecisionRecord, *, hosted: bool = False) -> DecisionRecord:
         case_id = UUID(decision.case_id)
         with self.connect() as connection:
             proposal = connection.execute(
@@ -341,6 +376,19 @@ class OrderResolutionStore(PostgresStore):
             ).fetchone()
             if proposal is None or _proposal(proposal).action_identity != decision.action_identity:
                 raise Conflict("The decision does not match the current proposal.")
+            if decision.actor_id == proposal["owner_id"] and not (
+                hosted
+                and self.poc_enabled
+                and decision_allowed(
+                    connection,
+                    case_id,
+                    decision.tenant_id,
+                    decision.actor_id,
+                    decision.decision.value,
+                    require_audit=False,
+                )
+            ):
+                raise AccessDenied("Decision is not authorized.")
             connection.execute(
                 """
                 INSERT INTO order_resolution_decisions
@@ -823,7 +871,15 @@ class OrderResolutionStore(PostgresStore):
             if not (
                 principal.tenant_id == case.tenant_id
                 and principal.subject == case.reviewer_id
-                and principal.subject != case.owner_id
+                and (
+                    principal.subject != case.owner_id
+                    or self.permits_poc_decision(
+                        case_id,
+                        principal,
+                        decision_command.decision.value,
+                        connection=connection,
+                    )
+                )
                 and "workflow.approve" in principal.scopes
                 and "Workflow.Approver" in principal.roles
                 and case.checkpoint_id is None
@@ -1206,7 +1262,7 @@ class OrderResolutionStore(PostgresStore):
             or row["status"] not in ("pending", "approved", "rejected")
         ):
             raise Conflict("The hosted workflow is not waiting for this decision.")
-        return self.claim_decision(decision)
+        return self.claim_decision(decision, hosted=True)
 
     def finish_hosted(self, case_id: UUID) -> None:
         with self.connect() as connection:

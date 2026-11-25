@@ -1,5 +1,18 @@
 # Phased implementation plan
 
+## Single-identity synthetic POC in PR #62
+
+Use the existing operator and PostgreSQL owner, not a new identity. Install
+the optional protected grant/audit schema only on the dedicated POC database;
+enable the generated hosted API and Agent A options only after verifying the
+reviewed artifacts and actual scope, TLS, managed-identity principal mapping,
+protected trigger ownership and operator grants. The owner command issues
+the exact case/proposal/outcome grant after the native pause without storing
+an Entra credential. Production remains default-off with distinct actors.
+Local PostgreSQL fixture results do not prove Azure activation, hosted
+continuation, adoption of independent provenance, or live multi-actor
+authorization evidence. See the [operator runbook](../profiles/order-resolution/overlay/backend/poc/README.md).
+
 ## Windows asynchronous PostgreSQL startup in PR #62
 
 **Local acceptance passed; exact-head CI pending.** The default generated

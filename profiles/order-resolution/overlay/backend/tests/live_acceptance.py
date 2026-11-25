@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import hashlib
 import json
 import os
 import re
@@ -149,7 +150,14 @@ def _payload(case: dict, evidence_items: list[dict] | None = None) -> dict:
 
 
 class LiveClient:
-    def __init__(self, base_url: str, auth_file: str, deployment_revision: str):
+    def __init__(
+        self,
+        base_url: str,
+        auth_file: str,
+        deployment_revision: str,
+        *,
+        poc_owner_database_url: str | None = None,
+    ):
         self.base_url = _https_origin(base_url)
         if self.base_url != _https_origin(os.environ.get("MAF_LIVE_AUTHORIZED_ORIGIN", "")):
             raise ValueError("The live base URL does not match the authorized origin.")
@@ -173,7 +181,15 @@ class LiveClient:
             scopes={"workflow.read"},
             roles={"Acceptance.Operator"},
         )
-        if self.owner["object_id"] == self.reviewer["object_id"]:
+        self.poc_owner_database_url = poc_owner_database_url
+        if self.poc_owner_database_url:
+            if (
+                not self.owner["object_id"]
+                == self.reviewer["object_id"]
+                == self.operator["object_id"]
+            ):
+                raise ValueError("POC acceptance requires one exact owner/reviewer/operator.")
+        elif self.owner["object_id"] == self.reviewer["object_id"]:
             raise ValueError("Live owner and reviewer identities must be distinct.")
         tenants = {
             identity["claims"].get("tid") for identity in (self.owner, self.reviewer, self.operator)
@@ -277,7 +293,12 @@ class LiveClient:
             "/api/cases",
             self.owner,
             body={
-                "reviewer_id": reviewer_id or self.reviewer["object_id"],
+                "reviewer_id": reviewer_id
+                or (
+                    "poc-unassigned-reviewer"
+                    if self.poc_owner_database_url
+                    else self.reviewer["object_id"]
+                ),
                 "payload": payload,
             },
             idempotency_key=key,
@@ -404,6 +425,23 @@ class LiveClient:
             },
             case_id=record["id"],
             hosted_phase="resume",
+        )
+
+    def grant_poc_decision(self, record: dict, decision: str) -> None:
+        if self.poc_owner_database_url is None or record.get("status") != "pending":
+            raise ValueError("The POC grant requires a configured owner and an exact pending case.")
+        from app.order_resolution.durability import Decision
+        from app.order_resolution.poc_grant import issue_grant
+
+        proposal = record["payload"]["proposal"]
+        issue_grant(
+            self.poc_owner_database_url,
+            case_id=UUID(record["id"]),
+            proposal_version=proposal["version"],
+            handle_digest=hashlib.sha256(record["decision_handle"].encode()).hexdigest(),
+            action=proposal["action"],
+            destination_id=proposal["destination_id"],
+            decision=Decision(decision),
         )
 
     def control(
@@ -803,7 +841,14 @@ def create_results(
         raise UnsupportedScenario(
             "ORS-005 requires independently verified native continuation evidence."
         )
-    client = LiveClient(base_url, auth_file, deployment_revision)
+    poc_database_url = os.environ.get("MAF_LIVE_POC_OWNER_DATABASE_URL")
+    client = (
+        LiveClient(
+            base_url, auth_file, deployment_revision, poc_owner_database_url=poc_database_url
+        )
+        if poc_database_url
+        else LiveClient(base_url, auth_file, deployment_revision)
+    )
     results = {}
     for case in GOLDEN_CASES:
         case_id = case["id"]
@@ -848,6 +893,8 @@ def create_results(
         reviewer_id = None
         if case_id == "ORS-009":
             reviewer_id = str(uuid4())
+        elif poc_database_url and case_id in {"ORS-002", "ORS-003"}:
+            reviewer_id = client.owner["object_id"]
         record, _ = client.submit(_payload(case), key, reviewer_id=reviewer_id)
         if case_id in {"ORS-002", "ORS-003", "ORS-009"}:
             record = client.wait_for_pending(record)
@@ -856,11 +903,15 @@ def create_results(
         original = False
         pending_before = record["status"] == "pending"
         if case_id == "ORS-002":
+            if poc_database_url:
+                client.grant_poc_decision(record, "approved")
             status, record, _ = client.decide(record, "approved", client.reviewer)
             if status != 200:
                 raise RuntimeError(f"ORS-002 approval failed with HTTP {status}.")
             record = client.wait_for_completion(record, "completed")
         elif case_id == "ORS-003":
+            if poc_database_url:
+                client.grant_poc_decision(record, "rejected")
             status, record, _ = client.decide(record, "rejected", client.reviewer)
             if status != 200:
                 raise RuntimeError(f"ORS-003 rejection failed with HTTP {status}.")

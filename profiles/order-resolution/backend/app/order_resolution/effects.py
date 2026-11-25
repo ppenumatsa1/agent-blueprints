@@ -142,8 +142,15 @@ class EffectCoordinator:
         current_proposal: Proposal,
         decision: DecisionRecord | None,
         payload: dict[str, Any],
+        *,
+        protected_self_decision: bool = False,
     ) -> EffectRequest:
-        require_action_authorization(proposal, current_proposal, decision)
+        require_action_authorization(
+            proposal,
+            current_proposal,
+            decision,
+            protected_self_decision=protected_self_decision,
+        )
         request = EffectRequest.create(proposal, payload)
         record = self._ledger.claim_effect(request)
         if record.request != request:

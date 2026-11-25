@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import io
 import time
 from email.message import Message
@@ -19,7 +20,7 @@ from app.domain.errors import AccessDenied, NotFound
 from app.domain.models import Case, Principal
 from app.infrastructure.identity import AuthenticatedRequest
 from app.order_resolution.acceptance import AcceptanceFaults
-from app.order_resolution.durability import Proposal
+from app.order_resolution.durability import Decision, Proposal
 from app.order_resolution.persistence import OrderResolutionStore
 from app.order_resolution.service import OrderResolutionService
 from tests.hosted_failure_runner import (
@@ -77,6 +78,61 @@ class FakeConnection:
 
 
 class AcceptanceFaultTests(unittest.TestCase):
+    def test_poc_owner_grant_uses_pending_case_and_exact_handle_digest(self):
+        client = object.__new__(LiveClient)
+        client.poc_owner_database_url = "synthetic-poc-owner-url"
+        case = {
+            "id": str(CASE_ID),
+            "status": "pending",
+            "decision_handle": "test-native-request",
+            "payload": {
+                "proposal": {
+                    "version": 1,
+                    "action": "replacement_shipment",
+                    "destination_id": "synthetic-fulfillment",
+                }
+            },
+        }
+        with patch("app.order_resolution.poc_grant.issue_grant") as issue_grant:
+            with self.assertRaises(ValueError):
+                client.grant_poc_decision({**case, "status": "created"}, "rejected")
+            issue_grant.assert_not_called()
+            client.grant_poc_decision(case, "rejected")
+        issue_grant.assert_called_once_with(
+            "synthetic-poc-owner-url",
+            case_id=CASE_ID,
+            proposal_version=1,
+            handle_digest=hashlib.sha256(b"test-native-request").hexdigest(),
+            action="replacement_shipment",
+            destination_id="synthetic-fulfillment",
+            decision=Decision.REJECTED,
+        )
+
+    def test_single_identity_is_accepted_only_in_explicit_poc_mode(self):
+        actor = {"object_id": str(uuid4()), "claims": {"tid": str(uuid4())}}
+        with (
+            patch.dict("os.environ", {"MAF_LIVE_AUTHORIZED_ORIGIN": "https://example.invalid"}),
+            patch("tests.live_acceptance._read_auth"),
+            patch("tests.live_acceptance._identity", return_value=actor) as identity,
+        ):
+            with self.assertRaisesRegex(ValueError, "must be distinct"):
+                LiveClient("https://example.invalid", "unused", REVISION)
+            client = LiveClient(
+                "https://example.invalid",
+                "unused",
+                REVISION,
+                poc_owner_database_url="synthetic-poc-owner-url",
+            )
+            self.assertEqual(client.owner, actor)
+            identity.side_effect = [actor, actor, {**actor, "object_id": str(uuid4())}]
+            with self.assertRaisesRegex(ValueError, "one exact owner/reviewer/operator"):
+                LiveClient(
+                    "https://example.invalid",
+                    "unused",
+                    REVISION,
+                    poc_owner_database_url="synthetic-poc-owner-url",
+                )
+
     def test_model_endpoint_requires_separately_authorized_https_origin(self):
         auth = {
             "model": {

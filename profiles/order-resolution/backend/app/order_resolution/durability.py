@@ -246,7 +246,8 @@ class Proposal:
             if self.decision_handle_digest is not None:
                 if not re.fullmatch(r"[0-9a-f]{64}", self.decision_handle_digest):
                     raise DurabilityError(
-                        "invalid_approval_binding", "The decision handle digest is invalid."
+                        "invalid_approval_binding",
+                        "The decision handle digest is invalid.",
                     )
                 _safe(self.decision_channel or "", "Decision channel")
         elif any(
@@ -369,6 +370,7 @@ def record_decision(
     command: DecisionCommand,
     *,
     now: datetime,
+    protected_self_decision: bool = False,
 ) -> DecisionRecord:
     current = store.get_current_proposal(proposal.case_id)
     if current != proposal:
@@ -389,7 +391,7 @@ def record_decision(
         or "Workflow.Approver" not in actor.roles
         or actor.tenant_id != proposal.tenant_id
         or actor.subject != proposal.reviewer_id
-        or actor.subject == proposal.owner_id
+        or (actor.subject == proposal.owner_id and not protected_self_decision)
         or command.scope != DECISION_SCOPE
     ):
         raise AuthorizationDenied("authorization_denied", "Decision is not authorized.")
@@ -405,7 +407,8 @@ def record_decision(
         )
     ):
         raise AuthorizationDenied(
-            "authorization_denied", "Decision identity does not match the pending proposal."
+            "authorization_denied",
+            "Decision identity does not match the pending proposal.",
         )
     if _utc(now) >= _utc(proposal.decision_expires_at):
         raise AuthorizationDenied("authorization_denied", "Decision authorization has expired.")
@@ -448,6 +451,8 @@ def require_action_authorization(
     proposal: Proposal,
     current: Proposal,
     decision: DecisionRecord | None,
+    *,
+    protected_self_decision: bool = False,
 ) -> None:
     if current != proposal:
         raise Conflict("proposal_not_current", "The proposal is no longer current.")
@@ -461,7 +466,7 @@ def require_action_authorization(
         or decision.action_identity != proposal.action_identity
         or decision.tenant_id != proposal.tenant_id
         or decision.actor_id != proposal.reviewer_id
-        or decision.actor_id == proposal.owner_id
+        or (decision.actor_id == proposal.owner_id and not protected_self_decision)
         or decision.scope != DECISION_SCOPE
         or decision.channel != proposal.decision_channel
     ):
