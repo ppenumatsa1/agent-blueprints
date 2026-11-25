@@ -1,5 +1,15 @@
 # Phased implementation plan
 
+## Development POC execution priority
+
+Repository guidance now prioritizes the smallest authorized end-to-end
+synthetic cycle on the current CI-validated candidate before non-blocking
+refinements. Existing explicit safeguards and honest reporting of unverified
+checks remain required. Evidence: `.github/copilot-instructions.md` and draft
+[PR #62](https://github.com/ppenumatsa1/agent-blueprints/pull/62). Next:
+apply this priority to the pending Azure POC cycle without treating it as a
+production-readiness claim.
+
 ## Single-identity synthetic POC in PR #62
 
 Use the existing operator and PostgreSQL owner, not a new identity. Install

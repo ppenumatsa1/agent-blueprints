@@ -11,6 +11,16 @@ The original [interactive architecture](software-factory.html) is a preserved
 historical source; this checklist records current status. The 2–3 hour
 prototype objective has not yet been measured.
 
+## Development POC execution priority
+
+**Status: Completed for repository guidance.** Acceptance: prioritize the
+smallest authorized synthetic end-to-end cycle on the current CI-validated
+candidate, defer non-blocking refinements, and report unknowns without
+weakening explicit safeguards. Evidence: `.github/copilot-instructions.md`
+and draft [PR #62](https://github.com/ppenumatsa1/agent-blueprints/pull/62).
+Next: apply the guidance to the pending Azure POC cycle; no live result is
+implied by the guidance.
+
 ## Single-identity synthetic POC in PR #62
 
 **Status: In Progress; Azure activation and acceptance remain blocked.**

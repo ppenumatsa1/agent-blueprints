@@ -8,6 +8,13 @@ contracts and documented engineering patterns where they have demonstrated
 value; do not hide MAF, LangGraph, or a harness behind a universal runtime.
 Generated projects must not import this repository at runtime.
 
+## Development POC execution
+
+Prioritize the smallest authorized synthetic end-to-end cycle on the current
+CI-validated candidate before optional refinements. Retrospective unknowns
+remain disclosed, while existing explicit safety and security safeguards
+remain in force. A POC cycle is not production-readiness evidence.
+
 ## Protected synthetic POC self-decisions
 
 The default Order Resolution API and Agent A require a distinct reviewer.
