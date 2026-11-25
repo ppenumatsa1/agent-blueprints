@@ -39,6 +39,27 @@ live subset only when its deployment prerequisites are satisfied. All-nine
 acceptance, native hosted recovery, deployment provenance, and production
 authorization remain unverified or blocked; none is waived.
 
+## Live acceptance oracle corrections in PR #62
+
+**Locally verified; exact-head CI and Azure execution pending.** ORS-004 now
+submits an identical pre-completion replay only after observing a nonterminal
+case, verifies that replay is still nonterminal and uses the original case,
+then compares the original and replayed terminal business outcomes. A fast
+completion is explicitly unverified. ORS-008 checks each submitted record and
+protected snapshot for the real `policy_evidence_invalid` failure, absent
+proposal and decision, no recorded approval, action, claim or effect, and
+exactly one terminal event. Missing or conflicting evidence stops the run.
+Approval-request counts cover the application's durable local and hosted audit
+events; they do not prove a global Foundry session or compute inventory.
+
+Focused tests reproduced the prior false positives. A fresh independent
+generation then passed 38 acceptance tests and three PostgreSQL-backed tests;
+the isolated root suite passed 114 tests with two existing skips. The first
+format check failed before the repository-specific formatting and lint checks
+passed. Next: verify exact-head CI, then establish the actual scoped rollout,
+in-flight-operation and provenance prerequisites before live testing. No
+Azure outcome or production readiness is inferred from these local checks.
+
 ## Opt-in hosted image publication for PR #62
 
 **Local implementation; integration and Azure verification pending.** Generated

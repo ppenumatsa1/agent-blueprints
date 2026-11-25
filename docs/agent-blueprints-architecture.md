@@ -82,6 +82,14 @@ For cases without an explicit reviewer, this mode uses a stable reserved nil
 UUID and refuses an operator collision; the value does not grant approval.
 The ORS-001, 004, and 006–008 selection has a mocked driver regression that
 does not call the grant or decision paths, not evidence of live execution.
+ORS-004 requires an observed nonterminal same-identity replay and separately
+compares the terminal business outcome after replay; a case that completes
+before that boundary is unverified. ORS-008 checks every invalid variant's
+record and snapshot for the actual failure, absent proposal, decision and
+effects, no recorded local/hosted approval request, and exactly one terminal
+event. The protected snapshot exposes execution completion, failure code and
+durable approval-request event counts for these checks. Those application
+records do not establish complete Foundry session visibility or provenance.
 Partial results do not satisfy the full canonical acceptance contract or
 authorize deployment, recovery injection, or a provenance bypass.
 

@@ -6,6 +6,7 @@ from email.message import Message
 import urllib.error
 import urllib.request
 import unittest
+from copy import deepcopy
 from pathlib import Path
 from threading import Event
 from types import SimpleNamespace
@@ -63,6 +64,7 @@ class FakeConnection:
             {
                 "approved": 0,
                 "rejected": 0,
+                "approval_requests": 0,
                 "claims": 1,
                 "effects": 1,
                 "terminal": 1,
@@ -617,6 +619,302 @@ class AcceptanceFaultTests(unittest.TestCase):
         client.submit.assert_called_once()
         result.assert_called_once_with(snapshot, native_pause=False, extras={})
 
+    def test_ors004_replays_before_completion_and_compares_terminal_outcome(self):
+        created = {
+            "id": str(CASE_ID),
+            "status": "created",
+            "execution_complete": False,
+            "decision": "pending",
+            "payload": {"proposal": {"amount": "7.90"}},
+            "failure_code": None,
+        }
+        completed = {**created, "status": "completed", "execution_complete": True}
+        snapshot = {
+            "status": "completed",
+            "execution_complete": True,
+            "failure_code": None,
+            "decision": None,
+            "proposal": {
+                "action": "partial_refund_10",
+                "amount": "7.90",
+                "currency": "USD",
+                "approval_required": False,
+            },
+            "verified_actions": [
+                {"type": "partial_refund_10", "amount": "7.90", "currency": "USD"}
+            ],
+            "counts": {"approved": 0, "claims": 1, "effects": 1, "terminal": 1},
+        }
+        for mismatch in ("none", "record", "snapshot"):
+            with self.subTest(mismatch=mismatch):
+                client = Mock(owner={"object_id": str(uuid4())})
+                replay = deepcopy(completed)
+                after = deepcopy(snapshot)
+                if mismatch == "record":
+                    replay["payload"]["proposal"]["amount"] = "8.00"
+                elif mismatch == "snapshot":
+                    after["verified_actions"][0]["amount"] = "8.00"
+                client.submit.side_effect = [(created, {}), (created, {}), (replay, {})]
+                client.wait_for_completion.return_value = completed
+                client.snapshot.side_effect = [snapshot, after]
+                with (
+                    patch.dict("os.environ", {"MAF_LIVE_POC_OWNER_DATABASE_URL": "synthetic"}),
+                    patch("tests.live_acceptance.LiveClient", return_value=client),
+                ):
+                    results = create_results(
+                        base_url="https://example.invalid",
+                        auth_file="unused",
+                        source_revision=REVISION,
+                        deployment_revision=REVISION,
+                        case_ids=["ORS-004"],
+                    )
+                calls = [
+                    call[0]
+                    for call in client.mock_calls
+                    if call[0] in ("submit", "wait_for_completion", "snapshot")
+                ]
+                self.assertEqual(
+                    calls,
+                    [
+                        "submit",
+                        "submit",
+                        "wait_for_completion",
+                        "snapshot",
+                        "submit",
+                        "snapshot",
+                    ],
+                )
+                first, before, after_call = client.submit.call_args_list
+                self.assertEqual(first, before)
+                self.assertEqual(first, after_call)
+                self.assertTrue(
+                    results["ORS-004"]["technical_execution"]["request_identity_reused"]
+                )
+                self.assertEqual(
+                    results["ORS-004"]["business_outcome"]["returned_original_outcome"],
+                    mismatch == "none",
+                )
+
+    def test_ors004_marks_unobserved_precompletion_replay_unverified(self):
+        created = {"id": str(CASE_ID), "status": "created", "execution_complete": False}
+        completed = {
+            "id": str(CASE_ID),
+            "status": "completed",
+            "execution_complete": True,
+        }
+        for first, replay in ((completed, completed), (created, completed)):
+            with self.subTest(first=first["status"]):
+                client = Mock(owner={"object_id": str(uuid4())})
+                client.submit.side_effect = [(first, {}), (replay, {})]
+                client.wait_for_completion.return_value = completed
+                client.snapshot.return_value = {
+                    "status": "completed",
+                    "proposal": None,
+                    "decision": None,
+                    "verified_actions": [],
+                    "counts": {"approved": 0, "claims": 0, "effects": 0, "terminal": 1},
+                }
+                with (
+                    patch.dict("os.environ", {"MAF_LIVE_POC_OWNER_DATABASE_URL": "synthetic"}),
+                    patch("tests.live_acceptance.LiveClient", return_value=client),
+                ):
+                    results = create_results(
+                        base_url="https://example.invalid",
+                        auth_file="unused",
+                        source_revision=REVISION,
+                        deployment_revision=REVISION,
+                        case_ids=["ORS-004"],
+                    )
+                self.assertEqual(results["ORS-004"]["status"], "unverified")
+                self.assertNotIn("business_outcome", results["ORS-004"])
+                client.wait_for_completion.assert_not_called()
+
+    def test_ors004_rejects_a_different_case_on_either_replay(self):
+        created = {"id": str(CASE_ID), "status": "created", "execution_complete": False}
+        completed = {
+            **created,
+            "status": "completed",
+            "execution_complete": True,
+            "decision": "pending",
+            "payload": {"proposal": None},
+            "failure_code": None,
+        }
+        snapshot = {
+            "status": "completed",
+            "execution_complete": True,
+            "failure_code": None,
+            "decision": None,
+            "proposal": None,
+            "verified_actions": [],
+            "counts": {"approved": 0, "claims": 0, "effects": 0, "terminal": 1},
+        }
+        for mismatch in ("before", "after"):
+            with self.subTest(mismatch=mismatch):
+                client = Mock(owner={"object_id": str(uuid4())})
+                other = {**created, "id": str(uuid4())}
+                client.submit.side_effect = [
+                    (created, {}),
+                    (other if mismatch == "before" else created, {}),
+                    (other, {}),
+                ]
+                client.wait_for_completion.return_value = completed
+                client.snapshot.return_value = snapshot
+                with (
+                    patch.dict("os.environ", {"MAF_LIVE_POC_OWNER_DATABASE_URL": "synthetic"}),
+                    patch("tests.live_acceptance.LiveClient", return_value=client),
+                    self.assertRaisesRegex(RuntimeError, "ORS-004 .* different case"),
+                ):
+                    create_results(
+                        base_url="https://example.invalid",
+                        auth_file="unused",
+                        source_revision=REVISION,
+                        deployment_revision=REVISION,
+                        case_ids=["ORS-004"],
+                    )
+
+    def test_ors004_rejects_missing_terminal_evidence(self):
+        created = {"id": str(CASE_ID), "status": "created", "execution_complete": False}
+        completed = {
+            **created,
+            "status": "completed",
+            "execution_complete": True,
+            "decision": "pending",
+            "payload": {"proposal": None},
+            "failure_code": None,
+        }
+        snapshot = {
+            "status": "completed",
+            "execution_complete": True,
+            "decision": None,
+            "proposal": None,
+            "verified_actions": [],
+            "counts": {"approved": 0, "claims": 0, "effects": 0, "terminal": 1},
+        }
+        client = Mock(owner={"object_id": str(uuid4())})
+        client.submit.side_effect = [(created, {}), (created, {}), (completed, {})]
+        client.wait_for_completion.return_value = completed
+        client.snapshot.return_value = snapshot
+        with (
+            patch.dict("os.environ", {"MAF_LIVE_POC_OWNER_DATABASE_URL": "synthetic"}),
+            patch("tests.live_acceptance.LiveClient", return_value=client),
+            self.assertRaisesRegex(RuntimeError, "ORS-004 terminal business evidence"),
+        ):
+            create_results(
+                base_url="https://example.invalid",
+                auth_file="unused",
+                source_revision=REVISION,
+                deployment_revision=REVISION,
+                case_ids=["ORS-004"],
+            )
+
+    def test_ors008_requires_each_observed_failure_and_one_terminal_event(self):
+        def fixtures():
+            records = [
+                {
+                    "id": str(uuid4()),
+                    "status": "failed",
+                    "execution_complete": True,
+                    "failure_code": "policy_evidence_invalid",
+                    "decision": "pending",
+                    "payload": {
+                        "proposal": None,
+                        "resolution_failure": "policy_evidence_invalid",
+                    },
+                }
+                for _ in range(3)
+            ]
+            snapshots = [
+                {
+                    "status": "failed",
+                    "execution_complete": True,
+                    "failure_code": "policy_evidence_invalid",
+                    "proposal": None,
+                    "decision": None,
+                    "verified_actions": [],
+                    "counts": {
+                        "approved": 0,
+                        "rejected": 0,
+                        "approval_requests": 0,
+                        "claims": 0,
+                        "effects": 0,
+                        "terminal": 1,
+                    },
+                }
+                for _ in records
+            ]
+            return records, snapshots
+
+        def run(records, snapshots):
+            client = Mock(owner={"object_id": str(uuid4())})
+            client.submit.side_effect = [(record, {}) for record in records]
+            client.snapshot.side_effect = snapshots
+            with (
+                patch.dict("os.environ", {"MAF_LIVE_POC_OWNER_DATABASE_URL": "synthetic"}),
+                patch("tests.live_acceptance.LiveClient", return_value=client),
+            ):
+                return create_results(
+                    base_url="https://example.invalid",
+                    auth_file="unused",
+                    source_revision=REVISION,
+                    deployment_revision=REVISION,
+                    case_ids=["ORS-008"],
+                )
+
+        records, snapshots = fixtures()
+        result = run(records, snapshots)["ORS-008"]
+        self.assertEqual(result["business_outcome"]["error"], "policy_evidence_invalid")
+        self.assertEqual(result["technical_execution"]["terminal_event_count_per_variant"], 1)
+        self.assertTrue(result["technical_execution"]["all_variants_failed_explicitly"])
+
+        for mismatch in (
+            "record_error",
+            "snapshot_error",
+            "terminal",
+            "payload_proposal",
+            "payload_error",
+            "proposal",
+            "decision",
+            "actions",
+            "approval",
+            "approved",
+            "claim",
+            "effect",
+            "missing_count",
+            "boolean_count",
+        ):
+            with self.subTest(mismatch=mismatch):
+                records, snapshots = fixtures()
+                if mismatch == "record_error":
+                    records[1]["failure_code"] = "policy_evidence_missing"
+                elif mismatch == "snapshot_error":
+                    snapshots[1]["failure_code"] = "policy_evidence_missing"
+                elif mismatch == "terminal":
+                    snapshots[1]["counts"]["terminal"] = 2
+                elif mismatch == "payload_proposal":
+                    records[1]["payload"]["proposal"] = {"action": "replacement_shipment"}
+                elif mismatch == "payload_error":
+                    records[1]["payload"]["resolution_failure"] = "policy_evidence_missing"
+                elif mismatch == "proposal":
+                    snapshots[1]["proposal"] = {"action": "replacement_shipment"}
+                elif mismatch == "decision":
+                    snapshots[1]["decision"] = "approved"
+                elif mismatch == "actions":
+                    snapshots[1]["verified_actions"] = [{"type": "replacement_shipment"}]
+                elif mismatch == "approval":
+                    snapshots[1]["counts"]["approval_requests"] = 1
+                elif mismatch == "approved":
+                    snapshots[1]["counts"]["approved"] = 1
+                elif mismatch == "claim":
+                    snapshots[1]["counts"]["claims"] = 1
+                elif mismatch == "effect":
+                    snapshots[1]["counts"]["effects"] = 1
+                elif mismatch == "missing_count":
+                    del snapshots[1]["counts"]["approval_requests"]
+                else:
+                    snapshots[1]["counts"]["terminal"] = True
+                with self.assertRaisesRegex(RuntimeError, "ORS-008"):
+                    run(records, snapshots)
+
     def test_single_identity_no_decision_subset_never_grants_or_decides(self):
         actor_id = str(uuid4())
         client = object.__new__(LiveClient)
@@ -626,10 +924,17 @@ class AcceptanceFaultTests(unittest.TestCase):
         client.grant_poc_decision = Mock(side_effect=AssertionError("unexpected grant"))
         client.decide = Mock(side_effect=AssertionError("unexpected decision"))
         client.wait_for_pending = Mock(side_effect=AssertionError("unexpected pending case"))
-        client.wait_for_completion = Mock(side_effect=lambda record, _status: record)
         submissions = []
         records = {}
         records_by_id = {}
+
+        def finish(record, _status):
+            stored = records_by_id[record["id"]]
+            if stored["status"] == "created":
+                stored.update(status="completed", execution_complete=True)
+            return deepcopy(stored)
+
+        client.wait_for_completion = Mock(side_effect=finish)
 
         def request(method, path, identity, *, body, idempotency_key, hosted_phase):
             self.assertEqual((method, path, hosted_phase), ("POST", "/api/cases", "start"))
@@ -640,19 +945,41 @@ class AcceptanceFaultTests(unittest.TestCase):
                 failed = not idempotency_key.startswith("live-") or idempotency_key.startswith(
                     ("live-ors-006-", "live-ors-007-")
                 )
+                status = (
+                    "failed"
+                    if failed
+                    else "created"
+                    if idempotency_key.startswith("live-ors-004-")
+                    else "completed"
+                )
+                failure_code = (
+                    "policy_evidence_invalid"
+                    if not idempotency_key.startswith("live-")
+                    else "synthetic-failure"
+                    if failed
+                    else None
+                )
                 record = {
                     "id": str(uuid4()),
-                    "status": "failed" if failed else "completed",
-                    "failure_code": "synthetic-failure" if failed else None,
+                    "status": status,
+                    "execution_complete": status != "created",
+                    "decision": "pending",
+                    "failure_code": failure_code,
+                    "payload": {
+                        "proposal": None if failed else {"action": "partial_refund_10"},
+                        **({"resolution_failure": failure_code} if failed else {}),
+                    },
                 }
                 records[idempotency_key] = record
                 records_by_id[record["id"]] = record
-            return 200, records[idempotency_key], {}
+            return 200, deepcopy(records[idempotency_key]), {}
 
         def snapshot(case_id):
             record = records_by_id[case_id]
             return {
                 "status": record["status"],
+                "execution_complete": record["execution_complete"],
+                "failure_code": record["failure_code"],
                 "proposal": (
                     None
                     if record["status"] == "failed"
@@ -665,7 +992,14 @@ class AcceptanceFaultTests(unittest.TestCase):
                 ),
                 "decision": None,
                 "verified_actions": [],
-                "counts": {"approved": 0, "claims": 0, "effects": 0, "terminal": 1},
+                "counts": {
+                    "approved": 0,
+                    "rejected": 0,
+                    "approval_requests": 0,
+                    "claims": 0,
+                    "effects": 0,
+                    "terminal": 1,
+                },
             }
 
         client.request = Mock(side_effect=request)
@@ -692,8 +1026,8 @@ class AcceptanceFaultTests(unittest.TestCase):
         client.decide.assert_not_called()
         client.wait_for_pending.assert_not_called()
         repeated = [item for item in submissions if item[0].startswith("live-ors-004-")]
-        self.assertEqual(len(repeated), 2)
-        self.assertEqual(repeated[0], repeated[1])
+        self.assertEqual(len(repeated), 3)
+        self.assertTrue(all(item == repeated[0] for item in repeated))
         self.assertEqual(
             {body["reviewer_id"] for _, body in submissions}, {repeated[0][1]["reviewer_id"]}
         )
@@ -1115,6 +1449,9 @@ class AcceptanceFaultTests(unittest.TestCase):
         self.assertEqual(snapshot["proposal"]["amount"], "7.90")
         self.assertEqual(snapshot["proposal"]["currency"], "USD")
         self.assertEqual(snapshot["counts"]["effects"], 1)
+        self.assertTrue(snapshot["execution_complete"])
+        self.assertIsNone(snapshot["failure_code"])
+        self.assertEqual(snapshot["counts"]["approval_requests"], 0)
 
     def test_case_control_supports_fail_closed_cases_without_hosted_binding(self):
         store = object.__new__(OrderResolutionStore)

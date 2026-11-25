@@ -832,6 +832,50 @@ def _result(snapshot: dict, *, native_pause: bool, extras: dict | None = None) -
     return result
 
 
+def _completed_business_evidence(record: dict, snapshot: dict) -> tuple:
+    record_fields = (
+        "status",
+        "execution_complete",
+        "decision",
+        "payload",
+        "failure_code",
+    )
+    snapshot_fields = (
+        "status",
+        "execution_complete",
+        "failure_code",
+        "decision",
+        "proposal",
+        "verified_actions",
+        "counts",
+    )
+    counts = snapshot.get("counts")
+    if (
+        not all(field in record for field in record_fields)
+        or not all(field in snapshot for field in snapshot_fields)
+        or not isinstance(counts, dict)
+        or any(
+            type(counts.get(name)) is not int or counts[name] < 0
+            for name in ("approved", "claims", "effects", "terminal")
+        )
+        or not isinstance(record["payload"], dict)
+        or "proposal" not in record["payload"]
+        or record["status"] != "completed"
+        or record["execution_complete"] is not True
+        or snapshot["status"] != record["status"]
+        or snapshot["execution_complete"] is not True
+        or record["failure_code"] is not None
+        or snapshot["failure_code"] != record["failure_code"]
+    ):
+        raise RuntimeError("ORS-004 terminal business evidence is incomplete or inconsistent.")
+    return (
+        record["decision"],
+        record["payload"]["proposal"],
+        record["payload"].get("resolution_failure"),
+        _result(snapshot, native_pause=False)["business_outcome"],
+    )
+
+
 def create_results(
     *,
     base_url: str,
@@ -875,37 +919,69 @@ def create_results(
             continue
         if case_id == "ORS-008":
             snapshots = []
+            records = []
             for variant in case["input"]["policy_evidence_variants"]:
                 record, _ = client.submit(_payload(case, [variant]), str(uuid4()))
-                snapshots.append(client.snapshot(record["id"]))
+                snapshot = client.snapshot(record["id"])
+                counts = snapshot.get("counts")
+                names = (
+                    "approved",
+                    "rejected",
+                    "approval_requests",
+                    "claims",
+                    "effects",
+                    "terminal",
+                )
+                if (
+                    not isinstance(counts, dict)
+                    or any(type(counts.get(name)) is not int or counts[name] < 0 for name in names)
+                    or record.get("status") != "failed"
+                    or record.get("execution_complete") is not True
+                    or record.get("failure_code") != "policy_evidence_invalid"
+                    or record.get("decision") != "pending"
+                    or not isinstance(record.get("payload"), dict)
+                    or "proposal" not in record["payload"]
+                    or record["payload"]["proposal"] is not None
+                    or record["payload"].get("resolution_failure") != record["failure_code"]
+                    or snapshot.get("status") != record["status"]
+                    or snapshot.get("execution_complete") is not True
+                    or snapshot.get("failure_code") != record["failure_code"]
+                    or "proposal" not in snapshot
+                    or snapshot["proposal"] is not None
+                    or "decision" not in snapshot
+                    or snapshot["decision"] is not None
+                    or snapshot.get("verified_actions") != []
+                    or any(counts[name] != 0 for name in names[:-1])
+                    or counts["terminal"] != 1
+                ):
+                    raise RuntimeError(
+                        f"ORS-008 has missing or inconsistent evidence for {variant['invalid_reason']}."
+                    )
+                records.append(record)
+                snapshots.append(snapshot)
+            business_outcome = _result(
+                snapshots[0],
+                native_pause=snapshots[0]["counts"]["approval_requests"] > 0,
+            )["business_outcome"]
+            business_outcome["error"] = records[0]["failure_code"]
             results[case_id] = {
-                "business_outcome": {
-                    "proposal_authoritative": False,
-                    "proposed_action": None,
-                    "approval_required": None,
-                    "decision": "none",
-                    "verified_actions": [],
-                    "state": "failed",
-                    "error": (
-                        "policy_evidence_invalid"
-                        if all(item["status"] == "failed" for item in snapshots)
-                        else "unexpected"
-                    ),
-                },
+                "business_outcome": business_outcome,
                 "technical_execution": {
                     "invalid_variants_checked": [
                         item["invalid_reason"] for item in case["input"]["policy_evidence_variants"]
                     ],
                     "all_variants_failed_explicitly": all(
-                        item["status"] == "failed" for item in snapshots
+                        item["failure_code"] == "policy_evidence_invalid" for item in records
                     ),
-                    "native_pause_required": False,
-                    "authorized_decision_count": 0,
+                    "native_pause_required": any(
+                        item["counts"]["approval_requests"] > 0 for item in snapshots
+                    ),
+                    "authorized_decision_count": sum(
+                        item["counts"]["approved"] for item in snapshots
+                    ),
                     "action_claim_count": sum(item["counts"]["claims"] for item in snapshots),
                     "side_effect_count": sum(item["counts"]["effects"] for item in snapshots),
-                    "terminal_event_count_per_variant": min(
-                        item["counts"]["terminal"] for item in snapshots
-                    ),
+                    "terminal_event_count_per_variant": snapshots[0]["counts"]["terminal"],
                 },
             }
             continue
@@ -916,12 +992,55 @@ def create_results(
             reviewer_id = str(uuid4())
         elif poc_database_url and case_id in {"ORS-002", "ORS-003"}:
             reviewer_id = client.owner["object_id"]
+        if case_id == "ORS-004":
+            payload = _payload(case)
+            first, _ = client.submit(payload, key, reviewer_id=reviewer_id)
+            if first.get("status") == "failed" or first.get("failure_code"):
+                raise RuntimeError("ORS-004 failed before the pre-completion replay.")
+            if first.get("status") != "created" or first.get("execution_complete") is not False:
+                results[case_id] = {
+                    "status": "unverified",
+                    "reason": "The initial response did not establish a nonterminal replay boundary.",
+                }
+                continue
+            before, _ = client.submit(payload, key, reviewer_id=reviewer_id)
+            if before.get("id") != first.get("id"):
+                raise RuntimeError("ORS-004 pre-completion replay returned a different case.")
+            if before.get("status") == "failed" or before.get("failure_code"):
+                raise RuntimeError("ORS-004 failed during the pre-completion replay.")
+            if before.get("status") != "created" or before.get("execution_complete") is not False:
+                results[case_id] = {
+                    "status": "unverified",
+                    "reason": "The replay was not observed before completion.",
+                }
+                continue
+            record = client.wait_for_completion(before, "completed")
+            snapshot = client.snapshot(record["id"])
+            replay, _ = client.submit(payload, key, reviewer_id=reviewer_id)
+            if replay.get("id") != record["id"]:
+                raise RuntimeError("ORS-004 post-completion replay returned a different case.")
+            replay_snapshot = client.snapshot(replay["id"])
+            original = _completed_business_evidence(
+                record, snapshot
+            ) == _completed_business_evidence(replay, replay_snapshot)
+            result = _result(
+                replay_snapshot,
+                native_pause=False,
+                extras={
+                    "request_identity_reused": before["id"] == first["id"] == replay["id"],
+                    "duplicate_terminal_event_emitted": replay_snapshot["counts"]["terminal"] != 1,
+                },
+            )
+            result["business_outcome"]["returned_original_outcome"] = original
+            result["technical_execution"].pop("native_pause_required")
+            result["technical_execution"].pop("authorized_decision_count")
+            results[case_id] = result
+            continue
         record, _ = client.submit(_payload(case), key, reviewer_id=reviewer_id)
         if case_id in {"ORS-002", "ORS-003", "ORS-009"}:
             record = client.wait_for_pending(record)
-        elif case_id in {"ORS-001", "ORS-004"}:
+        elif case_id == "ORS-001":
             record = client.wait_for_completion(record, "completed")
-        original = False
         pending_before = record["status"] == "pending"
         if case_id == "ORS-002":
             if poc_database_url:
@@ -937,9 +1056,6 @@ def create_results(
             if status != 200:
                 raise RuntimeError(f"ORS-003 rejection failed with HTTP {status}.")
             record = client.wait_for_completion(record, "rejected")
-        elif case_id == "ORS-004":
-            replay, _ = client.submit(_payload(case), key)
-            original = replay["id"] == record["id"]
         elif case_id == "ORS-009":
             denied = []
             for label, identity in (
@@ -975,11 +1091,6 @@ def create_results(
                 native_pause_before_action=pending_before,
                 rejection_count=snapshot["counts"]["rejected"],
             )
-        elif case_id == "ORS-004":
-            extras.update(
-                request_identity_reused=original,
-                duplicate_terminal_event_emitted=snapshot["counts"]["terminal"] != 1,
-            )
         result = _result(
             snapshot,
             native_pause=case_id in {"ORS-002", "ORS-003"},
@@ -988,10 +1099,6 @@ def create_results(
         if snapshot["status"] == "failed":
             result["business_outcome"]["error"] = record.get("failure_code")
         if case_id == "ORS-003":
-            result["technical_execution"].pop("authorized_decision_count")
-        if case_id == "ORS-004":
-            result["business_outcome"]["returned_original_outcome"] = original
-            result["technical_execution"].pop("native_pause_required")
             result["technical_execution"].pop("authorized_decision_count")
         results[case_id] = result
     return results

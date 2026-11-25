@@ -49,6 +49,26 @@ format check failed before formatting was corrected. No live case was submitted.
 Next: verify the integrated POC driver and record actual selected-case outcomes
 without declaring omitted cases or the full matrix passed.
 
+## Live acceptance oracle corrections in PR #62
+
+**Status: In Progress; local checks passed, exact-head CI and Azure execution
+pending.** ORS-004 must observe the same request identity while the case is
+still nonterminal and compare the replayed terminal business outcome with the
+original; a fast completion is `unverified`, not a pass. ORS-008 must observe
+the actual invalid-evidence failure, no proposal, decision, action or recorded
+approval request, and exactly one terminal event for every variant. Missing
+or inconsistent evidence fails closed.
+
+The previous driver reproduced false positives for these conditions in
+focused generated-project tests. The corrected independent generation passed
+38 acceptance tests and three PostgreSQL-backed tests, including local and
+hosted approval-event accounting and all invalid-evidence variants. The
+isolated root suite ran 114 tests with two existing skips. An initial format
+check failed; the repository-specific formatter and lint checks then passed.
+These results do not prove live Foundry execution, complete session visibility
+or deployed provenance. Next: verify exact-head CI and the scoped deployment
+and recovery prerequisites before collecting real selected-case evidence.
+
 ## Opt-in hosted image publication for PR #62
 
 **Status: In Progress; local image path only.** Acceptance: independently

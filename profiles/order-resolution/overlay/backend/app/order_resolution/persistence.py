@@ -784,6 +784,10 @@ class OrderResolutionStore(PostgresStore):
                      WHERE case_id = %s AND decision = 'approved') AS approved,
                     (SELECT count(*) FROM order_resolution_decisions
                      WHERE case_id = %s AND decision = 'rejected') AS rejected,
+                    (SELECT count(*) FROM wf_audit
+                     WHERE case_id = %s
+                       AND event IN ('checkpoint_saved', 'hosted_request_saved'))
+                        AS approval_requests,
                     (SELECT count(*) FROM order_resolution_effects
                      WHERE case_id = %s) AS claims,
                     (SELECT count(*)
@@ -800,7 +804,7 @@ class OrderResolutionStore(PostgresStore):
                     (SELECT count(*) FROM order_resolution_audit
                      WHERE case_id = %s AND event = 'decision_denied') AS denials
                 """,
-                (case_id, case_id, case_id, case_id, case_id, case_id),
+                (case_id, case_id, case_id, case_id, case_id, case_id, case_id),
             ).fetchone()
             actions = connection.execute(
                 """
@@ -813,6 +817,8 @@ class OrderResolutionStore(PostgresStore):
             ).fetchall()
         return {
             "status": case.status,
+            "execution_complete": case.execution_complete,
+            "failure_code": case.failure_code,
             "decision": case.decision,
             "proposal": (
                 {

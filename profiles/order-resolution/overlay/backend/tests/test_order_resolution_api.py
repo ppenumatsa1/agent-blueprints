@@ -471,6 +471,7 @@ class OrderResolutionApiTests(unittest.TestCase):
         self.assertEqual(self.database_counts(case_id)["actions"], 0)
         self.assertEqual(self.durability_counts(case_id)["effect_claims"], 0)
         self.assertEqual(self.durability_counts(case_id)["synthetic_effects"], 0)
+        self.assertEqual(self.store.acceptance_snapshot(case_id)["counts"]["approval_requests"], 1)
         with self.store.connect() as connection:
             claim_count = connection.execute(
                 "SELECT count(*) AS count FROM order_resolution_requests WHERE case_id = %s",
@@ -592,6 +593,7 @@ class OrderResolutionApiTests(unittest.TestCase):
             ),
             ("pending", request_id, "pending", request_id, 1),
         )
+        self.assertEqual(self.store.acceptance_snapshot(case.id)["counts"]["approval_requests"], 1)
 
     def test_hosted_token_failure_does_not_create_durable_operation_claim(self):
         from order_resolution_hosted.client import (
@@ -2421,6 +2423,38 @@ class OrderResolutionApiTests(unittest.TestCase):
             self.database_counts(case_id),
             {"actions": 0, "claims": 0, "decisions": 0, "failures": 1},
         )
+
+    def test_invalid_policy_evidence_snapshot_records_failure_without_approval(self):
+        for field in ("digest_valid", "current", "applicable"):
+            with self.subTest(field=field):
+                evidence = late_policy()
+                evidence[field] = False
+                with self.client() as client:
+                    record = self.submit(
+                        client,
+                        payload("ORDER-LOW", "79.00", 4, [evidence]),
+                    )
+                snapshot = self.store.acceptance_snapshot(UUID(record["id"]))
+                self.assertEqual(
+                    (
+                        snapshot["status"],
+                        snapshot["execution_complete"],
+                        snapshot["failure_code"],
+                    ),
+                    ("failed", True, "policy_evidence_invalid"),
+                )
+                self.assertIsNone(snapshot["proposal"])
+                self.assertIsNone(snapshot["decision"])
+                self.assertEqual(snapshot["verified_actions"], [])
+                for name in (
+                    "approval_requests",
+                    "approved",
+                    "rejected",
+                    "claims",
+                    "effects",
+                ):
+                    self.assertEqual(snapshot["counts"][name], 0)
+                self.assertEqual(snapshot["counts"]["terminal"], 1)
 
     def test_decision_process_death_before_and_after_persistence_recovers_safely(self):
         for mode, return_code, persisted in (
