@@ -413,8 +413,17 @@ remote source build. Image publication is a separate, explicit path:
    `active` state before candidate-specific testing. The journal's
    `observed_image_reference` is a version GET configuration observation, not
    a measurement of a running container. Recheck the old route before any
-   authorized promotion; restore that fixed route if rollback is required.
-   Existing sessions remain bound to their original versions.
+   authorized promotion. Restoring a fixed route alone is not a verified
+   rollback; existing sessions remain bound to their original versions.
+
+Binary rollback requires separate review and end-to-end compatibility evidence.
+A synthetic test of the prior API at `a302e939` found that its action
+authorization accepts an already persisted same-actor approval without the
+POC-grant check, although it rejects a new self-decision. Before considering
+rollback, quiesce writers and account for all sessions, queued effects, grants,
+and POC case states. Zero rows incompatible with the old operation journal is
+necessary but not sufficient; do not rewrite historical outcomes or replay
+effects to make a rollback appear safe.
 
 The image operation's identity also includes the local archive digest to
 prevent accidental journal reuse, but the digest and producer metadata do

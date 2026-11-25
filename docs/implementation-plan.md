@@ -65,7 +65,10 @@ Next: transfer to the #62 owner for independent review and exact-head CI,
 then coordinate the authorized registry push and fixed-route deployment.
 Existing rollout gates are not weakened. Project pull permissions, a real
 candidate version, session routing, hosted execution, and independent
-provenance remain unverified.
+provenance remain unverified. Binary rollback also requires separate evidence:
+the earlier API can authorize an already persisted same-actor approval without
+the POC-grant check. Check all sessions, queued effects, grants, and POC case
+states; a route change or empty incompatible-journal query is not sufficient.
 
 ## Windows asynchronous PostgreSQL startup in PR #62
 

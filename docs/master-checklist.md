@@ -81,6 +81,9 @@ registry, route, candidate configuration, identity and actual sessions. The
 deployment orchestrator still defaults to remote source builds; no Azure
 deployment, independent provenance, live acceptance or production readiness
 is claimed. Existing failure-injection and release gates are unchanged.
+Binary rollback is unverified: the earlier API can authorize an already
+persisted same-actor approval without the POC-grant check. Route restoration
+or an empty incompatible-journal query alone does not establish safety.
 
 ## Windows asynchronous PostgreSQL startup in PR #62
 
