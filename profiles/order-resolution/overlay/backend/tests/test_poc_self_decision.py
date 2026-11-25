@@ -12,7 +12,7 @@ from psycopg import sql
 from psycopg.conninfo import make_conninfo
 from psycopg.errors import InsufficientPrivilege
 
-from app.domain.errors import AccessDenied, Conflict
+from app.domain.errors import AccessDenied, ActionError, Conflict
 from app.domain.models import Principal
 from app.domain.policy import CaseAccessPolicy
 from app.order_resolution.action import RecordOrderResolutionAction
@@ -329,3 +329,15 @@ class PocDatabaseBoundaryTests(unittest.TestCase):
                 connection.execute(
                     sql.SQL("REVOKE INSERT ON ors_poc.decision_audit FROM {}").format(runtime)
                 )
+
+    def test_existing_approval_without_protected_audit_cannot_apply(self):
+        case, command, conversation = self.pending(Decision.APPROVED)
+        self.assertTrue(self.grant(case.id, command))
+        self.bind(case, command, conversation)
+        self.record(case, command)
+        with psycopg.connect(self.admin_dsn) as owner:
+            owner.execute("DELETE FROM ors_poc.decision_audit WHERE case_id = %s", (case.id,))
+        self.assertEqual(self.store.get(case.id).status, "approved")
+        with self.assertRaises(ActionError):
+            self.store.apply_once(case.id, True, RecordOrderResolutionAction().bind(self.store))
+        self.assertEqual(self.store.acceptance_snapshot(case.id)["counts"]["effects"], 0)

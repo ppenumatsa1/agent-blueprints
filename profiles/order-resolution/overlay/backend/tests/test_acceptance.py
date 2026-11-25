@@ -133,6 +133,62 @@ class AcceptanceFaultTests(unittest.TestCase):
                     poc_owner_database_url="synthetic-poc-owner-url",
                 )
 
+    def test_selected_poc_decisions_grant_before_resuming_as_same_actor(self):
+        actor = {"object_id": str(uuid4())}
+        client = Mock(owner=actor, reviewer=actor)
+        pending = {"id": str(CASE_ID), "status": "pending"}
+        client.submit.return_value = (pending, {})
+        client.wait_for_pending.return_value = pending
+        completed = {"id": str(CASE_ID), "status": "completed"}
+        client.decide.return_value = (200, completed, {})
+        client.wait_for_completion.return_value = completed
+        client.snapshot.return_value = {"status": "completed", "counts": {"rejected": 1}}
+        with (
+            patch.dict("os.environ", {"MAF_LIVE_POC_OWNER_DATABASE_URL": "synthetic-poc-url"}),
+            patch("tests.live_acceptance.LiveClient", return_value=client) as factory,
+            patch(
+                "tests.live_acceptance._result",
+                return_value={
+                    "business_outcome": {},
+                    "technical_execution": {"authorized_decision_count": 1},
+                },
+            ),
+        ):
+            results = create_results(
+                base_url="https://example.invalid",
+                auth_file="unused",
+                source_revision=REVISION,
+                deployment_revision=REVISION,
+                case_ids=["ORS-002", "ORS-003"],
+            )
+        factory.assert_called_once_with(
+            "https://example.invalid",
+            "unused",
+            REVISION,
+            poc_owner_database_url="synthetic-poc-url",
+        )
+        self.assertTrue(
+            all(
+                call.kwargs == {"reviewer_id": actor["object_id"]}
+                for call in client.submit.call_args_list
+            )
+        )
+        self.assertEqual(
+            [
+                (call[0], call.args)
+                for call in client.mock_calls
+                if call[0] in ("grant_poc_decision", "decide")
+            ],
+            [
+                ("grant_poc_decision", (pending, "approved")),
+                ("decide", (pending, "approved", actor)),
+                ("grant_poc_decision", (pending, "rejected")),
+                ("decide", (pending, "rejected", actor)),
+            ],
+        )
+        self.assertEqual(results["ORS-005"]["status"], "not_run")
+        self.assertEqual(results["ORS-009"]["status"], "not_run")
+
     def test_model_endpoint_requires_separately_authorized_https_origin(self):
         auth = {
             "model": {
