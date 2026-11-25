@@ -31,20 +31,63 @@ operate against the migrated schema before relying on image rollback. Capture
 each case's real observations and errors separately; missing evidence is not a
 pass.
 
+### Prepared existing-resource procedure
+
+The following is preparation for validation, not authorization to execute
+Azure writes before validation:
+
+1. Generate a fresh independent project with
+   `python .\scripts\instantiate_maf.py <new-directory> --profile order-resolution`.
+   Build its backend and frontend and use the generated hosted publisher with
+   `--archive <local-zip> --container-context <new-local-directory>` to prepare
+   the hosted image context. The deployment web build must use the existing
+   API's TLS upstream and approved client configuration. Resolve build inputs
+   without committing tenant values and retain immutable image digests once
+   images are pushed.
+2. Connect to the existing PostgreSQL server using an Entra token and
+   `sslmode=verify-full` over its already permitted path. After validation,
+   run `python -m app.order_resolution.migrations upgrade` from the generated
+   backend with the migration connection in the process environment. Do not
+   call the firewall-mutating migration wrapper. The base and profile
+   transactions can commit separately; on failure stop, preserve the error,
+   and diagnose the actual schema before a forward retry.
+3. Before publishing, preserve endpoint settings and use the native Foundry
+   agent endpoint merge-patch to change only the version-selection rules from
+   `@latest` to the currently serving concrete version at 100%. Re-read the
+   route and stop on a mismatch. Existing sessions are not queried or changed.
+4. Publish one hosted version with the generated publisher's `--publish`,
+   `--agent-name <name>`,
+   `--image-reference <registry/repository@sha256:digest>`,
+   `--expected-route-version <current-version>`, `--operation-id`, and
+   `--journal` options. Retain the journal and do not replay an ambiguous
+   create. Verify the resulting version, identity, required narrowly scoped
+   access, and configured digest before transition. Leave the POC
+   self-decision flag off and do not create a POC self-decision grant.
+5. After validating the precise API and web changes, update the existing
+   Container Apps with `az containerapp update --image` and the required API
+   environment changes. Preserve existing authentication and secret
+   configuration. Verify the active revisions, images, version, and health,
+   then run ORS-001 before the other authorized cases.
+
 ### Current validation checklist
 
 - [ ] Prepare a recipe and validation inputs that represent only the intended
   existing-resource updates and no infrastructure provisioning.
 - [ ] Run the Azure CLI recipe's core CLI, authentication, template build,
   provider validation, and what-if checks against those exact inputs.
-- [ ] Verify container builds, supported Node.js runtime, applicable Azure
-  policies, and required existing-resource roles.
+- [x] Build the three generated containers locally and verify their offline
+  imports or build output. The web build used synthetic configuration.
+- [x] Check the frontend build uses supported Node.js 22 LTS and the existing
+  API and web identities have registry pull roles.
+- [ ] Verify applicable Azure policies, the remaining required roles, and the
+  actual deployed build inputs.
 - [ ] Record commands, timestamps, results, and remaining unknowns in a new
   current-scope validation proof before setting status to `Validated`.
 - [ ] Complete the required deployment preflight without violating this scope.
 
 Provisioning a new resource group, network, database, or other infrastructure
-is outside this scope, not an implied validation or deployment step. The
+is outside this scope, so their creation and capacity checks are not
+applicable; this does not waive the validation recipe's mandatory checks. The
 existing infrastructure template and its historical what-if are not proof for
 the proposed image and agent updates. The current Azure CLI validation recipe
 requires provider validation and what-if of a Bicep template, but no
@@ -62,11 +105,23 @@ path is available.
 ### Current-scope evidence and limitations
 
 - Exact-head CI passed for `260d9cbb47390f2fb866bf1e620c9741845484e8`
-  in run `45667244691`; a later candidate must have its own passing CI.
+  in run `45667244691` and for `4c069e10af7d440d47c431ac495988a6ae1d2ae5`
+  in run `45668742499`; a later candidate must have its own passing CI.
 - The generated migration command upgraded a disposable legacy PostgreSQL
   fixture twice while preserving existing operation and binding states.
   Live read-only checks found migrations 0004 and 0005 absent; no live
   migration or POC case was run.
+- A fresh independent project at `4c069e1` matched the local build contexts
+  byte-for-byte, and the native hosted archive matched the earlier generated
+  archive. API, web, and hosted images built locally. The first offline API
+  import failed because `WORKFLOW_HOST` was unset; it succeeded with synthetic
+  hosted configuration. These builds do not prove pushed artifact identity.
+- The existing API and web use one registry with visible `AcrPull` assignments
+  for both managed identities; their current images are digest-pinned. The
+  current hosted endpoint is `@latest`, so the publisher's fixed-route guard
+  requires a route update before publication. A locally serialized SDK
+  merge-patch input passed the publisher's fixed-route check, and `@latest`
+  was rejected; the patch was not sent to Azure.
 - Source-to-immutable-artifact provenance, independently observed runtime
   identity, and historical hosted response outcomes remain unverified. These
   unknowns are disclosed rather than represented as passes or used as an
