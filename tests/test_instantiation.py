@@ -488,6 +488,8 @@ class InstantiationTests(unittest.TestCase):
                 "backend/order_resolution_hosted/credentials.py",
                 "backend/tests/test_order_resolution.py",
                 "backend/tests/test_order_resolution_api.py",
+                "hosted-agent/.dockerignore",
+                "hosted-agent/Dockerfile",
                 "hosted-agent/main.py",
                 "hosted-agent/requirements.txt",
                 "hosted-agent/src/order_resolution_hosted/bridge.py",
@@ -514,6 +516,13 @@ class InstantiationTests(unittest.TestCase):
                 (ROOT / "profiles" / "order-resolution" / "backend" / "app" / "api" / "routes" / "cases.py").read_bytes(),
                 (target / "backend" / "app" / "api" / "routes" / "cases.py").read_bytes(),
             )
+            for name in (".dockerignore", "Dockerfile"):
+                self.assertEqual(
+                    (
+                        ROOT / "profiles" / "order-resolution" / "hosted-agent" / name
+                    ).read_bytes(),
+                    (target / "hosted-agent" / name).read_bytes(),
+                )
             order_profile = (target / "frontend" / "src" / "order-resolution.tsx").read_text(
                 encoding="utf-8"
             )

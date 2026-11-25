@@ -31,6 +31,13 @@ class VerificationWorkflowTests(unittest.TestCase):
         self.assertIn("cd ../hosted-agent", workflow)
         self.assertIn("uv pip install --python", workflow)
         self.assertIn("python -m unittest discover -s tests -v", workflow)
+        self.assertIn(
+            "python -m unittest discover -s scripts/foundry/tests -v", workflow
+        )
+        self.assertIn(
+            "docker build --platform linux/amd64 --tag agent-blueprints-hosted:ci",
+            workflow,
+        )
         order_resolution_backend = workflow.split(
             "      - name: Run generated Order Resolution API, workflow, database, and UI tests\n",
             1,

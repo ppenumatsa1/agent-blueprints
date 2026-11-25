@@ -7,13 +7,14 @@ import contextlib
 import hashlib
 import json
 import os
+import re
 import shutil
 import sys
 import time
 import zipfile
 from dataclasses import asdict, dataclass, replace
-from pathlib import Path
-from typing import Any, Mapping
+from pathlib import Path, PurePosixPath
+from typing import Any, Mapping, NoReturn
 from urllib.parse import urlsplit
 from uuid import uuid4
 
@@ -44,6 +45,13 @@ OBSERVABILITY_RUNTIME_ENVIRONMENT = {
     "AGENTSERVER_FLUSH_MODE": "async",
     "APPLICATIONINSIGHTS_AUTH_MODE": "entra",
 }
+IMAGE_REFERENCE = re.compile(
+    r"(?P<registry>[a-z0-9](?:[a-z0-9-]*[a-z0-9])?"
+    r"(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*(?::[0-9]{1,5})?)/"
+    r"[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*"
+    r"(?:/[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*)*"
+    r"@sha256:[0-9a-f]{64}\Z"
+)
 
 
 @dataclass(frozen=True)
@@ -59,6 +67,9 @@ class PublishRecord:
     provisioning_status: str | None = None
     identity_principal_id: str | None = None
     identity_client_id: str | None = None
+    image_reference: str | None = None
+    observed_image_reference: str | None = None
+    expected_route_version: str | None = None
 
 
 @dataclass(frozen=True)
@@ -121,6 +132,137 @@ def build_source_archive(project_root: Path, output: Path) -> str:
     finally:
         shutil.rmtree(staging, ignore_errors=True)
     return hashlib.sha256(output.read_bytes()).hexdigest()
+
+
+def build_container_context(
+    project_root: Path, archive: Path, destination: Path
+) -> None:
+    project_root = project_root.resolve()
+    destination = destination.resolve()
+    if destination.exists() or destination.is_relative_to(project_root):
+        raise ValueError(
+            "The container context must be a new directory outside the project."
+        )
+    if not destination.parent.is_dir():
+        raise ValueError("The container context parent directory must already exist.")
+    assets = [
+        project_root / "hosted-agent" / name for name in ("Dockerfile", ".dockerignore")
+    ]
+    if any(not asset.is_file() for asset in assets):
+        raise ValueError("The generated hosted container build assets are missing.")
+    destination.mkdir()
+    try:
+        with zipfile.ZipFile(archive) as source:
+            names = set()
+            for entry in source.infolist():
+                name = entry.filename
+                parts = name.split("/")
+                path = PurePosixPath(name)
+                if (
+                    not name
+                    or name in names
+                    or entry.is_dir()
+                    or path.is_absolute()
+                    or path.as_posix() != name
+                    or "\\" in name
+                    or ":" in name
+                    or any(part in ("", ".", "..") for part in parts)
+                    or (
+                        name not in ("main.py", "requirements.txt")
+                        and (
+                            len(parts) < 2
+                            or parts[0] not in ("app", "order_resolution_hosted")
+                        )
+                    )
+                ):
+                    raise ValueError(
+                        "The hosted source archive contains an invalid path."
+                    )
+                names.add(name)
+                target = destination.joinpath(*parts)
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(source.read(entry))
+            if (
+                not {"main.py", "requirements.txt"}.issubset(names)
+                or not any(name.startswith("app/") for name in names)
+                or not any(
+                    name.startswith("order_resolution_hosted/") for name in names
+                )
+            ):
+                raise ValueError("The hosted source archive is incomplete.")
+        for asset in assets:
+            shutil.copy2(asset, destination / asset.name)
+    except Exception:
+        shutil.rmtree(destination)
+        raise
+
+
+def _validate_image_reference(image_reference: str) -> None:
+    if not isinstance(image_reference, str) or len(image_reference) > 512:
+        raise ValueError("The hosted image must be a bounded digest-pinned reference.")
+    match = IMAGE_REFERENCE.fullmatch(image_reference)
+    if not match:
+        raise ValueError(
+            "The hosted image must be a fully qualified sha256 digest reference."
+        )
+    host, separator, port = match.group("registry").partition(":")
+    if ("." not in host and host != "localhost" and not separator) or (
+        separator and not 1 <= int(port) <= 65535
+    ):
+        raise ValueError("The hosted image registry is invalid.")
+
+
+def _validate_route_version(version: str | None) -> None:
+    if not isinstance(version, str) or not re.fullmatch(r"[1-9][0-9]*", version):
+        raise ValueError(
+            "The expected route must identify a concrete released version."
+        )
+
+
+def _field(value: Any, name: str) -> Any:
+    if isinstance(value, Mapping):
+        return value.get(name)
+    return getattr(value, name, None)
+
+
+def _require_fixed_route(
+    agents: Any, agent_name: str, expected_version: str | None
+) -> None:
+    _validate_route_version(expected_version)
+    agent = agents.get(agent_name=agent_name)
+    endpoint = _field(agent, "agent_endpoint")
+    selector = _field(endpoint, "version_selector")
+    rules = _field(selector, "version_selection_rules")
+    if not isinstance(rules, (list, tuple)) or len(rules) != 1:
+        raise ValueError(
+            "The hosted endpoint must have one explicit fixed-version route."
+        )
+    rule = rules[0]
+    percentage = _field(rule, "traffic_percentage")
+    if (
+        _text(_field(rule, "type")) != "FixedRatio"
+        or _field(rule, "agent_version") != expected_version
+        or type(percentage) is not int
+        or percentage != 100
+    ):
+        raise ValueError(
+            "The hosted endpoint must route 100% to the expected fixed version."
+        )
+
+
+def _require_configured_image(
+    details: Any, expected_version: str, expected_image: str
+) -> str:
+    if _field(details, "version") != expected_version:
+        raise ValueError("The hosted version GET did not return the expected version.")
+    definition = _field(details, "definition")
+    container = _field(definition, "container_configuration")
+    actual_image = _field(container, "image")
+    if actual_image != expected_image:
+        raise ValueError(
+            "The hosted version's configured image does not match the requested image."
+        )
+    return actual_image
 
 
 def build_azd_service_contract(project: str = "hosted-agent") -> dict[str, Any]:
@@ -206,26 +348,39 @@ def _publication_environment(environment: Mapping[str, str]) -> dict[str, str]:
     return published
 
 
-def build_definition(runtime_environment: Mapping[str, str]) -> Any:
+def build_definition(
+    runtime_environment: Mapping[str, str], *, image_reference: str | None = None
+) -> Any:
     environment = hosted_runtime_environment(runtime_environment)
     from azure.ai.projects.models import (
         CodeConfiguration,
+        ContainerConfiguration,
         HostedAgentDefinition,
         ProtocolVersionRecord,
     )
 
+    configuration: dict[str, Any]
+    if image_reference is None:
+        configuration = {
+            "code_configuration": CodeConfiguration(
+                runtime=PYTHON_RUNTIME,
+                entry_point=list(ENTRY_POINT),
+                dependency_resolution=DEPENDENCY_RESOLUTION,
+            )
+        }
+    else:
+        _validate_image_reference(image_reference)
+        configuration = {
+            "container_configuration": ContainerConfiguration(image=image_reference)
+        }
     return HostedAgentDefinition(
         cpu=CPU,
         memory=MEMORY,
-        code_configuration=CodeConfiguration(
-            runtime=PYTHON_RUNTIME,
-            entry_point=list(ENTRY_POINT),
-            dependency_resolution=DEPENDENCY_RESOLUTION,
-        ),
         protocol_versions=[
             ProtocolVersionRecord(protocol="responses", version=PROTOCOL_VERSION)
         ],
         environment_variables=environment,
+        **configuration,
     )
 
 
@@ -236,6 +391,8 @@ def publication_identity(
     agent_name: str,
     archive_sha256: str,
     runtime_environment: Mapping[str, str],
+    image_reference: str | None = None,
+    expected_route_version: str | None = None,
 ) -> dict[str, Any]:
     endpoint = project_endpoint.rstrip("/")
     for value, label in (
@@ -253,7 +410,9 @@ def publication_identity(
         raise ValueError(
             "The hosted runtime project endpoint must match the publication target."
         )
-    return {
+    if (image_reference is None) != (expected_route_version is None):
+        raise ValueError("Image publication requires an expected fixed route version.")
+    identity = {
         "schema_version": "1",
         "project_endpoint": endpoint,
         "project_id": project_id,
@@ -269,6 +428,14 @@ def publication_identity(
             "environment": _publication_environment(environment),
         },
     }
+    if image_reference is not None:
+        _validate_image_reference(image_reference)
+        _validate_route_version(expected_route_version)
+        hosted = identity["hosted_definition"]
+        del hosted["runtime"], hosted["entry_point"], hosted["dependency_resolution"]
+        hosted["container_image"] = image_reference
+        identity["expected_route_version"] = expected_route_version
+    return identity
 
 
 def publication_digest(identity: dict[str, Any]) -> str:
@@ -337,6 +504,8 @@ def _claim_publish(journal_path: Path, requested: PublishRecord) -> PublishClaim
             existing.operation_id != requested.operation_id
             or existing.publication_digest != requested.publication_digest
             or existing.archive_sha256 != requested.archive_sha256
+            or existing.image_reference != requested.image_reference
+            or existing.expected_route_version != requested.expected_route_version
         ):
             raise ValueError(
                 "The publish journal is bound to different publication identity."
@@ -347,6 +516,9 @@ def _claim_publish(journal_path: Path, requested: PublishRecord) -> PublishClaim
             raise AmbiguousPublish(
                 "The prior publish is unknown and cannot be replayed."
             )
+        if existing.status == "not_submitted":
+            _save_record(journal_path, requested)
+            return PublishClaim(requested, acquired=True)
         if existing.status == "pending":
             _save_record(journal_path, replace(existing, status="unknown"))
             raise AmbiguousPublish(
@@ -386,6 +558,26 @@ def _finish_owned_publish(
         return updated
 
 
+def _raise_ambiguous_publish(
+    message: str,
+    *,
+    agents: Any,
+    agent_name: str,
+    image_reference: str | None,
+    expected_route_version: str | None,
+    cause: Exception | None = None,
+) -> NoReturn:
+    if image_reference is not None:
+        try:
+            _require_fixed_route(agents, agent_name, expected_route_version)
+        except Exception as route_error:
+            raise AmbiguousPublish(
+                f"{message} The expected fixed route could not be verified after create."
+            ) from route_error
+        message += " The expected fixed route was observed after create."
+    raise AmbiguousPublish(message) from cause
+
+
 def publish_once(
     *,
     agents: Any,
@@ -396,6 +588,8 @@ def publish_once(
     operation_id: str,
     runtime_environment: Mapping[str, str],
     journal_path: Path,
+    image_reference: str | None = None,
+    expected_route_version: str | None = None,
 ) -> PublishRecord:
     digest = hashlib.sha256(archive.read_bytes()).hexdigest()
     identity_digest = publication_digest(
@@ -405,9 +599,15 @@ def publish_once(
             agent_name=agent_name,
             archive_sha256=digest,
             runtime_environment=runtime_environment,
+            image_reference=image_reference,
+            expected_route_version=expected_route_version,
         )
     )
-    definition = build_definition(runtime_environment)
+    definition = (
+        build_definition(runtime_environment)
+        if image_reference is None
+        else build_definition(runtime_environment, image_reference=image_reference)
+    )
     owner_token = uuid4().hex
     pending = PublishRecord(
         operation_id,
@@ -415,34 +615,64 @@ def publish_once(
         digest,
         "pending",
         owner_token=owner_token,
+        image_reference=image_reference,
+        expected_route_version=expected_route_version,
     )
     claim = _claim_publish(journal_path, pending)
     if not claim.acquired:
+        if image_reference is not None:
+            _require_fixed_route(agents, agent_name, expected_route_version)
         return claim.record
-    with archive.open("rb") as code:
+    if image_reference is not None:
         try:
-            created = agents.create_version_from_code(
-                agent_name=agent_name,
-                definition=definition,
-                code=code,
-                code_zip_sha256=digest,
-                description="Order Resolution native MAF Responses host.",
-                metadata={
-                    "publish_operation_id": operation_id,
-                    "publication_digest": identity_digest,
-                    "source_archive_sha256": digest,
-                },
-                retry_total=0,
+            _require_fixed_route(agents, agent_name, expected_route_version)
+        except Exception:
+            _finish_owned_publish(
+                journal_path,
+                owner_token=owner_token,
+                status="not_submitted",
             )
+            raise
+    source = (
+        archive.open("rb") if image_reference is None else contextlib.nullcontext(None)
+    )
+    with source as code:
+        try:
+            metadata = {
+                "publish_operation_id": operation_id,
+                "publication_digest": identity_digest,
+            }
+            if image_reference is None:
+                metadata["source_archive_sha256"] = digest
+            else:
+                metadata["image_reference"] = image_reference
+            options = {
+                "agent_name": agent_name,
+                "definition": definition,
+                "description": "Order Resolution native MAF Responses host.",
+                "metadata": metadata,
+                "retry_total": 0,
+            }
+            if image_reference is None:
+                created = agents.create_version_from_code(
+                    code=code, code_zip_sha256=digest, **options
+                )
+            else:
+                created = agents.create_version(**options)
         except Exception as exc:
             _finish_owned_publish(
                 journal_path,
                 owner_token=owner_token,
                 status="unknown",
             )
-            raise AmbiguousPublish(
-                "Hosted version creation may have applied; reconcile before any retry."
-            ) from exc
+            _raise_ambiguous_publish(
+                "Hosted version creation may have applied; reconcile before any retry.",
+                agents=agents,
+                agent_name=agent_name,
+                image_reference=image_reference,
+                expected_route_version=expected_route_version,
+                cause=exc,
+            )
     version = getattr(created, "version", None)
     if not isinstance(version, str) or not version:
         _finish_owned_publish(
@@ -450,14 +680,23 @@ def publish_once(
             owner_token=owner_token,
             status="unknown",
         )
-        raise AmbiguousPublish("The create response did not contain an agent version.")
-    return _finish_owned_publish(
+        _raise_ambiguous_publish(
+            "The create response did not contain an agent version; reconcile before any retry.",
+            agents=agents,
+            agent_name=agent_name,
+            image_reference=image_reference,
+            expected_route_version=expected_route_version,
+        )
+    record = _finish_owned_publish(
         journal_path,
         owner_token=owner_token,
         status="acknowledged",
         agent_version=version,
         details=created,
     )
+    if image_reference is not None:
+        _require_fixed_route(agents, agent_name, expected_route_version)
+    return record
 
 
 def _text(value: Any) -> str | None:
@@ -513,11 +752,18 @@ def resolve_publish_identity(
             or not record.agent_version
         ):
             raise ValueError("An acknowledged agent version is required.")
+        if record.image_reference is not None:
+            _validate_route_version(record.expected_route_version)
+            _require_fixed_route(agents, agent_name, record.expected_route_version)
         details = agents.get_version(
             agent_name=agent_name,
             agent_version=record.agent_version,
         )
         resolved = _version_details(details)
+        if record.image_reference is not None:
+            resolved["observed_image_reference"] = _require_configured_image(
+                details, record.agent_version, record.image_reference
+            )
         identity_ready = (
             resolved["identity_principal_id"]
             and resolved["identity_client_id"]
@@ -533,6 +779,8 @@ def resolve_publish_identity(
                     or current.publication_digest != record.publication_digest
                     or current.archive_sha256 != record.archive_sha256
                     or current.agent_version != record.agent_version
+                    or current.image_reference != record.image_reference
+                    or current.expected_route_version != record.expected_route_version
                 ):
                     raise ValueError(
                         "The publish journal changed during identity resolution."
@@ -540,6 +788,10 @@ def resolve_publish_identity(
                 updated = replace(current, **resolved)
                 _save_record(journal_path, updated)
             if not require_active or resolved["provisioning_status"] == "active":
+                if record.image_reference is not None:
+                    _require_fixed_route(
+                        agents, agent_name, record.expected_route_version
+                    )
                 return updated
         if require_active and resolved["provisioning_status"] == "failed":
             raise RuntimeError("The hosted agent version failed provisioning.")
@@ -561,23 +813,42 @@ def reconcile_publish(
         record = _load_record(journal_path)
     if record is None:
         raise ValueError("The publish journal is missing.")
+    if record.status == "not_submitted":
+        return record
     matches = []
-    for item in agents.list_versions(agent_name=agent_name):
-        if isinstance(item, dict):
-            metadata = item.get("metadata", {})
-            version = item.get("version")
-        else:
-            metadata = getattr(item, "metadata", {}) or {}
-            version = getattr(item, "version", None)
-        if (
-            metadata.get("publish_operation_id") == record.operation_id
-            and metadata.get("publication_digest") == record.publication_digest
-            and metadata.get("source_archive_sha256") == record.archive_sha256
-            and version
-        ):
-            matches.append(str(version))
+    try:
+        for item in agents.list_versions(agent_name=agent_name):
+            if isinstance(item, dict):
+                metadata = item.get("metadata", {})
+                version = item.get("version")
+            else:
+                metadata = getattr(item, "metadata", {}) or {}
+                version = getattr(item, "version", None)
+            if (
+                metadata.get("publish_operation_id") == record.operation_id
+                and metadata.get("publication_digest") == record.publication_digest
+                and (
+                    metadata.get("source_archive_sha256") == record.archive_sha256
+                    if record.image_reference is None
+                    else metadata.get("image_reference") == record.image_reference
+                )
+                and version
+            ):
+                matches.append(str(version))
+    finally:
+        if record.image_reference is not None:
+            _validate_route_version(record.expected_route_version)
+            _require_fixed_route(agents, agent_name, record.expected_route_version)
     if len(set(matches)) != 1:
         return record
+    if record.image_reference is not None:
+        try:
+            details = agents.get_version(
+                agent_name=agent_name, agent_version=matches[0]
+            )
+            _require_configured_image(details, matches[0], record.image_reference)
+        finally:
+            _require_fixed_route(agents, agent_name, record.expected_route_version)
     with _journal_lock(journal_path):
         current = _load_record(journal_path)
         if current is None:
@@ -586,6 +857,8 @@ def reconcile_publish(
             current.operation_id != record.operation_id
             or current.publication_digest != record.publication_digest
             or current.archive_sha256 != record.archive_sha256
+            or current.image_reference != record.image_reference
+            or current.expected_route_version != record.expected_route_version
         ):
             raise ValueError("The publish journal changed during reconciliation.")
         if current.status == "acknowledged":
@@ -604,7 +877,10 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("project_root", type=Path)
     parser.add_argument("--archive", type=Path, required=True)
+    parser.add_argument("--container-context", type=Path)
     parser.add_argument("--publish", action="store_true")
+    parser.add_argument("--image-reference")
+    parser.add_argument("--expected-route-version")
     parser.add_argument("--agent-name")
     parser.add_argument("--operation-id")
     parser.add_argument("--journal", type=Path)
@@ -613,8 +889,19 @@ def main() -> int:
     args = parser.parse_args()
     if args.identity_timeout_seconds < 0:
         parser.error("--identity-timeout-seconds must be nonnegative")
+    if args.container_context is not None and args.publish:
+        parser.error("--container-context cannot be combined with --publish")
+    if (args.image_reference is None) != (args.expected_route_version is None):
+        parser.error(
+            "--image-reference and --expected-route-version must be supplied together"
+        )
+    if args.image_reference is not None and not args.publish:
+        parser.error("--image-reference requires --publish")
     digest = build_source_archive(args.project_root, args.archive)
     print(f"ARCHIVE_SHA256={digest}")
+    if args.container_context is not None:
+        build_container_context(args.project_root, args.archive, args.container_context)
+        print(f"CONTAINER_CONTEXT={args.container_context}")
     if not args.publish:
         return 0
     for name, value in (
@@ -646,6 +933,8 @@ def main() -> int:
             operation_id=args.operation_id,
             runtime_environment=runtime_environment,
             journal_path=args.journal,
+            image_reference=args.image_reference,
+            expected_route_version=args.expected_route_version,
         )
         record = resolve_publish_identity(
             agents=project.agents,

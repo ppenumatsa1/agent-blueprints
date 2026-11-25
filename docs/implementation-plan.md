@@ -29,6 +29,39 @@ seam and execute the explicitly selected live
 subset. All-nine acceptance, native hosted recovery, deployment provenance,
 and production authorization remain unverified or blocked; none is waived.
 
+## Opt-in hosted image publication for PR #62
+
+**Local implementation; integration and Azure verification pending.** Generated
+projects can stage the deterministic hosted archive into a minimal image
+context, build a non-root Python 3.13 Responses host, and opt into SDK
+publication by immutable image digest. The image operation binds its journal
+to the image and a fixed prior route; it checks that route before and after
+creation, including ambiguous outcomes, during reconciliation and during
+identity polling. It refuses ambiguous replay and checks the exact version's
+configured image. The original source remote-build behavior remains the
+default. These point-in-time control-plane checks are not atomic and do not
+authenticate source-to-image provenance or measure the running container.
+
+Local evidence at parent `28b7da3`: 17 publisher tests, eight instantiation
+tests, 67 hosted tests inside the `linux/amd64` image, and the isolated root
+suite (114 tests, two existing skips) passed. A synthetic, network-isolated
+probe reached `/readiness` on port 8088. The default-PyPI image build failed
+on a TLS handshake; the documented credentialless HTTPS mirror build passed.
+An initial image failed host construction because its non-root home was
+missing; the corrected image passed construction. The initial `/healthz`
+probe timed out on a `404`. The readiness probe mocked prewarm and
+observability; a separate unmocked, credentialless probe logged failed token
+prewarm and telemetry initialization and does not establish live auth or
+observability. The credential-free CI workflow now includes the publisher
+regressions and a generated-image build with a mocked, network-isolated
+composition check; exact-head CI is pending integration.
+
+Next: transfer to the #62 owner for independent review and exact-head CI,
+then coordinate the authorized registry push and fixed-route deployment.
+Existing rollout gates are not weakened. Project pull permissions, a real
+candidate version, session routing, hosted execution, and independent
+provenance remain unverified.
+
 ## Windows asynchronous PostgreSQL startup in PR #62
 
 **Local acceptance passed; exact-head CI pending.** The default generated

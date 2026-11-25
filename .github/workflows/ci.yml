@@ -20,6 +20,8 @@ jobs:
         run: python -m pip install -r requirements-dev.txt
       - name: Run contract and readiness regression tests
         run: python -m unittest discover -s tests -v
+      - name: Run offline hosted publisher regression tests
+        run: python -m unittest discover -s scripts/foundry/tests -v
 
   maf-infrastructure:
     runs-on: ubuntu-latest
@@ -271,6 +273,26 @@ jobs:
             echo "Order Resolution verification must not skip canonical scenarios." >&2
             exit 1
           fi
+      - name: Build and verify the generated hosted image without Azure
+        run: |
+          python "$ORDER_RESOLUTION_DIR/scripts/foundry/publish_order_resolution_hosted.py" \
+            "$ORDER_RESOLUTION_DIR" --archive "$RUNNER_TEMP/hosted-source.zip" \
+            --container-context "$RUNNER_TEMP/hosted-container"
+          docker build --platform linux/amd64 --tag agent-blueprints-hosted:ci "$RUNNER_TEMP/hosted-container"
+          docker run --rm --network none --entrypoint python agent-blueprints-hosted:ci -c '
+          import os
+          from unittest.mock import Mock, patch
+          from agent_framework_foundry_hosting import ResponsesHostServer
+          from order_resolution_hosted.host import create_responses_server
+          app = Mock()
+          app.checkpoint_types = ("app.order_resolution.workflow:OrderResolutionDecision",)
+          with patch("order_resolution_hosted.host._configure_host_observability"):
+              server = create_responses_server(app)
+          assert isinstance(server, ResponsesHostServer)
+          app.prewarm.assert_called_once()
+          assert os.geteuid() != 0
+          assert os.access(os.environ["HOME"], os.W_OK)
+          '
       - name: Produce Order Resolution evaluation evidence and run independent validator
         run: |
           cd "$ORDER_RESOLUTION_DIR/backend"

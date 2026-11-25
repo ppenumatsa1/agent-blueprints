@@ -87,6 +87,12 @@ endpoint and resource ID plus the model deployment and protected internal API
 endpoint, app scope, and timeout. The publisher injects only that allowlist;
 the hosted container receives no database URL, PostgreSQL credential, TLS
 root, or database identity setting.
+An opt-in generated container context and digest-pinned image publisher are
+also available. They require a recorded fixed prior-version route and do not
+change the default source-build deployment. A configured image digest is not
+independent build provenance or proof of the running image; see the
+[hosting guidance](../../docs/azure-foundry/hosting.md#opt-in-image-based-publishing)
+for the route, reconciliation and validation limits.
 The endpoint includes the frozen `/api/internal/hosted/v1` prefix, the scope is
 the configured API application ID URI plus `/.default`, and the hosted version
 identity receives only the `Hosted.Workflow.Invoke` application role.

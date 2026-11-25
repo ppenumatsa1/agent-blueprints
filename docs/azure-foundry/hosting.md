@@ -364,6 +364,88 @@ create acknowledged in the journal; rerunning the same operation may safely
 retry discovery/readiness. The SDK does not expose a documented ARM resource
 ID for the hosted version, so callers must not invent one.
 
+### Opt-in image-based publishing
+
+The generated project also includes a hosted `Dockerfile` and `.dockerignore`.
+The default publisher and `scripts/azure/deploy.ps1` still use the existing
+remote source build. Image publication is a separate, explicit path:
+
+1. Use the publisher with `--archive <zip>` and
+   `--container-context <new-directory-outside-project>`. The context contains
+   only the staged contents of the source archive and these build assets; it
+   rejects invalid archive paths. Never put credentials or private data in the
+   context.
+2. Build the context for `linux/amd64` with a unique tag in the authorized
+   existing registry. The Dockerfile runs `python main.py` as a non-root user,
+   provides a writable home, exposes port 8088, and sets
+   `PYTHONNOUSERSITE=1`. For a restricted network,
+   `PYTHON_PACKAGE_INDEX` may select a credentialless HTTPS package mirror;
+   never pass credentials in build arguments. Direct requirements are pinned,
+   but the base image tag and transitive dependencies are not a reproducible
+   source-to-image attestation.
+3. Push only to the authorized registry. Record the push's immutable digest
+   and independently query the registry's manifest metadata; stop if they
+   differ. Use `<registry>/<repository>@sha256:<digest>` rather than a tag.
+   The Foundry **project** managed identity needs existing pull access to the
+   registry; the hosted version's runtime identity is separate. This publisher
+   neither grants permissions nor pushes an image.
+4. Record the currently served release version and pin the endpoint to that
+   concrete version with one `FixedRatio` rule at 100%, preserving its other
+   endpoint configuration. Re-read the route and coordinate all writers.
+   Creating a version behind `@latest` can immediately change traffic.
+   The preview `draft` flag is not a substitute: the service can create a
+   normal release when draft creation is not enabled.
+5. Invoke the generated publisher with `--publish`, `--image-reference` set
+   to the digest reference and `--expected-route-version` set to the recorded
+   numeric release version, in addition to the normal project, agent,
+   operation ID, journal and runtime inputs. It checks the fixed route before
+   and after `create_version` and while polling, but the reads and create are
+   not an atomic transaction. A concurrent writer can still race them; a
+   coordinated single-writer window is required. On an unsuccessful pre-create
+   route check the journal is `not_submitted`, and the same operation can be
+   retried after correction. A lost or ambiguous create remains `unknown` and
+   must be reconciled, never replayed. The publisher rechecks and reports the
+   fixed route after ambiguous creates; an unavailable or changed route is
+   reported explicitly. Reconciliation also checks the route after version
+   listing, even when no match is found or the list fails, and after candidate
+   lookup.
+6. Resolve the exact returned version and verify its image, identity and
+   `active` state before candidate-specific testing. The journal's
+   `observed_image_reference` is a version GET configuration observation, not
+   a measurement of a running container. Recheck the old route before any
+   authorized promotion; restore that fixed route if rollback is required.
+   Existing sessions remain bound to their original versions.
+
+The image operation's identity also includes the local archive digest to
+prevent accidental journal reuse, but the digest and producer metadata do
+**not** prove the image was built from that archive or a particular commit.
+Independent source/build and deployed-runtime provenance remain separate
+requirements; existing failure-injection and release hard stops are unchanged.
+
+Local evidence on the #62 parent `28b7da3`: 17 publisher tests, eight
+generated-project tests and 67 hosted tests inside the image passed. The
+source-mode publication identity matched the parent implementation and an
+existing source journal was reused without another create. The pinned SDK
+models also passed a mocked image create after rejecting an `@latest` route.
+A separate review identified missing route rechecks after ambiguous creates
+and inconclusive reconciliation; focused local tests cover the correction,
+and the reviewer confirmed that finding resolved.
+A network-isolated synthetic-app probe returned `200` from `/readiness` on port
+8088, with prewarm and observability mocked. The first default-PyPI build
+failed on a TLS handshake; a separate credentialless HTTPS mirror build passed.
+The first non-root image failed construction because its home was missing; the
+corrected image passed construction. The first `/healthz`-only probe timed out
+because that endpoint returned `404`. An unmocked composition probe without
+credentials logged token-prewarm and telemetry-initialization failures; it is
+not live-authentication or telemetry evidence. No image was pushed or
+published to Foundry by this work. The proposed credential-free CI steps run
+publisher regressions and build the generated image with a mocked,
+network-isolated composition check; integrated-head CI remains pending. Direct
+image test discovery failed because the curated image excludes tests; all 67
+passed when the generated tests were mounted read-only. YAML parsing first
+failed because the isolated SDK environment lacked PyYAML; the existing
+system parser then successfully parsed the workflow.
+
 ## Compatibility matrix
 
 | Capability | Result | Evidence / limitation |
@@ -378,6 +460,7 @@ ID for the hosted version, so callers must not invent one.
 | Protected API business port | Verified locally | Exact C revision `2a04d5be3013e782a7c1222b2a16a7047cbb15cd` passed verification-only binding plus read/prepare/decision/effect/finish over loopback HTTP and PostgreSQL 17, including identical terminal replay, conflicting intent, and unauthorized actor negatives |
 | Managed-identity token acquisition | Verified locally | Mock credentials verify `https://ai.azure.com/.default`, the dedicated internal API `api://.../.default` scope, and Authorization headers |
 | Source-code publishing API | Verified locally | Public signature/model test and no-retry mocked publish test |
+| Digest-pinned image publishing | Verified locally; Azure unverified | Public SDK model and guarded mock create; image/configuration GET is not runtime or source provenance |
 | Hosted version identity query | SDK surface verified; live identity unverified | Public `get_version` returns `AgentVersionDetails.instance_identity.principal_id/client_id`, `id`, `agent_guid`, and provisioning status |
 | Exact dependency compatibility | Verified locally | Pinned environment imports and SDK-drift assertions |
 | Hosted per-user/session checkpoint isolation | Documented, not live verified | Platform behavior is relied on only after application mapping; no Azure deployment was performed |

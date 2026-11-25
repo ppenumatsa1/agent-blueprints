@@ -40,6 +40,44 @@ based on `28b7da3541d4d24e2d7b5e6e76873d937c7c1349`; no live case was submitted.
 Next: verify the integrated POC driver and record actual selected-case outcomes
 without declaring omitted cases or the full matrix passed.
 
+## Opt-in hosted image publication for PR #62
+
+**Status: In Progress; local image path only.** Acceptance: independently
+generated Order Resolution projects can stage the existing hosted source,
+build a non-root `linux/amd64` image, and publish an explicit SHA-256 image
+reference only while the endpoint has one recorded, fixed 100% prior-version
+route. The existing remote source-build path remains the default. Ambiguous
+creates cannot be replayed and trigger a route recheck; reconciliation also
+rechecks the route on inconclusive reads. A version GET must report the
+requested version and image.
+Route reads are not atomic with creation and require coordinated single-writer
+deployment. Neither an image reference nor an API observation proves source
+provenance or the image actually executing in a hosted session.
+
+Local evidence on base `28b7da3541d4d24e2d7b5e6e76873d937c7c1349`:
+17 publisher tests, eight generated-project tests, 67 hosted tests inside the
+image, and 114 isolated root tests with two existing skips passed. The pinned
+SDK serialized the digest reference. A network-isolated synthetic-app probe
+returned `200` from `/readiness` on port 8088. The first build against default
+PyPI failed on a TLS handshake; a separate credentialless HTTPS mirror build
+passed. The first image lacked a writable non-root home and failed server
+construction; the corrected image passed construction. A healthz-only probe
+timed out because `/healthz` returned `404`. The synthetic readiness probe
+mocked prewarm and observability; a separate real-composition probe without
+network or credentials logged authentication and telemetry initialization
+failures, so it is not evidence of live identity or telemetry.
+The credential-free CI workflow now runs the publisher regressions and builds
+the generated hosted image; its network-isolated composition check mocks
+prewarm and observability. This CI change has not run on an integrated head.
+
+Next: integrate and independently review this change on the existing draft
+[#62](https://github.com/ppenumatsa1/agent-blueprints/pull/62), verify its
+exact-head CI, then use an authorized single-writer rollout and inspect the
+registry, route, candidate configuration, identity and actual sessions. The
+deployment orchestrator still defaults to remote source builds; no Azure
+deployment, independent provenance, live acceptance or production readiness
+is claimed. Existing failure-injection and release gates are unchanged.
+
 ## Windows asynchronous PostgreSQL startup in PR #62
 
 **Status: In Progress; local acceptance passed, exact-head CI pending.**
