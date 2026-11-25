@@ -21,7 +21,7 @@ business API, never a database credential or local workflow checkpoint.
 PostgreSQL atomically appends the protected exception audit when the
 durable decision succeeds. Approved effects recheck that audit and use only
 the built-in PostgreSQL synthetic destination. Local relational checks and
-mocked Azure catalog mapping are not live workload identity or artifact
+fixture Entra role labels are not live workload identity or artifact
 provenance.
 
 ## Windows asynchronous PostgreSQL startup

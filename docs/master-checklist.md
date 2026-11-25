@@ -19,7 +19,7 @@ application database/MI, an owner-issued grant for the exact pending hosted
 proposal and outcome, an atomic protected audit, and no non-synthetic effect.
 A disposable PostgreSQL fixture exercised approval/rejection, replay, revoked
 trust from privilege drift, binding/payload tampering, expiry, and atomic
-rollback; only the Azure principal catalog was emulated. See the [operator
+rollback using fixture Entra role labels. See the [operator
 runbook](../profiles/order-resolution/overlay/backend/poc/README.md).
 Next: review the candidate and verify the actual Azure application-database
 principal mapping, role ownership, immutable deployed revisions and scope

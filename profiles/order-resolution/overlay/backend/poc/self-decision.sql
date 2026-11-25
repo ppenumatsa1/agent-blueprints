@@ -40,6 +40,39 @@ CREATE TABLE ors_poc.decision_audit (
     decided_at timestamptz NOT NULL
 );
 
+CREATE FUNCTION ors_poc.matches_entra_role(
+    role_name name, object_id uuid, object_type text, is_admin boolean
+)
+RETURNS boolean
+LANGUAGE sql STABLE SET search_path = pg_catalog, pg_temp
+AS $$
+    SELECT EXISTS (
+        SELECT 1
+        FROM pg_catalog.pg_shseclabel AS mapping
+        JOIN pg_catalog.pg_roles AS r ON r.oid = mapping.objoid
+        CROSS JOIN LATERAL (
+            SELECT string_to_array(mapping.label, ',') AS fields
+        ) AS label
+        WHERE mapping.classoid = 'pg_catalog.pg_authid'::regclass
+            AND mapping.provider = 'pgaadauth' AND r.rolname = role_name
+            AND ARRAY['aadauth', 'oid=' || object_id::text, 'type=' || object_type]
+                <@ label.fields
+            AND ('admin' = ANY(label.fields)) = is_admin
+    )
+$$;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM ors_poc.scope AS s
+        WHERE ors_poc.matches_entra_role(s.runtime_role, s.identity_oid, 'service', false)
+            AND ors_poc.matches_entra_role(session_user, s.operator_oid, 'user', true)
+    ) THEN
+        RAISE EXCEPTION 'The POC Entra role security labels did not match' USING ERRCODE = '42501';
+    END IF;
+END
+$$;
+
 CREATE FUNCTION ors_poc.operator_allowed(actor_tenant text, actor_id text, verified_host text)
 RETURNS boolean
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
@@ -48,18 +81,12 @@ AS $$
         SELECT 1
         FROM ors_poc.scope AS s
         JOIN pg_catalog.pg_roles AS r ON r.rolname = s.runtime_role
-        JOIN pg_catalog.pgaadauth_list_principals(false)
-            AS p(rolename, principaltype, objectid, tenantid, ismfa, isadmin)
-            ON p.rolename = r.rolname
         WHERE s.database_name = current_database()
             AND (verified_host IS NULL OR s.database_host = verified_host)
             AND s.runtime_role = session_user
             AND s.tenant_id::text = actor_tenant
             AND s.operator_oid::text = actor_id
-            AND p.objectid::text = s.identity_oid::text
-            AND p.tenantid::text = s.tenant_id::text
-            AND p.principaltype = 'service'
-            AND NOT p.isadmin
+            AND ors_poc.matches_entra_role(s.runtime_role, s.identity_oid, 'service', false)
             AND NOT (r.rolsuper OR r.rolcreaterole OR r.rolcreatedb OR r.rolreplication
                 OR r.rolbypassrls)
             AND NOT pg_has_role(r.oid, current_user, 'MEMBER')
@@ -221,16 +248,11 @@ BEGIN
         least(p.decision_expires_at, statement_timestamp() + interval '5 minutes')
     INTO requested
     FROM ors_poc.scope AS s
-    JOIN pg_catalog.pgaadauth_list_principals(false)
-        AS principal(rolename, principaltype, objectid, tenantid, ismfa, isadmin)
-        ON principal.rolename = session_user
     JOIN public.wf_cases AS c ON c.id = target_case
     JOIN public.order_resolution_proposals AS p ON p.case_id = c.id AND p.is_current
     WHERE session_user = current_user AND s.database_name = current_database()
         AND s.database_host = verified_host
-        AND principal.principaltype = 'user' AND principal.isadmin
-        AND principal.objectid::text = s.operator_oid::text
-        AND principal.tenantid::text = s.tenant_id::text
+        AND ors_poc.matches_entra_role(session_user, s.operator_oid, 'user', true)
         AND c.tenant_id = s.tenant_id::text
         AND c.owner_id = s.operator_oid::text AND c.reviewer_id = c.owner_id
         AND c.status = 'pending' AND c.checkpoint_id IS NULL

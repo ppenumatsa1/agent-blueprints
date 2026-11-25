@@ -23,9 +23,11 @@ database, not the administrative `postgres` database. Pass these `psql` variable
 Use the unshared POC role and verify that the human owner has authority over
 the migrated case, proposal and decision tables. The installation is
 transactional and intentionally refuses to replace any existing scope. It
-adds no public schema DML grants. Its functions require Azure's principal
-mapping in the **application** database; validate that capability on the
-target before enabling either workload. The API must use the exact host and
+adds no public schema DML grants. It validates the Azure-managed Entra role
+labels in the cluster-wide PostgreSQL catalog, not the database-local Entra
+administration functions. Confirm the application database exposes the
+exact service and human-admin labels before enabling either workload. The API
+must use the exact host and
 configured user-assigned managed identity via the Container Apps MI endpoint
 and verified TLS. Never substitute a developer credential for the API.
 
@@ -67,3 +69,6 @@ trusted database owner. Direct writes to existing business and synthetic
 tables are not authoritative proof of an exception. Disabling both workload
 options restores the usual distinct-identity restriction; retain the
 protected database audit as evidence.
+
+Platform references: [Azure Entra role labels](https://learn.microsoft.com/azure/postgresql/security/security-manage-entra-users#enable-microsoft-entra-authentication-for-an-existing-postgresql-role-using-sql)
+and [PostgreSQL shared roles catalog](https://www.postgresql.org/docs/17/catalog-pg-shseclabel.html).

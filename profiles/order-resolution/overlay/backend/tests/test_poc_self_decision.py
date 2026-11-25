@@ -57,11 +57,13 @@ class PocDatabaseBoundaryTests(unittest.TestCase):
         source = os.environ.get("MAF_TEST_DATABASE_URL")
         if not source:
             raise RuntimeError("The POC boundary tests require isolated MAF_TEST_DATABASE_URL.")
+        cls.fixture_cluster = source
         name = f"ors_poc_{uuid4().hex}"
         runtime = f"{name}_api"
+        owner = f"{name}_owner"
         password = uuid4().hex
-        cls.admin_dsn = make_conninfo(source, dbname=name)
-        cls.runtime_dsn = make_conninfo(cls.admin_dsn, user=runtime, password=password)
+        cls.admin_dsn = make_conninfo(source, dbname=name, user=owner, password=password)
+        cls.runtime_dsn = make_conninfo(source, dbname=name, user=runtime, password=password)
         with psycopg.connect(source, autocommit=True) as connection:
             if not connection.execute(
                 "SELECT rolsuper FROM pg_roles WHERE rolname = current_user"
@@ -69,17 +71,32 @@ class PocDatabaseBoundaryTests(unittest.TestCase):
                 raise unittest.SkipTest(
                     "The disposable Azure role-mapping fixture needs a superuser."
                 )
+            for role, label in (
+                (runtime, f"aadauth,oid={IDENTITY},type=service"),
+                (owner, f"aadauth,oid={OPERATOR},type=user,admin"),
+            ):
+                connection.execute(
+                    sql.SQL("CREATE ROLE {} LOGIN PASSWORD {}").format(
+                        sql.Identifier(role), sql.Literal(password)
+                    )
+                )
+                cls.addClassCleanup(
+                    cls.execute_admin, source, sql.SQL("DROP ROLE {}").format(sql.Identifier(role))
+                )
+                # Only disposable fixture roles receive labels; no provider extension is loaded.
+                connection.execute(
+                    """
+                    INSERT INTO pg_catalog.pg_shseclabel (objoid, classoid, provider, label)
+                    SELECT oid, 'pg_catalog.pg_authid'::regclass, 'pgaadauth', %s
+                    FROM pg_catalog.pg_roles WHERE rolname = %s
+                    """,
+                    (label, role),
+                )
             connection.execute(
-                sql.SQL("CREATE ROLE {} LOGIN PASSWORD {}").format(
-                    sql.Identifier(runtime), sql.Literal(password)
+                sql.SQL("CREATE DATABASE {} OWNER {}").format(
+                    sql.Identifier(name), sql.Identifier(owner)
                 )
             )
-            cls.addClassCleanup(
-                cls.execute_admin,
-                source,
-                sql.SQL("DROP ROLE {}").format(sql.Identifier(runtime)),
-            )
-            connection.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(name)))
             cls.addClassCleanup(
                 cls.execute_admin,
                 source,
@@ -95,28 +112,6 @@ class PocDatabaseBoundaryTests(unittest.TestCase):
             connection.execute(
                 sql.SQL("GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO {}").format(
                     sql.Identifier(runtime)
-                )
-            )
-            # Emulate only the Azure catalog response in the disposable database.
-            connection.execute(
-                sql.SQL("""
-                CREATE FUNCTION pg_catalog.pgaadauth_list_principals(boolean)
-                RETURNS TABLE (
-                    rolename text, principaltype text, objectid text, tenantid text,
-                    ismfa boolean, isadmin boolean
-                )
-                LANGUAGE sql AS $$
-                    SELECT {}::text, 'service'::text, {}::text, {}::text, false, false
-                    UNION ALL
-                    SELECT {}::text, 'user'::text, {}::text, {}::text, false, true
-                $$
-            """).format(
-                    sql.Literal(runtime),
-                    sql.Literal(IDENTITY),
-                    sql.Literal(TENANT),
-                    sql.Literal(psycopg.conninfo.conninfo_to_dict(source)["user"]),
-                    sql.Literal(OPERATOR),
-                    sql.Literal(TENANT),
                 )
             )
             installer = (
@@ -341,3 +336,20 @@ class PocDatabaseBoundaryTests(unittest.TestCase):
         with self.assertRaises(ActionError):
             self.store.apply_once(case.id, True, RecordOrderResolutionAction().bind(self.store))
         self.assertEqual(self.store.acceptance_snapshot(case.id)["counts"]["effects"], 0)
+
+    def test_role_rebound_to_a_different_entra_identity_is_denied(self):
+        runtime = psycopg.conninfo.conninfo_to_dict(self.runtime_dsn)["user"]
+        update_label = """
+            UPDATE pg_catalog.pg_shseclabel AS mapping SET label = %s
+            FROM pg_catalog.pg_roles AS r
+            WHERE mapping.objoid = r.oid AND r.rolname = %s
+                AND mapping.provider = 'pgaadauth'
+                AND mapping.classoid = 'pg_catalog.pg_authid'::regclass
+        """
+        with psycopg.connect(self.fixture_cluster, autocommit=True) as connection:
+            connection.execute(update_label, (f"aadauth,oid={uuid4()},type=service", runtime))
+            try:
+                with self.assertRaises(AccessDenied):
+                    self.submit()
+            finally:
+                connection.execute(update_label, (f"aadauth,oid={IDENTITY},type=service", runtime))
