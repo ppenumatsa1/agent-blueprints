@@ -242,7 +242,11 @@ class LiveClient:
             payload = error.read()
             response_headers = {name.lower(): value for name, value in error.headers.items()}
         parsed = self._capture_response(
-            status, payload, response_headers, case_id=case_id, hosted_phase=hosted_phase
+            status,
+            payload,
+            response_headers,
+            case_id=case_id,
+            hosted_phase=hosted_phase,
         )
         return status, parsed, response_headers
 
@@ -834,14 +838,25 @@ def create_results(
     auth_file: str,
     source_revision: str,
     deployment_revision: str,
+    case_ids: list[str] | None = None,
 ) -> dict[str, dict]:
     if source_revision != deployment_revision:
         raise ValueError("Live provider results require exact source/deployment parity.")
-    if any(case["id"] == "ORS-005" for case in GOLDEN_CASES):
+    known = {case["id"] for case in GOLDEN_CASES}
+    selected = known if case_ids is None else set(case_ids)
+    if not selected or selected - known:
+        raise ValueError("Select at least one known canonical scenario.")
+    if case_ids is not None and len(selected) != len(case_ids):
+        raise ValueError("Canonical scenario selection must not contain duplicates.")
+    if "ORS-005" in selected:
         raise UnsupportedScenario(
             "ORS-005 requires independently verified native continuation evidence."
         )
     poc_database_url = os.environ.get("MAF_LIVE_POC_OWNER_DATABASE_URL")
+    if "ORS-009" in selected and poc_database_url:
+        raise UnsupportedScenario(
+            "ORS-009 requires distinct actor identities; same-identity POC mode cannot verify it."
+        )
     client = (
         LiveClient(
             base_url, auth_file, deployment_revision, poc_owner_database_url=poc_database_url
@@ -852,6 +867,12 @@ def create_results(
     results = {}
     for case in GOLDEN_CASES:
         case_id = case["id"]
+        if case_id not in selected:
+            results[case_id] = {
+                "status": "not_run",
+                "reason": "Excluded by explicit canonical scenario selection.",
+            }
+            continue
         if case_id == "ORS-008":
             snapshots = []
             for variant in case["input"]["policy_evidence_variants"]:

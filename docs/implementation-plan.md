@@ -13,6 +13,22 @@ Local PostgreSQL fixture results do not prove Azure activation, hosted
 continuation, adoption of independent provenance, or live multi-actor
 authorization evidence. See the [operator runbook](../profiles/order-resolution/overlay/backend/poc/README.md).
 
+## Explicit partial live acceptance in PR #62
+
+**Selection implemented and locally verified; Azure execution pending.**
+The live producer accepts an explicit `case_ids` list. It preserves default
+all-nine behavior, source/deployment parity, and the ORS-005 fail-closed oracle.
+Unselected canonical cases remain in the result as `status: not_run`, never
+as normalized business success. Invalid or unsupported selection fails before
+constructing a live client. ORS-009 requires distinct actors and is refused
+when same-identity POC owner-database mode is configured.
+
+Evidence: three isolated generated-backend selection/guard tests passed on
+the change based on `28b7da3`. Next: verify the integrated POC approval/rejection
+seam and execute the explicitly selected live
+subset. All-nine acceptance, native hosted recovery, deployment provenance,
+and production authorization remain unverified or blocked; none is waived.
+
 ## Windows asynchronous PostgreSQL startup in PR #62
 
 **Local acceptance passed; exact-head CI pending.** The default generated

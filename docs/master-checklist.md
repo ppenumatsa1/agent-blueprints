@@ -27,6 +27,19 @@ before enabling the option. Neither production authorization nor firewall
 rules are changed. Do not count unexecuted or multi-principal scenarios as
 passed.
 
+## Explicit partial live acceptance in PR #62
+
+**Status: Completed locally; deployed execution remains unverified.**
+Acceptance: `create_results(case_ids=[...])` runs only explicitly selected
+canonical cases, records every omitted case as `status: not_run`, and rejects
+empty, unknown, duplicate, or unsupported selections before constructing a
+live client. Default all-nine selection still fails closed on ORS-005.
+Same-identity POC mode cannot select the distinct-actor ORS-009 oracle.
+Evidence: three isolated generated-backend regressions passed on the change
+based on `28b7da3541d4d24e2d7b5e6e76873d937c7c1349`; no live case was submitted.
+Next: verify the integrated POC driver and record actual selected-case outcomes
+without declaring omitted cases or the full matrix passed.
+
 ## Windows asynchronous PostgreSQL startup in PR #62
 
 **Status: In Progress; local acceptance passed, exact-head CI pending.**

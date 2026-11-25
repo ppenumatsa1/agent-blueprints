@@ -409,7 +409,11 @@ class AcceptanceFaultTests(unittest.TestCase):
             )
         )
         client._read_for_poll = AsyncMock(
-            return_value={"id": str(CASE_ID), "status": "failed", "failure_code": "hosted_failure"}
+            return_value={
+                "id": str(CASE_ID),
+                "status": "failed",
+                "failure_code": "hosted_failure",
+            }
         )
         adapter = object.__new__(LiveHostedFailureAdapter)
         adapter.client = client
@@ -441,6 +445,66 @@ class AcceptanceFaultTests(unittest.TestCase):
             )
         client.submit.assert_not_called()
         client.decide.assert_not_called()
+
+    def test_explicit_subset_runs_selected_case_and_records_omissions_as_not_run(self):
+        client = Mock()
+        record = {"id": str(CASE_ID), "status": "completed"}
+        client.submit.return_value = (record, {})
+        client.wait_for_completion.return_value = record
+        snapshot = {"status": "completed"}
+        with (
+            patch(
+                "tests.live_acceptance.GOLDEN_CASES",
+                [{"id": "ORS-001"}, {"id": "ORS-005"}, {"id": "ORS-009"}],
+            ),
+            patch("tests.live_acceptance.LiveClient", return_value=client),
+            patch("tests.live_acceptance._payload", return_value={}),
+            patch("tests.live_acceptance._result", return_value={"observed": True}) as result,
+        ):
+            client.snapshot.return_value = snapshot
+            results = create_results(
+                base_url="https://example.invalid",
+                auth_file="unused",
+                source_revision=REVISION,
+                deployment_revision=REVISION,
+                case_ids=["ORS-001"],
+            )
+        self.assertEqual(results["ORS-001"], {"observed": True})
+        for case_id in ("ORS-005", "ORS-009"):
+            self.assertEqual(results[case_id]["status"], "not_run")
+            self.assertNotIn("business_outcome", results[case_id])
+        client.submit.assert_called_once()
+        result.assert_called_once_with(snapshot, native_pause=False, extras={})
+
+    def test_invalid_or_blocked_subset_fails_before_constructing_live_client(self):
+        selections = ([], ["ORS-010"], ["ORS-001", "ORS-001"], ["ORS-001", "ORS-005"])
+        for selected in selections:
+            with (
+                self.subTest(selected=selected),
+                patch("tests.live_acceptance.LiveClient") as client,
+                self.assertRaises((ValueError, UnsupportedScenario)),
+            ):
+                create_results(
+                    base_url="https://example.invalid",
+                    auth_file="unused",
+                    source_revision=REVISION,
+                    deployment_revision=REVISION,
+                    case_ids=selected,
+                )
+            client.assert_not_called()
+        with (
+            patch.dict("os.environ", {"MAF_LIVE_POC_OWNER_DATABASE_URL": "unused"}),
+            patch("tests.live_acceptance.LiveClient") as client,
+            self.assertRaisesRegex(UnsupportedScenario, "distinct actor identities"),
+        ):
+            create_results(
+                base_url="https://example.invalid",
+                auth_file="unused",
+                source_revision=REVISION,
+                deployment_revision=REVISION,
+                case_ids=["ORS-001", "ORS-009"],
+            )
+        client.assert_not_called()
 
     def test_wait_for_pending_rejects_mismatched_cases_and_unusable_handles(self):
         case_id = str(CASE_ID)

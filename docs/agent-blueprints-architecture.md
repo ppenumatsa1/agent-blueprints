@@ -70,6 +70,17 @@ credential-safety checks do not prove live recovery or trusted origin control.
 The full live result producer refuses to submit any case until ORS-005 native
 continuation can be independently established.
 
+An operator can explicitly request a partial result with
+`create_results(..., case_ids=["ORS-001", "ORS-002", "ORS-003", "ORS-004",
+"ORS-006", "ORS-007", "ORS-008", "ORS-009"])`. Each excluded canonical case
+is retained as `status: not_run` with no fabricated business or technical
+outcome. Empty, unknown, duplicate, and unsupported selections fail before
+live client construction. Default selection still includes all nine and
+refuses ORS-005. Same-identity POC owner-database mode must also exclude
+ORS-009, whose official oracle requires distinct actor identities.
+Partial results do not satisfy the full canonical acceptance contract or
+authorize deployment, recovery injection, or a provenance bypass.
+
 ## Hosted response failure visibility
 
 An immediate failed Responses start/resume commits the operation outcome,
