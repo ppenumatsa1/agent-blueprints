@@ -25,7 +25,11 @@ Next: review the candidate and verify the actual Azure application-database
 principal mapping, role ownership, immutable deployed revisions and scope
 before enabling the option. Neither production authorization nor firewall
 rules are changed. Do not count unexecuted or multi-principal scenarios as
-passed.
+passed. The dedicated security review failed before producing a verdict and
+must be repeated by an authorized reviewer before activation. A historical
+API binary can act on a persisted self-approval without the new effect check;
+binary rollback requires verified quiescence of all POC cases, grants,
+effects, and sessions, not merely a clean journal.
 
 ## Explicit partial live acceptance in PR #62
 

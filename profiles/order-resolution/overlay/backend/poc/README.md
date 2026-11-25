@@ -70,5 +70,14 @@ tables are not authoritative proof of an exception. Disabling both workload
 options restores the usual distinct-identity restriction; retain the
 protected database audit as evidence.
 
+Do not roll back an API binary while any self-reviewed POC case, issued grant,
+approved decision, queued effect, or hosted session remains reachable by that
+binary. A historical API version rejects *new* self-decisions but can process
+an already persisted self-approval without this protected grant check.
+Quiesce and account for all such cases, work queues, and running sessions
+before a binary rollback; a clean publication journal or reverting a Foundry
+route alone does not establish safety. This isolation has not been verified
+in Azure. Keep activation blocked pending an authorized security review.
+
 Platform references: [Azure Entra role labels](https://learn.microsoft.com/azure/postgresql/security/security-manage-entra-users#enable-microsoft-entra-authentication-for-an-existing-postgresql-role-using-sql)
 and [PostgreSQL shared roles catalog](https://www.postgresql.org/docs/17/catalog-pg-shseclabel.html).

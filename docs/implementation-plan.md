@@ -12,6 +12,11 @@ an Entra credential. Production remains default-off with distinct actors.
 Local PostgreSQL fixture results do not prove Azure activation, hosted
 continuation, adoption of independent provenance, or live multi-actor
 authorization evidence. See the [operator runbook](../profiles/order-resolution/overlay/backend/poc/README.md).
+The security review returned no verdict, so activation remains blocked.
+Before any old-binary rollback, drain and account for all self-reviewed
+cases, decisions, queued effects, grants, and hosted sessions. Historical
+effect authorization accepts an already persisted self-approval without the
+new protected-grant check; a clean journal alone cannot permit rollback.
 
 ## Explicit partial live acceptance in PR #62
 
