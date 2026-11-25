@@ -49,10 +49,15 @@ existing infrastructure template and its historical what-if are not proof for
 the proposed image and agent updates. The current Azure CLI validation recipe
 requires provider validation and what-if of a Bicep template, but no
 scope-correct template or equivalent validated recipe for these updates has
-been established. The deployment workflow also requires `azd provision` for
-Container Apps and ACR. Do not skip either mandatory check or widen the
-approved scope; stop until a supported, validated existing-resource path is
-available.
+been established. The deployment skill's top-level Container Apps and ACR
+step calls for `azd provision`, while its referenced checklist narrows the
+two-phase AcrPull propagation gate to newly provisioned role assignments
+after phase 1; whether that gate applies to this existing-app update is
+unresolved. Its Azure CLI recipe also includes infrastructure deployment.
+This is a workflow conflict, not a claim that Azure requires provisioning to
+update an existing Container App. Do not assume a check can be skipped or
+widen the approved scope; stop until a supported, validated existing-resource
+path is available.
 
 ### Current-scope evidence and limitations
 
