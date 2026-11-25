@@ -2,9 +2,74 @@
 
 ## Status
 
-Validated
+Approved for the current existing-resource-only POC scope; not ready for
+validation or deployment.
 
-## Scope and guardrails
+## Current POC rollout scope
+
+The approved objective is one synthetic Order Resolution cycle on the
+CI-validated candidate, starting with ORS-001. If it succeeds, the remaining
+authorized exception-OFF cases are ORS-004 and ORS-006 through ORS-008.
+Self-approval remains off. Old Foundry sessions remain unchanged, issue #56
+stays open, and the stacked pull requests stay draft and unmerged.
+
+Use only the existing POC resources. The intended changes are the required
+database migrations, immutable API and web images, and a new hosted-agent
+version. Do not provision infrastructure, create a resource group or network,
+modify PostgreSQL firewall rules, or use the broader deployment and migration
+scripts below. Preserve authentication, authorization, managed identities,
+and existing safety gates. Tenant-specific identifiers remain outside this
+public repository.
+
+The planned recipe is Azure CLI against the existing resources, with the
+generated independent project and native migration and hosted-agent publisher.
+Before any Azure write, prepare and validate the exact execution path, confirm
+the candidate commit and CI, identify existing resource and image identities,
+and establish a bounded forward-recovery procedure for the separately
+committed base and profile migrations. Verify that the previous API can safely
+operate against the migrated schema before relying on image rollback. Capture
+each case's real observations and errors separately; missing evidence is not a
+pass.
+
+### Current validation checklist
+
+- [ ] Prepare a recipe and validation inputs that represent only the intended
+  existing-resource updates and no infrastructure provisioning.
+- [ ] Run the Azure CLI recipe's core CLI, authentication, template build,
+  provider validation, and what-if checks against those exact inputs.
+- [ ] Verify container builds, supported Node.js runtime, applicable Azure
+  policies, and required existing-resource roles.
+- [ ] Record commands, timestamps, results, and remaining unknowns in a new
+  current-scope validation proof before setting status to `Validated`.
+- [ ] Complete the required deployment preflight without violating this scope.
+
+Provisioning a new resource group, network, database, or other infrastructure
+is outside this scope, not an implied validation or deployment step. The
+existing infrastructure template and its historical what-if are not proof for
+the proposed image and agent updates. The current Azure CLI validation recipe
+requires provider validation and what-if of a Bicep template, but no
+scope-correct template or equivalent validated recipe for these updates has
+been established. The deployment workflow also requires `azd provision` for
+Container Apps and ACR. Do not skip either mandatory check or widen the
+approved scope; stop until a supported, validated existing-resource path is
+available.
+
+### Current-scope evidence and limitations
+
+- Exact-head CI passed for `260d9cbb47390f2fb866bf1e620c9741845484e8`
+  in run `45667244691`; a later candidate must have its own passing CI.
+- The generated migration command upgraded a disposable legacy PostgreSQL
+  fixture twice while preserving existing operation and binding states.
+  Live read-only checks found migrations 0004 and 0005 absent; no live
+  migration or POC case was run.
+- Source-to-immutable-artifact provenance, independently observed runtime
+  identity, and historical hosted response outcomes remain unverified. These
+  unknowns are disclosed rather than represented as passes or used as an
+  exhaustive historical reconciliation prerequisite.
+- The validation evidence below is historical infrastructure-only evidence,
+  not validation or authorization of this current POC rollout.
+
+## Historical infrastructure scope and guardrails
 
 Prepare deployment-ready Azure Developer CLI and Bicep infrastructure for
 Azure/Foundry Workstream B. This branch may perform read-only Azure discovery
@@ -178,10 +243,11 @@ backend/frontend, and `WORKFLOW_HOST=local` are prohibited.
 | Draft integration PR exact-head CI | Draft PR #49 at `007f9bc0136c0d0e42bb22c4d45fd9a7f799cfb4`; run `45090269313` passed contracts, browser, Compose, core, frontend, independent generation, and infrastructure. |
 | Immutable image and observability guard revalidation | `scripts/azure/validate.ps1` passed Bicep build/lint and all 17 infrastructure contracts after making both application images explicit and preserving existing digest pins. Pinned hosted compatibility tests passed for AgentServer, Azure Monitor, HTTP instrumentation, native MAF, and Foundry SDK surfaces; focused privacy, HITL-link, and strict correlation-verifier tests passed. No Azure mutation was performed by these checks. |
 
-The Azure validation workflow is complete and the plan is `Validated`.
+The historical infrastructure-only validation workflow completed with status
+`Validated` for the scope above; it did not validate the current POC rollout.
 Provisioning, live generated-source publication, hosted execution, and
-application verification remain unexecuted and must preserve the fail-closed
-deployment and readiness gates below.
+application verification described in that scope remained unexecuted and must
+preserve the fail-closed deployment and readiness gates below.
 
 The first guarded apply exposed two provider behaviors not represented by the
 catalog-only preflight: ACR Basic rejected the AVM module's default deny
