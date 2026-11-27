@@ -32,7 +32,10 @@ Local synthetic OTLP tests found downstream baggage in logs and exception text
 in traces with the pinned AgentServer bootstrap. A supported pre-export
 sanitizer hook was not identified; a partial ingress mitigation does not
 resolve these export paths. These local findings do not establish exposure in
-the deployed POC. An experimental application-owned callback
+the deployed POC. A separate aggregate query confirmed a synthetic case
+identifier in five hosted dependency URL fields in the deployed POC; actual
+baggage and exception exposure remains unverified. This does not establish a
+customer-data leak. An experimental application-owned callback
 sanitized synthetic Azure Monitor and OTLP envelopes, but did not prove native
 Foundry enrichment, identity, metrics, or all destinations and does not meet
 the approved AgentServer-owned initialization requirement. Next: inspect the
