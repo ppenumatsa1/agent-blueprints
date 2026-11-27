@@ -51,9 +51,22 @@ remains unverified without a controlled live exception canary. ORS-001
 completed; ORS-006, ORS-007 and the three ORS-008 variants failed as expected
 without effects. ORS-004 is unverified because its nonterminal replay
 boundary was not observed. Browser approval was denied, so authenticated UI
-verification remains unverified. Next: obtain browser access and separately
+verification remains unverified. Next: after exact-head CI, deploy through the
+repository POC procedure and attempt authenticated UI verification; separately
 verify replay, baggage and exception exposure. Keep the seven Azure Policy
 audit findings unresolved and the broader plan **Approved / Not Validated**.
+
+The current UI candidate also has a distinct activity-timeline empty state and
+semantic status-text colors for light and dark themes. Final local evidence:
+the shared frontend passed 64 unit tests, build, CSP, and Chromium E2E checks
+(local 1, history 5, studio 1); a fresh generated Order Resolution frontend
+passed 74 unit tests, build, CSP, Chromium E2E checks (1/5/1), and responsive
+accessibility (1). Exact-head CI and deployment of this UI candidate remain
+pending; authenticated Azure history, timeline, and approval visibility are
+not yet verified. Next: require exact-head CI, deploy only through the
+repository POC procedure, then verify the live authenticated UI and authorized
+synthetic cases. Preserve self-approval disabled and all seven unresolved
+policy findings.
 
 ## Development POC execution priority
 

@@ -38,7 +38,8 @@ export function RequestComposer({
   }
 
   const payloadControl = (
-    <>
+    <details className="advanced-input">
+      <summary>Advanced: edit request JSON</summary>
       <label htmlFor="payload">{profile.labels.payload}</label>
       <textarea
         id="payload"
@@ -50,7 +51,7 @@ export function RequestComposer({
         rows={6}
         disabled={busy}
       />
-    </>
+    </details>
   );
 
   return (
@@ -101,6 +102,7 @@ export function RequestComposer({
         />
         {payloadControl}
         <button type="submit" disabled={busy}>{profile.labels.submit}</button>
+        {busy && <p role="status">Working…</p>}
       </form>
     </section>
   );

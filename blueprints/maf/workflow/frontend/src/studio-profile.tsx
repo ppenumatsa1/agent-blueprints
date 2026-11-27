@@ -76,10 +76,10 @@ export interface WorkflowStudioProfile {
   history: {
     heading: string;
     activityHeading: string;
-    refresh: string;
     loadMore: string;
     loading: string;
     empty: string;
+    activityEmpty: string;
     error: string;
     events: Record<ActivityType, string>;
   };

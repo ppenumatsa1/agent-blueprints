@@ -34,6 +34,22 @@ This proposal adds two bounded follow-up workstreams to the existing
 development POC. It does not change the overall **Approved / Not Validated**
 plan status or convert partial POC evidence into production validation.
 
+### Workflow Studio UI candidate - local evidence only
+
+The approved UI changes are implemented in the shared blueprint and copied
+into a fresh, independently generated Order Resolution project. The shared
+frontend passed 64 unit tests, production build, CSP check, and Chromium E2E
+checks for local rendering (1), history (5), and studio shell (1). The
+generated frontend passed 74 unit tests, production build, CSP check, the same
+Chromium checks (1/5/1), and its responsive accessibility check (1). The final
+copy distinguishes an empty activity timeline from empty workflow history;
+semantic status text colors are defined for both themes.
+
+These are local results, not exact-head CI or authenticated Azure UI evidence.
+The UI candidate has not yet been deployed. Exact-head CI must pass before any
+rollout; live history, timeline, approval visibility, and end-to-end behavior
+remain unverified. The seven Azure Policy audit findings remain unresolved.
+
 The implementation may use `ppenumatsa1/maf-monorepo` at indexed revision
 `45430753c5f3e75716ea3822d2b2b52fbb4f1c34` as read-only design and supported
 SDK-pattern evidence. Do not copy its source implementation. Preserve the

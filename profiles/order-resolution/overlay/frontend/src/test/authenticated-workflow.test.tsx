@@ -99,16 +99,16 @@ it("runs a synthetic authenticated UI flow with server-gated decisions", async (
 
   await userEvent.type(screen.getByLabelText("Reviewer object ID"), reviewer);
   await userEvent.click(screen.getByRole("button", { name: "Submit issue" }));
-  await screen.findByRole("heading", { name: "Case status: pending" });
+  await screen.findByRole("status", { name: "Case status: pending" });
   expect(screen.queryByRole("button", { name: "Approve" })).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Reject" })).not.toBeInTheDocument();
   await screen.findByText("Review requested");
   await userEvent.click(await screen.findByRole("button", { name: new RegExp(id) }));
   await userEvent.click(await screen.findByRole("button", { name: "Approve" }));
   expect(await screen.findByRole("alert")).toHaveTextContent("You are not authorized for this record.");
-  expect(screen.getByRole("heading", { name: "Case status: pending" })).toBeVisible();
+  expect(screen.getByRole("status", { name: "Case status: pending" })).toBeVisible();
   await userEvent.click(screen.getByRole("button", { name: "Reject" }));
-  expect(await screen.findByRole("heading", { name: "Case status: rejected" })).toBeVisible();
+  expect(await screen.findByRole("status", { name: "Case status: rejected" })).toBeVisible();
   expect(decisionRequests).toEqual(["approved", "rejected"].map((decision) => ({
     decision, proposal_version: 3, action: "manual_review", destination_id: "synthetic",
     handle: "synthetic-handle", channel: "api",

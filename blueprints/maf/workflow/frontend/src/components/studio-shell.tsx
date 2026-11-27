@@ -38,6 +38,7 @@ export function StudioShell({
   const [payload, setPayload] = useState("{}");
   const [recordId, setRecordId] = useState("");
   const [record, setRecord] = useState<WorkflowCase | null>(null);
+  const [newRun, setNewRun] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [refreshError, setRefreshError] = useState("");
@@ -133,6 +134,7 @@ export function StudioShell({
       recordRequest.current += 1;
       setRecord(result);
       setRecordId(result.id);
+      setNewRun(false);
       setHistoryRefresh((value) => value + 1);
     });
   }
@@ -144,7 +146,10 @@ export function StudioShell({
       if (!uuid.test(recordId)) throw new WorkflowClientError("Enter a valid case ID.");
       setRecord(null);
       const result = await client.read(recordId);
-      if (recordRequest.current === requestNumber) setRecord(result);
+      if (recordRequest.current === requestNumber) {
+        setRecord(result);
+        setNewRun(false);
+      }
     });
   }
 
@@ -154,7 +159,10 @@ export function StudioShell({
     setRecord(null);
     await run(async () => {
       const result = await client.read(id);
-      if (recordRequest.current === requestNumber) setRecord(result);
+      if (recordRequest.current === requestNumber) {
+        setRecord(result);
+        setNewRun(false);
+      }
     });
   }
 
@@ -172,6 +180,29 @@ export function StudioShell({
     });
   }
 
+  function startNewRun() {
+    recordRequest.current += 1;
+    setRecord(null);
+    setRecordId("");
+    setReviewer("");
+    setPayload("{}");
+    submission.current = null;
+    setNewRun(true);
+    setError("");
+    setRefreshError("");
+  }
+
+  async function refreshWorkspace() {
+    await run(async () => {
+      setHistoryRefresh((value) => value + 1);
+      setActivityRefresh((value) => value + 1);
+      if (record) {
+        const updated = await client.read(record.id);
+        setRecord(updated);
+      }
+    });
+  }
+
   const status = record?.status === "completed" && !record.execution_complete ? "recovering" : record?.status;
   return (
     <main className="shell">
@@ -179,12 +210,17 @@ export function StudioShell({
         <div>
           <p className="eyebrow">{profile.eyebrow}</p>
           <h1>{profile.title}</h1>
-          <p>{profile.description}</p>
+          <p className="header-description">{profile.description}</p>
         </div>
         {signedIn && (
-          <button className="secondary" disabled={busy || authBusy} onClick={() => void run(signOut)}>
-            Sign out
-          </button>
+          <div className="header-actions" role="group" aria-label="Workflow actions">
+            <button type="button" onClick={startNewRun} disabled={busy || newRun}>New Run</button>
+            <button type="button" className="secondary" disabled={busy || authBusy}
+              onClick={() => void refreshWorkspace()}>Refresh</button>
+            <button className="secondary" disabled={busy || authBusy} onClick={() => void run(signOut)}>
+              Sign out
+            </button>
+          </div>
         )}
       </header>
       {(error || refreshError) && <p className="alert" role="alert">{error || refreshError}</p>}
@@ -208,40 +244,49 @@ export function StudioShell({
             />
           )}
           <div className="workflow-main">
-          <RequestComposer
-            profile={profile}
-            reviewer={reviewer}
-            payload={payload}
-            busy={busy}
-            onReviewerChange={setReviewer}
-            onPayloadChange={setPayload}
-            onSubmit={(event) => void create(event)}
-          />
-          {profile.capabilities.manualTests ? (
-            <section className="card" aria-label="Synthetic manual tests">
-              <h2>Synthetic manual tests</h2>
-              <p>Unavailable: application-supplied test code is not isolated from real systems.</p>
-            </section>
-          ) : null}
-          <section className="card">
-            <h2>{profile.labels.openCase}</h2>
-            <form onSubmit={open}>
-              <label htmlFor="record-id">{profile.labels.caseId}</label>
-              <div className="inline">
-                <input id="record-id" value={recordId} onChange={(event) => setRecordId(event.target.value)} />
-                <button className="secondary" type="submit" disabled={busy}>{profile.labels.open}</button>
-              </div>
-            </form>
-            {busy && <p role="status">Working...</p>}
-            {record && status && (
-              <div className="record" aria-live="polite">
-                <h3>Case status: {status}</h3>
+            {newRun ? (
+              <>
+                <RequestComposer
+                  profile={profile}
+                  reviewer={reviewer}
+                  payload={payload}
+                  busy={busy}
+                  onReviewerChange={setReviewer}
+                  onPayloadChange={setPayload}
+                  onSubmit={(event) => void create(event)}
+                />
+                {profile.capabilities.manualTests ? (
+                  <section className="card" aria-label="Synthetic manual tests">
+                    <h2>Synthetic manual tests</h2>
+                    <p>Unavailable: application-supplied test code is not isolated from real systems.</p>
+                  </section>
+                ) : null}
+                <details className="card case-lookup">
+                  <summary>{profile.labels.openCase}</summary>
+                  <form onSubmit={open}>
+                    <label htmlFor="record-id">{profile.labels.caseId}</label>
+                    <div className="inline">
+                      <input id="record-id" value={recordId}
+                        onChange={(event) => setRecordId(event.target.value)} />
+                      <button className="secondary" type="submit" disabled={busy}>{profile.labels.open}</button>
+                    </div>
+                  </form>
+                </details>
+              </>
+            ) : record && status ? (
+              <section className="card run-workspace" aria-labelledby="run-heading">
+                <div className="run-heading">
+                  <div>
+                    <h2 id="run-heading">Selected run</h2>
+                    <p className="identifier">{record.id}</p>
+                  </div>
+                  <span className={`status-badge status-${status}`} role="status" aria-label={`Case status: ${status}`}>
+                    {status}
+                  </span>
+                </div>
                 {record.failure_code && (
                   <p className="alert">Recovery or action failed. Check the case before retrying.</p>
                 )}
-                <CaseMetadataPanel record={record} status={status} profile={profile} />
-                <CaseSummaryPanel record={record} profile={profile} />
-                <ProtocolContextPanel key={record.id} record={record} profile={profile} />
                 {profile.capabilities.history && (
                   <ActivityTimeline
                     caseId={record.id}
@@ -250,26 +295,71 @@ export function StudioShell({
                     refreshKey={activityRefresh}
                   />
                 )}
-              </div>
+                <ProtocolContextPanel key={record.id} record={record} profile={profile} />
+                <details className="case-lookup">
+                  <summary>Open another case by ID</summary>
+                  <form onSubmit={open}>
+                    <label htmlFor="record-id">{profile.labels.caseId}</label>
+                    <div className="inline">
+                      <input id="record-id" value={recordId}
+                        onChange={(event) => setRecordId(event.target.value)} />
+                      <button className="secondary" type="submit" disabled={busy}>{profile.labels.open}</button>
+                    </div>
+                  </form>
+                </details>
+              </section>
+            ) : (
+              <section className="card" aria-live="polite">
+                <h2>Loading workflow</h2>
+                {busy && <p role="status">Working…</p>}
+              </section>
             )}
-          </section>
           </div>
-          <aside className="card review-rail" aria-label="Review and evidence">
-            {record ? (
+          <aside className="review-rail" aria-label="Workflow review">
+            {record && status ? (
               <>
-                <ApprovalPanel
-                  decision={record.decision}
-                  approvalRequired={profile.approvalRequired?.(record)}
-                  pending={record.status === "pending" && record.decision === "pending" && !record.failure_code && (!profile.decisionBinding || !!profile.decisionBinding(record)) && (!profile.approvalRequired || profile.approvalRequired(record) === true)}
-                  busy={busy}
-                  profile={profile}
-                  onDecide={(value) => void decide(value)}
-                />
+                <section className="card output-panel" aria-labelledby="output-heading">
+                  <div className="panel-heading">
+                    <h2 id="output-heading">Latest Output</h2>
+                  </div>
+                  <p>{record.failure_code
+                    ? "The workflow reported a failure. Review the case before retrying."
+                    : status === "pending" && record.decision === "pending"
+                      ? "This workflow is awaiting its configured review decision."
+                      : `Workflow state: ${status}.`}</p>
+                  <p className="hint">A response transcript is not included in the case API.</p>
+                </section>
+                <section className="card">
+                  <CaseSummaryPanel record={record} profile={profile} />
+                </section>
+                <section className="card">
+                  <ApprovalPanel
+                    decision={record.decision}
+                    approvalRequired={profile.approvalRequired?.(record)}
+                    pending={record.status === "pending" && record.decision === "pending" && !record.failure_code && (!profile.decisionBinding || !!profile.decisionBinding(record)) && (!profile.approvalRequired || profile.approvalRequired(record) === true)}
+                    busy={busy}
+                    profile={profile}
+                    onDecide={(value) => void decide(value)}
+                  />
+                </section>
                 {profile.capabilities.evidence && profile.projectEvidence ? (
-                  <EvidencePanel record={record} project={profile.projectEvidence} />
-                ) : <section><h3>Evidence</h3><p>Evidence is not available in this view.</p></section>}
+                  <section className="card"><EvidencePanel record={record} project={profile.projectEvidence} /></section>
+                ) : (
+                  <section className="card evidence-unavailable">
+                    <h2>Evidence</h2>
+                    <p>Evidence is not available for this workflow.</p>
+                  </section>
+                )}
+                <section className="card">
+                  <CaseMetadataPanel record={record} status={status} />
+                </section>
               </>
-            ) : <><h2>Review and evidence</h2><p>Open a case to review its status.</p></>}
+            ) : (
+              <section className="card approval-empty">
+                <h2>Human-in-the-loop</h2>
+                <p>Select a workflow to view its approval state.</p>
+              </section>
+            )}
           </aside>
         </div>
       )}

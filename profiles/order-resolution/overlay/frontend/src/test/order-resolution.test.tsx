@@ -8,6 +8,14 @@ import { WorkflowWorkspace } from "../workspace";
 
 
 describe("order resolution case", () => {
+  function revealCaseLookup() {
+    const disclosure = document.querySelector<HTMLDetailsElement>(".case-lookup");
+    if (disclosure && !disclosure.open) {
+      const summary = disclosure.querySelector("summary");
+      if (summary) fireEvent.click(summary);
+    }
+  }
+
   it("exposes the live browser controls and case ID for the profile", async () => {
     const id = "80000000-0000-4000-8000-000000000008";
     const pending: WorkflowCase = {
@@ -36,12 +44,14 @@ describe("order resolution case", () => {
     );
     expect(screen.getByRole("heading", { name: /^(New request|New order issue)$/ })).toBeVisible();
     await userEvent.type(screen.getByLabelText("Reviewer object ID"), id);
+    await userEvent.click(screen.getByText("Advanced: edit request JSON"));
     expect(screen.getByLabelText(/^(Request data|Order issue data) \(JSON\)$/)).toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: /^(Submit request|Submit issue)$/ }));
-    expect(await screen.findByRole("heading", { name: "Case status: pending" })).toBeVisible();
+    expect(await screen.findByRole("status", { name: "Case status: pending" })).toBeVisible();
+    await userEvent.click(screen.getByText("Open another case by ID"));
     expect(screen.getByLabelText("Case ID")).toHaveValue(id);
     await userEvent.click(screen.getByRole("button", { name: "Approve" }));
-    expect(await screen.findByRole("heading", { name: "Case status: completed" })).toBeVisible();
+    expect(await screen.findByRole("status", { name: "Case status: completed" })).toBeVisible();
     expect(within(screen.getByRole("region", { name: "Approval" })).getByText("Decision:"))
       .toHaveTextContent("Decision: approved");
   });
@@ -126,6 +136,7 @@ describe("order resolution case", () => {
       activity: vi.fn().mockResolvedValue({ schema_version: "workflow-activity/1", items: [], next_cursor: null }),
     };
     render(<WorkflowWorkspace signedIn client={client} profile={orderResolutionProfile} signIn={vi.fn()} signOut={vi.fn()} />);
+    revealCaseLookup();
     fireEvent.change(screen.getByLabelText("Case ID"), { target: { value: record.id } });
     fireEvent.click(screen.getByRole("button", { name: "Open" }));
     fireEvent.click(await screen.findByRole("button", { name: decision === "approved" ? "Approve" : "Reject" }));
@@ -189,6 +200,7 @@ describe("order resolution case", () => {
       activity: vi.fn().mockResolvedValue({ items: [], next_cursor: null }),
     };
     render(<WorkflowWorkspace signedIn client={client} profile={orderResolutionProfile} signIn={vi.fn()} signOut={vi.fn()} />);
+    revealCaseLookup();
     fireEvent.change(screen.getByLabelText("Case ID"), { target: { value: record.id } });
     fireEvent.click(screen.getByRole("button", { name: "Open" }));
     expect(await screen.findByText("Approval not required.")).toBeVisible();
@@ -226,6 +238,7 @@ describe("order resolution case", () => {
       activity: vi.fn().mockResolvedValue({ items: [], next_cursor: null }),
     };
     render(<WorkflowWorkspace signedIn client={client} profile={orderResolutionProfile} signIn={vi.fn()} signOut={vi.fn()} />);
+    revealCaseLookup();
     fireEvent.change(screen.getByLabelText("Case ID"), { target: { value: record.id } });
     fireEvent.click(screen.getByRole("button", { name: "Open" }));
     expect(await screen.findByText("Approval requirement is unavailable.")).toBeVisible();

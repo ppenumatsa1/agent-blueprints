@@ -33,6 +33,17 @@ remains unverified because its replay boundary was not observed. Browser
 approval was denied, so authenticated UI testing is unverified. Next: obtain
 browser access and separately verify replay, baggage and exception exposure.
 
+The Workflow Studio UI implementation now includes the approved run-centered
+layout, distinct activity-timeline empty copy, and semantic light/dark status
+text colors. Local shared-frontend checks passed (64 unit tests, build, CSP,
+Chromium E2E local/history/studio 1/5/1); a fresh generated Order Resolution
+frontend passed (74 unit tests, build, CSP, E2E 1/5/1, responsive accessibility
+1). These checks do not verify authenticated Azure behavior. Exact-head CI and
+the UI rollout remain pending; after CI, deploy only through the repository's
+POC-specific procedure and verify live history, timeline, approval visibility,
+and authorized synthetic scenarios. Keep self-approval disabled, the seven
+policy findings unresolved, and the overall plan **Approved / Not Validated**.
+
 ## Development POC execution priority
 
 Repository guidance now prioritizes the smallest authorized end-to-end

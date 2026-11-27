@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
 import { describe, expect, it, vi } from "vitest";
@@ -38,9 +38,14 @@ function setup(profile: WorkflowStudioProfile) {
 }
 
 async function selectCase() {
+  const disclosure = document.querySelector<HTMLDetailsElement>(".case-lookup");
+  if (disclosure && !disclosure.open) {
+    const summary = disclosure.querySelector("summary");
+    if (summary) fireEvent.click(summary);
+  }
   await userEvent.type(screen.getByLabelText("Case ID"), record.id);
   await userEvent.click(screen.getByRole("button", { name: /^Open$/ }));
-  await screen.findByRole("heading", { name: "Case status: pending" });
+  await screen.findByRole("status", { name: "Case status: pending" });
 }
 
 describe("read-only protocol context", () => {
@@ -54,7 +59,7 @@ describe("read-only protocol context", () => {
     await selectCase();
     expect(register).not.toHaveBeenCalled();
     expect(screen.queryByRole("region", { name: "Protocol context" })).not.toBeInTheDocument();
-    expect(screen.getByText("CopilotKit: Not enabled")).toBeVisible();
+    expect(screen.queryByText(/CopilotKit:/)).not.toBeInTheDocument();
   });
 
   it("shares only a protocol context entry after consent and removes it on stop or deselection", async () => {
@@ -118,6 +123,9 @@ describe("read-only protocol context", () => {
     });
     const invalid: WorkflowCase = JSON.parse(JSON.stringify({ ...record, status: "PRIVATE STATUS" }));
     vi.mocked(client.read).mockResolvedValueOnce(invalid);
+    const disclosure = document.querySelector<HTMLDetailsElement>(".case-lookup");
+    const summary = disclosure?.querySelector("summary");
+    if (summary) fireEvent.click(summary);
     await userEvent.type(screen.getByLabelText("Case ID"), record.id);
     await userEvent.click(screen.getByRole("button", { name: /^Open$/ }));
     expect(await screen.findByText("Protocol context is unavailable for this status.")).toBeVisible();
@@ -135,6 +143,9 @@ describe("read-only protocol context", () => {
     });
     await selectCase();
     await userEvent.click(screen.getByRole("button", { name: "Share status with AG-UI" }));
+    const disclosure = document.querySelector<HTMLDetailsElement>(".case-lookup");
+    const summary = disclosure?.querySelector("summary");
+    if (summary) fireEvent.click(summary);
     await userEvent.click(screen.getByRole("button", { name: /^Open$/ }));
     expect(unregister).toHaveBeenCalledOnce();
     expect(await screen.findByRole("button", { name: "Share status with AG-UI" })).toBeVisible();

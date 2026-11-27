@@ -50,6 +50,14 @@ function workspace(api: WorkflowClient, signedIn = true) {
   );
 }
 
+function revealCaseLookup() {
+  const disclosure = document.querySelector<HTMLDetailsElement>(".case-lookup");
+  if (disclosure && !disclosure.open) {
+    const summary = disclosure.querySelector("summary");
+    if (summary) fireEvent.click(summary);
+  }
+}
+
 afterEach(() => vi.unstubAllGlobals());
 
 describe("workflow workspace", () => {
@@ -75,15 +83,23 @@ describe("workflow workspace", () => {
     const submit = vi.fn().mockReturnValue(new Promise<WorkflowCase>((resolve) => { finish = resolve; }));
     const api = client({ submit });
     render(workspace(api));
+    const requestJson = screen.getByText("Advanced: edit request JSON").closest("details");
+    expect(requestJson).not.toHaveAttribute("open");
+    await userEvent.click(screen.getByText("Advanced: edit request JSON"));
+    expect(screen.getByLabelText("Request data (JSON)")).toBeVisible();
     await userEvent.type(screen.getByLabelText("Reviewer object ID"), reviewer);
     await userEvent.click(screen.getByRole("button", { name: "Submit request" }));
     expect(screen.getByRole("status")).toHaveTextContent("Working");
     expect(screen.getByRole("button", { name: "Submit request" })).toBeDisabled();
     finish(pending);
-    expect(await screen.findByRole("heading", { name: "Case status: pending" })).toBeVisible();
+    expect(await screen.findByRole("status", { name: "Case status: pending" })).toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: "Approve" }));
-    expect(await screen.findByRole("heading", { name: "Case status: completed" })).toBeVisible();
+    expect(await screen.findByRole("status", { name: "Case status: completed" })).toBeVisible();
     expect(api.decide).toHaveBeenCalledWith(id, "approved");
+    await userEvent.click(screen.getByRole("button", { name: "New Run" }));
+    expect(screen.queryByRole("status", { name: "Case status: completed" })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Reviewer object ID")).toHaveValue("");
+    expect(screen.getByLabelText("Request data (JSON)")).toHaveValue("{}");
   });
 
   it("refreshes asynchronous submissions until completion", async () => {
@@ -99,11 +115,11 @@ describe("workflow workspace", () => {
       const { unmount } = render(workspace(api));
       fireEvent.change(screen.getByLabelText("Reviewer object ID"), { target: { value: reviewer } });
       await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Submit request" })); });
-      expect(screen.getByRole("heading", { name: "Case status: created" })).toBeVisible();
+      expect(screen.getByRole("status", { name: "Case status: created" })).toBeVisible();
       await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
-      expect(screen.getByRole("heading", { name: "Case status: pending" })).toBeVisible();
+      expect(screen.getByRole("status", { name: "Case status: pending" })).toBeVisible();
       await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
-      expect(screen.getByRole("heading", { name: "Case status: completed" })).toBeVisible();
+      expect(screen.getByRole("status", { name: "Case status: completed" })).toBeVisible();
       await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
       expect(api.read).toHaveBeenCalledTimes(2);
       unmount();
@@ -120,13 +136,14 @@ describe("workflow workspace", () => {
         .mockRejectedValueOnce(new WorkflowClientError("Refresh unavailable."))
         .mockResolvedValueOnce(complete);
       const { unmount } = render(workspace(client({ read })));
+      revealCaseLookup();
       fireEvent.change(screen.getByLabelText("Case ID"), { target: { value: id } });
       await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Open" })); });
       await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
       expect(screen.getByRole("alert")).toHaveTextContent("Refresh unavailable.");
-      expect(screen.getByRole("heading", { name: "Case status: pending" })).toBeVisible();
+      expect(screen.getByRole("status", { name: "Case status: pending" })).toBeVisible();
       await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
-      expect(screen.getByRole("heading", { name: "Case status: completed" })).toBeVisible();
+      expect(screen.getByRole("status", { name: "Case status: completed" })).toBeVisible();
       expect(screen.queryByRole("alert")).not.toBeInTheDocument();
       expect(read).toHaveBeenCalledTimes(3);
       unmount();
@@ -142,12 +159,13 @@ describe("workflow workspace", () => {
       const complete = { ...failed, status: "completed" as const, decision: "approved" as const, execution_complete: true, failure_code: null };
       const read = vi.fn().mockResolvedValueOnce(failed).mockResolvedValueOnce(complete);
       const { unmount } = render(workspace(client({ read })));
+      revealCaseLookup();
       fireEvent.change(screen.getByLabelText("Case ID"), { target: { value: id } });
       await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Open" })); });
       expect(screen.getByText(/recovery or action failed/i)).toBeVisible();
       expect(screen.queryByRole("button", { name: "Approve" })).not.toBeInTheDocument();
       await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
-      expect(screen.getByRole("heading", { name: "Case status: completed" })).toBeVisible();
+      expect(screen.getByRole("status", { name: "Case status: completed" })).toBeVisible();
       expect(screen.queryByText(/recovery or action failed/i)).not.toBeInTheDocument();
       await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
       expect(read).toHaveBeenCalledTimes(2);
@@ -169,6 +187,7 @@ describe("workflow workspace", () => {
         })
         .mockResolvedValueOnce(complete);
       const { unmount } = render(workspace(client({ read })));
+      revealCaseLookup();
       fireEvent.change(screen.getByLabelText("Case ID"), { target: { value: id } });
       await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Open" })); });
       await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
@@ -177,7 +196,7 @@ describe("workflow workspace", () => {
       expect(stalledSignal?.aborted).toBe(true);
       expect(screen.getByRole("alert")).toHaveTextContent("Case refresh timed out.");
       await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
-      expect(screen.getByRole("heading", { name: "Case status: completed" })).toBeVisible();
+      expect(screen.getByRole("status", { name: "Case status: completed" })).toBeVisible();
       expect(screen.queryByRole("alert")).not.toBeInTheDocument();
       unmount();
     } finally {
@@ -195,14 +214,16 @@ describe("workflow workspace", () => {
             .mockReturnValueOnce(new Promise<WorkflowCase>((resolve) => { finish = resolve; }))
             .mockResolvedValueOnce(other);
           const { unmount } = render(workspace(client({ read })));
+          revealCaseLookup();
           fireEvent.change(screen.getByLabelText("Case ID"), { target: { value: id } });
           await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Open" })); });
           await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
+          revealCaseLookup();
           fireEvent.change(screen.getByLabelText("Case ID"), { target: { value: other.id } });
           await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Open" })); });
           await act(async () => { finish({ ...pending, status: "completed", execution_complete: true }); });
-          expect(screen.getByText(other.id)).toBeVisible();
-          expect(screen.getByRole("heading", { name: "Case status: pending" })).toBeVisible();
+          expect(screen.getByText(other.id, { selector: ".run-heading .identifier" })).toBeVisible();
+          expect(screen.getByRole("status", { name: "Case status: pending" })).toBeVisible();
           unmount();
         } finally {
           vi.useRealTimers();
@@ -215,11 +236,12 @@ describe("workflow workspace", () => {
           const read = vi.fn().mockResolvedValueOnce(pending)
             .mockRejectedValueOnce(new WorkflowClientError("Access revoked.", true));
           const { unmount } = render(workspace(client({ read })));
+          revealCaseLookup();
           fireEvent.change(screen.getByLabelText("Case ID"), { target: { value: id } });
           await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Open" })); });
           await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
           expect(screen.getByRole("alert")).toHaveTextContent("Access revoked.");
-          expect(screen.queryByRole("heading", { name: "Case status: pending" })).not.toBeInTheDocument();
+          expect(screen.queryByRole("status", { name: "Case status: pending" })).not.toBeInTheDocument();
           await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
           expect(read).toHaveBeenCalledTimes(2);
           unmount();
@@ -232,11 +254,12 @@ describe("workflow workspace", () => {
       decide: vi.fn().mockResolvedValue({ ...pending, status: "rejected", decision: "rejected", execution_complete: true }),
     });
     render(workspace(api));
+    revealCaseLookup();
     await userEvent.type(screen.getByLabelText("Case ID"), id);
     await userEvent.click(screen.getByRole("button", { name: "Open" }));
-    await screen.findByRole("heading", { name: "Case status: pending" });
+    await screen.findByRole("status", { name: "Case status: pending" });
     await userEvent.click(screen.getByRole("button", { name: "Reject" }));
-    expect(await screen.findByRole("heading", { name: "Case status: rejected" })).toBeVisible();
+    expect(await screen.findByRole("status", { name: "Case status: rejected" })).toBeVisible();
     expect(api.decide).toHaveBeenCalledWith(id, "rejected");
   });
 
@@ -249,8 +272,40 @@ describe("workflow workspace", () => {
     await userEvent.click(screen.getByRole("button", { name: "Submit request" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("could not be reached");
     await userEvent.click(screen.getByRole("button", { name: "Submit request" }));
-    await screen.findByRole("heading", { name: "Case status: pending" });
+    await screen.findByRole("status", { name: "Case status: pending" });
     expect(submit.mock.calls[0][2]).toBe(submit.mock.calls[1][2]);
+  });
+
+  it("refreshes the selected run, history, and timeline from the workspace action", async () => {
+    const read = vi.fn().mockResolvedValue(pending);
+    const listHistory = vi.fn().mockResolvedValue({
+      schema_version: "workflow-history/1" as const,
+      items: [],
+      next_cursor: null,
+    });
+    const activity = vi.fn().mockResolvedValue({
+      schema_version: "workflow-activity/1" as const,
+      items: [],
+      next_cursor: null,
+    });
+    render(workspace(client({ read, listHistory, activity })));
+    revealCaseLookup();
+    await userEvent.type(screen.getByLabelText("Case ID"), id);
+    await userEvent.click(screen.getByRole("button", { name: "Open" }));
+    await screen.findByRole("status", { name: "Case status: pending" });
+    await waitFor(() => expect(activity).toHaveBeenCalledTimes(1));
+    const historyReads = listHistory.mock.calls.length;
+    const activityReads = activity.mock.calls.length;
+    const caseReads = read.mock.calls.length;
+
+    await userEvent.click(screen.getByRole("button", { name: "Refresh" }));
+
+    await waitFor(() => {
+      expect(listHistory.mock.calls.length).toBeGreaterThan(historyReads);
+      expect(activity.mock.calls.length).toBeGreaterThan(activityReads);
+      expect(read.mock.calls.length).toBeGreaterThan(caseReads);
+    });
+    expect(read).toHaveBeenLastCalledWith(id);
   });
 
   it("reports invalid input and exposes accessible form controls", async () => {
@@ -269,21 +324,23 @@ describe("workflow workspace", () => {
       failure_code: "synthetic_failure",
     };
     render(workspace(client({ read: vi.fn().mockResolvedValue(recovering) })));
+    revealCaseLookup();
     await userEvent.type(screen.getByLabelText("Case ID"), id);
     await userEvent.click(screen.getByRole("button", { name: "Open" }));
-    expect(await screen.findByRole("heading", { name: "Case status: recovering" })).toBeVisible();
+    expect(await screen.findByRole("status", { name: "Case status: recovering" })).toBeVisible();
     expect(screen.getByText(/recovery or action failed/i)).toBeVisible();
     expect(screen.getByRole("heading", { name: "Workflow history" })).toBeVisible();
-    expect(screen.getByText("Live activity: Enabled")).toBeVisible();
-    expect(screen.getByText("Evidence: Not enabled")).toBeVisible();
-    expect(screen.getByText("Manual tests: Not enabled")).toBeVisible();
-    expect(screen.getByText("AG-UI: Not enabled")).toBeVisible();
-    expect(screen.getByText("CopilotKit: Not enabled")).toBeVisible();
+    expect(screen.getByText("Live updates")).toBeVisible();
+    expect(screen.getByText("Evidence is not available for this workflow.")).toBeVisible();
+    expect(screen.queryByText(/Manual tests:/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/AG-UI:/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/CopilotKit:/)).not.toBeInTheDocument();
   });
 
   it.each(["hosted_response_failed", "recovery_failed"])("does not offer decisions for a pending case with %s", async (failure_code) => {
     const failed = { ...pending, failure_code };
     render(workspace(client({ read: vi.fn().mockResolvedValue(failed) })));
+    revealCaseLookup();
     await userEvent.type(screen.getByLabelText("Case ID"), id);
     await userEvent.click(screen.getByRole("button", { name: "Open" }));
     expect(await screen.findByText(/recovery or action failed/i)).toBeVisible();

@@ -23,10 +23,6 @@ export interface HistorySidebarProps {
   onSelect(id: string): void;
 }
 
-function recordLabel(item: WorkflowHistoryItem): string {
-  return `${item.status} workflow`;
-}
-
 export function HistorySidebar({
   profile,
   client,
@@ -42,7 +38,6 @@ export function HistorySidebar({
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState(false);
-  const [refreshVersion, setRefreshVersion] = useState(0);
   const [loadedStatus, setLoadedStatus] = useState<WorkflowStatus | "all">("all");
   const generation = useRef(0);
   const stale = loadedStatus !== status;
@@ -76,7 +71,7 @@ export function HistorySidebar({
     return () => {
       active = false;
     };
-  }, [client, status, refreshVersion, refreshKey]);
+  }, [client, status, refreshKey]);
 
   async function loadMore() {
     if (!cursor || loadingMore) return;
@@ -103,14 +98,6 @@ export function HistorySidebar({
     <aside className="card history-sidebar" aria-labelledby="history-heading" aria-busy={loading || loadingMore}>
       <div className="history-heading">
         <h2 id="history-heading">{profile.history.heading}</h2>
-        <button
-          className="secondary"
-          type="button"
-          disabled={loading || disabled}
-          onClick={() => setRefreshVersion((value) => value + 1)}
-        >
-          {profile.history.refresh}
-        </button>
       </div>
       <label htmlFor="history-status">Filter by status</label>
       <select
@@ -145,9 +132,14 @@ export function HistorySidebar({
                 disabled={disabled}
                 onClick={() => onSelect(item.id)}
               >
-                <span>{recordLabel(item)}</span>
-                <time dateTime={item.updated_at}>{new Date(item.updated_at).toLocaleString()}</time>
-                <span className="identifier">{item.id}</span>
+                <span className="history-item-heading">
+                  <strong>{item.status}</strong>
+                  <time dateTime={item.updated_at}>
+                    {new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(item.updated_at))}
+                  </time>
+                </span>
+                <span className="history-item-decision">Decision: {item.decision}</span>
+                <span className="identifier" title={item.id}>{item.id}</span>
               </button>
             </li>
           ))}

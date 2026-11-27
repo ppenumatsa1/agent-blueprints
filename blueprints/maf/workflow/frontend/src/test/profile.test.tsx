@@ -62,6 +62,6 @@ describe("workflow studio profiles", () => {
       />,
     );
     expect(screen.getByRole("heading", { name: "Synthetic Review Studio" })).toBeVisible();
-    expect(screen.getByRole("heading", { name: "Find synthetic case" })).toBeVisible();
+    expect(screen.getByText("Find synthetic case")).toBeVisible();
   });
 });

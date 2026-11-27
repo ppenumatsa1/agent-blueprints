@@ -1,5 +1,5 @@
 import { InteractionStatus } from "@azure/msal-browser";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 
@@ -12,6 +12,14 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.clearAllMocks();
 });
+
+function revealCaseLookup() {
+  const disclosure = document.querySelector<HTMLDetailsElement>(".case-lookup");
+  if (disclosure && !disclosure.open) {
+    const summary = disclosure.querySelector("summary");
+    if (summary) fireEvent.click(summary);
+  }
+}
 
 it("clears record data and ignores stale active accounts when the signed-in user changes", async () => {
   const first = {
@@ -50,26 +58,28 @@ it("clears record data and ignores stale active accounts when the signed-in user
   };
   useMsal.mockReturnValue({ instance, accounts: [first], inProgress: InteractionStatus.None });
   const { rerender } = render(<AuthenticatedApplication config={config} />);
+  revealCaseLookup();
   await userEvent.type(screen.getByLabelText("Case ID"), id);
   await userEvent.click(screen.getByRole("button", { name: "Open" }));
-  expect(await screen.findByRole("heading", { name: "Case status: pending" })).toBeVisible();
+  expect(await screen.findByRole("status", { name: "Case status: pending" })).toBeVisible();
   await waitFor(() => expect(streamSignal).toBeDefined());
 
   useMsal.mockReturnValue({ instance, accounts: [second], inProgress: InteractionStatus.None });
   rerender(<AuthenticatedApplication config={config} />);
   expect(streamSignal?.aborted).toBe(true);
-  expect(screen.queryByRole("heading", { name: "Case status: pending" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("status", { name: "Case status: pending" })).not.toBeInTheDocument();
   expect(screen.getByLabelText("Case ID")).toHaveValue("");
+  revealCaseLookup();
   await userEvent.type(screen.getByLabelText("Case ID"), id);
   await userEvent.click(screen.getByRole("button", { name: "Open" }));
   expect(instance.acquireTokenSilent).toHaveBeenLastCalledWith({ account: second, scopes: ["read"] });
-  expect(await screen.findByRole("heading", { name: "Case status: pending" })).toBeVisible();
+  expect(await screen.findByRole("status", { name: "Case status: pending" })).toBeVisible();
 
   useMsal.mockReturnValue({ instance, accounts: [], inProgress: InteractionStatus.None });
   rerender(<AuthenticatedApplication config={config} />);
   expect(screen.getByRole("heading", { name: "Sign in to continue" })).toBeVisible();
   useMsal.mockReturnValue({ instance, accounts: [second], inProgress: InteractionStatus.None });
   rerender(<AuthenticatedApplication config={config} />);
-  expect(screen.queryByRole("heading", { name: "Case status: pending" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("status", { name: "Case status: pending" })).not.toBeInTheDocument();
   expect(screen.getByLabelText("Case ID")).toHaveValue("");
 });

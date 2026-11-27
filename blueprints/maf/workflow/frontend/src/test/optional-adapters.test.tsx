@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
 import { describe, expect, it, vi } from "vitest";
@@ -31,9 +31,14 @@ function setup(profile: WorkflowStudioProfile) {
 }
 
 async function openCase() {
+  const disclosure = document.querySelector<HTMLDetailsElement>(".case-lookup");
+  if (disclosure && !disclosure.open) {
+    const summary = disclosure.querySelector("summary");
+    if (summary) fireEvent.click(summary);
+  }
   await userEvent.type(screen.getByLabelText("Case ID"), record.id);
   await userEvent.click(screen.getByRole("button", { name: "Open" }));
-  await screen.findByRole("heading", { name: "Case status: pending" });
+  await screen.findByRole("status", { name: "Case status: pending" });
 }
 
 describe("optional studio adapters", () => {
@@ -94,7 +99,7 @@ describe("optional studio adapters", () => {
     expect(screen.getByRole("region", { name: "Synthetic manual tests" })).toHaveTextContent("Unavailable");
     expect(screen.queryByRole("button", { name: "Run synthetic" })).not.toBeInTheDocument();
     await openCase();
-    expect(screen.getByText("Manual tests: Not enabled")).toBeVisible();
+    expect(screen.queryByText(/Manual tests:/)).not.toBeInTheDocument();
     expect(run).not.toHaveBeenCalled();
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(screen.queryByText("Unexpected success")).not.toBeInTheDocument();
@@ -112,7 +117,7 @@ describe("optional studio adapters", () => {
       get syntheticManualTests() { return getTests(); },
     });
     await openCase();
-    expect(screen.getByText("Manual tests: Not enabled")).toBeVisible();
+    expect(screen.queryByText(/Manual tests:/)).not.toBeInTheDocument();
     expect(getTests).not.toHaveBeenCalled();
   });
 });
