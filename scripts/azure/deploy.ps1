@@ -437,6 +437,9 @@ try {
     $apiName = Get-RequiredValue $values 'AZURE_API_CONTAINER_APP_NAME'
     $webName = Get-RequiredValue $values 'AZURE_WEB_CONTAINER_APP_NAME'
     $apiFqdn = Get-RequiredValue $values 'AZURE_API_FQDN'
+    if ($apiFqdn.Length -gt 253 -or $apiFqdn -notmatch '^(?=.{1,253}$)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$') {
+        throw 'Generated API FQDN is invalid.'
+    }
     $apiEnvironment = @(
         'WORKFLOW_HOST=hosted',
         "DEPLOYMENT_REVISION=$sourceRevision",
@@ -712,8 +715,9 @@ try {
 
     $patchedNginx = $nginxSource.Replace(
         'proxy_pass http://api:8000;',
-        "proxy_ssl_server_name on;`n        proxy_pass https://$apiFqdn;"
+        "proxy_ssl_server_name on;`n        proxy_ssl_name $apiFqdn;`n        proxy_ssl_verify on;`n        proxy_ssl_trusted_certificate /etc/ssl/certs/ca-certificates.crt;`n        proxy_pass https://$apiFqdn;"
     )
+    $patchedNginx = $patchedNginx.Replace('proxy_set_header Host $host;', "proxy_set_header Host $apiFqdn;")
     Set-Content -LiteralPath $nginxPath -Value $patchedNginx -NoNewline
     Push-Location (Join-Path $generatedRoot 'frontend')
     try {

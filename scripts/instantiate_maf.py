@@ -2,8 +2,11 @@
 
 import argparse
 import ast
+import json
+import re
 import shutil
 import sys
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 
@@ -39,6 +42,176 @@ IGNORE = shutil.ignore_patterns(
     "dist",
     "coverage",
 )
+
+CATALOG_SCHEMA = "workflow-use-cases/1"
+ORDER_RESOLUTION_SCENARIO_SET = "order-resolution-spec/0.1.0"
+
+
+def _unavailable_catalog() -> dict:
+    return {
+        "schema_version": CATALOG_SCHEMA,
+        "status": "unavailable",
+        "scenario_set": None,
+        "cases": [],
+    }
+
+
+def _catalog_evidence(item: object, invalid_reason: str | None = None) -> dict:
+    if not isinstance(item, dict):
+        raise ValueError("Invalid synthetic policy input.")
+    policy = item.get("policy")
+    if not isinstance(policy, str) or not re.fullmatch(
+        r"POLICY-[A-Za-z0-9._-]{1,80}@[0-9]{1,4}", policy
+    ):
+        raise ValueError("Invalid synthetic policy identifier.")
+    result: dict[str, object] = {"policy": policy}
+    for key, invalid in (
+        ("current", "expired"),
+        ("applicable", "non-applicable"),
+        ("digest_valid", "digest-invalid"),
+    ):
+        value = item.get(key, True if invalid_reason is not None else None)
+        if not isinstance(value, bool):
+            raise ValueError("Invalid synthetic policy assertion.")
+        result[key] = value and invalid_reason != invalid
+    if "asserted_action" in item:
+        action = item["asserted_action"]
+        if action not in ("partial_refund_10", "replacement_shipment"):
+            raise ValueError("Invalid synthetic action assertion.")
+        result["asserted_action"] = action
+    if "asserted_approval_required" in item:
+        approval = item["asserted_approval_required"]
+        if not isinstance(approval, bool):
+            raise ValueError("Invalid synthetic approval assertion.")
+        result["asserted_approval_required"] = approval
+    return result
+
+
+def _order_resolution_catalog(contract_path: Path, cases_path: Path) -> dict:
+    """Project selected fixture inputs to inert browser data; never export commands."""
+    try:
+        if contract_path.stat().st_size > 1_000_000 or cases_path.stat().st_size > 1_000_000:
+            raise ValueError("Synthetic assets are too large.")
+        contract = json.loads(contract_path.read_text(encoding="utf-8"))
+        golden = json.loads(cases_path.read_text(encoding="utf-8"))
+        if (
+            not isinstance(contract, dict)
+            or contract.get("contract_id") != "order-resolution-spec"
+            or contract.get("contract_version") != "0.1.0"
+            or contract.get("scenario_set") != ORDER_RESOLUTION_SCENARIO_SET
+            or not isinstance(golden, dict)
+            or golden.get("scenario_set") != ORDER_RESOLUTION_SCENARIO_SET
+            or not isinstance(contract.get("orders"), dict)
+            or not isinstance(contract.get("amounts"), dict)
+            or contract["amounts"].get("currency") != "USD"
+            or not isinstance(golden.get("cases"), list)
+            or not 1 <= len(golden["cases"]) <= 64
+        ):
+            raise ValueError("Unsupported synthetic assets.")
+
+        catalog_cases = []
+        seen: set[str] = set()
+        for case in golden["cases"]:
+            if not isinstance(case, dict) or not isinstance(case.get("input"), dict):
+                raise ValueError("Invalid synthetic case.")
+            case_id = case.get("id")
+            title = case.get("title")
+            if (
+                not isinstance(case_id, str)
+                or not re.fullmatch(r"ORS-[0-9]{3}", case_id)
+                or case_id in seen
+                or not isinstance(title, str)
+                or not 1 <= len(title) <= 120
+                or not title.isprintable()
+            ):
+                raise ValueError("Invalid synthetic case identity.")
+            seen.add(case_id)
+            inputs = case["input"]
+            order_id = inputs.get("order")
+            if not isinstance(order_id, str) or not re.fullmatch(
+                r"ORDER-[A-Za-z0-9][A-Za-z0-9._-]{0,99}", order_id
+            ):
+                raise ValueError("Invalid synthetic order identifier.")
+            facts = contract["orders"].get(order_id)
+            if not isinstance(facts, dict):
+                raise ValueError("Synthetic order facts are unavailable.")
+            amount = facts.get("amount")
+            issue = facts.get("issue")
+            if (
+                not isinstance(amount, str)
+                or not re.fullmatch(r"[0-9]{1,9}(?:\.[0-9]{1,2})?", amount)
+                or Decimal(amount) <= 0
+                or issue not in ("late_delivery", "damaged_item")
+            ):
+                raise ValueError("Invalid synthetic order facts.")
+            order: dict[str, object] = {
+                "id": order_id,
+                "amount": amount,
+                "currency": "USD",
+                "issue": issue,
+            }
+            if issue == "late_delivery":
+                delay = facts.get("delay_days")
+                if not isinstance(delay, int) or isinstance(delay, bool) or delay <= 3:
+                    raise ValueError("Invalid synthetic delay.")
+                order["delay_days"] = delay
+            elif "delay_days" in facts:
+                raise ValueError("Invalid damaged-order facts.")
+
+            variants: list[tuple[str | None, list[dict]]]
+            if "policy_evidence_variants" in inputs:
+                source = inputs["policy_evidence_variants"]
+                if (
+                    "policy_evidence" in inputs
+                    or not isinstance(source, list)
+                    or not 1 <= len(source) <= 10
+                ):
+                    raise ValueError("Invalid synthetic evidence variants.")
+                variants = []
+                reasons: set[str] = set()
+                for item in source:
+                    if not isinstance(item, dict):
+                        raise ValueError("Invalid synthetic evidence variant.")
+                    reason = item.get("invalid_reason")
+                    if reason not in ("digest-invalid", "expired", "non-applicable") or reason in reasons:
+                        raise ValueError("Unsupported synthetic evidence variant.")
+                    reasons.add(reason)
+                    variants.append((reason, [_catalog_evidence(item, reason)]))
+            else:
+                evidence = inputs.get("policy_evidence")
+                if not isinstance(evidence, list) or len(evidence) > 16:
+                    raise ValueError("Invalid synthetic evidence inputs.")
+                variants = [(None, [_catalog_evidence(item) for item in evidence])]
+
+            for reason, evidence in variants:
+                identifier = f"{case_id}-{reason}" if reason else case_id
+                fields = [
+                    {"label": "Order", "value": order_id},
+                    {"label": "Issue", "value": issue.replace("_", " ")},
+                    {"label": "Order amount", "value": f"USD {amount}"},
+                    {"label": "Synthetic policy inputs", "value": str(len(evidence))},
+                ]
+                if "delay_days" in order:
+                    fields.append({"label": "Delay", "value": f"{order['delay_days']} days"})
+                if reason:
+                    fields.append({"label": "Synthetic variation", "value": reason})
+                catalog_cases.append(
+                    {
+                        "id": identifier,
+                        "title": f"{title} ({reason})" if reason else title,
+                        "payload": {"order": order, "policy_evidence": evidence},
+                        "fields": fields,
+                    }
+                )
+        return {
+            "schema_version": CATALOG_SCHEMA,
+            "status": "available",
+            "scenario_set": ORDER_RESOLUTION_SCENARIO_SET,
+            "cases": catalog_cases,
+        }
+    except (OSError, UnicodeError, json.JSONDecodeError, InvalidOperation, ValueError, TypeError):
+        # A caller-selected unsupported fixture must never fall back to another catalog.
+        return _unavailable_catalog()
 
 
 def _relative_sibling_modules(path: Path) -> set[str]:
@@ -251,6 +424,12 @@ def instantiate(
         order_resolution.mkdir()
         shutil.copy2(contract, order_resolution / "acceptance-contract.json")
         shutil.copy2(cases, order_resolution / "golden-cases.json")
+        catalog = destination / "frontend" / "src" / "order-resolution-use-cases.json"
+        catalog.write_text(
+            json.dumps(_order_resolution_catalog(contract, cases), ensure_ascii=True, indent=2)
+            + "\n",
+            encoding="utf-8",
+        )
         _merge_order_resolution_verification(verification)
     (verification / "tests").mkdir()
     for name in (

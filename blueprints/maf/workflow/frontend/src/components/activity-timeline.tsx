@@ -248,6 +248,7 @@ export function ActivityTimeline({ caseId, client, profile, refreshKey = 0 }: Ac
           Refresh activity
         </button>
       </div>
+      <p>Activity shown may not include every workflow event.</p>
       {(loading || stale) && <p role="status">{profile.history.loading}</p>}
       {!loading && !stale && error && (
         <p className="alert" role="alert">
@@ -257,6 +258,9 @@ export function ActivityTimeline({ caseId, client, profile, refreshKey = 0 }: Ac
         </p>
       )}
       {!loading && !stale && !error && items.length === 0 && <p>{profile.history.empty}</p>}
+      {!loading && !stale && !error && (cursor || (snapshotComplete && visibleCount < items.length)) && (
+        <p role="status">Activity history is incomplete; load more to review additional events.</p>
+      )}
       {!loading && !stale && !error && items.length > 0 && (
         <ol className="activity-list" aria-label={profile.history.activityHeading}>
           {items.slice(0, visibleCount).map((item, index) => (

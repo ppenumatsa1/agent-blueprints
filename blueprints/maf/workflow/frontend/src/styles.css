@@ -7,8 +7,8 @@ body {
   font-family: "Segoe UI", Aptos, Calibri, -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
-button, input, textarea { font: inherit; }
-button, input, textarea { border-radius: 0.625rem; }
+button, input, textarea, select { font: inherit; }
+button, input, textarea, select { border-radius: 0.625rem; }
 button { cursor: pointer; border: 1px solid var(--cp-accent); padding: 0.65rem 1rem; background: var(--cp-accent); color: var(--cp-accent-fg); font-weight: 600; }
 button:hover:not(:disabled) { background: var(--cp-accent-hover); }
 button:disabled { cursor: not-allowed; opacity: 0.65; }
@@ -16,18 +16,26 @@ button.secondary { background: var(--cp-surface); color: var(--cp-text); border-
 button.secondary:hover:not(:disabled) { background: var(--cp-surface-soft); }
 :focus-visible { outline: 3px solid var(--cp-accent); outline-offset: 3px; }
 
-.shell { max-width: 72rem; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+.shell { max-width: 100rem; margin: 0 auto; padding: 1.25rem 1.25rem 4rem; }
 .header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; margin-bottom: 1.5rem; }
 .header p, .card > p { color: var(--cp-text-muted); }
 .eyebrow { font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; }
 h1 { margin: 0.25rem 0; font-size: 2rem; }
 h2 { margin-top: 0; font-size: 1.25rem; }
 h3 { font-size: 1.1rem; }
-.layout { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr)); gap: 1rem; align-items: start; }
+.layout { display: grid; grid-template-columns: minmax(13rem, 18rem) minmax(0, 1fr) minmax(13rem, 20rem); gap: 1rem; align-items: start; }
+.layout.without-history { grid-template-columns: minmax(0, 1fr) minmax(13rem, 20rem); }
+.workflow-main { display: grid; gap: 1rem; min-width: 0; }
+.review-rail { min-width: 0; }
 .card { background: var(--cp-surface); border: 1px solid var(--cp-border); border-radius: 1rem; padding: 1.5rem; box-shadow: 0 1px 2px var(--cp-border); }
 form { display: grid; gap: 0.75rem; }
 label { font-weight: 600; }
-input, textarea { width: 100%; padding: 0.7rem; border: 1px solid var(--cp-border-strong); background: var(--cp-surface); color: var(--cp-text); }
+input, textarea, select { width: 100%; padding: 0.7rem; border: 1px solid var(--cp-border-strong); background: var(--cp-surface); color: var(--cp-text); }
+.use-case-picker { display: grid; gap: 0.65rem; }
+.use-case-preview { padding: 0.75rem; background: var(--cp-surface-soft); border-radius: 0.625rem; }
+.use-case-preview dl { display: grid; gap: 0.5rem; }
+.use-case-preview dl div { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.hint { color: var(--cp-text-muted); }
 textarea, pre, .identifier { font-family: Consolas, "Courier New", Courier, monospace; }
 pre { overflow: auto; padding: 1rem; background: var(--cp-surface-soft); border-radius: 0.625rem; }
 .inline, .actions { display: flex; gap: 0.5rem; }
@@ -50,4 +58,6 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .history-item time, .activity-list time { color: var(--cp-text-muted); font-size: 0.85rem; }
 .activity-timeline { border-top: 1px solid var(--cp-border); margin: 1rem 0; padding-top: 1rem; }
 .activity-list li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.5rem; border: 1px solid var(--cp-border); border-radius: 0.5rem; padding: 0.5rem 0.75rem; background: var(--cp-surface-soft); }
-@media (max-width: 36rem) { .header, .inline { flex-direction: column; } .inline button { width: 100%; } }
+@media (max-width: 70rem) { .layout { grid-template-columns: minmax(12rem, 16rem) minmax(0, 1fr); } .review-rail { grid-column: 2; } }
+@media (max-width: 48rem) { .layout, .layout.without-history { grid-template-columns: minmax(0, 1fr); } .review-rail { grid-column: auto; } }
+@media (max-width: 36rem) { .header, .inline, .actions { flex-direction: column; } .inline button { width: 100%; } }

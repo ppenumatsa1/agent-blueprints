@@ -12,7 +12,7 @@ describe("order resolution case", () => {
     const id = "80000000-0000-4000-8000-000000000008";
     const pending: WorkflowCase = {
       id, correlation_id: id, status: "pending", decision: "pending",
-      payload: { proposal: { version: 1, action: "manual_review", destination_id: "synthetic" } },
+      payload: { proposal: { version: 1, action: "manual_review", destination_id: "synthetic", approval_required: true } },
       decision_handle: "opaque-handle", decision_channel: "foundry-responses",
       execution_complete: false, failure_code: null,
     };
@@ -46,7 +46,7 @@ describe("order resolution case", () => {
       .toHaveTextContent("Decision: approved");
   });
 
-  it("renders the deterministic proposal and escalated rejection", () => {
+  it("renders the deterministic proposal and rejection status", () => {
     const record: WorkflowCase = {
       id: "80000000-0000-4000-8000-000000000008",
       correlation_id: "80000000-0000-4000-8000-000000000008",
@@ -72,7 +72,7 @@ describe("order resolution case", () => {
         { label: "Proposed action", value: "partial_refund_10" },
         { label: "Proposed amount", value: "USD 18.50" },
         { label: "Approval required", value: "Yes" },
-        { label: "Outcome", value: "Escalated after rejection" },
+        { label: "Status", value: "rejected" },
       ],
     });
   });
@@ -112,7 +112,7 @@ describe("order resolution case", () => {
       correlation_id: "80000000-0000-4000-8000-000000000008",
       status: "pending",
       decision: "pending",
-      payload: { proposal: { version: 3, action: "manual_review", destination_id: "synthetic" } },
+      payload: { proposal: { version: 3, action: "manual_review", destination_id: "synthetic", approval_required: true } },
       decision_handle: "opaque-handle",
       decision_channel: "foundry-responses",
       execution_complete: false,
@@ -136,5 +136,56 @@ describe("order resolution case", () => {
       handle: "opaque-handle",
       channel: "foundry-responses",
     }));
+  });
+
+  it("loads synthetic inputs without submitting or deciding", async () => {
+    const client: WorkflowClient = {
+      submit: vi.fn(), read: vi.fn(), decide: vi.fn(),
+      listHistory: vi.fn().mockResolvedValue({ items: [], next_cursor: null }),
+      activity: vi.fn().mockResolvedValue({ items: [], next_cursor: null }),
+    };
+    render(<WorkflowWorkspace signedIn client={client} profile={orderResolutionProfile} signIn={vi.fn()} signOut={vi.fn()} />);
+    await userEvent.selectOptions(screen.getByLabelText("Synthetic use case"), "ORS-001");
+    await userEvent.click(screen.getByRole("button", { name: "Load use case" }));
+    expect((screen.getByLabelText("Order issue data (JSON)") as HTMLTextAreaElement).value).toContain("ORDER-LOW");
+    expect(screen.getByText(/Loading only prepares input/)).toBeVisible();
+    expect(client.submit).not.toHaveBeenCalled();
+    expect(client.decide).not.toHaveBeenCalled();
+  });
+
+  it("discloses an unavailable use-case catalog", () => {
+    const client: WorkflowClient = {
+      submit: vi.fn(), read: vi.fn(), decide: vi.fn(),
+      listHistory: vi.fn().mockResolvedValue({ items: [], next_cursor: null }),
+      activity: vi.fn().mockResolvedValue({ items: [], next_cursor: null }),
+    };
+    const profile = {
+      ...orderResolutionProfile,
+      useCaseCatalog: { schema_version: "workflow-use-cases/1" as const, status: "unavailable" as const, scenario_set: null, cases: [] as const },
+    };
+    render(<WorkflowWorkspace signedIn client={client} profile={profile} signIn={vi.fn()} signOut={vi.fn()} />);
+    expect(screen.getByText("Synthetic use cases are unavailable for the selected assets.")).toBeVisible();
+    expect(screen.queryByLabelText("Synthetic use case")).not.toBeInTheDocument();
+  });
+
+  it("does not infer approval is required from pending status", async () => {
+    const record: WorkflowCase = {
+      id: "80000000-0000-4000-8000-000000000008",
+      correlation_id: "80000000-0000-4000-8000-000000000008",
+      status: "pending", decision: "pending",
+      payload: { proposal: { version: 1, action: "manual_review", destination_id: "synthetic" } },
+      decision_handle: "opaque", decision_channel: "api", execution_complete: false, failure_code: null,
+    };
+    const client: WorkflowClient = {
+      submit: vi.fn(), read: vi.fn().mockResolvedValue(record), decide: vi.fn(),
+      listHistory: vi.fn().mockResolvedValue({ items: [], next_cursor: null }),
+      activity: vi.fn().mockResolvedValue({ items: [], next_cursor: null }),
+    };
+    render(<WorkflowWorkspace signedIn client={client} profile={orderResolutionProfile} signIn={vi.fn()} signOut={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText("Case ID"), { target: { value: record.id } });
+    fireEvent.click(screen.getByRole("button", { name: "Open" }));
+    expect(await screen.findByText("Approval requirement is unavailable.")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Approve" })).not.toBeInTheDocument();
+    expect(client.decide).not.toHaveBeenCalled();
   });
 });

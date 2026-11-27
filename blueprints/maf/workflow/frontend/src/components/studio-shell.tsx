@@ -196,7 +196,18 @@ export function StudioShell({
           <button disabled={busy || authBusy} onClick={() => void run(signIn)}>Sign in</button>
         </section>
       ) : (
-        <div className="layout">
+        <div className={`layout${profile.capabilities.history ? "" : " without-history"}`}>
+          {profile.capabilities.history && (
+            <HistorySidebar
+              profile={profile}
+              client={client}
+              selectedId={record?.id ?? null}
+              refreshKey={historyRefresh}
+              disabled={busy}
+              onSelect={(id) => void selectHistoryRecord(id)}
+            />
+          )}
+          <div className="workflow-main">
           <RequestComposer
             profile={profile}
             reviewer={reviewer}
@@ -212,16 +223,6 @@ export function StudioShell({
               <p>Unavailable: application-supplied test code is not isolated from real systems.</p>
             </section>
           ) : null}
-          {profile.capabilities.history && (
-            <HistorySidebar
-              profile={profile}
-              client={client}
-              selectedId={record?.id ?? null}
-              refreshKey={historyRefresh}
-              disabled={busy}
-              onSelect={(id) => void selectHistoryRecord(id)}
-            />
-          )}
           <section className="card">
             <h2>{profile.labels.openCase}</h2>
             <form onSubmit={open}>
@@ -241,9 +242,6 @@ export function StudioShell({
                 <CaseMetadataPanel record={record} status={status} profile={profile} />
                 <CaseSummaryPanel record={record} profile={profile} />
                 <ProtocolContextPanel key={record.id} record={record} profile={profile} />
-                {profile.capabilities.evidence && profile.projectEvidence && (
-                  <EvidencePanel record={record} project={profile.projectEvidence} />
-                )}
                 {profile.capabilities.history && (
                   <ActivityTimeline
                     caseId={record.id}
@@ -252,16 +250,29 @@ export function StudioShell({
                     refreshKey={activityRefresh}
                   />
                 )}
+              </div>
+            )}
+          </section>
+          </div>
+          <aside className="card review-rail" aria-label="Review and evidence">
+            {record ? (
+              <>
                 <ApprovalPanel
                   decision={record.decision}
-                  pending={record.status === "pending" && record.decision === "pending" && !record.failure_code && (!profile.decisionBinding || !!profile.decisionBinding(record))}
+                  pending={record.status === "pending" && record.decision === "pending" && !record.failure_code && (!profile.decisionBinding || !!profile.decisionBinding(record)) && (!profile.approvalRequired || profile.approvalRequired(record) === true)}
                   busy={busy}
                   profile={profile}
                   onDecide={(value) => void decide(value)}
                 />
-              </div>
-            )}
-          </section>
+                {profile.approvalRequired && profile.approvalRequired(record) === undefined && (
+                  <p>Approval requirement is unavailable.</p>
+                )}
+                {profile.capabilities.evidence && profile.projectEvidence ? (
+                  <EvidencePanel record={record} project={profile.projectEvidence} />
+                ) : <section><h3>Evidence</h3><p>Evidence is not available in this view.</p></section>}
+              </>
+            ) : <><h2>Review and evidence</h2><p>Open a case to review its status.</p></>}
+          </aside>
         </div>
       )}
     </main>
