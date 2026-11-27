@@ -11,38 +11,44 @@ the center, and approvals/evidence on the right, with a simpler responsive
 layout. Keep the existing React, Vite, TypeScript, and CopilotKit dependency
 choices unless an implemented feature demonstrably requires a change.
 
-Source `3bddba6` passed [exact-head CI 8/8](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/46034973494)
-and was deployed to the existing POC with self-approval disabled. Keep PR
-#62 draft and the overall deployment plan **Approved / Not
-Validated**. The seven Azure Policy audit findings, prior Foundry `403`, and
-unavailable distinct reviewer remain disclosed, not waived. Acceptance
-criteria and rollout boundaries are in the
-[deployment plan](../.azure/deployment-plan.md#approved-pr-62-observability-and-operator-ui-correction).
-Classify suspected privacy exposures from deployed configuration and
-authorized synthetic tests; do not infer a live leak from local probes.
-The hosted HTTPX request hooks redact URL paths, queries, and userinfo in
-local exporter checks while preserving parentage. A new synthetic ORS-001
-trace had five origin-only hosted API callback URLs and no case ID in those
-URLs; parent links connected the API, Foundry, hosted agent and callback API.
-The new query did not establish database span correlation. Local baggage and
-exception canaries appeared in OTLP payloads; the live baggage marker was
-not observed but its hosted arrival is unverified, and live exception
-exposure remains unverified. ORS-001 completed; ORS-006/007 and all three
-ORS-008 variants produced the expected failures without effects. ORS-004
-remains unverified because its replay boundary was not observed. Browser
-approval was denied, so authenticated UI testing is unverified. Next: obtain
-browser access and separately verify replay, baggage and exception exposure.
+Source `62fdb05d9d1ef00d7273ecc9db21a8ecf5a439d2` passed exact-head CI 8/8
+in [run 46045692581](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/46045692581)
+and was deployed to the existing POC with self-approval disabled. The API and
+web revisions are healthy on immutable images, with protected settings,
+identities and secrets preserved. Hosted version 13 is published and active,
+but the Foundry route remains pinned to version 12; recent live spans identify
+version 12, so candidate hosted behavior is not verified. Do not switch the
+route until old-session callback safety is established. Keep PR #62 draft and
+the overall deployment plan **Approved / Not Validated**. The seven Azure
+Policy audit findings, prior Foundry `403`, and unavailable distinct reviewer
+remain disclosed, not waived. Acceptance criteria and rollout boundaries are
+in the [deployment plan](../.azure/deployment-plan.md#approved-pr-62-observability-and-operator-ui-correction).
 
-The Workflow Studio UI implementation now includes the approved run-centered
+Live acceptance evidence: ORS-001 completed with one claim, effect and
+terminal event. ORS-004 completed on its initial response before the required
+pre-completion replay boundary; no replay was attempted, so it remains
+unverified. ORS-006/007 failed with the expected missing/conflicting-evidence
+codes and zero claims/effects. All three ORS-008 variants failed explicitly
+with zero claims/effects and one terminal event each. Ten callback-host
+dependencies were parent-linked and contained no case UUID, callback route or
+query string, but the spans identify version 12 rather than version 13. A
+baggage marker was absent from a traced read-only API request, not from a
+verified hosted-agent callback. A handled 404 error canary produced no
+`AppExceptions` row; actual HTTPX exception exposure remains unverified.
+Database span correlation, Foundry portal visibility, and authenticated UI
+behavior remain unverified. Browser approval was denied and the blocked tab
+was not retried.
+
+The Workflow Studio UI implementation includes the approved run-centered
 layout, distinct activity-timeline empty copy, and semantic light/dark status
 text colors. Local shared-frontend checks passed (64 unit tests, build, CSP,
 Chromium E2E local/history/studio 1/5/1); a fresh generated Order Resolution
 frontend passed (74 unit tests, build, CSP, E2E 1/5/1, responsive accessibility
-1). These checks do not verify authenticated Azure behavior. Exact-head CI and
-the UI rollout remain pending; after CI, deploy only through the repository's
-POC-specific procedure and verify live history, timeline, approval visibility,
-and authorized synthetic scenarios. Keep self-approval disabled, the seven
-policy findings unresolved, and the overall plan **Approved / Not Validated**.
+1). These do not verify authenticated Azure behavior. Next: establish the
+old-session callback safety boundary before routing version 13, then verify
+the hosted candidate and live authenticated UI when access is available.
+Preserve self-approval disabled, the seven unresolved policy findings, and
+the overall plan **Approved / Not Validated**.
 
 ## Development POC execution priority
 

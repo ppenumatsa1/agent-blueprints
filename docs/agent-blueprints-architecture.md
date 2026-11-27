@@ -100,6 +100,17 @@ records do not establish complete Foundry session visibility or provenance.
 Partial results do not satisfy the full canonical acceptance contract or
 authorize deployment, recovery injection, or a provenance bypass.
 
+On the deployed PR #62 candidate, the selected live subset confirmed ORS-001
+completion and the expected ORS-006, ORS-007, and ORS-008 failure outcomes.
+ORS-004 completed before its pre-completion replay boundary and remains
+unverified; no replay was attempted. Although hosted version 13 is published,
+the Foundry route and recent telemetry still identify version 12, so version
+13 behavior is not verified live. The API/web revisions are healthy, but
+authenticated UI checks were blocked by browser approval. These partial
+results keep the development POC status **Approved / Not Validated** and do
+not waive the seven unresolved Azure Policy findings or the distinct-reviewer
+and hosted-continuation requirements.
+
 ## Hosted response failure visibility
 
 An immediate failed Responses start/resume commits the operation outcome,

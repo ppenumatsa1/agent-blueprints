@@ -13,60 +13,40 @@ prototype objective has not yet been measured.
 
 ## Approved telemetry and Workflow Studio follow-up in PR #62
 
-**Status: Development POC deployed; validation partial.** Acceptance: reduce successful fast polling and SDK
-noise while retaining errors, slow requests, metrics, privacy-safe correlation,
-and connected API/Foundry/MAF/database spans. In parallel, provide the reference
-studio's responsive history, workflow/timeline, and approvals/evidence
-panels without unnecessary framework upgrades or weaker authorization.
+**Status: Development POC deployed; validation partial.** Acceptance: reduce
+successful fast polling and SDK noise while retaining errors, slow requests,
+metrics, privacy-safe correlation, and connected API/Foundry/MAF/database
+spans. In parallel, provide the reference studio's responsive
+history, workflow/timeline, and approvals/evidence panels without unnecessary
+framework upgrades or weaker authorization.
 
-Evidence: the existing POC's managed-identity telemetry connection was
-corrected and a fresh synthetic ORS-001 produced a connected Application
-Insights transaction; its environment-specific identifiers and raw evidence
-remain outside this public repository. Foundry portal visibility and live
-noise-reduction and UI behavior are not yet verified.
-The reference-aligned UI has passed local source and independently generated
-frontend tests, builds, CSP, and responsive browser checks; authenticated
-Azure UI behavior remains unverified. A generated-profile authenticated flow
-also passed with mocked identity and services; this is not live authorization evidence.
-Local synthetic OTLP tests found downstream baggage in logs and exception text
-in traces with the pinned AgentServer bootstrap. A supported pre-export
-sanitizer hook was not identified; a partial ingress mitigation does not
-resolve these export paths. These local findings do not establish exposure in
-the deployed POC. A separate aggregate query confirmed a synthetic case
-identifier in five hosted dependency URL fields in the deployed POC; actual
-baggage and exception exposure remains unverified. This does not establish a
-customer-data leak. An experimental application-owned callback
-sanitized synthetic Azure Monitor and OTLP envelopes, but did not prove native
-Foundry enrichment, identity, metrics, or all destinations and does not meet
-the approved AgentServer-owned initialization requirement. A focused HTTPX
-request-hook fix removes local URL canaries while preserving tested
-parentage and metrics. The POC deployed source `3bddba6` after
-[exact-head CI 8/8](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/46034973494).
-In a new synthetic ORS-001 trace, all five hosted API callback dependency
-URLs were origin-only and none contained the case ID. Parent links connected
-API, Foundry, hosted, and callback API spans; database span correlation was
-not established by this query. The baggage canary was sent but not found;
-its arrival at hosted instrumentation is unverified. Exception exposure
-remains unverified without a controlled live exception canary. ORS-001
-completed; ORS-006, ORS-007 and the three ORS-008 variants failed as expected
-without effects. ORS-004 is unverified because its nonterminal replay
-boundary was not observed. Browser approval was denied, so authenticated UI
-verification remains unverified. Next: after exact-head CI, deploy through the
-repository POC procedure and attempt authenticated UI verification; separately
-verify replay, baggage and exception exposure. Keep the seven Azure Policy
-audit findings unresolved and the broader plan **Approved / Not Validated**.
+Evidence: PR source
+`62fdb05d9d1ef00d7273ecc9db21a8ecf5a439d2` passed exact-head CI 8/8 in run
+`46045692581`. The API and web revisions are healthy on immutable images;
+self-approval is disabled and existing protected settings, identities and
+secrets were preserved. Hosted version 13 was published and is active, but the
+Foundry route remains pinned to version 12; recent App Insights spans identify
+version 12, so version 13 is not verified serving. ORS-001 completed with one
+claim, effect and terminal event. ORS-004 completed before its required
+pre-completion replay boundary; no replay was attempted and the case is
+unverified. ORS-006/007 failed with their expected evidence codes and zero
+claims/effects; all three ORS-008 variants failed explicitly with zero
+claims/effects and one terminal event each.
 
-The current UI candidate also has a distinct activity-timeline empty state and
-semantic status-text colors for light and dark themes. Final local evidence:
-the shared frontend passed 64 unit tests, build, CSP, and Chromium E2E checks
-(local 1, history 5, studio 1); a fresh generated Order Resolution frontend
-passed 74 unit tests, build, CSP, Chromium E2E checks (1/5/1), and responsive
-accessibility (1). Exact-head CI and deployment of this UI candidate remain
-pending; authenticated Azure history, timeline, and approval visibility are
-not yet verified. Next: require exact-head CI, deploy only through the
-repository POC procedure, then verify the live authenticated UI and authorized
-synthetic cases. Preserve self-approval disabled and all seven unresolved
-policy findings.
+Ten callback-host dependencies were parent-linked and exposed no case UUID,
+callback route or query string, but their serving version was 12. A baggage
+marker was absent from a traced read-only API request; hosted baggage
+propagation remains unverified. A separate handled 404 canary produced no
+`AppExceptions` row; internal HTTPX exception exposure remains unverified.
+Database span correlation and Foundry portal visibility remain unverified.
+Browser approval was denied, so authenticated history, timeline and approval
+visibility are unverified. Local source/generated frontend tests, builds, CSP,
+and responsive Chromium checks passed; these do not substitute for live UI
+evidence. Next: establish the old-session callback safety boundary before
+switching the Foundry route, then verify the candidate hosted version and
+authenticated UI when access is available. Keep the PR draft, self-approval
+disabled, all seven Azure Policy audit findings unresolved, and the broader
+plan **Approved / Not Validated**.
 
 ## Development POC execution priority
 

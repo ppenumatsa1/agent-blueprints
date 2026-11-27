@@ -6,22 +6,49 @@ Plan status: **Approved / Not Validated**
 
 Deployment status: **Development POC Deployed / Validation Partial**
 
-Current follow-up: source `3bddba6` passed
-[exact-head CI 8/8](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/46034973494)
-and was deployed to the existing development POC. Hosted version 12 is fixed
-at 100%; API and web revisions are ready with protected configuration,
-identities and secrets preserved and self-approval disabled. ORS-001
-completed; ORS-006/007 and three ORS-008 variants failed as expected without
-effects. ORS-004 remains unverified because its nonterminal replay boundary
-was not observed. In the new ORS-001 trace, five hosted API callbacks had
-origin-only dependency URLs and no case ID; parent links connected API,
-Foundry, hosted and callback API spans. Database span correlation was not
-established by that query. The live baggage marker was not found, but its
-arrival at hosted instrumentation is unverified; live exception exposure is
-unverified. Browser approval was denied, so authenticated UI behavior remains
-unverified. Next: obtain browser access and verify replay, baggage and
-exception exposure separately. The seven Azure Policy audit findings remain
-unresolved.
+Current follow-up: source
+`62fdb05d9d1ef00d7273ecc9db21a8ecf5a439d2` passed exact-head CI 8/8 in
+[run 46045692581](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/46045692581)
+(run 46045444628 also passed 8/8) and was deployed to the existing development
+POC. The API revision is
+`aborsfoundpv2n45-api--pr62-62fdb05` with image digest
+`sha256:d7d4ce74cd02f12ca8655a2afb6610bd301ff5ac67dd2d06b642aa56f63b1b0c`;
+the web revision is
+`aborsfoundpv2n45-web--pr62-62fdb05-depth4` with image digest
+`sha256:3e41888bd285ae6efb3662ab6058ae990ffb3f7c915d7ed6c8150da844eb1f51`.
+The hosted image digest is
+`sha256:468f6d91f3f9d7e5dd2bf31f52a96151340c3f246b9e1480a58f25951d9dffeb`;
+version 13 is published and active, but the Foundry route remains pinned to
+version 12. Recent live spans identify serving version 12, so version 13's
+hosted behavior is not verified in live traffic. Do not repoint the route until
+the old-session callback safety boundary is established. The API and web
+revisions are healthy; protected settings, identities and secrets were
+preserved, and self-approval remains disabled.
+
+The read-only acceptance snapshot confirmed ORS-001 completed with one claim,
+one synthetic effect and one terminal event. ORS-004 returned completed on
+its initial submission, so the required pre-completion replay boundary was not
+observed; its snapshot has one claim, one effect and one terminal event, and
+no replay was attempted. ORS-006 and ORS-007 failed with their expected
+`policy_evidence_missing` and `policy_evidence_conflict` codes, each with zero
+claims/effects and one terminal event. All three ORS-008 variants failed with
+`policy_evidence_invalid`, zero claims/effects, and one terminal event each.
+ORS-002, ORS-003, ORS-005 and ORS-009 remain pending/unrun; approval cases
+still require a distinct reviewer, and ORS-005 continuation remains
+unverified.
+
+Application Insights showed 10 callback-host dependencies, all parent-linked,
+with no case UUID, callback route, or query string in their exported URL data.
+However, those spans identify hosted version 12, not the published version 13.
+A separate baggage marker was absent from the traced read-only API request;
+that did not verify baggage arrival at hosted instrumentation. A handled
+synthetic 404 error canary was absent from telemetry and produced no
+`AppExceptions` row; this does not verify internal HTTPX exception exposure.
+Database span correlation and Foundry portal visibility remain unverified.
+Authenticated browser approval was denied, so live history, timeline, and
+approval visibility remain unverified; the denied tab was not retried. The
+seven Azure Policy audit findings remain unresolved. Keep the overall plan
+**Approved / Not Validated** and the PR draft.
 
 Change authorization: **The user approved the observability and frontend
 changes below, including deployment and verification on the existing
