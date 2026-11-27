@@ -22,9 +22,12 @@ panels without unnecessary framework upgrades or weaker authorization.
 Evidence: the existing POC's managed-identity telemetry connection was
 corrected and a fresh synthetic ORS-001 produced a connected Application
 Insights transaction; its environment-specific identifiers and raw evidence
-remain outside this public repository. Foundry portal visibility, the
-noise-reduction change, and the UI change are not yet verified.
-Next: finish both independent workstreams, integrate them, run exact-head CI,
+remain outside this public repository. Foundry portal visibility and live
+noise-reduction and UI behavior are not yet verified.
+The reference-aligned UI has passed local source and independently generated
+frontend tests, builds, CSP, and responsive browser checks; authenticated
+Azure UI behavior remains unverified.
+Next: finish hosted telemetry privacy, run exact-head CI,
 and perform existing-resource Azure verification. Keep the seven Azure Policy audit findings unresolved and
 the broader plan **Approved / Not Validated**.
 

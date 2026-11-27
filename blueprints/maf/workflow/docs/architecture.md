@@ -403,7 +403,9 @@ The profile copies the authoritative
 verification tree, together with `tests/test_order_resolution_contract.py`.
 The generated runtime does not read those assets or this repository. Explicit
 asset overrides exist only for isolated generator tests; they do not replace
-the canonical generated assets.
+the canonical generated assets. At generation time, the selected synthetic assets
+also produce an inert, bounded frontend use-case catalog; the deployed frontend
+does not read the original verification assets.
 
 The base frontend includes a generic `WorkflowStudioProfile` with no
 Order Resolution vocabulary. UX Layer 2 adds reusable profile-owned history
@@ -413,6 +415,14 @@ payload projection, and proposal decision binding while retaining the same
 protected API and MSAL client; its history UI reuses the generic labels and
 does not add order-specific event content. Evidence and manual tests are
 disabled by default; AG-UI and CopilotKit remain reserved flags.
+
+The operator workspace presents history, workflow and activity, and
+approval/evidence in three responsive panels. History search covers loaded
+items only. Loading a synthetic use case fills editable inputs without
+submitting a case or running a test; missing or unsupported catalogs are
+shown as unavailable. Approval controls still require the case's binding and
+server authorization. An unknown approval requirement is not treated as an
+approval decision, and synthetic policy inputs are not verified evidence.
 
 Applications may opt in to `projectEvidence` and return a text-only
 `EvidenceProjection` from a selected, already authorized case. Explicitly

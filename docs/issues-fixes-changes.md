@@ -23,6 +23,9 @@ plan or release status unless the corresponding validation is complete.
 | 09:22 CST | In progress | Workflow Studio | A local candidate passed frontend, generated-profile, accessibility, and proxy-configuration checks. Search, editable use-case inputs, and approval-state wording need follow-up before final integration. | #62 |
 | 09:24 CST | In progress | Local integration | Initial telemetry and studio commits are integrated in an isolated worktree. Focused telemetry (30), generator (10), and frontend (62) tests passed; the frontend build and CSP check passed. Further privacy and UX work remains. | #62 |
 | 09:26 CST | In progress | Generated UI and telemetry | The independently generated UI passed 70 tests, build, CSP, and responsive browser checks. Hosted probes still expose synthetic exception text and downstream baggage in OTLP; mitigation is under investigation. | #62 |
+| 09:31 CST | Complete | Local studio checks | History search, editable inputs, and approval-state wording are integrated. Source and generated UI tests passed (63 and 72), as did builds, CSP, and responsive browser checks. Azure UI verification remains pending. | #62 |
+| 09:32 CST | Complete | Local history checks | Generated-project history browser tests passed (5); the production-built studio signed-out smoke passed (1). These checks do not replace authenticated Azure UI verification. | #62 |
+| 09:33 CST | Blocked | Hosted telemetry | A local test of the pinned AgentServer bootstrap and loopback OTLP collector reproduced synthetic downstream baggage in logs and exception text in traces. Supported exporter injection was not found; the partial mitigation is not a complete privacy fix. | #62 |
 
 - **Issues:** Useful Foundry/Application Insights transaction spans are
   obscured by credential and polling noise; the current operator UI does not
