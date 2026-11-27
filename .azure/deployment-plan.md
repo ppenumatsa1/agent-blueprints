@@ -46,9 +46,12 @@ copy distinguishes an empty activity timeline from empty workflow history;
 semantic status text colors are defined for both themes.
 
 These are local results, not exact-head CI or authenticated Azure UI evidence.
-The UI candidate has not yet been deployed. Exact-head CI must pass before any
-rollout; live history, timeline, approval visibility, and end-to-end behavior
-remain unverified. The seven Azure Policy audit findings remain unresolved.
+The UI candidate has not yet been deployed. No automatic PR run appeared after
+the candidate push, so a non-privileged manual dispatch was added to the
+existing readiness workflow without changing its eight jobs. Run it at the
+exact PR head and require 8/8 before rollout; live history, timeline, approval
+visibility, and end-to-end behavior remain unverified. The seven Azure Policy
+audit findings remain unresolved.
 
 The implementation may use `ppenumatsa1/maf-monorepo` at indexed revision
 `45430753c5f3e75716ea3822d2b2b52fbb4f1c34` as read-only design and supported
