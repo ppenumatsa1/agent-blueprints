@@ -30,6 +30,7 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanE
 from opentelemetry.trace import StatusCode
 
 from app.composition import create_app
+from app.api.middleware import install_request_middleware
 from app.config import Settings
 from app.infrastructure.telemetry import SafeExporter, SafeMetricExporter, Telemetry, instrumented
 from app.infrastructure.delegation import OnBehalfOf
@@ -50,6 +51,87 @@ def fake_metric_exporter():
 
 
 class TelemetryTests(unittest.TestCase):
+    def test_fast_polling_logs_are_suppressed_but_trace_and_metrics_remain(self):
+        reader = InMemoryMetricReader()
+        telemetry = Telemetry(metric_reader=reader)
+        self.addCleanup(telemetry.shutdown)
+        exporter = InMemorySpanExporter()
+        telemetry.provider.add_span_processor(SimpleSpanProcessor(exporter))
+        app = FastAPI()
+        install_request_middleware(app, telemetry)
+
+        @app.get("/api/cases/{case_id}")
+        def poll(case_id: str):
+            if case_id == "denied":
+                return JSONResponse(status_code=403, content={})
+            if case_id == "unavailable":
+                return JSONResponse(status_code=503, content={})
+            if case_id == "error":
+                raise RuntimeError(CANARY)
+            return {}
+
+        with patch("app.infrastructure.telemetry._emit") as emit:
+            with TestClient(app) as client:
+                ok = client.get(
+                    f"/api/cases/{CANARY}?api-version={CANARY}",
+                    headers={
+                        "traceparent": "00-1234567890abcdef1234567890abcdef-1234567890abcdef-01",
+                        "baggage": f"private={CANARY}",
+                    },
+                )
+                denied = client.get("/api/cases/denied")
+                unavailable = client.get("/api/cases/unavailable")
+                error = client.get("/api/cases/error")
+                missing = client.get("/missing")
+        records = [call.kwargs for call in emit.call_args_list if call.args == ("operation",)]
+        self.assertNotIn(ok.headers["X-Correlation-ID"], str(records))
+        self.assertIn(denied.headers["X-Correlation-ID"], str(records))
+        self.assertIn(unavailable.headers["X-Correlation-ID"], str(records))
+        self.assertIn(error.headers["X-Correlation-ID"], str(records))
+        self.assertIn(missing.headers["X-Correlation-ID"], str(records))
+        spans = [span for span in exporter.get_finished_spans() if span.name == "http.request"]
+        ok_span = next(
+            span
+            for span in spans
+            if span.attributes["blueprint.request.id"] == ok.headers["X-Correlation-ID"]
+        )
+        self.assertIn(f"{ok_span.context.span_id:016x}", ok.headers["traceparent"])
+        self.assertEqual(ok_span.context.trace_id, int("1234567890abcdef1234567890abcdef", 16))
+        self.assertEqual(ok_span.parent.span_id, int("1234567890abcdef", 16))
+        self.assertNotIn(CANARY, str(_convert_span_to_envelope(ok_span)))
+        error_span = next(
+            span
+            for span in spans
+            if span.attributes["blueprint.request.id"] == error.headers["X-Correlation-ID"]
+        )
+        self.assertEqual(error_span.attributes["error.type"], "RuntimeError")
+        self.assertNotIn(CANARY, error_span.to_json() + str(_convert_span_to_envelope(error_span)))
+        data = reader.get_metrics_data()
+        metrics = [
+            metric
+            for resource in data.resource_metrics
+            for scope in resource.scope_metrics
+            for metric in scope.metrics
+            if metric.name == "blueprint.operations"
+        ]
+        points = metrics[0].data.data_points
+        self.assertEqual(
+            {point.attributes["outcome"]: point.value for point in points},
+            {"success": 1, "client_error": 2, "error": 2},
+        )
+
+    def test_slow_poll_and_other_operations_are_logged(self):
+        telemetry = Telemetry()
+        self.addCleanup(telemetry.shutdown)
+        with (
+            patch("app.infrastructure.telemetry._emit") as emit,
+            patch("app.infrastructure.telemetry.time.monotonic", side_effect=[1.0, 2.0]),
+        ):
+            with telemetry.operation("http.request") as operation:
+                operation.quiet_success = True
+                operation.set_attribute("http.response.status_code", 200)
+        self.assertEqual(emit.call_args.kwargs["duration_ms"], 1000)
+
     def app(self, *, store=None, components=None, cors_origins=()):
         checkpoint_dir = tempfile.TemporaryDirectory(dir=".")
         self.addCleanup(checkpoint_dir.cleanup)

@@ -8,6 +8,7 @@ from opentelemetry.trace import SpanKind, Status, StatusCode
 from app.infrastructure.telemetry import Telemetry
 
 logger = logging.getLogger("blueprint.api")
+_POLL_ROUTES = frozenset({"/api/cases", "/api/cases/{case_id}", "/api/cases/{case_id}/activity"})
 
 
 def install_request_middleware(app: FastAPI, telemetry: Telemetry | None = None) -> None:
@@ -31,10 +32,13 @@ def install_request_middleware(app: FastAPI, telemetry: Telemetry | None = None)
                     parent=telemetry.parent_from_headers(request.headers),
                 ) as span:
                     span.set_attribute("http.request.method", request.method)
+                    failed = False
                     try:
                         response = await call_next(request)
                     except Exception as exc:
+                        failed = True
                         logger.error("Request %s failed (%s).", request_id, type(exc).__name__)
+                        span.fail(exc)
                         response = JSONResponse(
                             status_code=500, content={"detail": "Internal server error."}
                         )
@@ -43,7 +47,11 @@ def install_request_middleware(app: FastAPI, telemetry: Telemetry | None = None)
                     if case_id is not None:
                         span.set_attribute("blueprint.case.id", case_id)
                     span.set_attribute("http.response.status_code", response.status_code)
-                    if response.status_code >= 500:
+                    route = request.scope.get("route")
+                    span.quiet_success = (
+                        request.method == "GET" and getattr(route, "path", None) in _POLL_ROUTES
+                    )
+                    if response.status_code >= 500 and not failed:
                         span.set_status(Status(StatusCode.ERROR))
                     response_traceparent = span.traceparent()
         response.headers["X-Correlation-ID"] = request_id
