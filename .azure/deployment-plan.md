@@ -67,6 +67,10 @@ unverified. A local probe alone does not establish exposure in the deployed
 POC. Address confirmed sources with the smallest supported change and retain
 AgentServer ownership unless a demonstrated need for a change is approved.
 Continue independently verified UI work alongside this investigation.
+Verify that the pinned SDKs support `ENABLE_TELEMETRY`,
+`ENABLE_INSTRUMENTATION`, and `OTEL_RECORD_CONTENT` before relying on them;
+enable telemetry and instrumentation while keeping content capture disabled.
+Reduce Azure SDK informational logging without hiding warnings or errors.
 
 1. Preserve the supported telemetry foundation:
    - AgentServer owns hosted provider/exporter initialization.

@@ -26,7 +26,8 @@ remain outside this public repository. Foundry portal visibility and live
 noise-reduction and UI behavior are not yet verified.
 The reference-aligned UI has passed local source and independently generated
 frontend tests, builds, CSP, and responsive browser checks; authenticated
-Azure UI behavior remains unverified.
+Azure UI behavior remains unverified. A generated-profile authenticated flow
+also passed with mocked identity and services; this is not live authorization evidence.
 Local synthetic OTLP tests found downstream baggage in logs and exception text
 in traces with the pinned AgentServer bootstrap. A supported pre-export
 sanitizer hook was not identified; a partial ingress mitigation does not
