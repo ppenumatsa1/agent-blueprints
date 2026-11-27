@@ -13,7 +13,7 @@ prototype objective has not yet been measured.
 
 ## Approved telemetry and Workflow Studio follow-up in PR #62
 
-**Status: In Progress.** Acceptance: reduce successful fast polling and SDK
+**Status: Blocked on hosted telemetry privacy.** Acceptance: reduce successful fast polling and SDK
 noise while retaining errors, slow requests, metrics, privacy-safe correlation,
 and connected API/Foundry/MAF/database spans. In parallel, provide the reference
 studio's responsive history, workflow/timeline, and approvals/evidence
@@ -27,7 +27,11 @@ noise-reduction and UI behavior are not yet verified.
 The reference-aligned UI has passed local source and independently generated
 frontend tests, builds, CSP, and responsive browser checks; authenticated
 Azure UI behavior remains unverified.
-Next: finish hosted telemetry privacy, run exact-head CI,
+Local synthetic OTLP tests found downstream baggage in logs and exception text
+in traces with the pinned AgentServer bootstrap. A supported pre-export
+sanitizer hook was not identified; a partial ingress mitigation does not
+resolve these export paths. Next: establish a supported or separately verified
+privacy boundary, run exact-head CI,
 and perform existing-resource Azure verification. Keep the seven Azure Policy audit findings unresolved and
 the broader plan **Approved / Not Validated**.
 

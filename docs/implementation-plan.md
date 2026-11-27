@@ -2,7 +2,8 @@
 
 ## Approved observability and Workflow Studio follow-up in PR #62
 
-**Approved; telemetry and UI in progress in parallel, Azure verification pending.**
+**Approved; local UI checks passed, hosted telemetry privacy blocked, Azure
+verification pending.**
 Reduce credential and fast successful polling noise while retaining errors,
 slow requests, metrics, and connected API -> Foundry -> hosted MAF -> database
 traces. Align the Order Resolution UI with the existing MAF Workflow
