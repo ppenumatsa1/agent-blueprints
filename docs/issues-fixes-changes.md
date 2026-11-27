@@ -19,6 +19,8 @@ plan or release status unless the corresponding validation is complete.
 | 09:11 CST | In progress | Parallel implementation | User authorized separate telemetry and studio worktrees. Prior uncommitted candidates are preserved; integration and deployment await both workstreams and their checks. | #62 |
 | 09:17 CST | Blocked | Authenticated UI preflight | Browser access to the existing POC tab was not approved; authenticated browser verification remains unverified. Local work and CI preparation continue without bypassing browser approval. | #62 |
 | 09:18 CST | Complete | Integration baseline | The isolated integration worktree passed 18 infrastructure tests, 18 hosted publisher tests, and 114 root tests with two optional adapter skips. Both implementation workstreams remain in progress. | #62 |
+| 09:20 CST | In progress | Telemetry | A separate worktree produced a locally tested partial backend change that suppresses fast successful polling operation logs. Hosted privacy and polling-span reduction remain unresolved; the candidate has not been integrated or deployed. | #62 |
+| 09:22 CST | In progress | Workflow Studio | A local candidate passed frontend, generated-profile, accessibility, and proxy-configuration checks. Search, editable use-case inputs, and approval-state wording need follow-up before final integration. | #62 |
 
 - **Issues:** Useful Foundry/Application Insights transaction spans are
   obscured by credential and polling noise; the current operator UI does not
