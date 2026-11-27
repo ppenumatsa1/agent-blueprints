@@ -31,6 +31,7 @@ plan or release status unless the corresponding validation is complete.
 | 09:44 CST | Blocked | Hosted telemetry | The documented AgentServer configuration exposes no confirmed ordered sanitizer for all managed exporters. Actual A365, OTLP, and platform-injected settings remain unknown; the existing connected Azure trace does not verify export privacy. Obtain a supported privacy boundary and verify the enabled destinations before rollout. | #62 |
 | 09:48 CST | In progress | Deployed telemetry and UI | The user directed an evidence-first investigation of actual configuration and authorized synthetic exposures while independently tested UI work continues. Local canaries alone are not proof of a deployed leak. | #62 |
 | 09:52 CST | Complete | Local authenticated UI flow | A generated-profile test exercised loading, editing, scoped submission, history, activity, and server-gated decisions using mocked identity and services. The generated UI suite passed 73 tests. Real authenticated Azure browser behavior remains unverified. | #62 |
+| 09:55 CST | In progress | Draft PR integration | UI and partial backend telemetry changes were published for independent review. Exact-head CI has not yet started; hosted privacy investigation and deployment remain pending. | #62 |
 
 - **Issues:** Useful Foundry/Application Insights transaction spans are
   obscured by credential and polling noise; the current operator UI does not
