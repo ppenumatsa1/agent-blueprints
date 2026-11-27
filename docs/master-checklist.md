@@ -30,8 +30,11 @@ Azure UI behavior remains unverified.
 Local synthetic OTLP tests found downstream baggage in logs and exception text
 in traces with the pinned AgentServer bootstrap. A supported pre-export
 sanitizer hook was not identified; a partial ingress mitigation does not
-resolve these export paths. Next: establish a supported or separately verified
-privacy boundary, run exact-head CI,
+resolve these export paths. An experimental application-owned callback
+sanitized synthetic Azure Monitor and OTLP envelopes, but did not prove native
+Foundry enrichment, identity, metrics, or all destinations and does not meet
+the approved AgentServer-owned initialization requirement. Next: identify the
+actual destination configuration and an approved privacy boundary, run exact-head CI,
 and perform existing-resource Azure verification. Keep the seven Azure Policy audit findings unresolved and
 the broader plan **Approved / Not Validated**.
 

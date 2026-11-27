@@ -27,6 +27,7 @@ plan or release status unless the corresponding validation is complete.
 | 09:32 CST | Complete | Local history checks | Generated-project history browser tests passed (5); the production-built studio signed-out smoke passed (1). These checks do not replace authenticated Azure UI verification. | #62 |
 | 09:33 CST | Blocked | Hosted telemetry | A local test of the pinned AgentServer bootstrap and loopback OTLP collector reproduced synthetic downstream baggage in logs and exception text in traces. Supported exporter injection was not found; the partial mitigation is not a complete privacy fix. | #62 |
 | 09:36 CST | In progress | Hosted telemetry | Investigating the documented custom observability callback as a possible privacy-safe alternative; equivalent native tracing, exporter behavior, and error visibility still need proof. | #62 |
+| 09:40 CST | Blocked | Hosted telemetry | An experimental application-owned callback sanitized synthetic Azure Monitor and OTLP export envelopes while retaining tested parentage and error status. It did not establish native Foundry enrichment, identity, metrics, or all destinations, and conflicts with the approved AgentServer-owned initialization requirement; it is not implemented. | #62 |
 
 - **Issues:** Useful Foundry/Application Insights transaction spans are
   obscured by credential and polling noise; the current operator UI does not
