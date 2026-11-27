@@ -6,6 +6,10 @@ Plan status: **Approved / Not Validated**
 
 Deployment status: **Development POC Deployed / Validation Partial**
 
+Current follow-up: after verified fixes and exact-head CI, prepare the next
+Azure deployment and authenticated UI test; do not start either as part of
+this request.
+
 Change authorization: **The user approved the observability and frontend
 changes below, including deployment and verification on the existing
 development POC resources.** The broader plan remains **Approved / Not
