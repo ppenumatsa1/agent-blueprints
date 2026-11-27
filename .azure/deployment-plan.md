@@ -2,8 +2,9 @@
 
 ## Status
 
-Approved for the current existing-resource-only POC scope; not ready for
-validation or deployment.
+Plan status: **Approved / Not Validated**
+
+Deployment status: **Not Started**
 
 ## Current POC rollout scope
 
@@ -89,24 +90,23 @@ Provisioning a new resource group, network, database, or other infrastructure
 is outside this scope, so their creation and capacity checks are not
 applicable; this does not waive the validation recipe's mandatory checks. The
 existing infrastructure template and its historical what-if are not proof for
-the proposed image and agent updates. The current Azure CLI validation recipe
-requires provider validation and what-if of a Bicep template, but no
-scope-correct template or equivalent validated recipe for these updates has
-been established. The deployment skill's top-level Container Apps and ACR
-step calls for `azd provision`, while its referenced checklist narrows the
-two-phase AcrPull propagation gate to newly provisioned role assignments
-after phase 1; whether that gate applies to this existing-app update is
-unresolved. Its Azure CLI recipe also includes infrastructure deployment.
-This is a workflow conflict, not a claim that Azure requires provisioning to
-update an existing Container App. Do not assume a check can be skipped or
-widen the approved scope; stop until a supported, validated existing-resource
-path is available.
+the proposed image and agent updates. The repository's POC-specific deployment
+procedure is `.github/skills/azure-poc-deploy/SKILL.md`; it defines the
+existing-resource-only path and prohibits infrastructure provisioning. Its
+presence resolves the earlier workflow conflict with generic deployment
+guidance, but it does not validate the current rollout or authorize Azure
+writes. The seven existing Azure Policy audit findings remain unresolved and
+deferred. Do not assume a required check can be skipped, weaken the existing
+security requirements, or widen the approved scope.
 
 ### Current-scope evidence and limitations
 
-- Exact-head CI passed for `260d9cbb47390f2fb866bf1e620c9741845484e8`
-  in run `45667244691` and for `4c069e10af7d440d47c431ac495988a6ae1d2ae5`
-  in run `45668742499`; a later candidate must have its own passing CI.
+- Exact-head CI passed 8/8 for
+  `0e3b2397cc1989a3198a04ef7a29c06693d7b079` in run `45977781842`.
+  Earlier exact-head runs also passed for
+  `260d9cbb47390f2fb866bf1e620c9741845484e8` in run `45667244691` and
+  `4c069e10af7d440d47c431ac495988a6ae1d2ae5` in run `45668742499`; a later
+  candidate must have its own passing CI.
 - The generated migration command upgraded a disposable legacy PostgreSQL
   fixture twice while preserving existing operation and binding states.
   Live read-only checks found migrations 0004 and 0005 absent; no live
