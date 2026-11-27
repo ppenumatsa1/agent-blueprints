@@ -88,6 +88,25 @@ describe("workflow history sidebar", () => {
     expect(await screen.findByRole("button", { name: new RegExp(secondId) })).toBeVisible();
   });
 
+  it("searches only loaded items and keeps pagination available", async () => {
+    const listHistory = vi.fn()
+      .mockResolvedValueOnce(historyPage([historyRecord(firstId)], "next"))
+      .mockResolvedValueOnce(historyPage([historyRecord(secondId)]));
+    render(<HistorySidebar profile={defaultWorkflowStudioProfile} client={client({ listHistory })}
+      selectedId={null} onSelect={vi.fn()} />);
+    await screen.findByRole("button", { name: new RegExp(firstId) });
+    expect(screen.getByText(/Times are browser-local/)).toHaveTextContent(
+      Intl.DateTimeFormat().resolvedOptions().timeZone || "time zone unavailable",
+    );
+    await userEvent.type(screen.getByLabelText("Search loaded history"), secondId);
+    expect(screen.getByText("No matching loaded workflows.")).toBeVisible();
+    expect(listHistory).toHaveBeenCalledTimes(1);
+    await userEvent.click(screen.getByRole("button", { name: "Load more history" }));
+    expect(await screen.findByRole("button", { name: new RegExp(secondId) })).toBeVisible();
+    expect(screen.queryByRole("button", { name: new RegExp(firstId) })).not.toBeInTheDocument();
+    expect(screen.getByText(/Search covers loaded items only/)).toBeVisible();
+  });
+
   it("resets load-more state when the status filter changes during pagination", async () => {
     let finishStalePage!: (page: WorkflowHistoryPage) => void;
     const listHistory = vi.fn()

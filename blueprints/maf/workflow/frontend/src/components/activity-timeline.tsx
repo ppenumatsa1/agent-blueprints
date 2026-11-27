@@ -249,6 +249,7 @@ export function ActivityTimeline({ caseId, client, profile, refreshKey = 0 }: Ac
         </button>
       </div>
       <p>Activity shown may not include every workflow event.</p>
+      <p className="hint">Times are browser-local ({Intl.DateTimeFormat().resolvedOptions().timeZone || "time zone unavailable"}).</p>
       {(loading || stale) && <p role="status">{profile.history.loading}</p>}
       {!loading && !stale && error && (
         <p className="alert" role="alert">

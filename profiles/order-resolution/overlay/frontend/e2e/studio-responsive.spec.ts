@@ -14,6 +14,12 @@ test("synthetic launcher is accessible and responsive without executing a case",
   await page.getByLabel("Synthetic use case").selectOption("ORS-001");
   await page.getByRole("button", { name: "Load use case" }).click();
   await expect(page.getByLabel("Order issue data (JSON)")).toHaveValue(/ORDER-LOW/);
+  await page.getByLabel("order amount").fill("91.00");
+  await expect(page.getByLabel("Order issue data (JSON)")).toHaveValue(/91\.00/);
+  await expect(page.getByLabel("Search loaded history")).toBeVisible();
+  await page.getByLabel("Search loaded history").focus();
+  await page.keyboard.type("pending");
+  await expect(page.getByLabel("Search loaded history")).toHaveValue("pending");
   await expect(page.getByText(/Loading only prepares input/)).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.addScriptTag({ path: require.resolve("axe-core/axe.min.js") });

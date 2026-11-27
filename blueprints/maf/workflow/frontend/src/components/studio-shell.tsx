@@ -259,14 +259,12 @@ export function StudioShell({
               <>
                 <ApprovalPanel
                   decision={record.decision}
+                  approvalRequired={profile.approvalRequired?.(record)}
                   pending={record.status === "pending" && record.decision === "pending" && !record.failure_code && (!profile.decisionBinding || !!profile.decisionBinding(record)) && (!profile.approvalRequired || profile.approvalRequired(record) === true)}
                   busy={busy}
                   profile={profile}
                   onDecide={(value) => void decide(value)}
                 />
-                {profile.approvalRequired && profile.approvalRequired(record) === undefined && (
-                  <p>Approval requirement is unavailable.</p>
-                )}
                 {profile.capabilities.evidence && profile.projectEvidence ? (
                   <EvidencePanel record={record} project={profile.projectEvidence} />
                 ) : <section><h3>Evidence</h3><p>Evidence is not available in this view.</p></section>}

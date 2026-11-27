@@ -36,6 +36,7 @@ export function HistorySidebar({
   onSelect,
 }: HistorySidebarProps) {
   const [status, setStatus] = useState<WorkflowStatus | "all">("all");
+  const [search, setSearch] = useState("");
   const [items, setItems] = useState<WorkflowHistoryItem[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -45,6 +46,10 @@ export function HistorySidebar({
   const [loadedStatus, setLoadedStatus] = useState<WorkflowStatus | "all">("all");
   const generation = useRef(0);
   const stale = loadedStatus !== status;
+  const query = search.trim().toLocaleLowerCase();
+  const visibleItems = items.filter((item) =>
+    `${item.id} ${item.status} ${item.decision}`.toLocaleLowerCase().includes(query),
+  );
 
   useEffect(() => {
     const requestGeneration = ++generation.current;
@@ -118,12 +123,20 @@ export function HistorySidebar({
           <option key={value} value={value}>{value === "all" ? "All statuses" : value}</option>
         ))}
       </select>
+      <label htmlFor="history-search">Search loaded history</label>
+      <input id="history-search" type="search" value={search} disabled={disabled}
+        onChange={(event) => setSearch(event.target.value)} />
+      <p className="hint">Search covers loaded items only; load more to search additional history.</p>
+      <p className="hint">Times are browser-local ({Intl.DateTimeFormat().resolvedOptions().timeZone || "time zone unavailable"}).</p>
       {(loading || stale) && <p role="status">{profile.history.loading}</p>}
       {!loading && !stale && error && <p className="alert" role="alert">{profile.history.error}</p>}
       {!loading && !stale && !error && items.length === 0 && <p>{profile.history.empty}</p>}
-      {!loading && !stale && !error && items.length > 0 && (
+      {!loading && !stale && !error && items.length > 0 && visibleItems.length === 0 && (
+        <p>No matching loaded workflows.</p>
+      )}
+      {!loading && !stale && !error && visibleItems.length > 0 && (
         <ul className="history-list">
-          {items.map((item) => (
+          {visibleItems.map((item) => (
             <li key={item.id}>
               <button
                 type="button"

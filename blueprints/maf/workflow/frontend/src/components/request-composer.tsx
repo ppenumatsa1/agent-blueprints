@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 
 import type { WorkflowStudioProfile } from "../studio-profile";
+import { UseCaseEditor } from "./use-case-editor";
 
 interface RequestComposerProps {
   profile: WorkflowStudioProfile;
@@ -23,16 +24,16 @@ export function RequestComposer({
 }: RequestComposerProps) {
   const [selectedId, setSelectedId] = useState("");
   const [loadedId, setLoadedId] = useState("");
+  const [editorValue, setEditorValue] = useState<Record<string, unknown>>({});
   const catalog = profile.useCaseCatalog;
   const cases = catalog?.status === "available" ? catalog.cases : [];
   const selected = cases.find((item) => item.id === selectedId);
   const loaded = cases.find((item) => item.id === loadedId);
-  const loadedPayload = loaded ? JSON.stringify(loaded.payload, null, 2) : "";
-  const showLoaded = Boolean(loaded && payload === loadedPayload);
 
   function loadUseCase() {
     if (!selected) return;
     onPayloadChange(JSON.stringify(selected.payload, null, 2));
+    setEditorValue({ ...selected.payload });
     setLoadedId(selected.id);
   }
 
@@ -73,15 +74,15 @@ export function RequestComposer({
               Load use case
             </button>
             <p className="hint">Loading only prepares input; it does not run a test or submit a case.</p>
-            {showLoaded && loaded && (
-              <div className="use-case-preview" aria-live="polite">
-                <p><strong>Loaded: {loaded.id}</strong> — {loaded.title}</p>
-                <dl>
-                  {loaded.fields.map((field) => (
-                    <div key={field.label}><dt>{field.label}</dt><dd>{field.value}</dd></div>
-                  ))}
-                </dl>
+            {loaded && (
+              <div className="use-case-preview">
+                <p role="status"><strong>Loaded: {loaded.id}</strong> — {loaded.title}</p>
                 <p className="hint">Synthetic policy inputs are not independently verified evidence.</p>
+                <UseCaseEditor template={loaded.payload} value={editorValue} disabled={busy}
+                  onChange={(value) => {
+                    setEditorValue(value);
+                    onPayloadChange(JSON.stringify(value, null, 2));
+                  }} />
               </div>
             )}
           </div>

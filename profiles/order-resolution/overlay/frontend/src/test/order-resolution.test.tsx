@@ -139,8 +139,12 @@ describe("order resolution case", () => {
   });
 
   it("loads synthetic inputs without submitting or deciding", async () => {
+    const id = "80000000-0000-4000-8000-000000000008";
     const client: WorkflowClient = {
-      submit: vi.fn(), read: vi.fn(), decide: vi.fn(),
+      submit: vi.fn().mockResolvedValue({
+        id, correlation_id: id, status: "created", decision: "pending",
+        payload: {}, execution_complete: false, failure_code: null,
+      }), read: vi.fn(), decide: vi.fn(),
       listHistory: vi.fn().mockResolvedValue({ items: [], next_cursor: null }),
       activity: vi.fn().mockResolvedValue({ items: [], next_cursor: null }),
     };
@@ -148,8 +152,48 @@ describe("order resolution case", () => {
     await userEvent.selectOptions(screen.getByLabelText("Synthetic use case"), "ORS-001");
     await userEvent.click(screen.getByRole("button", { name: "Load use case" }));
     expect((screen.getByLabelText("Order issue data (JSON)") as HTMLTextAreaElement).value).toContain("ORDER-LOW");
+    const amount = screen.getByLabelText("order amount");
+    await userEvent.clear(amount);
+    await userEvent.type(amount, "91.00");
+    await userEvent.click(screen.getByLabelText("policy evidence 1 current"));
+    const data = JSON.parse((screen.getByLabelText("Order issue data (JSON)") as HTMLTextAreaElement).value);
+    expect(data.order.amount).toBe("91.00");
+    expect(data.policy_evidence[0].current).toBe(false);
     expect(screen.getByText(/Loading only prepares input/)).toBeVisible();
     expect(client.submit).not.toHaveBeenCalled();
+    expect(client.decide).not.toHaveBeenCalled();
+    await userEvent.type(screen.getByLabelText("Reviewer object ID"), id);
+    await userEvent.clear(screen.getByLabelText("order delay days"));
+    await userEvent.click(screen.getByRole("button", { name: "Submit issue" }));
+    expect(client.submit).not.toHaveBeenCalled();
+    await userEvent.type(screen.getByLabelText("order delay days"), "7");
+    await userEvent.click(screen.getByRole("button", { name: "Submit issue" }));
+    await waitFor(() => expect(client.submit).toHaveBeenCalledWith(id, expect.objectContaining({
+      order: expect.objectContaining({ amount: "91.00", delay_days: 7 }),
+      policy_evidence: [expect.objectContaining({ current: false })],
+    }), expect.any(String)));
+    expect(client.decide).not.toHaveBeenCalled();
+  });
+
+  it("reports approval not required rather than a pending decision", async () => {
+    const record: WorkflowCase = {
+      id: "80000000-0000-4000-8000-000000000008",
+      correlation_id: "80000000-0000-4000-8000-000000000008",
+      status: "pending", decision: "pending",
+      payload: { proposal: { version: 1, action: "manual_review", destination_id: "synthetic", approval_required: false } },
+      decision_handle: "opaque", decision_channel: "api", execution_complete: false, failure_code: null,
+    };
+    const client: WorkflowClient = {
+      submit: vi.fn(), read: vi.fn().mockResolvedValue(record), decide: vi.fn(),
+      listHistory: vi.fn().mockResolvedValue({ items: [], next_cursor: null }),
+      activity: vi.fn().mockResolvedValue({ items: [], next_cursor: null }),
+    };
+    render(<WorkflowWorkspace signedIn client={client} profile={orderResolutionProfile} signIn={vi.fn()} signOut={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText("Case ID"), { target: { value: record.id } });
+    fireEvent.click(screen.getByRole("button", { name: "Open" }));
+    expect(await screen.findByText("Approval not required.")).toBeVisible();
+    expect(within(screen.getByRole("region", { name: "Approval" })).queryByText(/Decision: pending/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Approve" })).not.toBeInTheDocument();
     expect(client.decide).not.toHaveBeenCalled();
   });
 
