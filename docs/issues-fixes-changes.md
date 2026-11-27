@@ -32,6 +32,7 @@ plan or release status unless the corresponding validation is complete.
 | 09:48 CST | In progress | Deployed telemetry and UI | The user directed an evidence-first investigation of actual configuration and authorized synthetic exposures while independently tested UI work continues. Local canaries alone are not proof of a deployed leak. | #62 |
 | 09:52 CST | Complete | Local authenticated UI flow | A generated-profile test exercised loading, editing, scoped submission, history, activity, and server-gated decisions using mocked identity and services. The generated UI suite passed 73 tests. Real authenticated Azure browser behavior remains unverified. | #62 |
 | 09:55 CST | In progress | Draft PR integration | UI and partial backend telemetry changes were published for independent review. Exact-head CI has not yet started; hosted privacy investigation and deployment remain pending. | #62 |
+| 10:03 CST | Complete | Preliminary exact-head CI | Readiness run `46029725804` passed 8/8 jobs on `11db5c44df7f8f8eb9e4d6d06996def7353f331b`. Later changes require their own exact-head CI. | #62 |
 | 10:06 CST | In progress | Deployed telemetry privacy | An aggregate query of a previously authorized synthetic trace confirmed its case identifier in five hosted dependency URL fields. Deployed baggage and exception exposure remain unverified; this finding does not establish a customer-data leak. Source-specific mitigation and correlation tests are in progress. | #62 |
 
 - **Issues:** Useful Foundry/Application Insights transaction spans are
