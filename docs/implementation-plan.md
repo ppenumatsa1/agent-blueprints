@@ -12,9 +12,9 @@ the center, and approvals/evidence on the right, with a simpler responsive
 layout. Keep the existing React, Vite, TypeScript, and CopilotKit dependency
 choices unless an implemented feature demonstrably requires a change.
 
-After both workstreams pass local checks and exact-head CI, deploy to the
-existing development POC using the repository POC skill, and verify telemetry
-and UI in Azure before any remaining scenario testing. Keep self-approval
+After both workstreams pass local checks and exact-head CI, prepare the next
+existing-resource deployment and authenticated UI test using the repository
+POC skill; do not execute either as part of this request. Keep self-approval
 disabled, PR #62 draft, and the overall deployment plan **Approved / Not
 Validated**. The seven Azure Policy audit findings, prior Foundry `403`, and
 unavailable distinct reviewer remain disclosed, not waived. Acceptance
@@ -22,6 +22,9 @@ criteria and rollout boundaries are in the
 [deployment plan](../.azure/deployment-plan.md#approved-pr-62-observability-and-operator-ui-correction).
 Classify suspected privacy exposures from deployed configuration and
 authorized synthetic tests; do not infer a live leak from local probes.
+The hosted HTTPX request hooks now redact URL paths, queries, and userinfo in
+local exporter checks while preserving parentage; deployed verification is
+pending. Local baggage and exception canaries still appeared in OTLP payloads.
 
 ## Development POC execution priority
 

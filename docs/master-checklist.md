@@ -38,10 +38,11 @@ baggage and exception exposure remains unverified. This does not establish a
 customer-data leak. An experimental application-owned callback
 sanitized synthetic Azure Monitor and OTLP envelopes, but did not prove native
 Foundry enrichment, identity, metrics, or all destinations and does not meet
-the approved AgentServer-owned initialization requirement. Next: inspect the
-actual destination configuration, classify authorized synthetic privacy tests,
-and fix confirmed sources with the smallest supported change. Run exact-head CI
-and perform existing-resource Azure verification. Keep the seven Azure Policy audit findings unresolved and
+the approved AgentServer-owned initialization requirement. A focused HTTPX
+request-hook fix now removes local URL canaries while preserving tested
+parentage and metrics; its deployed effect remains unverified. Next: run
+exact-head CI and prepare existing-resource Azure verification, without
+starting deployment or live UI testing in this request. Keep the seven Azure Policy audit findings unresolved and
 the broader plan **Approved / Not Validated**.
 
 ## Development POC execution priority

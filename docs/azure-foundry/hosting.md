@@ -11,6 +11,13 @@ and delegated API consent, and no reviewed live fault adapter was available.
 
 ## Runtime and state boundary
 
+The hosted AgentServer retains ownership of its telemetry providers and
+exporters. Public sync and async HTTPX request hooks reduce dependency URL
+attributes to the origin before export. Synthetic local tests cover Azure
+Monitor envelope conversion, OTLP encoding, HTTP status, metrics, and W3C
+parentage; the change has not been verified against a deployed version. The
+hooks do not sanitize baggage or exception text.
+
 `profiles/order-resolution/hosted-agent` is copied into every generated Order
 Resolution project. Its `ResponsesHostServer` receives a request-aware
 `workflow=` factory, creates a fresh native MAF workflow for each request, and
