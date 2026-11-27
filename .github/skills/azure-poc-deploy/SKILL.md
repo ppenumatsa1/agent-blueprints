@@ -13,6 +13,16 @@ source and the authorization or guidance change needed. Never relabel a failed
 or unverified check as passed or mark a plan Validated without its required
 validation.
 
+## Deployment authority
+
+This POC does not define the hosted agent as an `azure.ai.agent` service in
+`azure.yaml`. The generated project's services are the API and web Container
+Apps; the hosted version is published separately by the repository's journaled
+publisher. General Foundry `azd deploy` guidance for an `azure.ai.agent`
+service is not the deployment procedure for this POC. Use the publisher and
+the fixed-route, journal, image provenance, and preservation checks below;
+do not substitute an unjournaled deployment.
+
 ## Scope and safeguards
 
 - Use only the authorized existing subscription, registry, PostgreSQL database,
