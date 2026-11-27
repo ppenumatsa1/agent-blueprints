@@ -496,6 +496,21 @@ The explicit ORS-006, ORS-007, and three ORS-008 policy failures terminated
 with zero effects. This is development POC evidence, not production readiness
 or source-to-image attestation.
 
+The later POC rollout of source `3bddba6` used immutable API, web and hosted
+images after [exact-head CI passed 8/8](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/46034973494).
+Hosted version 12 was fixed at 100%; the app update preserved protected
+configuration, identities and secrets. In the new synthetic ORS-001 trace,
+five hosted POST callbacks to the API had origin-only dependency URLs and no
+case ID. Parent links joined the API, Foundry, hosted agent and API callback;
+the aggregate did not establish database spans. ORS-001 completed and
+ORS-006/007/008 had expected policy failures with no effects. ORS-004's
+nonterminal replay boundary was not observed. The live baggage marker was
+not found, but arrival at the hosted instrumentation is unverified; live
+exception exposure and authenticated UI behavior are unverified. Browser
+approval was denied. Next: verify these remaining items without enabling
+self-approval. The plan remains **Approved / Not Validated**, with seven Azure
+Policy audit findings unresolved.
+
 ## Compatibility matrix
 
 | Capability | Result | Evidence / limitation |

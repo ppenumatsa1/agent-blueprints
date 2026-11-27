@@ -13,7 +13,7 @@ prototype objective has not yet been measured.
 
 ## Approved telemetry and Workflow Studio follow-up in PR #62
 
-**Status: Hosted telemetry investigation in progress; UI locally verified.** Acceptance: reduce successful fast polling and SDK
+**Status: Development POC deployed; validation partial.** Acceptance: reduce successful fast polling and SDK
 noise while retaining errors, slow requests, metrics, privacy-safe correlation,
 and connected API/Foundry/MAF/database spans. In parallel, provide the reference
 studio's responsive history, workflow/timeline, and approvals/evidence
@@ -39,11 +39,21 @@ customer-data leak. An experimental application-owned callback
 sanitized synthetic Azure Monitor and OTLP envelopes, but did not prove native
 Foundry enrichment, identity, metrics, or all destinations and does not meet
 the approved AgentServer-owned initialization requirement. A focused HTTPX
-request-hook fix now removes local URL canaries while preserving tested
-parentage and metrics; its deployed effect remains unverified. Next: run
-exact-head CI and prepare existing-resource Azure verification, without
-starting deployment or live UI testing in this request. Keep the seven Azure Policy audit findings unresolved and
-the broader plan **Approved / Not Validated**.
+request-hook fix removes local URL canaries while preserving tested
+parentage and metrics. The POC deployed source `3bddba6` after
+[exact-head CI 8/8](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/46034973494).
+In a new synthetic ORS-001 trace, all five hosted API callback dependency
+URLs were origin-only and none contained the case ID. Parent links connected
+API, Foundry, hosted, and callback API spans; database span correlation was
+not established by this query. The baggage canary was sent but not found;
+its arrival at hosted instrumentation is unverified. Exception exposure
+remains unverified without a controlled live exception canary. ORS-001
+completed; ORS-006, ORS-007 and the three ORS-008 variants failed as expected
+without effects. ORS-004 is unverified because its nonterminal replay
+boundary was not observed. Browser approval was denied, so authenticated UI
+verification remains unverified. Next: obtain browser access and separately
+verify replay, baggage and exception exposure. Keep the seven Azure Policy
+audit findings unresolved and the broader plan **Approved / Not Validated**.
 
 ## Development POC execution priority
 

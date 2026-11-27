@@ -2,8 +2,7 @@
 
 ## Approved observability and Workflow Studio follow-up in PR #62
 
-**Approved; local UI checks passed, deployed telemetry privacy investigation
-in progress, Azure verification pending.**
+**Approved; development POC deployed, validation partial.**
 Reduce credential and fast successful polling noise while retaining errors,
 slow requests, metrics, and connected API -> Foundry -> hosted MAF -> database
 traces. Align the Order Resolution UI with the existing MAF Workflow
@@ -12,19 +11,27 @@ the center, and approvals/evidence on the right, with a simpler responsive
 layout. Keep the existing React, Vite, TypeScript, and CopilotKit dependency
 choices unless an implemented feature demonstrably requires a change.
 
-After both workstreams pass local checks and exact-head CI, prepare the next
-existing-resource deployment and authenticated UI test using the repository
-POC skill; do not execute either as part of this request. Keep self-approval
-disabled, PR #62 draft, and the overall deployment plan **Approved / Not
+Source `3bddba6` passed [exact-head CI 8/8](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/46034973494)
+and was deployed to the existing POC with self-approval disabled. Keep PR
+#62 draft and the overall deployment plan **Approved / Not
 Validated**. The seven Azure Policy audit findings, prior Foundry `403`, and
 unavailable distinct reviewer remain disclosed, not waived. Acceptance
 criteria and rollout boundaries are in the
 [deployment plan](../.azure/deployment-plan.md#approved-pr-62-observability-and-operator-ui-correction).
 Classify suspected privacy exposures from deployed configuration and
 authorized synthetic tests; do not infer a live leak from local probes.
-The hosted HTTPX request hooks now redact URL paths, queries, and userinfo in
-local exporter checks while preserving parentage; deployed verification is
-pending. Local baggage and exception canaries still appeared in OTLP payloads.
+The hosted HTTPX request hooks redact URL paths, queries, and userinfo in
+local exporter checks while preserving parentage. A new synthetic ORS-001
+trace had five origin-only hosted API callback URLs and no case ID in those
+URLs; parent links connected the API, Foundry, hosted agent and callback API.
+The new query did not establish database span correlation. Local baggage and
+exception canaries appeared in OTLP payloads; the live baggage marker was
+not observed but its hosted arrival is unverified, and live exception
+exposure remains unverified. ORS-001 completed; ORS-006/007 and all three
+ORS-008 variants produced the expected failures without effects. ORS-004
+remains unverified because its replay boundary was not observed. Browser
+approval was denied, so authenticated UI testing is unverified. Next: obtain
+browser access and separately verify replay, baggage and exception exposure.
 
 ## Development POC execution priority
 

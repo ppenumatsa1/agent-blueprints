@@ -6,9 +6,22 @@ Plan status: **Approved / Not Validated**
 
 Deployment status: **Development POC Deployed / Validation Partial**
 
-Current follow-up: after verified fixes and exact-head CI, prepare the next
-Azure deployment and authenticated UI test; do not start either as part of
-this request.
+Current follow-up: source `3bddba6` passed
+[exact-head CI 8/8](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/46034973494)
+and was deployed to the existing development POC. Hosted version 12 is fixed
+at 100%; API and web revisions are ready with protected configuration,
+identities and secrets preserved and self-approval disabled. ORS-001
+completed; ORS-006/007 and three ORS-008 variants failed as expected without
+effects. ORS-004 remains unverified because its nonterminal replay boundary
+was not observed. In the new ORS-001 trace, five hosted API callbacks had
+origin-only dependency URLs and no case ID; parent links connected API,
+Foundry, hosted and callback API spans. Database span correlation was not
+established by that query. The live baggage marker was not found, but its
+arrival at hosted instrumentation is unverified; live exception exposure is
+unverified. Browser approval was denied, so authenticated UI behavior remains
+unverified. Next: obtain browser access and verify replay, baggage and
+exception exposure separately. The seven Azure Policy audit findings remain
+unresolved.
 
 Change authorization: **The user approved the observability and frontend
 changes below, including deployment and verification on the existing
