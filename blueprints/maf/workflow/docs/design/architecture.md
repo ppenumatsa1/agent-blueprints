@@ -260,6 +260,21 @@ generic 500 body and exception-class-only logging prevent exception details
 from becoming API output. The code does not include distributed trace context
 propagation or a telemetry exporter.
 
+### Operator UI
+
+The React/MSAL operator workspace composes workflow history, the selected
+workflow and its activity timeline, and a review/evidence panel. Case lookup
+and raw JSON editing are secondary disclosures; starting a new run resets its
+idempotency key. Status labels reflect API state, and timeline entries contain
+only the event types and timestamps returned by the activity API. The UI does
+not invent a response transcript or workflow stages. Approval and rejection
+remain authenticated API operations; visibility in the browser is not
+authorization. See
+`blueprints/maf/workflow/frontend/src/components/studio-shell.tsx`,
+`blueprints/maf/workflow/frontend/src/components/history-sidebar.tsx`,
+`blueprints/maf/workflow/frontend/src/components/activity-timeline.tsx`, and
+`blueprints/maf/workflow/frontend/src/components/case-metadata-panel.tsx`.
+
 ## Trust and extension boundaries
 
 - `ApplicationComponents` supplies application-owned business rules, access
