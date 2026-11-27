@@ -16,7 +16,7 @@ from azure.ai.agentserver.core import configure_observability as configure_agent
 from azure.ai.agentserver.responses import ResponsesServerOptions
 
 from .application import CallerContext, HostedApplication, load_application
-from .observability import InvokeAgentSpanHook
+from .observability import InvokeAgentSpanHook, sanitize_async_httpx_url, sanitize_httpx_url
 
 
 _PRIVACY_ENVIRONMENT = {
@@ -29,7 +29,11 @@ _INSTRUMENTATION_OPTIONS = {
     "fastapi": {
         "excluded_urls": r"^https?://[^/?#]+/healthz$",
     },
-    "httpx": {"enabled": True},
+    "httpx": {
+        "enabled": True,
+        "request_hook": sanitize_httpx_url,
+        "async_request_hook": sanitize_async_httpx_url,
+    },
     "openai_agents": {"enabled": False},
     "urllib": {"enabled": True},
 }
@@ -170,9 +174,7 @@ def create_responses_server(
         parse_response=parse_response,
         checkpoint_store_provider=CheckpointStoreProvider(
             allowed_checkpoint_types=list(
-                application.checkpoint_types
-                if application is not None
-                else _CHECKPOINT_TYPES
+                application.checkpoint_types if application is not None else _CHECKPOINT_TYPES
             ),
         ),
         options=ResponsesServerOptions(
