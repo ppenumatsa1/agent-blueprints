@@ -17,6 +17,8 @@ plan or release status unless the corresponding validation is complete.
 | 08:42 CST | Blocked | Telemetry privacy | Local probes identified additional Azure SDK path/exception exposure and inbound baggage exposure in AgentServer logs; these remain unresolved. Telemetry is not deployment-ready. | #62 |
 | 08:58 CST | Blocked | Telemetry privacy | Synthetic local probes reproduced URL path and allowed query values in Azure Monitor dependency envelopes, exception text in OTLP spans, and untrusted baggage in Azure Monitor log envelopes. The deployed export paths remain unverified. Disabling SDK instrumentation alone loses dependency spans and propagation. | #62 |
 | 09:11 CST | In progress | Parallel implementation | User authorized separate telemetry and studio worktrees. Prior uncommitted candidates are preserved; integration and deployment await both workstreams and their checks. | #62 |
+| 09:17 CST | Blocked | Authenticated UI preflight | Browser access to the existing POC tab was not approved; authenticated browser verification remains unverified. Local work and CI preparation continue without bypassing browser approval. | #62 |
+| 09:18 CST | Complete | Integration baseline | The isolated integration worktree passed 18 infrastructure tests, 18 hosted publisher tests, and 114 root tests with two optional adapter skips. Both implementation workstreams remain in progress. | #62 |
 
 - **Issues:** Useful Foundry/Application Insights transaction spans are
   obscured by credential and polling noise; the current operator UI does not
