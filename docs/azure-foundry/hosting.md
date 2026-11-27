@@ -290,6 +290,23 @@ hosted-version identity `Monitoring Metrics Publisher`
 (`3913510d-42f4-4e42-8a64-420c390055eb`) at the exact component resource ID
 only; the publisher itself still performs no RBAC mutation.
 
+For a Foundry project connected to an Application Insights component with
+local authentication disabled, the project connection uses
+`authType: ProjectManagedIdentity`, has no credentials, and supplies the
+connection string via `metadata.ApplicationInsightsConnectionString`. The
+project's managed identity also needs `Monitoring Metrics Publisher` at the
+exact component scope; the hosted identity's corresponding role remains
+separate. The connection string comes from a secure deployment parameter and
+must not be committed. See the [Microsoft Entra trace-ingestion
+guidance](https://learn.microsoft.com/azure/foundry/observability/how-to/trace-ingestion-entra-authentication).
+
+A fresh synthetic POC request produced a connected API -> Foundry platform ->
+hosted `invoke_agent` -> native MAF workflow -> API/database transaction in
+the existing Application Insights component after correcting the project
+connection and scoped project role. The Foundry portal view remains unverified
+because the available data-plane trace read returned `403`. This evidence does
+not validate the broader deployment plan or production readiness.
+
 AgentServer Responses `2.4.0` exposes `ResponsesServerOptions.create_span_hook`
 as its supported create-lifecycle extension point, but defaults it to `None`.
 The pinned core `TraceContextMiddleware` extracts and attaches incoming W3C

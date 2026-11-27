@@ -92,6 +92,59 @@ class InfrastructureContractTests(unittest.TestCase):
         self.assertEqual(deployments[0]["sku"]["name"], "[parameters('modelSkuName')]")
         self.assertEqual(deployments[0]["sku"]["capacity"], "[parameters('modelCapacity')]")
 
+    def test_foundry_trace_ingestion_uses_project_managed_identity(self):
+        connections = self.of_type(
+            "Microsoft.CognitiveServices/accounts/projects/connections"
+        )
+        application_insights = next(
+            connection
+            for connection in connections
+            if connection["properties"]["category"] == "AppInsights"
+        )
+        properties = application_insights["properties"]
+        self.assertEqual(properties["authType"], "ProjectManagedIdentity")
+        self.assertEqual(properties["category"], "AppInsights")
+        self.assertFalse(properties["isSharedToAll"])
+        self.assertNotIn("credentials", properties)
+        self.assertEqual(
+            properties["metadata"]["ApplicationInsightsConnectionString"],
+            "[parameters('applicationInsightsConnectionString')]",
+        )
+
+        deployment = next(
+            resource
+            for resource in self.of_type("Microsoft.Resources/deployments")
+            if resource["name"] == "foundry-project-telemetry-role"
+        )
+        parameters = deployment["properties"]["parameters"]
+        self.assertEqual(
+            parameters["applicationInsightsName"]["value"],
+            "[reference('observability').outputs.applicationInsightsName.value]",
+        )
+        self.assertEqual(
+            parameters["principalId"]["value"],
+            "[reference('foundry').outputs.projectPrincipalId.value]",
+        )
+        self.assertEqual(parameters["principalType"]["value"], "ServicePrincipal")
+        self.assertEqual(
+            parameters["assignmentSeed"]["value"],
+            "foundry-project-monitoring-metrics-publisher",
+        )
+        self.assertIn(
+            "3913510d-42f4-4e42-8a64-420c390055eb",
+            parameters["roleDefinitionId"]["value"],
+        )
+        assignment = next(
+            resource
+            for resource in resources(deployment["properties"]["template"])
+            if resource["type"] == "Microsoft.Authorization/roleAssignments"
+        )
+        self.assertEqual(
+            assignment["scope"],
+            "[resourceId('Microsoft.Insights/components', "
+            "parameters('applicationInsightsName'))]",
+        )
+
     def test_postgres_is_entra_only_public_and_tls_enforced(self):
         source = (INFRA / "modules" / "postgres.bicep").read_text(encoding="utf-8")
         servers = self.of_type("Microsoft.DBforPostgreSQL/flexibleServers")

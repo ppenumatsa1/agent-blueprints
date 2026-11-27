@@ -11,6 +11,23 @@ The original [interactive architecture](software-factory.html) is a preserved
 historical source; this checklist records current status. The 2–3 hour
 prototype objective has not yet been measured.
 
+## Approved telemetry and Workflow Studio follow-up in PR #62
+
+**Status: In Progress.** Acceptance: reduce successful fast polling and SDK
+noise while retaining errors, slow requests, metrics, privacy-safe correlation,
+and connected API/Foundry/MAF/database spans. In parallel, provide the reference
+studio's responsive history, workflow/timeline, and approvals/evidence
+panels without unnecessary framework upgrades or weaker authorization.
+
+Evidence: the existing POC's managed-identity telemetry connection was
+corrected and a fresh synthetic ORS-001 produced a connected Application
+Insights transaction; its environment-specific identifiers and raw evidence
+remain outside this public repository. Foundry portal visibility, the
+noise-reduction change, and the UI change are not yet verified.
+Next: finish both independent workstreams, integrate them, run exact-head CI,
+and perform existing-resource Azure verification. Keep the seven Azure Policy audit findings unresolved and
+the broader plan **Approved / Not Validated**.
+
 ## Development POC execution priority
 
 **Status: Completed for repository guidance.** Acceptance: prioritize the

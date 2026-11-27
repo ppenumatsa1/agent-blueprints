@@ -93,14 +93,13 @@ resource applicationInsightsConnection 'Microsoft.CognitiveServices/accounts/pro
   parent: project
   name: 'ApplicationInsights'
   properties: {
-    authType: 'ApiKey'
+    #disable-next-line BCP036
+    authType: 'ProjectManagedIdentity'
     category: 'AppInsights'
-    credentials: {
-      key: applicationInsightsConnectionString
-    }
-    isSharedToAll: true
+    isSharedToAll: false
     metadata: {
       ApiType: 'Azure'
+      ApplicationInsightsConnectionString: applicationInsightsConnectionString
       ResourceId: applicationInsightsResourceId
       location: location
     }
@@ -133,5 +132,6 @@ output accountId string = account.id
 output projectName string = project.name
 output projectId string = project.id
 output projectEndpoint string = project.properties.endpoints['AI Foundry API']
+output projectPrincipalId string = project.identity.principalId
 output modelDeploymentName string = model.name
 output runtimeConnectionName string = createRuntimeConnection ? runtimeSecretConnection!.name : ''

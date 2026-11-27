@@ -268,6 +268,21 @@ module telemetryRole './modules/role-assignment.bicep' = {
   }
 }
 
+module foundryTelemetryRole './modules/role-assignment.bicep' = {
+  name: 'foundry-project-telemetry-role'
+  scope: resourceGroup
+  params: {
+    applicationInsightsName: observability.outputs.applicationInsightsName
+    principalId: foundry.outputs.projectPrincipalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: subscriptionResourceId(
+      'Microsoft.Authorization/roleDefinitions',
+      '3913510d-42f4-4e42-8a64-420c390055eb'
+    )
+    assignmentSeed: 'foundry-project-monitoring-metrics-publisher'
+  }
+}
+
 output AZURE_RESOURCE_GROUP string = resourceGroup.name
 output AZURE_LOCATION string = location
 output AZURE_AI_ACCOUNT_NAME string = foundry.outputs.accountName

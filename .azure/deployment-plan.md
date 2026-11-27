@@ -6,6 +6,238 @@ Plan status: **Approved / Not Validated**
 
 Deployment status: **Development POC Deployed / Validation Partial**
 
+Change authorization: **The user approved the observability and frontend
+changes below, including deployment and verification on the existing
+development POC resources.** The broader plan remains **Approved / Not
+Validated**; approval does not establish that validation has passed.
+
+## Approved PR #62 observability and operator UI correction
+
+This proposal adds two bounded follow-up workstreams to the existing
+development POC. It does not change the overall **Approved / Not Validated**
+plan status or convert partial POC evidence into production validation.
+
+The implementation may use `ppenumatsa1/maf-monorepo` at indexed revision
+`45430753c5f3e75716ea3822d2b2b52fbb4f1c34` as read-only design and supported
+SDK-pattern evidence. Do not copy its source implementation. Preserve the
+blueprint's framework-native, independently generated structure and use
+supported AgentServer, Microsoft Agent Framework, OpenTelemetry, Azure Monitor,
+React, Vite, and CopilotKit capabilities before adding custom code.
+
+### Verified baseline
+
+- The POC uses its existing Application Insights component and Log Analytics
+  workspace. The initially named component from a different application is
+  unrelated. Environment-specific resource identifiers stay outside this
+  public repository.
+- The Foundry project Application Insights connection now uses
+  `ProjectManagedIdentity`, keeps the full connection string under metadata,
+  contains no credentials, and is not shared to all projects. The Foundry
+  project identity and hosted-agent identity have the narrowly scoped
+  `Monitoring Metrics Publisher` role at the exact Application Insights
+  component.
+- A fresh synthetic ORS-001 produced an Application Insights trace with the
+  connected API `http.request` -> Foundry platform `agentsv2/invoke_agent` ->
+  hosted `order-resolution/invoke_agent` -> native MAF workflow/business stages
+  -> API/database hierarchy. This is real telemetry evidence, not an
+  application-log inference. Environment-specific trace and case identifiers
+  are retained outside this public repository.
+- The active ORS-001 path is deterministic and did not invoke a model. The
+  absence of a model/chat span is therefore not a failed telemetry check unless
+  a future path actually performs a model call.
+- The same run produced approximately 123 dependency rows and at least 200
+  trace-log rows. Repeated successful polling, managed-identity token traffic,
+  Azure Identity initialization messages, and low-level state-store transport
+  diagnostics obscure the useful transaction.
+- The current React UI supports authenticated submission, history, case
+  opening, activity, and server-authorized approval/rejection, but presents
+  them as dense independent cards. It has no safe curated use-case loader,
+  limited run-at-a-glance hierarchy, and weak responsive operator flow.
+
+### Workstream A - interpretable Foundry and Application Insights telemetry
+
+Objective: retain one privacy-safe distributed business transaction and
+existing metrics while removing redundant, fast successful polling and
+credential noise. Do not hide slow requests, errors, failed authentication,
+failed exports, business failures, or unresolved parentage.
+
+1. Preserve the supported telemetry foundation:
+   - AgentServer owns hosted provider/exporter initialization.
+   - Native MAF instrumentation remains enabled with message and sensitive
+     content capture disabled.
+   - W3C propagation remains the API-to-Foundry correlation mechanism.
+   - The hosted `invoke_agent` hook remains a privacy-safe application anchor;
+     do not recreate native MAF spans.
+   - The API keeps one global provider and its existing allowlisted business
+     attributes.
+2. Commit the already proven infrastructure contract:
+   - Foundry connection `authType: ProjectManagedIdentity`.
+   - no connection credentials;
+   - project managed identity telemetry role at the exact component;
+   - focused contract coverage for those invariants.
+3. Use supported configuration before custom filtering:
+   - configure AgentServer/runtime log verbosity so Azure Identity, Azure Core,
+     HTTP client, and successful credential initialization diagnostics do not
+     export at information level;
+   - retain warning, error, exporter, authentication, and authorization logs;
+   - disable or narrow redundant low-level Azure SDK/urllib transport
+     instrumentation only after a trace comparison proves the platform,
+     hosted invocation, MAF workflow, meaningful tool/API calls, and database
+     spans remain connected.
+4. Add the smallest application-owned request exclusions required by the
+   blueprint's manual privacy-safe API middleware:
+   - reduce successful, fast health, SSE opening, history/activity refresh,
+     and case-status polling `http.request` telemetry;
+   - always retain submission, decision, internal hosted callback, and
+     consequential workflow requests;
+   - always retain 4xx/5xx results, exceptions, and slow requests, including
+     on normally quiet routes. Use an existing documented slow-request
+     threshold if present; otherwise start with a documented, testable
+     one-second elapsed-time threshold. Expected stream lifetime alone is not
+     a slow request;
+   - preserve request-count, duration, and failure metrics regardless of span
+     reduction, and avoid orphaning retained child spans;
+   - do not record route parameters, query strings, tokens, payloads, customer
+     text, or raw model/tool content.
+5. Keep correlation usable:
+   - retain trace ID, request/correlation ID, case ID, conversation ID, hosted
+     version, and privacy-safe stage/outcome dimensions where supported;
+   - do not use case ID as a replacement for distributed parentage;
+   - disclose browser polling as separate traces when it is intentionally not
+     part of the business transaction.
+
+Acceptance criteria:
+
+- A new ORS-001 produces one connected API -> Foundry platform -> hosted agent
+  -> MAF workflow/business stage -> database transaction in the POC's existing
+  Application Insights component.
+- The trace contains the real operation/trace ID, request ID, and case ID, with
+  no raw request, response, prompt, token, credential, or policy-evidence
+  content.
+- Fast successful health/poll/SSE transport is reduced. Slow requests, failure
+  traces, request metrics, warnings, and errors remain visible. Measure the
+  before/after low-value credential and transport rows; disclose limitations
+  rather than treating an arbitrary reduction percentage as a release gate.
+- Local synthetic canary tests cover URL path and query attributes, exception
+  text, and untrusted baggage in actual export envelopes, while verifying
+  retained error visibility and W3C parentage through native agent spans.
+- Foundry trace visibility is verified where the current identity has access.
+  A portal or data-plane `403` remains an explicit access gap; Application
+  Insights rows alone must not be represented as proof of Foundry portal
+  visibility.
+
+### Workstream B - simple Order Resolution operator workspace
+
+Objective: use the existing MAF Workflow Studio reference project and supplied
+screenshot as the design baseline, not invent a separate design. Preserve its
+three-panel organization in a simpler, responsive operator workspace without
+copying its code or weakening existing authorization and side-effect boundaries.
+
+Frontend baseline:
+
+- Keep the existing React, React DOM, Vite, TypeScript, Playwright, and
+  lockfile versions when they already support the work. Do not upgrade or add
+  React, Vite, TypeScript, CopilotKit, Zod, or lint tooling merely to match
+  reference-project version numbers.
+- Add or change a dependency only when a requested implemented capability
+  actually requires it; document and verify compatibility. Use the configured
+  Microsoft npm proxy if package downloads require it.
+- Preserve MSAL, same-origin `/api` proxying, CSP, no browser secrets, and the
+  existing generated-project independence contract.
+
+Planned information architecture:
+
+1. A compact header with the application identity, environment/runtime
+   context, refresh/new-case actions, and sign-out.
+2. A left-hand searchable, status-filtered workflow history rail with concise status
+   badges, browser-local timestamps with an explicit time-zone label, selected
+   state, and accessible loading/empty/error states.
+3. A central workflow and timeline workspace with:
+   - a plain-language new issue composer;
+   - curated ORS use-case templates that only populate reviewed form data;
+   - a normal authenticated submit action with generated idempotency key;
+   - a chronological event timeline that emphasizes business stages and
+     expands technical details on demand.
+4. A right-hand approvals and evidence rail with status, latest outcome, request
+   summary, correlation identifiers, approval state/actions,
+   evidence/capability indicators, and raw details behind an explicit disclosure.
+5. Responsive behavior that becomes one logical column on narrow screens,
+   preserves keyboard order, and does not rely on color alone.
+
+Functional and security boundaries:
+
+- "Load use case" loads only versioned, static, schema-checked synthetic ORS
+  examples. It does not execute profile callbacks, arbitrary JavaScript,
+  browser-side test runners, or hidden Azure actions.
+- "Run case" uses the existing authenticated API and server-side authorization.
+  Approval/rejection is offered only for a valid pending decision; the server
+  remains responsible for enforcing reviewer assignment and authorization.
+- CopilotKit is limited to the existing capability-gated, read-only
+  selected-case assistant/projection. It cannot start, approve, reject, retry,
+  or alter a workflow. If no supported AG-UI/CopilotKit endpoint is present,
+  the core workspace ships with that capability disabled and the gap remains
+  documented.
+- The UI does not fabricate evidence, infer successful effects from status
+  text, or expose tenant IDs, access tokens, secret values, raw policy
+  evidence, model content, or internal exception details.
+- Existing API contracts are reused. Additive backend projection changes are
+  allowed only when the current API cannot safely provide a required display
+  field.
+
+Acceptance criteria:
+
+- An operator can sign in, load a reviewed ORS example, submit it, follow its
+  activity, reopen it from history, and approve or reject a valid pending case
+  without editing raw JSON.
+- Failed, pending, recovering, rejected, and completed states remain visually
+  distinct and accurately mapped to server data.
+- History search/filter, refresh, selected-case state, approval controls,
+  local-time display, and responsive navigation are keyboard accessible and
+  covered by unit and Playwright checks.
+- Source and independently generated profile frontends pass their existing
+  typecheck, unit/axe tests, production build, CSP checks, and Chromium
+  workflows at desktop and mobile widths.
+- The deployed web revision is verified against the existing API with a real
+  authenticated browser session when the required user state is available.
+  Missing authenticated-browser access remains unverified, not passed.
+
+### Approved execution order and verification
+
+1. Implement telemetry and the reference-aligned three-panel UI in parallel
+   in separate worktrees. Locally verify telemetry privacy, correlation, fast,
+   slow, failed, and consequential requests and metrics; verify source and
+   generated-profile UI behavior and accessibility independently.
+2. Integrate both reviewed workstreams without overwriting existing work.
+3. Update `docs/issues-fixes-changes.md`, `docs/master-checklist.md`,
+   `docs/implementation-plan.md`, and the relevant Foundry/frontend
+   architecture documentation with acceptance criteria, evidence, and
+   remaining gaps.
+4. Run targeted backend/hosted/frontend checks, then
+   `python -m unittest discover -s tests -v`, generated-project tests, frontend
+   existing frontend typecheck/unit/build/CSP checks, and Playwright.
+5. Commit and push the reviewed change to draft PR #62. Run exact-head CI and
+   require 8/8 before any application rollout.
+6. After green exact-head CI, use `.github/skills/azure-poc-deploy/SKILL.md`
+   for the authorized existing-resource rollout. Publish immutable API, web,
+   and hosted images only where their code changed. Preserve all existing
+   secrets, identities, networking, firewall, policy, and revision settings.
+7. Verify both telemetry and the UI in Azure before testing remaining
+   scenarios. Use one fresh ORS-001 as needed for verification, capture real
+   trace/case/request identifiers and telemetry queries, and collect browser
+   screenshots or links where access permits. Any subsequent scenarios remain
+   subject to the repository skill's explicit authorization and safety limits;
+   ORS-002, ORS-003, ORS-005, and ORS-009 remain pending without a compatible
+   procedure and the required distinct reviewer and recovery evidence.
+8. Keep PR #62 draft, self-approval disabled, the seven Azure Policy audit
+   findings unresolved, deployment evidence development-only, and the plan
+   **Approved / Not Validated** until all broader validation requirements are
+   independently satisfied.
+
+Out of scope: infrastructure provisioning; firewall, networking, Entra, secret,
+identity, or Azure Policy changes; production rollout; UI-triggered manual test
+code; arbitrary prompt execution; fabricated model spans; and retrospective
+alteration of historical deployment or telemetry records.
+
 ## Current POC rollout scope
 
 The approved objective is one synthetic Order Resolution cycle on the

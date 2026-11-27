@@ -4,6 +4,59 @@ This log records significant implementation and deployment corrections together
 with their evidence and remaining validation gaps. An entry does not change a
 plan or release status unless the corresponding validation is complete.
 
+## 2026-11-27 - Approved observability and studio follow-up
+
+| Time (US Central) | Status | Task | Completed details | PR |
+| --- | --- | --- | --- | --- |
+| 06:00 CST | Complete | Trace ingestion | A fresh synthetic run produced connected API, Foundry, MAF, and database spans. | #62 |
+| 06:40 CST | In progress | Telemetry and studio | Infrastructure checks passed; the root suite ran 114 tests with two optional adapters skipped. Telemetry is underway; partial UI work is paused until telemetry verification. | #62 |
+| 06:54 CST | Complete | Noise baseline | The original trace had 119 dependency rows, 26 token requests, and 200 log rows, 81 of which were credential noise. Successful request metrics were present. | #62 |
+| 06:59 CST | In progress | Telemetry review | Focused API and hosted tests passed, but exception privacy and sampled-flag correlation issues require correction before UI work resumes. | #62 |
+| 07:38 CST | In progress | Telemetry review | Focused API and hosted tests pass; review identified a fail-open redaction path and polling-root retention that need resolution before rollout. | #62 |
+| 08:12 CST | Blocked | Telemetry review | Redaction failure now fails closed in local tests. Sampled polling roots are still retained to preserve returned trace parentage; broader HTTP telemetry privacy and useful failure diagnostics need review. No follow-up rollout has occurred. | #62 |
+| 08:42 CST | Blocked | Telemetry privacy | Local probes identified additional Azure SDK path/exception exposure and inbound baggage exposure in AgentServer logs; these remain unresolved. Telemetry is not deployment-ready. | #62 |
+| 08:58 CST | Blocked | Telemetry privacy | Synthetic local probes reproduced URL path and allowed query values in Azure Monitor dependency envelopes, exception text in OTLP spans, and untrusted baggage in Azure Monitor log envelopes. The deployed export paths remain unverified. Disabling SDK instrumentation alone loses dependency spans and propagation. | #62 |
+| 09:11 CST | In progress | Parallel implementation | User authorized separate telemetry and studio worktrees. Prior uncommitted candidates are preserved; integration and deployment await both workstreams and their checks. | #62 |
+
+- **Issues:** Useful Foundry/Application Insights transaction spans are
+  obscured by credential and polling noise; the current operator UI does not
+  match the usable three-panel MAF Workflow Studio reference.
+- **Approved sequence:** Implement telemetry and the reference-aligned UI in
+  parallel in separate worktrees; integrate, validate, and deploy both together
+  on the existing development POC before remaining scenario testing.
+- **Requirements:** Preserve errors, slow requests, metrics, correlation,
+  authentication, authorization, and self-approval controls. Avoid unnecessary
+  framework and CopilotKit upgrades.
+- **Foundry ingestion cause and correction:** The POC Application Insights
+  component disables local authentication, but the project connection used
+  API-key authentication and the project identity lacked the component-scoped
+  telemetry role. The existing connection now uses project managed identity
+  and the project identity has the narrowly scoped publisher role. A fresh
+  synthetic ORS-001 produced a connected API, Foundry platform, hosted MAF,
+  and database trace in Application Insights. Environment-specific identifiers
+  and raw evidence are retained outside this public repository.
+- **Noise baseline:** A bounded query for that trace returned 119 dependency
+  rows, including 26 managed-identity token requests, and 200 hosted-agent log
+  rows, including 81 credential initialization or successful-token messages.
+  Two initial Windows CLI queries failed with `BadArgumentError`; the same
+  read-only query succeeded with single-quoted KQL string literals.
+- **Metric baseline:** The API exported `blueprint.operations` and
+  `blueprint.operation.duration` for successful `http.request` operations.
+  The baseline window contained no failed-request metric sample, so failure
+  metric preservation still requires a focused check.
+- **Local contract checks:** The Foundry connection and scoped-role changes
+  passed all 18 infrastructure tests, and the Bicep template compiled. The
+  role's deterministic assignment seed matches the existing scoped deployment.
+  The isolated root suite ran 114 tests: 112 passed and two optional
+  application-adapter tests were skipped because no adapters were selected.
+  These checks do not replace exact-head CI or Azure rollout verification.
+- **Remaining gaps:** Noise reduction and UI changes are in progress and not
+  yet deployed or verified. The initial frontend test could not start because
+  Vitest was absent; dependencies were restored from the existing lockfile and
+  the test has not yet been rerun. Foundry portal trace visibility remains
+  unverified after a `403`; the seven Azure Policy audit findings remain
+  unresolved. The deployment plan remains **Approved / Not Validated**.
+
 ## 2026-11-27 - PR #62 development POC deployment
 
 Status: **Development POC deployed; validation partial**. The deployment plan

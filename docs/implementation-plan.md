@@ -1,5 +1,25 @@
 # Phased implementation plan
 
+## Approved observability and Workflow Studio follow-up in PR #62
+
+**Approved; telemetry and UI in progress in parallel, Azure verification pending.**
+Reduce credential and fast successful polling noise while retaining errors,
+slow requests, metrics, and connected API -> Foundry -> hosted MAF -> database
+traces. Align the Order Resolution UI with the existing MAF Workflow
+Studio reference and screenshot: history on the left, workflow/timeline in
+the center, and approvals/evidence on the right, with a simpler responsive
+layout. Keep the existing React, Vite, TypeScript, and CopilotKit dependency
+choices unless an implemented feature demonstrably requires a change.
+
+After both workstreams pass local checks and exact-head CI, deploy to the
+existing development POC using the repository POC skill, and verify telemetry
+and UI in Azure before any remaining scenario testing. Keep self-approval
+disabled, PR #62 draft, and the overall deployment plan **Approved / Not
+Validated**. The seven Azure Policy audit findings, prior Foundry `403`, and
+unavailable distinct reviewer remain disclosed, not waived. Acceptance
+criteria and rollout boundaries are in the
+[deployment plan](../.azure/deployment-plan.md#approved-pr-62-observability-and-operator-ui-correction).
+
 ## Development POC execution priority
 
 Repository guidance now prioritizes the smallest authorized end-to-end
