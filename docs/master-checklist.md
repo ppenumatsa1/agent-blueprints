@@ -13,7 +13,7 @@ prototype objective has not yet been measured.
 
 ## Approved telemetry and Workflow Studio follow-up in PR #62
 
-**Status: Blocked on hosted telemetry privacy.** Acceptance: reduce successful fast polling and SDK
+**Status: Hosted telemetry investigation in progress; UI locally verified.** Acceptance: reduce successful fast polling and SDK
 noise while retaining errors, slow requests, metrics, privacy-safe correlation,
 and connected API/Foundry/MAF/database spans. In parallel, provide the reference
 studio's responsive history, workflow/timeline, and approvals/evidence
@@ -30,11 +30,13 @@ Azure UI behavior remains unverified.
 Local synthetic OTLP tests found downstream baggage in logs and exception text
 in traces with the pinned AgentServer bootstrap. A supported pre-export
 sanitizer hook was not identified; a partial ingress mitigation does not
-resolve these export paths. An experimental application-owned callback
+resolve these export paths. These local findings do not establish exposure in
+the deployed POC. An experimental application-owned callback
 sanitized synthetic Azure Monitor and OTLP envelopes, but did not prove native
 Foundry enrichment, identity, metrics, or all destinations and does not meet
-the approved AgentServer-owned initialization requirement. Next: identify the
-actual destination configuration and an approved privacy boundary, run exact-head CI,
+the approved AgentServer-owned initialization requirement. Next: inspect the
+actual destination configuration, classify authorized synthetic privacy tests,
+and fix confirmed sources with the smallest supported change. Run exact-head CI
 and perform existing-resource Azure verification. Keep the seven Azure Policy audit findings unresolved and
 the broader plan **Approved / Not Validated**.
 

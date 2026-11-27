@@ -2,8 +2,8 @@
 
 ## Approved observability and Workflow Studio follow-up in PR #62
 
-**Approved; local UI checks passed, hosted telemetry privacy blocked, Azure
-verification pending.**
+**Approved; local UI checks passed, deployed telemetry privacy investigation
+in progress, Azure verification pending.**
 Reduce credential and fast successful polling noise while retaining errors,
 slow requests, metrics, and connected API -> Foundry -> hosted MAF -> database
 traces. Align the Order Resolution UI with the existing MAF Workflow
@@ -20,6 +20,8 @@ Validated**. The seven Azure Policy audit findings, prior Foundry `403`, and
 unavailable distinct reviewer remain disclosed, not waived. Acceptance
 criteria and rollout boundaries are in the
 [deployment plan](../.azure/deployment-plan.md#approved-pr-62-observability-and-operator-ui-correction).
+Classify suspected privacy exposures from deployed configuration and
+authorized synthetic tests; do not infer a live leak from local probes.
 
 ## Development POC execution priority
 

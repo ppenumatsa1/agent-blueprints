@@ -61,6 +61,13 @@ existing metrics while removing redundant, fast successful polling and
 credential noise. Do not hide slow requests, errors, failed authentication,
 failed exports, business failures, or unresolved parentage.
 
+Inspect the deployed telemetry configuration and use authorized synthetic
+tests to classify suspected exposures as confirmed, not reproduced, or
+unverified. A local probe alone does not establish exposure in the deployed
+POC. Address confirmed sources with the smallest supported change and retain
+AgentServer ownership unless a demonstrated need for a change is approved.
+Continue independently verified UI work alongside this investigation.
+
 1. Preserve the supported telemetry foundation:
    - AgentServer owns hosted provider/exporter initialization.
    - Native MAF instrumentation remains enabled with message and sensitive
