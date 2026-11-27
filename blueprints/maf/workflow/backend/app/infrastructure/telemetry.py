@@ -107,6 +107,10 @@ class CorrelationContext:
 _correlation = ContextVar("blueprint_correlation", default=CorrelationContext())
 
 
+def current_request_id() -> str | None:
+    return _correlation.get().request_id
+
+
 def _safe_identifier(value):
     return value if isinstance(value, str) and _SAFE_IDENTIFIER.fullmatch(value) else None
 
@@ -272,6 +276,7 @@ class _Operation:
         self.technical_status = None
         self.business_outcome = None
         self.retry_count = 0
+        self.quiet_success = False
 
     def set_attribute(self, name, value):
         valid = False
@@ -737,10 +742,14 @@ class Telemetry:
                     fields["business_outcome"] = operation.business_outcome
                 if operation.retry_count:
                     fields["retry_count"] = operation.retry_count
-                _emit(
-                    "operation",
-                    **fields,
-                )
+                if not (
+                    operation.quiet_success
+                    and 200 <= (status_code or 0) < 300
+                    and outcome == "success"
+                    and start is not None
+                    and fields["duration_ms"] < 1000
+                ):
+                    _emit("operation", **fields)
                 try:
                     labels = {"operation": name, "outcome": fields["outcome"]}
                     self._operations.add(1, labels)

@@ -36,6 +36,19 @@ _ALLOWED_TAGS = frozenset(
 )
 
 
+def sanitize_httpx_url(span: Span, request: Any) -> None:
+    if not span.is_recording():
+        return
+    origin = str(
+        request.url.copy_with(path="/", query=None, fragment=None, username=None, password=None)
+    )
+    span.set_attributes({"http.url": origin, "url.full": origin})
+
+
+async def sanitize_async_httpx_url(span: Span, request: Any) -> None:
+    sanitize_httpx_url(span, request)
+
+
 @dataclass
 class _ActiveAnchor:
     span: Span

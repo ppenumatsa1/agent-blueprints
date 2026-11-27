@@ -195,16 +195,42 @@ producer. It is intentionally not guessed in this repository.
 The `azure-foundry-validation` GitHub environment must provide:
 
 - secrets `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`,
-  `AZURE_SUBSCRIPTION_ID`, `E2E_STORAGE_STATE_JSON`, and
-  `E2E_SESSION_STORAGE_JSON`; and a short-lived, narrowly scoped
+  `AZURE_SUBSCRIPTION_ID`, `E2E_OWNER_STORAGE_STATE_JSON`,
+  `E2E_OWNER_SESSION_STORAGE_JSON`, `E2E_REVIEWER_STORAGE_STATE_JSON`, and
+  `E2E_REVIEWER_SESSION_STORAGE_JSON`; and a short-lived, narrowly scoped
   `MAF_REAL_PROVIDER_AUTH_JSON`;
-- variables `AZURE_LOG_ANALYTICS_WORKSPACE_ID`, `E2E_REVIEWER_ID`,
+- variables `AZURE_LOG_ANALYTICS_WORKSPACE_ID`, `E2E_OWNER_ID`, `E2E_REVIEWER_ID`,
   a synthetic `E2E_PAYLOAD_JSON`, `E2E_ENTRA_TENANT_ID`,
   `E2E_ENTRA_SPA_CLIENT_ID`, and `E2E_ENTRA_API_APP_ID_URI`;
+- `MAF_LIVE_AUTHORIZED_ORIGIN`, independently configured by an authorized
+  operator as the exact HTTPS origin of the trusted deployed frontend/API;
+- `MAF_MODEL_AUTHORIZED_ORIGIN`, independently configured by an authorized
+  operator as the exact HTTPS origin of the trusted model endpoint;
 - variables `MAF_REAL_EVALUATION_PROVIDER`,
   `MAF_REAL_EVALUATION_MODEL`, `MAF_REAL_EVALUATOR_FACTORY`,
   `MAF_REAL_RESULT_FACTORY`, and
   `MAF_REAL_EVALUATION_MINIMUM_SCORE`.
+
+The dispatch `base_url` must be that origin, without a path, query, user info
+or fragment. The Python acceptance client rejects all redirects, including
+same-origin redirects. The browser injects session storage only at the
+authorized origin, including in frames; supplied browser storage state must
+contain no cookies and no other origin. Cookies cannot be restricted to a
+port, so even secure cookies are rejected. Curate state accordingly; do not
+disable these checks to make a run pass. Direct local use must separately
+set `MAF_LIVE_AUTHORIZED_ORIGIN` for the Python client and
+`E2E_AUTHORIZED_ORIGIN` for the browser. The configured origin and endpoint
+must be trusted; these checks do not attest the deployment, protect against
+a compromised authorized origin or trusted proxy, or verify Entra login.
+The model evaluator separately checks its endpoint against
+`MAF_MODEL_AUTHORIZED_ORIGIN` and refuses all redirects. Its endpoint may
+include a path and query, but not user info or a fragment.
+The frontend's protected API and activity-stream fetches also reject redirects.
+The hosted Responses client rejects redirects and retains an unknown operation
+outcome rather than replaying a potentially applied create. Top-level browser
+navigation is not constrained by those fetch settings; origin-gated storage
+does not make the authorized page, configured endpoints, MSAL, custom
+factories, proxy, or host trustworthy.
 
 The distinct `azure-foundry-failure-injection-nonproduction` GitHub
 environment must be configured with required reviewers and an OIDC federated
@@ -217,6 +243,7 @@ credential restricted to this repository/environment. Its secrets are
 (exactly `synthetic-nonproduction`), `MAF_HOSTED_FAILURE_RESOURCE_GROUP`,
 `MAF_HOSTED_FAILURE_API_CONTAINER_APP_NAME`,
 `MAF_HOSTED_FAILURE_AZD_ENVIRONMENT`,
+`MAF_LIVE_AUTHORIZED_ORIGIN` (the separately authorized HTTPS origin),
 `MAF_HOSTED_FAILURE_HOSTED_AGENT_NAME`,
 `MAF_HOSTED_FAILURE_HOSTED_AGENT_VERSION`,
 `MAF_HOSTED_FAILURE_API_REVISION`, `MAF_HOSTED_FAILURE_HOSTED_ROOT`, and
@@ -238,10 +265,13 @@ role-assignment scope.
 The active-revision verifier checks health, traffic, digest shape, and
 revision fields in supplied JSON; it does not independently attest that the
 image digest was built from the requested source or that the hosted inspection
-is authentic. No signed source-to-image or hosted-deployment attestation
-verifier is present. Therefore the failure-injection job contains a deliberate
-hard stop before `azure/login` and before loading/running the adapter. Setting
-dispatch inputs or environment markers cannot bypass that stop.
+is authentic. The [advisory build-attestation preflight](../../blueprints/maf/workflow/docs/build-attestations.md)
+can verify exact signed OCI subjects against an externally supplied policy, but
+does not prove independent policy or builder control, actual checkout, or live
+deployment identity. No trusted deployment-provenance verifier or observer is
+present. Therefore the failure-injection job contains a deliberate hard stop
+before `azure/login` and before loading/running the adapter. Setting dispatch
+inputs or environment markers cannot bypass that stop.
 
 These settings and marker checks are necessary gates, not proof of isolation.
 The adapter is trusted executable code, and the repository does not contain a
@@ -271,6 +301,23 @@ protected synthetic-nonproduction target, and support only bounded synthetic
 faults. The runner does not serialize the target resource ID into evidence. A
 missing capability is `blocked`; a failed observation is `failed`; neither is
 converted to success.
+
+The checked-in full live-result producer currently stops before submitting any
+cases: ORS-005 needs independently verified native continuation, not merely a
+completed business snapshot. The failure runner requires each passed case to
+have a successful hosted-start correlation with hosted metadata. Those
+supplied fields are structural evidence only; independently observed telemetry
+and deployment identity remain necessary.
+
+The hosted-interruption scenario is blocked before creating or interrupting a
+case: its existing adapter cannot verify native continuation after a stopped
+session. The live adapter also refuses direct interruption and reconciliation;
+it retains unknown/interrupted flags rather than treating an ordinary database
+read as recovery. Consequently its timeout/reconciliation scenarios cannot
+pass until an authoritative reconciliation mechanism exists. A future
+implementation must independently verify native continuation and durable
+outcome evidence before restoring these scenarios. The synthetic fixture tests
+are not evidence of live Foundry recovery.
 
 The browser gate restores explicit Playwright cookie/local-storage state and
 an explicit MSAL session-storage snapshot only after npm and browser

@@ -4,12 +4,14 @@ import type { WorkflowStudioProfile } from "../studio-profile";
 export function ApprovalPanel({
   decision,
   pending,
+  approvalRequired,
   busy,
   profile,
   onDecide,
 }: {
   decision: Decision;
   pending: boolean;
+  approvalRequired?: boolean;
   busy: boolean;
   profile: WorkflowStudioProfile;
   onDecide(decision: "approved" | "rejected"): void;
@@ -24,6 +26,10 @@ export function ApprovalPanel({
             {profile.labels.reject}
           </button>
         </div>
+      ) : decision === "pending" && approvalRequired === false ? (
+        <p>Approval not required.</p>
+      ) : decision === "pending" && profile.approvalRequired && approvalRequired === undefined ? (
+        <p>Approval requirement is unavailable.</p>
       ) : <p>Decision: <strong>{decision}</strong></p>}
     </section>
   );

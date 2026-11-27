@@ -26,6 +26,12 @@ workflow without a human pause. High-value refunds and replacement shipments
 create a native approval request and use the existing authenticated,
 server-authorized decision endpoint.
 
+For a pending request, the case response includes its decision handle and the
+selected host channel (`api` locally or `foundry-responses` for hosted mode).
+The UI returns both with the proposal binding; the service still validates
+the reviewer, proposal, handle and channel. Existing pending cases whose
+stored channel differs from the currently selected host fail closed.
+
 Missing, conflicting, or invalid policy evidence creates a persisted terminal
 failed case with its explicit failure code. It creates no proposal, native
 pause/checkpoint, decision, action claim, or effect. Other malformed or
@@ -46,6 +52,17 @@ self-approval is also rejected at the effect boundary. These tests use
 synthetic identities and a disposable database; they do not prove downstream
 transport or cloud isolation.
 
+An immediate failed hosted start or resume records the operation outcome,
+case failure, and audit event atomically. Existing failures are preserved,
+the failed operation is not replayed, and a new hosted decision is denied
+while that failure remains unresolved. Delayed callbacks preserve the failure
+until the hosted completion transition verifies matching business state,
+including when callbacks precede the failed journal update. Failed nonterminal
+cases continue to refresh without exposing approval. The case retains its
+actual business status; no hosted checkpoint is fabricated.
+Later background failure detection and authoritative hosted recovery remain
+unverified.
+
 ## Verification assets and current integration limits
 
 `verification/scenarios/order-resolution/acceptance-contract.json` and
@@ -57,7 +74,11 @@ owned by merged PR #42 and are not duplicated in the profile.
 
 Run `python -m app.order_resolution.migrations upgrade` with the schema-owner
 database identity before application startup. Runtime startup validates the
-profile schema and does not create it. PostgreSQL owns requests, proposals,
+profile schema and does not create it. Existing deployments need a separately
+verified, firewall-preserving path for both the hosted response-outcome and
+hosted start-claim migrations. The latter records the initial HTTP request ID
+for an acknowledged start claim; it is not proof of outbound dispatch.
+PostgreSQL owns requests, proposals,
 decisions, effect state, audit records, and the synthetic downstream; native
 MAF checkpoint files remain separate and unmodified.
 

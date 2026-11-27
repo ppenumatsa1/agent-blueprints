@@ -30,7 +30,7 @@ test("bearer stream triggers snapshot reconciliation of older activity", async (
   await page.goto("/e2e/activity-live.html");
   await expect(page.getByText("Workflow created")).toBeVisible();
   updated = true;
-  await expect(page.getByText("Action failed")).toBeVisible({ timeout: 25_000 });
+  await expect(page.getByText("Action failed", { exact: true })).toBeVisible({ timeout: 25_000 });
   expect(authorizations.length).toBeGreaterThan(2);
   expect(authorizations.every((value) => value === "Bearer synthetic-token")).toBe(true);
   await expect(page.getByText("Workflow created")).toHaveCount(1);

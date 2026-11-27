@@ -19,6 +19,27 @@ export interface EvidenceProjection {
   items: ReadonlyArray<{ label: string; value: string }>;
 }
 
+export interface StudioUseCase {
+  readonly id: string;
+  readonly title: string;
+  readonly payload: Readonly<Record<string, unknown>>;
+  readonly fields: ReadonlyArray<PayloadField>;
+}
+
+export type StudioUseCaseCatalog =
+  | {
+      readonly schema_version: "workflow-use-cases/1";
+      readonly status: "available";
+      readonly scenario_set: string;
+      readonly cases: ReadonlyArray<StudioUseCase>;
+    }
+  | {
+      readonly schema_version: "workflow-use-cases/1";
+      readonly status: "unavailable";
+      readonly scenario_set: null;
+      readonly cases: readonly [];
+    };
+
 /**
  * Legacy configuration only. The studio never executes these callbacks: browser
  * application code can access real services and is not a security sandbox.
@@ -55,10 +76,10 @@ export interface WorkflowStudioProfile {
   history: {
     heading: string;
     activityHeading: string;
-    refresh: string;
     loadMore: string;
     loading: string;
     empty: string;
+    activityEmpty: string;
     error: string;
     events: Record<ActivityType, string>;
   };
@@ -66,7 +87,10 @@ export interface WorkflowStudioProfile {
   projectPayload(payload: Record<string, unknown>, record: WorkflowCase): PayloadProjection;
   renderPayload?(projection: PayloadProjection, record: WorkflowCase): ReactNode;
   decisionBinding?(record: WorkflowCase): DecisionBinding | undefined;
+  approvalRequired?(record: WorkflowCase): boolean | undefined;
   projectEvidence?(record: WorkflowCase): EvidenceProjection;
+  /** Static data only; loading an example does not run or authorize anything. */
+  useCaseCatalog?: StudioUseCaseCatalog;
   /** @deprecated Manual test execution is disabled in all environments. */
   syntheticManualTests?: readonly SyntheticManualTest[];
   protocolAdapters?: {

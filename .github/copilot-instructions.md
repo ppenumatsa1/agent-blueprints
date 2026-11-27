@@ -17,6 +17,14 @@
   checks. Prototype readiness may disclose non-blocking failures; production
   requires verified, scoped human risk acceptance for them. Critical and
   security-critical checks cannot be silently downgraded or waived.
+- For development POCs, prioritize the smallest authorized end-to-end synthetic
+  cycle on the current CI-validated candidate before optional refinements.
+  Freeze non-blocking improvements until that cycle is observed and fix only
+  concrete blockers. Do not make retrospective unknowns or incomplete
+  aspirational checks rollout gates unless needed to prevent an immediate
+  safety, security, or data-integrity risk. Preserve existing explicit
+  safeguards and accurately record assumptions, unknowns, failures, and next
+  actions; never claim an unverified check passed.
 - For each meaningful PR, update `docs/master-checklist.md`,
   `docs/implementation-plan.md`, and relevant architecture documentation.
   Record acceptance criteria, evidence or a PR link, and the next action; mark

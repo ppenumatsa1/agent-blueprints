@@ -11,6 +11,13 @@ and delegated API consent, and no reviewed live fault adapter was available.
 
 ## Runtime and state boundary
 
+The hosted AgentServer retains ownership of its telemetry providers and
+exporters. Public sync and async HTTPX request hooks reduce dependency URL
+attributes to the origin before export. Synthetic local tests cover Azure
+Monitor envelope conversion, OTLP encoding, HTTP status, metrics, and W3C
+parentage; the change has not been verified against a deployed version. The
+hooks do not sanitize baggage or exception text.
+
 `profiles/order-resolution/hosted-agent` is copied into every generated Order
 Resolution project. Its `ResponsesHostServer` receives a request-aware
 `workflow=` factory, creates a fresh native MAF workflow for each request, and
@@ -199,7 +206,22 @@ only for the process that inserted the new claim. An existing `pending` record
 has no current owner proof, becomes `unknown`, and is not sent again. A
 concurrent original owner may still complete its one in-flight request and
 record the authoritative acknowledgment. Identical acknowledged duplicates
-return the recorded remote ID; conflicting duplicates fail.
+return the recorded remote ID; conflicting duplicates fail. A create
+acknowledgment is not proof of workflow completion. If a Responses create
+returns an ID with `status: failed`, the journal records the terminal `failed`
+outcome and ID, and the API surfaces a hosted workflow error. The same key
+continues to fail after restart without another POST. Apply the profile
+migration before running the updated API; existing acknowledgments are not
+reclassified.
+
+For start/resume operations, the failed journal transition, case failure and
+audit event share one PostgreSQL transaction. An existing case failure is not
+overwritten; a failed journal also prevents a new hosted decision if the case
+already had a different failure code. Delayed pending and action callbacks
+preserve the failure until `finish_hosted` verifies the matching business
+outcome. The UI hides approval while any failure code is present. This does
+not fabricate a terminal business outcome or hosted checkpoint, and does not
+establish that a later background Responses failure will be detected.
 
 A connection error, timeout, 5xx, malformed 2xx JSON, or success body without
 an authoritative ID changes the operation to `unknown`; the client does not
@@ -207,6 +229,8 @@ replay that POST. Malformed response bodies are not retained in the journal or
 surfaced in the error. `reconcile_acknowledgment` requires exactly one
 authoritative remote ID supplied by a trusted query/operator path. An empty or
 ambiguous search does not prove absence and leaves the operation `unknown`.
+Later background failure observation and a production authoritative lookup
+remain unverified. HTTP 429 handling is unchanged; it does not permit replay.
 
 The included in-memory journal is only for local tests. Agents B-D must supply
 a durable journal with atomic insert/claim ownership and update semantics and
@@ -272,6 +296,23 @@ local authentication. The deployment orchestrator assigns the resulting
 hosted-version identity `Monitoring Metrics Publisher`
 (`3913510d-42f4-4e42-8a64-420c390055eb`) at the exact component resource ID
 only; the publisher itself still performs no RBAC mutation.
+
+For a Foundry project connected to an Application Insights component with
+local authentication disabled, the project connection uses
+`authType: ProjectManagedIdentity`, has no credentials, and supplies the
+connection string via `metadata.ApplicationInsightsConnectionString`. The
+project's managed identity also needs `Monitoring Metrics Publisher` at the
+exact component scope; the hosted identity's corresponding role remains
+separate. The connection string comes from a secure deployment parameter and
+must not be committed. See the [Microsoft Entra trace-ingestion
+guidance](https://learn.microsoft.com/azure/foundry/observability/how-to/trace-ingestion-entra-authentication).
+
+A fresh synthetic POC request produced a connected API -> Foundry platform ->
+hosted `invoke_agent` -> native MAF workflow -> API/database transaction in
+the existing Application Insights component after correcting the project
+connection and scoped project role. The Foundry portal view remains unverified
+because the available data-plane trace read returned `403`. This evidence does
+not validate the broader deployment plan or production readiness.
 
 AgentServer Responses `2.4.0` exposes `ResponsesServerOptions.create_span_hook`
 as its supported create-lifecycle extension point, but defaults it to `None`.
@@ -347,6 +388,129 @@ create acknowledged in the journal; rerunning the same operation may safely
 retry discovery/readiness. The SDK does not expose a documented ARM resource
 ID for the hosted version, so callers must not invent one.
 
+### Opt-in image-based publishing
+
+The generated project also includes a hosted `Dockerfile` and `.dockerignore`.
+The default publisher and `scripts/azure/deploy.ps1` still use the existing
+remote source build. Image publication is a separate, explicit path:
+
+1. Use the publisher with `--archive <zip>` and
+   `--container-context <new-directory-outside-project>`. The context contains
+   only the staged contents of the source archive and these build assets; it
+   rejects invalid archive paths. Never put credentials or private data in the
+   context.
+2. Build the context for `linux/amd64` with a unique tag in the authorized
+   existing registry. The Dockerfile runs `python main.py` as a non-root user,
+   provides a writable home, exposes port 8088, and sets
+   `PYTHONNOUSERSITE=1`. It also sets
+   `AGENTSERVER_STATE_ROOT=/home/hosted/.agentserver` because Foundry may
+   override `HOME` with a platform path that is not writable by the image
+   user. For a restricted network,
+   `PYTHON_PACKAGE_INDEX` may select a credentialless HTTPS package mirror;
+   never pass credentials in build arguments. Direct requirements are pinned,
+   but the base image tag and transitive dependencies are not a reproducible
+   source-to-image attestation.
+3. Push only to the authorized registry. Record the push's immutable digest
+   and independently query the registry's manifest metadata; stop if they
+   differ. Use `<registry>/<repository>@sha256:<digest>` rather than a tag.
+   The Foundry **project** managed identity needs existing pull access to the
+   registry; the hosted version's runtime identity is separate. This publisher
+   neither grants permissions nor pushes an image.
+4. Record the currently served release version and pin the endpoint to that
+   concrete version with one `FixedRatio` rule at 100%, preserving its other
+   endpoint configuration. Re-read the route and coordinate all writers.
+   Creating a version behind `@latest` can immediately change traffic.
+   The preview `draft` flag is not a substitute: the service can create a
+   normal release when draft creation is not enabled.
+5. Invoke the generated publisher with `--publish`, `--image-reference` set
+   to the digest reference and `--expected-route-version` set to the recorded
+   numeric release version, in addition to the normal project, agent,
+   operation ID, journal and runtime inputs. It checks the fixed route before
+   and after `create_version` and while polling, but the reads and create are
+   not an atomic transaction. A concurrent writer can still race them; a
+   coordinated single-writer window is required. On an unsuccessful pre-create
+   route check the journal is `not_submitted`, and the same operation can be
+   retried after correction. A lost or ambiguous create remains `unknown` and
+   must be reconciled, never replayed. The publisher rechecks and reports the
+   fixed route after ambiguous creates; an unavailable or changed route is
+   reported explicitly. Reconciliation also checks the route after version
+   listing, even when no match is found or the list fails, and after candidate
+   lookup.
+   Image-container definitions omit Foundry-reserved
+   `FOUNDRY_PROJECT_ENDPOINT`, `APPLICATIONINSIGHTS_CONNECTION_STRING`, and
+   `APPLICATIONINSIGHTS_AUTH_MODE` values because the platform injects them.
+   The publisher still validates and binds those values into the publication
+   identity, hashing the connection string rather than recording it.
+6. Resolve the exact returned version and verify its image, identity and
+   `active` state before candidate-specific testing. The journal's
+   `observed_image_reference` is a version GET configuration observation, not
+   a measurement of a running container. Recheck the old route before any
+   authorized promotion. Restoring a fixed route alone is not a verified
+   rollback; existing sessions remain bound to their original versions.
+
+Binary rollback requires separate review and end-to-end compatibility evidence.
+A synthetic test of the prior API at `a302e939` found that its action
+authorization accepts an already persisted same-actor approval without the
+POC-grant check, although it rejects a new self-decision. Before considering
+rollback, quiesce writers and account for all sessions, queued effects, grants,
+and POC case states. Zero rows incompatible with the old operation journal is
+necessary but not sufficient; do not rewrite historical outcomes or replay
+effects to make a rollback appear safe.
+
+The image operation's identity also includes the local archive digest to
+prevent accidental journal reuse, but the digest and producer metadata do
+**not** prove the image was built from that archive or a particular commit.
+Independent source/build and deployed-runtime provenance remain separate
+requirements; existing failure-injection and release hard stops are unchanged.
+
+Local evidence on the #62 parent `28b7da3`: 17 publisher tests, eight
+generated-project tests and 67 hosted tests inside the image passed. The
+source-mode publication identity matched the parent implementation and an
+existing source journal was reused without another create. The pinned SDK
+models also passed a mocked image create after rejecting an `@latest` route.
+A separate review identified missing route rechecks after ambiguous creates
+and inconclusive reconciliation; focused local tests cover the correction,
+and the reviewer confirmed that finding resolved.
+A network-isolated synthetic-app probe returned `200` from `/readiness` on port
+8088, with prewarm and observability mocked. The first default-PyPI build
+failed on a TLS handshake; a separate credentialless HTTPS mirror build passed.
+The first non-root image failed construction because its home was missing; the
+corrected image passed construction. The first `/healthz`-only probe timed out
+because that endpoint returned `404`. An unmocked composition probe without
+credentials logged token-prewarm and telemetry-initialization failures; it is
+not live-authentication or telemetry evidence. No image was pushed or
+published to Foundry by this work. The proposed credential-free CI steps run
+publisher regressions and build the generated image with a mocked,
+network-isolated composition check; integrated-head CI remains pending. Direct
+image test discovery failed because the curated image excludes tests; all 67
+passed when the generated tests were mounted read-only. YAML parsing first
+failed because the isolated SDK environment lacked PyYAML; the existing
+system parser then successfully parsed the workflow.
+
+Live PR #62 evidence on candidate `3cfdbd9` published corrected immutable image
+`sha256:278843a486038c230c78bd658bd1e1a9a59a8c3c40f05dcdbafbd9a27b07223c`
+as active hosted version 11. The fixed route was promoted from version 10 to
+version 11 only after image, identity, API app-role, active-state, and route
+checks passed. ORS-001 and ORS-004 then completed through version-11 sessions.
+The explicit ORS-006, ORS-007, and three ORS-008 policy failures terminated
+with zero effects. This is development POC evidence, not production readiness
+or source-to-image attestation.
+
+The later POC rollout of source `3bddba6` used immutable API, web and hosted
+images after [exact-head CI passed 8/8](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/46034973494).
+Hosted version 12 was fixed at 100%; the app update preserved protected
+configuration, identities and secrets. In the new synthetic ORS-001 trace,
+five hosted POST callbacks to the API had origin-only dependency URLs and no
+case ID. Parent links joined the API, Foundry, hosted agent and API callback;
+the aggregate did not establish database spans. ORS-001 completed and
+ORS-006/007/008 had expected policy failures with no effects. ORS-004's
+nonterminal replay boundary was not observed. The live baggage marker was
+not found, but arrival at the hosted instrumentation is unverified; live
+exception exposure and authenticated UI behavior are unverified. Browser
+approval was denied. Next: verify these remaining items without enabling
+self-approval. The plan remains **Approved / Not Validated**, with seven Azure
+Policy audit findings unresolved.
+
 ## Compatibility matrix
 
 | Capability | Result | Evidence / limitation |
@@ -361,6 +525,7 @@ ID for the hosted version, so callers must not invent one.
 | Protected API business port | Verified locally | Exact C revision `2a04d5be3013e782a7c1222b2a16a7047cbb15cd` passed verification-only binding plus read/prepare/decision/effect/finish over loopback HTTP and PostgreSQL 17, including identical terminal replay, conflicting intent, and unauthorized actor negatives |
 | Managed-identity token acquisition | Verified locally | Mock credentials verify `https://ai.azure.com/.default`, the dedicated internal API `api://.../.default` scope, and Authorization headers |
 | Source-code publishing API | Verified locally | Public signature/model test and no-retry mocked publish test |
+| Digest-pinned image publishing | Verified locally; Azure unverified | Public SDK model and guarded mock create; image/configuration GET is not runtime or source provenance |
 | Hosted version identity query | SDK surface verified; live identity unverified | Public `get_version` returns `AgentVersionDetails.instance_identity.principal_id/client_id`, `id`, `agent_guid`, and provisioning status |
 | Exact dependency compatibility | Verified locally | Pinned environment imports and SDK-drift assertions |
 | Hosted per-user/session checkpoint isolation | Documented, not live verified | Platform behavior is relied on only after application mapping; no Azure deployment was performed |

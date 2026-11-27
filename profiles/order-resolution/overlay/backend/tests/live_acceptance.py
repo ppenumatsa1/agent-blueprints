@@ -1,15 +1,21 @@
 from __future__ import annotations
 
+import asyncio
 import base64
+import hashlib
 import json
 import os
+import re
+import ssl
 import subprocess
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 from uuid import UUID, uuid4
 
+import httpx
 from agent_framework import EvalItemResult, EvalResults, EvalScoreResult, Evaluator
 
 from tests.hosted_failure_runner import (
@@ -20,6 +26,7 @@ from tests.hosted_failure_runner import (
     StaleApproval,
     TransientFailure,
     UnknownOutcome,
+    UnsupportedScenario,
 )
 
 
@@ -35,6 +42,43 @@ GOLDEN_CASES = json.loads(
     )
 )["cases"]
 MODEL_CRITERION = "order-resolution-model-quality"
+CASE_POLL_TIMEOUT_SECONDS = 60
+CASE_POLL_INTERVAL_SECONDS = 2
+POC_UNASSIGNED_REVIEWER_ID = UUID(int=0)
+
+
+def _https_origin(value: str) -> str:
+    if not isinstance(value, str) or not re.fullmatch(
+        r"https://[a-zA-Z0-9.-]+(?::[0-9]+)?/?", value, re.IGNORECASE
+    ):
+        raise ValueError("An explicit HTTPS origin is required.")
+    try:
+        parsed = urllib.parse.urlsplit(value)
+        host = parsed.hostname
+        port = parsed.port
+        if (
+            parsed.scheme.lower() != "https"
+            or not host
+            or not re.fullmatch(r"[a-z0-9.-]+", host)
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.netloc.endswith(":")
+            or parsed.path not in ("", "/")
+            or parsed.query
+            or parsed.fragment
+            or "?" in value
+            or "#" in value
+            or port == 0
+        ):
+            raise ValueError
+    except ValueError as exc:
+        raise ValueError("An explicit HTTPS origin is required.") from exc
+    return f"https://{host}" + (f":{port}" if port and port != 443 else "")
+
+
+class _RejectRedirects(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise RuntimeError("Live acceptance redirects are not permitted.")
 
 
 def _read_auth(path: str) -> dict:
@@ -107,8 +151,18 @@ def _payload(case: dict, evidence_items: list[dict] | None = None) -> dict:
 
 
 class LiveClient:
-    def __init__(self, base_url: str, auth_file: str, deployment_revision: str):
-        self.base_url = base_url.rstrip("/")
+    def __init__(
+        self,
+        base_url: str,
+        auth_file: str,
+        deployment_revision: str,
+        *,
+        poc_owner_database_url: str | None = None,
+    ):
+        self.base_url = _https_origin(base_url)
+        if self.base_url != _https_origin(os.environ.get("MAF_LIVE_AUTHORIZED_ORIGIN", "")):
+            raise ValueError("The live base URL does not match the authorized origin.")
+        self.opener = urllib.request.build_opener(_RejectRedirects())
         self.deployment_revision = deployment_revision
         auth = _read_auth(auth_file)
         self.owner = _identity(
@@ -128,7 +182,15 @@ class LiveClient:
             scopes={"workflow.read"},
             roles={"Acceptance.Operator"},
         )
-        if self.owner["object_id"] == self.reviewer["object_id"]:
+        self.poc_owner_database_url = poc_owner_database_url
+        if self.poc_owner_database_url:
+            if (
+                not self.owner["object_id"]
+                == self.reviewer["object_id"]
+                == self.operator["object_id"]
+            ):
+                raise ValueError("POC acceptance requires one exact owner/reviewer/operator.")
+        elif self.owner["object_id"] == self.reviewer["object_id"]:
             raise ValueError("Live owner and reviewer identities must be distinct.")
         tenants = {
             identity["claims"].get("tid") for identity in (self.owner, self.reviewer, self.operator)
@@ -148,6 +210,13 @@ class LiveClient:
         case_id: str | None = None,
         hosted_phase: str | None = None,
     ) -> tuple[int, dict, dict[str, str]]:
+        if (
+            not isinstance(path, str)
+            or not path.startswith("/")
+            or path.startswith("//")
+            or re.search(r"[\x00-\x20\x7f\\#]", path)
+        ):
+            raise ValueError("The live request path must be origin-relative.")
         trace_id = uuid4().hex
         headers = {
             "Authorization": f"Bearer {identity['access_token']}",
@@ -165,7 +234,7 @@ class LiveClient:
             method=method,
         )
         try:
-            response = urllib.request.urlopen(request, timeout=90)
+            response = self.opener.open(request, timeout=90)
             status = response.status
             payload = response.read()
             response_headers = {name.lower(): value for name, value in response.headers.items()}
@@ -173,6 +242,24 @@ class LiveClient:
             status = error.code
             payload = error.read()
             response_headers = {name.lower(): value for name, value in error.headers.items()}
+        parsed = self._capture_response(
+            status,
+            payload,
+            response_headers,
+            case_id=case_id,
+            hosted_phase=hosted_phase,
+        )
+        return status, parsed, response_headers
+
+    def _capture_response(
+        self,
+        status: int,
+        payload: bytes,
+        response_headers: dict[str, str],
+        *,
+        case_id: str | None = None,
+        hosted_phase: str | None = None,
+    ) -> dict:
         parsed = json.loads(payload) if payload else {}
         returned_trace = response_headers.get("traceparent", "")
         correlation_request_id = response_headers.get("x-correlation-id", "")
@@ -197,7 +284,7 @@ class LiveClient:
                         ),
                     }
                 )
-        return status, parsed, response_headers
+        return parsed
 
     def submit(
         self,
@@ -206,6 +293,10 @@ class LiveClient:
         *,
         reviewer_id: str | None = None,
     ) -> tuple[dict, dict[str, str]]:
+        if not reviewer_id and self.poc_owner_database_url:
+            if UUID(self.owner["object_id"]) == POC_UNASSIGNED_REVIEWER_ID:
+                raise ValueError("The POC operator cannot be the unassigned reviewer.")
+            reviewer_id = str(POC_UNASSIGNED_REVIEWER_ID)
         status, record, headers = self.request(
             "POST",
             "/api/cases",
@@ -233,6 +324,88 @@ class LiveClient:
             raise RuntimeError(f"Live read failed with HTTP {status}.")
         return record
 
+    async def _read_for_poll(self, case_id: str) -> dict:
+        headers = {
+            "Authorization": f"Bearer {self.owner['access_token']}",
+            "Accept": "application/json",
+            "traceparent": f"00-{uuid4().hex}-{uuid4().hex[:16]}-01",
+        }
+        async with httpx.AsyncClient(
+            follow_redirects=False,
+            verify=ssl.create_default_context(),
+            timeout=None,
+        ) as client:
+            response = await client.get(f"{self.base_url}/api/cases/{case_id}", headers=headers)
+        if 300 <= response.status_code < 400:
+            raise RuntimeError("Live acceptance redirects are not permitted.")
+        record = self._capture_response(
+            response.status_code,
+            response.content,
+            {name.lower(): value for name, value in response.headers.items()},
+        )
+        if response.status_code >= 500:
+            raise TransientFailure("The live API reported a transient read failure.")
+        if response.status_code != 200:
+            raise RuntimeError(f"Live read failed with HTTP {response.status_code}.")
+        return record
+
+    def _wait_for_case(self, record: dict, ready, description: str) -> dict:
+        case_id = str(UUID(record["id"]))
+
+        async def poll() -> dict:
+            current = record
+            deadline = asyncio.timeout(CASE_POLL_TIMEOUT_SECONDS)
+            try:
+                async with deadline:
+                    for attempt in range(31):
+                        if current.get("id") != case_id:
+                            raise RuntimeError("The live read returned a different case.")
+                        if current.get("failure_code") or current.get("status") == "failed":
+                            raise RuntimeError("The live case reported a failure while waiting.")
+                        if ready(current):
+                            return current
+                        if current.get("execution_complete"):
+                            raise RuntimeError(
+                                "The live case completed without the expected state."
+                            )
+                        if attempt < 30:
+                            await asyncio.sleep(CASE_POLL_INTERVAL_SECONDS)
+                            current = await self._read_for_poll(case_id)
+            except TimeoutError as exc:
+                if not deadline.expired():
+                    raise
+                raise TimeoutError("The live case polling deadline expired.") from exc
+            raise RuntimeError(
+                f"The live case did not reach {description} within the polling limit."
+            )
+
+        return asyncio.run(poll())
+
+    def wait_for_pending(self, record: dict) -> dict:
+        def ready(value: dict) -> bool:
+            if value.get("status") != "pending":
+                return False
+            handle = value.get("decision_handle")
+            channel = value.get("decision_channel")
+            if handle is not None and (not isinstance(handle, str) or not handle.strip()):
+                raise RuntimeError("The live approval handle is invalid.")
+            if channel is not None and channel != "foundry-responses":
+                raise RuntimeError("The live approval channel is unexpected.")
+            return bool(handle) and channel == "foundry-responses"
+
+        return self._wait_for_case(
+            record,
+            ready,
+            "a hosted approval pause",
+        )
+
+    def wait_for_completion(self, record: dict, status: str) -> dict:
+        return self._wait_for_case(
+            record,
+            lambda value: value.get("status") == status and value.get("execution_complete") is True,
+            f"the {status} terminal state",
+        )
+
     def decide(
         self,
         record: dict,
@@ -256,6 +429,23 @@ class LiveClient:
             },
             case_id=record["id"],
             hosted_phase="resume",
+        )
+
+    def grant_poc_decision(self, record: dict, decision: str) -> None:
+        if self.poc_owner_database_url is None or record.get("status") != "pending":
+            raise ValueError("The POC grant requires a configured owner and an exact pending case.")
+        from app.order_resolution.durability import Decision
+        from app.order_resolution.poc_grant import issue_grant
+
+        proposal = record["payload"]["proposal"]
+        issue_grant(
+            self.poc_owner_database_url,
+            case_id=UUID(record["id"]),
+            proposal_version=proposal["version"],
+            handle_digest=hashlib.sha256(record["decision_handle"].encode()).hexdigest(),
+            action=proposal["action"],
+            destination_id=proposal["destination_id"],
+            decision=Decision(decision),
         )
 
     def control(
@@ -290,13 +480,15 @@ class LiveClient:
 
 
 class LiveHostedFailureAdapter:
-    def __init__(self, base_url: str):
+    def __init__(self, base_url: str, *, target_kind: str, target_id: str):
         self.source_revision = os.environ["SOURCE_REVISION"]
         self.deployment_revision = os.environ["DEPLOYMENT_REVISION"]
         self.agent_version = os.environ["AGENT_VERSION"]
+        self.target_kind = target_kind
+        self.target_id = target_id
         self.client = LiveClient(
             base_url,
-            os.environ["MAF_REAL_AUTH_FILE"],
+            os.environ["MAF_HOSTED_FAILURE_AUTH_FILE"],
             self.deployment_revision,
         )
         self.records: dict[str, dict] = {}
@@ -327,13 +519,17 @@ class LiveHostedFailureAdapter:
     def create(self, idempotency_key: str, *, lose_ack: bool = False) -> HostedRecord:
         case = next(item for item in GOLDEN_CASES if item["id"] == "ORS-002")
         record, _ = self.client.submit(_payload(case), idempotency_key)
-        request_id = record["decision_handle"]
-        if not request_id:
-            case_id = self.keys.get(idempotency_key)
-            if case_id is None:
-                raise RuntimeError("The live pending decision handle is unavailable.")
-            request_id = self.records[case_id]["request_id"]
         case_id = record["id"]
+        previous = self.keys.get(idempotency_key)
+        if previous is not None and previous != case_id:
+            raise RuntimeError("The idempotency key returned a different live case.")
+        if previous is None or record.get("status") in {"created", "pending"}:
+            record = self.client.wait_for_pending(record)
+        request_id = record.get("decision_handle")
+        if not request_id and previous is not None:
+            request_id = self.records[previous]["request_id"]
+        if not request_id:
+            raise RuntimeError("The live pending decision handle is unavailable.")
         self.keys[idempotency_key] = case_id
         self.records[case_id] = {
             "record": record,
@@ -394,7 +590,7 @@ class LiveHostedFailureAdapter:
             raise RuntimeError("The effect acknowledgement fault was not observed.")
         if status != 200:
             raise RuntimeError(f"Live approval failed with HTTP {status}.")
-        cached["record"] = response
+        cached["record"] = self.client.wait_for_completion(response, "completed")
         return self._record(case_id)
 
     def restart_api(self) -> None:
@@ -423,26 +619,9 @@ class LiveHostedFailureAdapter:
         raise RuntimeError("The API revision did not recover after restart.")
 
     def interrupt_host(self, case_id: str) -> None:
-        control = self.client.control("GET", f"/acceptance/cases/{case_id}")
-        root = os.environ["MAF_HOSTED_AGENT_ROOT"]
-        environment = os.environ["AZURE_ENV_NAME"]
-        command = [
-            "azd",
-            "ai",
-            "agent",
-            "sessions",
-            "stop",
-            control["platform_session_id"],
-            "--cwd",
-            root,
-            "--environment",
-            environment,
-            "--no-prompt",
-        ]
-        process_environment = dict(os.environ)
-        process_environment["AZURE_DEV_USER_AGENT"] = "microsoft_foundry_skill"
-        subprocess.run(command, check=True, timeout=180, env=process_environment)
-        self.interrupted.add(case_id)
+        raise UnsupportedScenario(
+            "Hosted interruption requires independently verified native continuation evidence."
+        )
 
     def set_postgres_transient(self, enabled: bool) -> None:
         self.client.control(
@@ -460,11 +639,9 @@ class LiveHostedFailureAdapter:
         return self.read(case_id)
 
     def reconcile(self, case_id: str) -> HostedRecord:
-        self.interrupted.discard(case_id)
-        self.unknown.discard(case_id)
-        return self.read(case_id)
+        raise UnsupportedScenario("Authoritative hosted reconciliation is not available.")
 
-    def correlations(self) -> list[dict[str, str | int]]:
+    def correlations(self) -> list[dict[str, object]]:
         unique = {}
         for item in list(self.client.correlations):
             value = dict(item)
@@ -473,6 +650,15 @@ class LiveHostedFailureAdapter:
                     "GET",
                     f"/acceptance/cases/{value['case_id']}",
                 )
+                if value["hosted_phase"] == "start":
+                    claim_request_id = control.get("start_claim_request_id")
+                    if claim_request_id != value["request_id"]:
+                        value.pop("hosted_phase")
+                        unique[(value["request_id"], value["case_id"])] = value
+                        continue
+                    value["extensions"] = {
+                        "producer": {"hosted_start_claim_request_id": claim_request_id}
+                    }
                 conversation_id = control.get("conversation_id")
                 if not isinstance(conversation_id, str) or not conversation_id:
                     raise RuntimeError("The hosted conversation evidence is unavailable.")
@@ -487,14 +673,17 @@ class LiveHostedFailureAdapter:
         return list(unique.values())
 
 
-def create_failure_adapter(*, base_url: str) -> LiveHostedFailureAdapter:
-    return LiveHostedFailureAdapter(base_url)
+def create_failure_adapter(
+    *, base_url: str, target_kind: str, target_id: str
+) -> LiveHostedFailureAdapter:
+    return LiveHostedFailureAdapter(base_url, target_kind=target_kind, target_id=target_id)
 
 
 class FoundryModelEvaluator:
     name = "foundry-order-resolution-quality"
 
     def __init__(self, *, provider_id: str, model_id: str, auth_file: str):
+        authorized_origin = _https_origin(os.environ.get("MAF_MODEL_AUTHORIZED_ORIGIN", ""))
         auth = _read_auth(auth_file)
         model = auth.get("model")
         if not isinstance(model, dict):
@@ -503,10 +692,14 @@ class FoundryModelEvaluator:
         self.model_id = model_id
         self.endpoint = model.get("endpoint")
         self.token = model.get("access_token")
-        if not isinstance(self.endpoint, str) or not self.endpoint.startswith("https://"):
-            raise ValueError("The model endpoint must be an explicit HTTPS URL.")
+        if not isinstance(self.endpoint, str) or re.search(r"[\x00-\x20\x7f\\#]", self.endpoint):
+            raise ValueError("The model endpoint must be an explicit authorized HTTPS URL.")
+        parsed = urllib.parse.urlsplit(self.endpoint)
+        if _https_origin(f"{parsed.scheme}://{parsed.netloc}") != authorized_origin:
+            raise ValueError("The model endpoint does not match the authorized origin.")
         if not isinstance(self.token, str) or not self.token:
             raise ValueError("The model access token is missing.")
+        self.opener = urllib.request.build_opener(_RejectRedirects())
 
     async def evaluate(self, items, *, eval_name: str) -> EvalResults:
         results = []
@@ -549,7 +742,7 @@ class FoundryModelEvaluator:
                 },
                 method="POST",
             )
-            response = urllib.request.urlopen(request, timeout=120)
+            response = self.opener.open(request, timeout=120)
             payload = json.loads(response.read())
             judged = json.loads(payload["choices"][0]["message"]["content"])
             score = judged.get("score")
@@ -639,52 +832,156 @@ def _result(snapshot: dict, *, native_pause: bool, extras: dict | None = None) -
     return result
 
 
+def _completed_business_evidence(record: dict, snapshot: dict) -> tuple:
+    record_fields = (
+        "status",
+        "execution_complete",
+        "decision",
+        "payload",
+        "failure_code",
+    )
+    snapshot_fields = (
+        "status",
+        "execution_complete",
+        "failure_code",
+        "decision",
+        "proposal",
+        "verified_actions",
+        "counts",
+    )
+    counts = snapshot.get("counts")
+    if (
+        not all(field in record for field in record_fields)
+        or not all(field in snapshot for field in snapshot_fields)
+        or not isinstance(counts, dict)
+        or any(
+            type(counts.get(name)) is not int or counts[name] < 0
+            for name in ("approved", "claims", "effects", "terminal")
+        )
+        or not isinstance(record["payload"], dict)
+        or "proposal" not in record["payload"]
+        or record["status"] != "completed"
+        or record["execution_complete"] is not True
+        or snapshot["status"] != record["status"]
+        or snapshot["execution_complete"] is not True
+        or record["failure_code"] is not None
+        or snapshot["failure_code"] != record["failure_code"]
+    ):
+        raise RuntimeError("ORS-004 terminal business evidence is incomplete or inconsistent.")
+    return (
+        record["decision"],
+        record["payload"]["proposal"],
+        record["payload"].get("resolution_failure"),
+        _result(snapshot, native_pause=False)["business_outcome"],
+    )
+
+
 def create_results(
     *,
     base_url: str,
     auth_file: str,
     source_revision: str,
     deployment_revision: str,
+    case_ids: list[str] | None = None,
 ) -> dict[str, dict]:
     if source_revision != deployment_revision:
         raise ValueError("Live provider results require exact source/deployment parity.")
-    client = LiveClient(base_url, auth_file, deployment_revision)
+    known = {case["id"] for case in GOLDEN_CASES}
+    selected = known if case_ids is None else set(case_ids)
+    if not selected or selected - known:
+        raise ValueError("Select at least one known canonical scenario.")
+    if case_ids is not None and len(selected) != len(case_ids):
+        raise ValueError("Canonical scenario selection must not contain duplicates.")
+    if "ORS-005" in selected:
+        raise UnsupportedScenario(
+            "ORS-005 requires independently verified native continuation evidence."
+        )
+    poc_database_url = os.environ.get("MAF_LIVE_POC_OWNER_DATABASE_URL")
+    if "ORS-009" in selected and poc_database_url:
+        raise UnsupportedScenario(
+            "ORS-009 requires distinct actor identities; same-identity POC mode cannot verify it."
+        )
+    client = (
+        LiveClient(
+            base_url, auth_file, deployment_revision, poc_owner_database_url=poc_database_url
+        )
+        if poc_database_url
+        else LiveClient(base_url, auth_file, deployment_revision)
+    )
     results = {}
     for case in GOLDEN_CASES:
         case_id = case["id"]
+        if case_id not in selected:
+            results[case_id] = {
+                "status": "not_run",
+                "reason": "Excluded by explicit canonical scenario selection.",
+            }
+            continue
         if case_id == "ORS-008":
             snapshots = []
+            records = []
             for variant in case["input"]["policy_evidence_variants"]:
                 record, _ = client.submit(_payload(case, [variant]), str(uuid4()))
-                snapshots.append(client.snapshot(record["id"]))
+                snapshot = client.snapshot(record["id"])
+                counts = snapshot.get("counts")
+                names = (
+                    "approved",
+                    "rejected",
+                    "approval_requests",
+                    "claims",
+                    "effects",
+                    "terminal",
+                )
+                if (
+                    not isinstance(counts, dict)
+                    or any(type(counts.get(name)) is not int or counts[name] < 0 for name in names)
+                    or record.get("status") != "failed"
+                    or record.get("execution_complete") is not True
+                    or record.get("failure_code") != "policy_evidence_invalid"
+                    or record.get("decision") != "pending"
+                    or not isinstance(record.get("payload"), dict)
+                    or "proposal" not in record["payload"]
+                    or record["payload"]["proposal"] is not None
+                    or record["payload"].get("resolution_failure") != record["failure_code"]
+                    or snapshot.get("status") != record["status"]
+                    or snapshot.get("execution_complete") is not True
+                    or snapshot.get("failure_code") != record["failure_code"]
+                    or "proposal" not in snapshot
+                    or snapshot["proposal"] is not None
+                    or "decision" not in snapshot
+                    or snapshot["decision"] is not None
+                    or snapshot.get("verified_actions") != []
+                    or any(counts[name] != 0 for name in names[:-1])
+                    or counts["terminal"] != 1
+                ):
+                    raise RuntimeError(
+                        f"ORS-008 has missing or inconsistent evidence for {variant['invalid_reason']}."
+                    )
+                records.append(record)
+                snapshots.append(snapshot)
+            business_outcome = _result(
+                snapshots[0],
+                native_pause=snapshots[0]["counts"]["approval_requests"] > 0,
+            )["business_outcome"]
+            business_outcome["error"] = records[0]["failure_code"]
             results[case_id] = {
-                "business_outcome": {
-                    "proposal_authoritative": False,
-                    "proposed_action": None,
-                    "approval_required": None,
-                    "decision": "none",
-                    "verified_actions": [],
-                    "state": "failed",
-                    "error": (
-                        "policy_evidence_invalid"
-                        if all(item["status"] == "failed" for item in snapshots)
-                        else "unexpected"
-                    ),
-                },
+                "business_outcome": business_outcome,
                 "technical_execution": {
                     "invalid_variants_checked": [
                         item["invalid_reason"] for item in case["input"]["policy_evidence_variants"]
                     ],
                     "all_variants_failed_explicitly": all(
-                        item["status"] == "failed" for item in snapshots
+                        item["failure_code"] == "policy_evidence_invalid" for item in records
                     ),
-                    "native_pause_required": False,
-                    "authorized_decision_count": 0,
+                    "native_pause_required": any(
+                        item["counts"]["approval_requests"] > 0 for item in snapshots
+                    ),
+                    "authorized_decision_count": sum(
+                        item["counts"]["approved"] for item in snapshots
+                    ),
                     "action_claim_count": sum(item["counts"]["claims"] for item in snapshots),
                     "side_effect_count": sum(item["counts"]["effects"] for item in snapshots),
-                    "terminal_event_count_per_variant": min(
-                        item["counts"]["terminal"] for item in snapshots
-                    ),
+                    "terminal_event_count_per_variant": snapshots[0]["counts"]["terminal"],
                 },
             }
             continue
@@ -693,38 +990,72 @@ def create_results(
         reviewer_id = None
         if case_id == "ORS-009":
             reviewer_id = str(uuid4())
+        elif poc_database_url and case_id in {"ORS-002", "ORS-003"}:
+            reviewer_id = client.owner["object_id"]
+        if case_id == "ORS-004":
+            payload = _payload(case)
+            first, _ = client.submit(payload, key, reviewer_id=reviewer_id)
+            if first.get("status") == "failed" or first.get("failure_code"):
+                raise RuntimeError("ORS-004 failed before the pre-completion replay.")
+            if first.get("status") != "created" or first.get("execution_complete") is not False:
+                results[case_id] = {
+                    "status": "unverified",
+                    "reason": "The initial response did not establish a nonterminal replay boundary.",
+                }
+                continue
+            before, _ = client.submit(payload, key, reviewer_id=reviewer_id)
+            if before.get("id") != first.get("id"):
+                raise RuntimeError("ORS-004 pre-completion replay returned a different case.")
+            if before.get("status") == "failed" or before.get("failure_code"):
+                raise RuntimeError("ORS-004 failed during the pre-completion replay.")
+            if before.get("status") != "created" or before.get("execution_complete") is not False:
+                results[case_id] = {
+                    "status": "unverified",
+                    "reason": "The replay was not observed before completion.",
+                }
+                continue
+            record = client.wait_for_completion(before, "completed")
+            snapshot = client.snapshot(record["id"])
+            replay, _ = client.submit(payload, key, reviewer_id=reviewer_id)
+            if replay.get("id") != record["id"]:
+                raise RuntimeError("ORS-004 post-completion replay returned a different case.")
+            replay_snapshot = client.snapshot(replay["id"])
+            original = _completed_business_evidence(
+                record, snapshot
+            ) == _completed_business_evidence(replay, replay_snapshot)
+            result = _result(
+                replay_snapshot,
+                native_pause=False,
+                extras={
+                    "request_identity_reused": before["id"] == first["id"] == replay["id"],
+                    "duplicate_terminal_event_emitted": replay_snapshot["counts"]["terminal"] != 1,
+                },
+            )
+            result["business_outcome"]["returned_original_outcome"] = original
+            result["technical_execution"].pop("native_pause_required")
+            result["technical_execution"].pop("authorized_decision_count")
+            results[case_id] = result
+            continue
         record, _ = client.submit(_payload(case), key, reviewer_id=reviewer_id)
-        original = False
+        if case_id in {"ORS-002", "ORS-003", "ORS-009"}:
+            record = client.wait_for_pending(record)
+        elif case_id == "ORS-001":
+            record = client.wait_for_completion(record, "completed")
         pending_before = record["status"] == "pending"
         if case_id == "ORS-002":
+            if poc_database_url:
+                client.grant_poc_decision(record, "approved")
             status, record, _ = client.decide(record, "approved", client.reviewer)
             if status != 200:
                 raise RuntimeError(f"ORS-002 approval failed with HTTP {status}.")
+            record = client.wait_for_completion(record, "completed")
         elif case_id == "ORS-003":
+            if poc_database_url:
+                client.grant_poc_decision(record, "rejected")
             status, record, _ = client.decide(record, "rejected", client.reviewer)
             if status != 200:
                 raise RuntimeError(f"ORS-003 rejection failed with HTTP {status}.")
-        elif case_id == "ORS-004":
-            replay, _ = client.submit(_payload(case), key)
-            original = replay["id"] == record["id"]
-        elif case_id == "ORS-005":
-            client.control(
-                "POST",
-                f"/acceptance/cases/{record['id']}/faults/decision-ack-lost",
-                enabled=True,
-            )
-            client.decide(record, "approved", client.reviewer)
-            for _ in range(30):
-                control = client.control("GET", f"/acceptance/cases/{record['id']}")
-                snapshot = control["snapshot"]
-                if (
-                    "decision-ack-lost" in control["observed_faults"]
-                    and snapshot["status"] == "completed"
-                ):
-                    break
-                time.sleep(2)
-            else:
-                raise RuntimeError("ORS-005 did not reconcile after acknowledgement loss.")
+            record = client.wait_for_completion(record, "rejected")
         elif case_id == "ORS-009":
             denied = []
             for label, identity in (
@@ -760,32 +1091,14 @@ def create_results(
                 native_pause_before_action=pending_before,
                 rejection_count=snapshot["counts"]["rejected"],
             )
-        elif case_id == "ORS-004":
-            extras.update(
-                request_identity_reused=original,
-                duplicate_terminal_event_emitted=snapshot["counts"]["terminal"] != 1,
-            )
-        elif case_id == "ORS-005":
-            extras.update(
-                termination_point="after_decision_commit_before_native_resume_acknowledgement",
-                native_continuation_reconciled=snapshot["status"] == "completed",
-                stored_decision_reused=snapshot["counts"]["approved"] == 1,
-                original_decision_audit_preserved=snapshot["counts"]["approved"] == 1,
-            )
         result = _result(
             snapshot,
-            native_pause=case_id in {"ORS-002", "ORS-003", "ORS-005"},
+            native_pause=case_id in {"ORS-002", "ORS-003"},
             extras=extras,
         )
         if snapshot["status"] == "failed":
             result["business_outcome"]["error"] = record.get("failure_code")
         if case_id == "ORS-003":
-            result["technical_execution"].pop("authorized_decision_count")
-        if case_id == "ORS-004":
-            result["business_outcome"]["returned_original_outcome"] = original
-            result["technical_execution"].pop("native_pause_required")
-            result["technical_execution"].pop("authorized_decision_count")
-        if case_id == "ORS-005":
             result["technical_execution"].pop("authorized_decision_count")
         results[case_id] = result
     return results

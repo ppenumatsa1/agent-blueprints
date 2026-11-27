@@ -24,6 +24,7 @@ from app.order_resolution.effects import (
     EffectStatus,
     Observation,
 )
+from app.order_resolution.poc import decision_allowed, operator_allowed
 
 
 _CASE_FOR_UPDATE = """
@@ -119,6 +120,40 @@ class OrderResolutionStore(PostgresStore):
     """PostgreSQL business state correlated with, but separate from, MAF checkpoints."""
 
     acceptance_faults = None
+    poc_enabled = False
+
+    def permits_poc_submission(self, actor: Principal) -> bool:
+        if not self.poc_enabled:
+            return False
+        with self.connect() as connection:
+            return operator_allowed(connection, actor)
+
+    def permits_poc_decision(
+        self, case_id: UUID, actor: Principal, decision: str, *, connection=None
+    ) -> bool:
+        if not self.poc_enabled:
+            return False
+        if connection is None:
+            with self.connect() as conn:
+                return self.permits_poc_decision(case_id, actor, decision, connection=conn)
+        return operator_allowed(connection, actor) and decision_allowed(
+            connection,
+            case_id,
+            actor.tenant_id,
+            actor.subject,
+            decision,
+            require_audit=False,
+        )
+
+    def permits_poc_effect(self, connection, decision: DecisionRecord) -> bool:
+        return self.poc_enabled and decision_allowed(
+            connection,
+            UUID(decision.case_id),
+            decision.tenant_id,
+            decision.actor_id,
+            decision.decision.value,
+            require_audit=True,
+        )
 
     def connect(self):
         if self.acceptance_faults is not None and self.acceptance_faults.postgres_transient():
@@ -328,7 +363,7 @@ class OrderResolutionStore(PostgresStore):
             ).fetchone()
         return _decision(row) if row is not None else None
 
-    def claim_decision(self, decision: DecisionRecord) -> DecisionRecord:
+    def claim_decision(self, decision: DecisionRecord, *, hosted: bool = False) -> DecisionRecord:
         case_id = UUID(decision.case_id)
         with self.connect() as connection:
             proposal = connection.execute(
@@ -341,6 +376,19 @@ class OrderResolutionStore(PostgresStore):
             ).fetchone()
             if proposal is None or _proposal(proposal).action_identity != decision.action_identity:
                 raise Conflict("The decision does not match the current proposal.")
+            if decision.actor_id == proposal["owner_id"] and not (
+                hosted
+                and self.poc_enabled
+                and decision_allowed(
+                    connection,
+                    case_id,
+                    decision.tenant_id,
+                    decision.actor_id,
+                    decision.decision.value,
+                    require_audit=False,
+                )
+            ):
+                raise AccessDenied("Decision is not authorized.")
             connection.execute(
                 """
                 INSERT INTO order_resolution_decisions
@@ -455,6 +503,8 @@ class OrderResolutionStore(PostgresStore):
         operation_id: str,
         operation_kind: str,
         request_digest: str,
+        *,
+        request_id: str | None = None,
     ) -> HostedOperationClaim:
         if (
             not operation_id
@@ -463,16 +513,20 @@ class OrderResolutionStore(PostgresStore):
             or not _DIGEST.fullmatch(request_digest)
         ):
             raise ValueError("The hosted operation claim is invalid.")
+        if request_id is not None:
+            if operation_kind != "start":
+                raise ValueError("Only a hosted start claim can record a request ID.")
+            request_id = str(UUID(request_id))
         with self.connect() as connection:
             inserted = connection.execute(
                 """
                 INSERT INTO order_resolution_hosted_operations
-                    (operation_id, case_id, operation_kind, request_digest, status)
-                VALUES (%s, %s, %s, %s, 'pending')
+                    (operation_id, case_id, operation_kind, request_digest, status, first_request_id)
+                VALUES (%s, %s, %s, %s, 'pending', %s)
                 ON CONFLICT (operation_id) DO NOTHING
                 RETURNING operation_id
                 """,
-                (operation_id, case_id, operation_kind, request_digest),
+                (operation_id, case_id, operation_kind, request_digest, request_id),
             ).fetchone()
             row = connection.execute(
                 """
@@ -514,10 +568,10 @@ class OrderResolutionStore(PostgresStore):
         status: str,
         remote_id: str | None,
     ) -> HostedOperation:
-        if status not in ("pending", "acknowledged", "rejected", "unknown"):
+        if status not in ("pending", "acknowledged", "failed", "rejected", "unknown"):
             raise ValueError("The hosted operation status is invalid.")
-        if (status == "acknowledged") != bool(remote_id):
-            raise ValueError("Only acknowledged operations have a remote ID.")
+        if (status in ("acknowledged", "failed")) != bool(remote_id):
+            raise ValueError("Acknowledged and failed hosted operations require a remote ID.")
         with self.connect() as connection:
             row = connection.execute(
                 """
@@ -532,10 +586,12 @@ class OrderResolutionStore(PostgresStore):
             if row is None or row["request_digest"] != request_digest:
                 raise Conflict("The hosted operation claim is missing or conflicts.")
             current = HostedOperation(**row)
-            if current.status == "acknowledged":
+            if current.status == "failed" and status == "unknown":
+                return current
+            if current.status in ("acknowledged", "failed"):
                 if current.status == status and current.remote_id == remote_id:
                     return current
-                raise Conflict("An acknowledged hosted operation cannot change outcome.")
+                raise Conflict("A recorded hosted response cannot change outcome.")
             connection.execute(
                 """
                 UPDATE order_resolution_hosted_operations
@@ -544,6 +600,22 @@ class OrderResolutionStore(PostgresStore):
                 """,
                 (status, remote_id, operation_id),
             )
+            if status == "failed" and current.operation_kind in ("start", "resume"):
+                connection.execute(
+                    """
+                    UPDATE wf_cases SET failure_code = 'hosted_response_failed', updated_at = now()
+                    WHERE id = %s AND NOT execution_complete AND failure_code IS NULL
+                    """,
+                    (current.case_id,),
+                )
+                connection.execute(
+                    """
+                    INSERT INTO wf_audit (case_id, event)
+                    SELECT id, 'hosted_response_failed' FROM wf_cases
+                    WHERE id = %s AND NOT execution_complete
+                    """,
+                    (current.case_id,),
+                )
         operation = self.get_hosted_operation(operation_id)
         if operation is None:
             raise Conflict("The hosted operation update could not be verified.")
@@ -682,6 +754,19 @@ class OrderResolutionStore(PostgresStore):
             "session_id": row["session_id"],
         }
 
+    def acceptance_start_claim_request_id(self, case_id: UUID) -> str | None:
+        with self.connect() as connection:
+            row = connection.execute(
+                """
+                SELECT first_request_id
+                FROM order_resolution_hosted_operations
+                WHERE case_id = %s AND operation_id = %s
+                    AND operation_kind = 'start' AND status = 'acknowledged'
+                """,
+                (case_id, f"case:{case_id}:start"),
+            ).fetchone()
+        return str(row["first_request_id"]) if row and row["first_request_id"] else None
+
     def acceptance_snapshot(self, case_id: UUID) -> dict[str, object]:
         case = self.get(case_id)
         try:
@@ -699,6 +784,10 @@ class OrderResolutionStore(PostgresStore):
                      WHERE case_id = %s AND decision = 'approved') AS approved,
                     (SELECT count(*) FROM order_resolution_decisions
                      WHERE case_id = %s AND decision = 'rejected') AS rejected,
+                    (SELECT count(*) FROM wf_audit
+                     WHERE case_id = %s
+                       AND event IN ('checkpoint_saved', 'hosted_request_saved'))
+                        AS approval_requests,
                     (SELECT count(*) FROM order_resolution_effects
                      WHERE case_id = %s) AS claims,
                     (SELECT count(*)
@@ -715,7 +804,7 @@ class OrderResolutionStore(PostgresStore):
                     (SELECT count(*) FROM order_resolution_audit
                      WHERE case_id = %s AND event = 'decision_denied') AS denials
                 """,
-                (case_id, case_id, case_id, case_id, case_id, case_id),
+                (case_id, case_id, case_id, case_id, case_id, case_id, case_id),
             ).fetchone()
             actions = connection.execute(
                 """
@@ -728,6 +817,8 @@ class OrderResolutionStore(PostgresStore):
             ).fetchall()
         return {
             "status": case.status,
+            "execution_complete": case.execution_complete,
+            "failure_code": case.failure_code,
             "decision": case.decision,
             "proposal": (
                 {
@@ -774,14 +865,33 @@ class OrderResolutionStore(PostgresStore):
             if case_row is None:
                 raise NotFound("The case was not found.")
             case = _case(case_row)
+            failed_response = connection.execute(
+                """
+                SELECT 1 FROM order_resolution_hosted_operations
+                WHERE case_id = %s AND operation_kind IN ('start', 'resume')
+                    AND status = 'failed'
+                LIMIT 1
+                """,
+                (case_id,),
+            ).fetchone()
             if not (
                 principal.tenant_id == case.tenant_id
                 and principal.subject == case.reviewer_id
-                and principal.subject != case.owner_id
+                and (
+                    principal.subject != case.owner_id
+                    or self.permits_poc_decision(
+                        case_id,
+                        principal,
+                        decision_command.decision.value,
+                        connection=connection,
+                    )
+                )
                 and "workflow.approve" in principal.scopes
                 and "Workflow.Approver" in principal.roles
                 and case.checkpoint_id is None
                 and case.request_id == decision_command.handle
+                and case.failure_code != "hosted_response_failed"
+                and (case.execution_complete or failed_response is None)
             ):
                 raise AccessDenied("The hosted reviewer is not authorized for the case.")
             row = connection.execute(
@@ -1080,7 +1190,19 @@ class OrderResolutionStore(PostgresStore):
             connection.execute(
                 """
                 UPDATE wf_cases SET status = 'pending', request_id = %s,
-                    checkpoint_id = NULL, failure_code = NULL, updated_at = now()
+                    checkpoint_id = NULL,
+                    failure_code = CASE
+                        WHEN failure_code IS NOT NULL THEN failure_code
+                        WHEN EXISTS (
+                                SELECT 1 FROM order_resolution_hosted_operations AS operation
+                                WHERE operation.case_id = wf_cases.id
+                                    AND operation.operation_kind IN ('start', 'resume')
+                                    AND operation.status = 'failed'
+                            )
+                        THEN 'hosted_response_failed'
+                        ELSE NULL
+                    END,
+                    updated_at = now()
                 WHERE id = %s
                 """,
                 (request_id, case_id),
@@ -1146,7 +1268,7 @@ class OrderResolutionStore(PostgresStore):
             or row["status"] not in ("pending", "approved", "rejected")
         ):
             raise Conflict("The hosted workflow is not waiting for this decision.")
-        return self.claim_decision(decision)
+        return self.claim_decision(decision, hosted=True)
 
     def finish_hosted(self, case_id: UUID) -> None:
         with self.connect() as connection:
@@ -1365,7 +1487,23 @@ class OrderResolutionStore(PostgresStore):
             )
             connection.execute(
                 """
-                UPDATE wf_cases SET status = 'completed', failure_code = NULL, updated_at = now()
+                UPDATE wf_cases SET status = 'completed',
+                    failure_code = CASE
+                        WHEN failure_code = 'hosted_response_failed'
+                            OR EXISTS (
+                                SELECT 1 FROM order_resolution_hosted_operations AS operation
+                                WHERE operation.case_id = wf_cases.id
+                                    AND operation.operation_kind IN ('start', 'resume')
+                                    AND operation.status = 'failed'
+                            )
+                        THEN COALESCE(failure_code, 'hosted_response_failed')
+                        WHEN EXISTS (
+                            SELECT 1 FROM order_resolution_hosted_bindings AS binding
+                            WHERE binding.case_id = wf_cases.id
+                        ) THEN failure_code
+                        ELSE NULL
+                    END,
+                    updated_at = now()
                 WHERE id = %s
                 """,
                 (case_id,),

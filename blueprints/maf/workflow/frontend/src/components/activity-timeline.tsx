@@ -22,7 +22,6 @@ export function ActivityTimeline({ caseId, client, profile, refreshKey = 0 }: Ac
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<"history" | "limit" | false>(false);
-  const [refreshVersion, setRefreshVersion] = useState(0);
   const [loadedCaseId, setLoadedCaseId] = useState(caseId);
   const [snapshotComplete, setSnapshotComplete] = useState(false);
   const [visibleCount, setVisibleCount] = useState(pageSize);
@@ -66,7 +65,7 @@ export function ActivityTimeline({ caseId, client, profile, refreshKey = 0 }: Ac
       controller.abort();
       loadMoreController.current?.abort();
     };
-  }, [caseId, client, refreshVersion, refreshKey]);
+  }, [caseId, client, refreshKey]);
 
   useEffect(() => {
     if (!profile.capabilities.liveActivity) return;
@@ -203,7 +202,7 @@ export function ActivityTimeline({ caseId, client, profile, refreshKey = 0 }: Ac
       clearTimeout(timer);
       clearTimeout(scanTimer);
     };
-  }, [caseId, client, profile.capabilities.liveActivity, refreshVersion, refreshKey]);
+  }, [caseId, client, profile.capabilities.liveActivity, refreshKey]);
 
   async function loadMore() {
     if (snapshotComplete) {
@@ -239,15 +238,14 @@ export function ActivityTimeline({ caseId, client, profile, refreshKey = 0 }: Ac
     <section className="activity-timeline" aria-labelledby="activity-heading" aria-busy={loading || loadingMore}>
       <div className="history-heading">
         <h3 id="activity-heading">{profile.history.activityHeading}</h3>
-        <button
-          type="button"
-          className="secondary"
-          disabled={loading}
-          onClick={() => setRefreshVersion((value) => value + 1)}
-        >
-          Refresh activity
-        </button>
+        <div className="timeline-actions">
+          {profile.capabilities.liveActivity && <span className="live-badge">Live updates</span>}
+        </div>
       </div>
+      <p className="hint">
+        Showing {Math.min(items.length, visibleCount)} of {items.length} loaded event records.
+        Activity may not include every workflow event; event details are limited to type and time.
+      </p>
       {(loading || stale) && <p role="status">{profile.history.loading}</p>}
       {!loading && !stale && error && (
         <p className="alert" role="alert">
@@ -256,13 +254,24 @@ export function ActivityTimeline({ caseId, client, profile, refreshKey = 0 }: Ac
             : profile.history.error}
         </p>
       )}
-      {!loading && !stale && !error && items.length === 0 && <p>{profile.history.empty}</p>}
+      {!loading && !stale && !error && items.length === 0 && <p>{profile.history.activityEmpty}</p>}
+      {!loading && !stale && !error && (cursor || (snapshotComplete && visibleCount < items.length)) && (
+        <p role="status">Activity history is incomplete; load more to review additional events.</p>
+      )}
       {!loading && !stale && !error && items.length > 0 && (
         <ol className="activity-list" aria-label={profile.history.activityHeading}>
           {items.slice(0, visibleCount).map((item, index) => (
-            <li key={`${item.type}:${item.created_at}:${index}`}>
-              <span>{profile.history.events[item.type]}</span>
-              <time dateTime={item.created_at}>{new Date(item.created_at).toLocaleString()}</time>
+            <li className="activity-event" key={`${item.type}:${item.created_at}:${index}`}>
+              <span className="activity-marker" aria-hidden="true" />
+              <div className="activity-event-content">
+                <div className="activity-event-heading">
+                  <strong>{profile.history.events[item.type]}</strong>
+                  <span className="event-kind">{item.type.replaceAll("_", " ")}</span>
+                </div>
+                <time dateTime={item.created_at}>
+                  {new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(item.created_at))}
+                </time>
+              </div>
             </li>
           ))}
         </ol>

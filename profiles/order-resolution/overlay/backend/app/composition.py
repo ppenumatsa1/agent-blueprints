@@ -1,5 +1,7 @@
+import os
 from importlib import import_module
 from typing import cast
+from urllib.parse import parse_qs, urlsplit
 
 from fastapi import FastAPI
 
@@ -57,11 +59,32 @@ def create_app(
     hosted_host: WorkflowHost | None = None,
 ) -> FastAPI:
     order_resolution = isinstance(components.rules, OrderResolutionRules)
+    poc_enabled = os.environ.get("ORDER_RESOLUTION_POC_SELF_DECISION") == "true"
+    token_provider = None
+    if poc_enabled:
+        database = urlsplit(settings.database_url)
+        if (
+            type(components.rules) is not OrderResolutionRules
+            or type(components.action) is not RecordOrderResolutionAction
+            or store is not None
+            or identity is not None
+            or hosted_host is not None
+            or settings.host_mode != "hosted"
+            or settings.database_auth_mode != "managed-identity"
+            or settings.database_tls_mode != "verify-full"
+            or not settings.database_managed_identity_client_id
+            or not (database.hostname or "").endswith(".postgres.database.azure.com")
+            or set(parse_qs(database.query, keep_blank_values=True)) - {"sslmode", "sslrootcert"}
+        ):
+            raise ValueError("POC self-decisions require the hosted profile and verified MI TLS.")
+        from app.order_resolution.poc import ManagedIdentityOnly
+
+        token_provider = ManagedIdentityOnly(settings.database_managed_identity_client_id)
     repository = (
         store
         if store is not None
         else (
-            OrderResolutionStore.from_settings(settings)
+            OrderResolutionStore.from_settings(settings, token_provider=token_provider)
             if order_resolution
             else PostgresStore.from_settings(settings)
         )
@@ -75,6 +98,7 @@ def create_app(
     )
     try:
         if isinstance(repository, OrderResolutionStore):
+            repository.poc_enabled = poc_enabled
             repository.acceptance_faults = AcceptanceFaults(
                 enabled=settings.acceptance_mode,
                 deployment_revision=settings.deployment_revision,

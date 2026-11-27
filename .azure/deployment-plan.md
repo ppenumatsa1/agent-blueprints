@@ -2,9 +2,489 @@
 
 ## Status
 
-Validated
+Plan status: **Approved / Not Validated**
 
-## Scope and guardrails
+Deployment status: **Development POC Deployed / Validation Partial**
+
+Current follow-up: source
+`62fdb05d9d1ef00d7273ecc9db21a8ecf5a439d2` passed exact-head CI 8/8 in
+[run 46045692581](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/46045692581)
+(run 46045444628 also passed 8/8) and was deployed to the existing development
+POC. The API revision is
+`aborsfoundpv2n45-api--pr62-62fdb05` with image digest
+`sha256:d7d4ce74cd02f12ca8655a2afb6610bd301ff5ac67dd2d06b642aa56f63b1b0c`;
+the web revision is
+`aborsfoundpv2n45-web--pr62-62fdb05-depth4` with image digest
+`sha256:3e41888bd285ae6efb3662ab6058ae990ffb3f7c915d7ed6c8150da844eb1f51`.
+The hosted image digest is
+`sha256:468f6d91f3f9d7e5dd2bf31f52a96151340c3f246b9e1480a58f25951d9dffeb`;
+version 13 is published and active, but the Foundry route remains pinned to
+version 12. Recent live spans identify serving version 12, so version 13's
+hosted behavior is not verified in live traffic. Do not repoint the route until
+the old-session callback safety boundary is established. The API and web
+revisions are healthy; protected settings, identities and secrets were
+preserved, and self-approval remains disabled.
+
+The read-only acceptance snapshot confirmed ORS-001 completed with one claim,
+one synthetic effect and one terminal event. ORS-004 returned completed on
+its initial submission, so the required pre-completion replay boundary was not
+observed; its snapshot has one claim, one effect and one terminal event, and
+no replay was attempted. ORS-006 and ORS-007 failed with their expected
+`policy_evidence_missing` and `policy_evidence_conflict` codes, each with zero
+claims/effects and one terminal event. All three ORS-008 variants failed with
+`policy_evidence_invalid`, zero claims/effects, and one terminal event each.
+ORS-002, ORS-003, ORS-005 and ORS-009 remain pending/unrun; approval cases
+still require a distinct reviewer, and ORS-005 continuation remains
+unverified.
+
+Application Insights showed 10 callback-host dependencies, all parent-linked,
+with no case UUID, callback route, or query string in their exported URL data.
+However, those spans identify hosted version 12, not the published version 13.
+A separate baggage marker was absent from the traced read-only API request;
+that did not verify baggage arrival at hosted instrumentation. A handled
+synthetic 404 error canary was absent from telemetry and produced no
+`AppExceptions` row; this does not verify internal HTTPX exception exposure.
+Database span correlation and Foundry portal visibility remain unverified.
+Authenticated browser approval was denied, so live history, timeline, and
+approval visibility remain unverified; the denied tab was not retried. The
+seven Azure Policy audit findings remain unresolved. Keep the overall plan
+**Approved / Not Validated** and the PR draft.
+
+Change authorization: **The user approved the observability and frontend
+changes below, including deployment and verification on the existing
+development POC resources.** The broader plan remains **Approved / Not
+Validated**; approval does not establish that validation has passed.
+
+## Approved PR #62 observability and operator UI correction
+
+This proposal adds two bounded follow-up workstreams to the existing
+development POC. It does not change the overall **Approved / Not Validated**
+plan status or convert partial POC evidence into production validation.
+
+### Workflow Studio UI candidate - local evidence only
+
+The approved UI changes are implemented in the shared blueprint and copied
+into a fresh, independently generated Order Resolution project. The shared
+frontend passed 64 unit tests, production build, CSP check, and Chromium E2E
+checks for local rendering (1), history (5), and studio shell (1). The
+generated frontend passed 74 unit tests, production build, CSP check, the same
+Chromium checks (1/5/1), and its responsive accessibility check (1). The final
+copy distinguishes an empty activity timeline from empty workflow history;
+semantic status text colors are defined for both themes.
+
+These are local results, not exact-head CI or authenticated Azure UI evidence.
+The UI candidate has not yet been deployed. No automatic PR run appeared after
+the candidate push, so a non-privileged manual dispatch was added to the
+existing readiness workflow without changing its eight jobs. Run it at the
+exact PR head and require 8/8 before rollout; live history, timeline, approval
+visibility, and end-to-end behavior remain unverified. The seven Azure Policy
+audit findings remain unresolved.
+
+The implementation may use `ppenumatsa1/maf-monorepo` at indexed revision
+`45430753c5f3e75716ea3822d2b2b52fbb4f1c34` as read-only design and supported
+SDK-pattern evidence. Do not copy its source implementation. Preserve the
+blueprint's framework-native, independently generated structure and use
+supported AgentServer, Microsoft Agent Framework, OpenTelemetry, Azure Monitor,
+React, Vite, and CopilotKit capabilities before adding custom code.
+
+### Verified baseline
+
+- The POC uses its existing Application Insights component and Log Analytics
+  workspace. The initially named component from a different application is
+  unrelated. Environment-specific resource identifiers stay outside this
+  public repository.
+- The Foundry project Application Insights connection now uses
+  `ProjectManagedIdentity`, keeps the full connection string under metadata,
+  contains no credentials, and is not shared to all projects. The Foundry
+  project identity and hosted-agent identity have the narrowly scoped
+  `Monitoring Metrics Publisher` role at the exact Application Insights
+  component.
+- A fresh synthetic ORS-001 produced an Application Insights trace with the
+  connected API `http.request` -> Foundry platform `agentsv2/invoke_agent` ->
+  hosted `order-resolution/invoke_agent` -> native MAF workflow/business stages
+  -> API/database hierarchy. This is real telemetry evidence, not an
+  application-log inference. Environment-specific trace and case identifiers
+  are retained outside this public repository.
+- The active ORS-001 path is deterministic and did not invoke a model. The
+  absence of a model/chat span is therefore not a failed telemetry check unless
+  a future path actually performs a model call.
+- The same run produced approximately 123 dependency rows and at least 200
+  trace-log rows. Repeated successful polling, managed-identity token traffic,
+  Azure Identity initialization messages, and low-level state-store transport
+  diagnostics obscure the useful transaction.
+- The current React UI supports authenticated submission, history, case
+  opening, activity, and server-authorized approval/rejection, but presents
+  them as dense independent cards. It has no safe curated use-case loader,
+  limited run-at-a-glance hierarchy, and weak responsive operator flow.
+
+### Workstream A - interpretable Foundry and Application Insights telemetry
+
+Objective: retain one privacy-safe distributed business transaction and
+existing metrics while removing redundant, fast successful polling and
+credential noise. Do not hide slow requests, errors, failed authentication,
+failed exports, business failures, or unresolved parentage.
+
+Inspect the deployed telemetry configuration and use authorized synthetic
+tests to classify suspected exposures as confirmed, not reproduced, or
+unverified. A local probe alone does not establish exposure in the deployed
+POC. Address confirmed sources with the smallest supported change and retain
+AgentServer ownership unless a demonstrated need for a change is approved.
+Continue independently verified UI work alongside this investigation.
+Verify that the pinned SDKs support `ENABLE_TELEMETRY`,
+`ENABLE_INSTRUMENTATION`, and `OTEL_RECORD_CONTENT` before relying on them;
+enable telemetry and instrumentation while keeping content capture disabled.
+Reduce Azure SDK informational logging without hiding warnings or errors.
+
+1. Preserve the supported telemetry foundation:
+   - AgentServer owns hosted provider/exporter initialization.
+   - Native MAF instrumentation remains enabled with message and sensitive
+     content capture disabled.
+   - W3C propagation remains the API-to-Foundry correlation mechanism.
+   - The hosted `invoke_agent` hook remains a privacy-safe application anchor;
+     do not recreate native MAF spans.
+   - The API keeps one global provider and its existing allowlisted business
+     attributes.
+2. Commit the already proven infrastructure contract:
+   - Foundry connection `authType: ProjectManagedIdentity`.
+   - no connection credentials;
+   - project managed identity telemetry role at the exact component;
+   - focused contract coverage for those invariants.
+3. Use supported configuration before custom filtering:
+   - configure AgentServer/runtime log verbosity so Azure Identity, Azure Core,
+     HTTP client, and successful credential initialization diagnostics do not
+     export at information level;
+   - retain warning, error, exporter, authentication, and authorization logs;
+   - disable or narrow redundant low-level Azure SDK/urllib transport
+     instrumentation only after a trace comparison proves the platform,
+     hosted invocation, MAF workflow, meaningful tool/API calls, and database
+     spans remain connected.
+4. Add the smallest application-owned request exclusions required by the
+   blueprint's manual privacy-safe API middleware:
+   - reduce successful, fast health, SSE opening, history/activity refresh,
+     and case-status polling `http.request` telemetry;
+   - always retain submission, decision, internal hosted callback, and
+     consequential workflow requests;
+   - always retain 4xx/5xx results, exceptions, and slow requests, including
+     on normally quiet routes. Use an existing documented slow-request
+     threshold if present; otherwise start with a documented, testable
+     one-second elapsed-time threshold. Expected stream lifetime alone is not
+     a slow request;
+   - preserve request-count, duration, and failure metrics regardless of span
+     reduction, and avoid orphaning retained child spans;
+   - do not record route parameters, query strings, tokens, payloads, customer
+     text, or raw model/tool content.
+5. Keep correlation usable:
+   - retain trace ID, request/correlation ID, case ID, conversation ID, hosted
+     version, and privacy-safe stage/outcome dimensions where supported;
+   - do not use case ID as a replacement for distributed parentage;
+   - disclose browser polling as separate traces when it is intentionally not
+     part of the business transaction.
+
+Acceptance criteria:
+
+- A new ORS-001 produces one connected API -> Foundry platform -> hosted agent
+  -> MAF workflow/business stage -> database transaction in the POC's existing
+  Application Insights component.
+- The trace contains the real operation/trace ID, request ID, and case ID, with
+  no raw request, response, prompt, token, credential, or policy-evidence
+  content.
+- Fast successful health/poll/SSE transport is reduced. Slow requests, failure
+  traces, request metrics, warnings, and errors remain visible. Measure the
+  before/after low-value credential and transport rows; disclose limitations
+  rather than treating an arbitrary reduction percentage as a release gate.
+- Local synthetic canary tests cover URL path and query attributes, exception
+  text, and untrusted baggage in actual export envelopes, while verifying
+  retained error visibility and W3C parentage through native agent spans.
+- Foundry trace visibility is verified where the current identity has access.
+  A portal or data-plane `403` remains an explicit access gap; Application
+  Insights rows alone must not be represented as proof of Foundry portal
+  visibility.
+
+### Workstream B - simple Order Resolution operator workspace
+
+Objective: use the existing MAF Workflow Studio reference project and supplied
+screenshot as the design baseline, not invent a separate design. Preserve its
+three-panel organization in a simpler, responsive operator workspace without
+copying its code or weakening existing authorization and side-effect boundaries.
+
+Frontend baseline:
+
+- Keep the existing React, React DOM, Vite, TypeScript, Playwright, and
+  lockfile versions when they already support the work. Do not upgrade or add
+  React, Vite, TypeScript, CopilotKit, Zod, or lint tooling merely to match
+  reference-project version numbers.
+- Add or change a dependency only when a requested implemented capability
+  actually requires it; document and verify compatibility. Use the configured
+  Microsoft npm proxy if package downloads require it.
+- Preserve MSAL, same-origin `/api` proxying, CSP, no browser secrets, and the
+  existing generated-project independence contract.
+
+Planned information architecture:
+
+1. A compact header with the application identity, environment/runtime
+   context, refresh/new-case actions, and sign-out.
+2. A left-hand searchable, status-filtered workflow history rail with concise status
+   badges, browser-local timestamps with an explicit time-zone label, selected
+   state, and accessible loading/empty/error states.
+3. A central workflow and timeline workspace with:
+   - a plain-language new issue composer;
+   - curated ORS use-case templates that only populate reviewed form data;
+   - a normal authenticated submit action with generated idempotency key;
+   - a chronological event timeline that emphasizes business stages and
+     expands technical details on demand.
+4. A right-hand approvals and evidence rail with status, latest outcome, request
+   summary, correlation identifiers, approval state/actions,
+   evidence/capability indicators, and raw details behind an explicit disclosure.
+5. Responsive behavior that becomes one logical column on narrow screens,
+   preserves keyboard order, and does not rely on color alone.
+
+Functional and security boundaries:
+
+- "Load use case" loads only versioned, static, schema-checked synthetic ORS
+  examples. It does not execute profile callbacks, arbitrary JavaScript,
+  browser-side test runners, or hidden Azure actions.
+- "Run case" uses the existing authenticated API and server-side authorization.
+  Approval/rejection is offered only for a valid pending decision; the server
+  remains responsible for enforcing reviewer assignment and authorization.
+- CopilotKit is limited to the existing capability-gated, read-only
+  selected-case assistant/projection. It cannot start, approve, reject, retry,
+  or alter a workflow. If no supported AG-UI/CopilotKit endpoint is present,
+  the core workspace ships with that capability disabled and the gap remains
+  documented.
+- The UI does not fabricate evidence, infer successful effects from status
+  text, or expose tenant IDs, access tokens, secret values, raw policy
+  evidence, model content, or internal exception details.
+- Existing API contracts are reused. Additive backend projection changes are
+  allowed only when the current API cannot safely provide a required display
+  field.
+
+Acceptance criteria:
+
+- An operator can sign in, load a reviewed ORS example, submit it, follow its
+  activity, reopen it from history, and approve or reject a valid pending case
+  without editing raw JSON.
+- Failed, pending, recovering, rejected, and completed states remain visually
+  distinct and accurately mapped to server data.
+- History search/filter, refresh, selected-case state, approval controls,
+  local-time display, and responsive navigation are keyboard accessible and
+  covered by unit and Playwright checks.
+- Source and independently generated profile frontends pass their existing
+  typecheck, unit/axe tests, production build, CSP checks, and Chromium
+  workflows at desktop and mobile widths.
+- The deployed web revision is verified against the existing API with a real
+  authenticated browser session when the required user state is available.
+  Missing authenticated-browser access remains unverified, not passed.
+
+### Approved execution order and verification
+
+1. Implement telemetry and the reference-aligned three-panel UI in parallel
+   in separate worktrees. Locally verify telemetry privacy, correlation, fast,
+   slow, failed, and consequential requests and metrics; verify source and
+   generated-profile UI behavior and accessibility independently.
+2. Integrate both reviewed workstreams without overwriting existing work.
+3. Update `docs/issues-fixes-changes.md`, `docs/master-checklist.md`,
+   `docs/implementation-plan.md`, and the relevant Foundry/frontend
+   architecture documentation with acceptance criteria, evidence, and
+   remaining gaps.
+4. Run targeted backend/hosted/frontend checks, then
+   `python -m unittest discover -s tests -v`, generated-project tests, frontend
+   existing frontend typecheck/unit/build/CSP checks, and Playwright.
+5. Commit and push the reviewed change to draft PR #62. Run exact-head CI and
+   require 8/8 before any application rollout.
+6. After green exact-head CI, use `.github/skills/azure-poc-deploy/SKILL.md`
+   for the authorized existing-resource rollout. Publish immutable API, web,
+   and hosted images only where their code changed. Preserve all existing
+   secrets, identities, networking, firewall, policy, and revision settings.
+7. Verify both telemetry and the UI in Azure before testing remaining
+   scenarios. Use one fresh ORS-001 as needed for verification, capture real
+   trace/case/request identifiers and telemetry queries, and collect browser
+   screenshots or links where access permits. Any subsequent scenarios remain
+   subject to the repository skill's explicit authorization and safety limits;
+   ORS-002, ORS-003, ORS-005, and ORS-009 remain pending without a compatible
+   procedure and the required distinct reviewer and recovery evidence.
+8. Keep PR #62 draft, self-approval disabled, the seven Azure Policy audit
+   findings unresolved, deployment evidence development-only, and the plan
+   **Approved / Not Validated** until all broader validation requirements are
+   independently satisfied.
+
+Out of scope: infrastructure provisioning; firewall, networking, Entra, secret,
+identity, or Azure Policy changes; production rollout; UI-triggered manual test
+code; arbitrary prompt execution; fabricated model spans; and retrospective
+alteration of historical deployment or telemetry records.
+
+## Current POC rollout scope
+
+The approved objective is one synthetic Order Resolution cycle on the
+CI-validated candidate, starting with ORS-001. If it succeeds, the remaining
+authorized exception-OFF cases are ORS-004 and ORS-006 through ORS-008.
+Self-approval remains off. Old Foundry sessions remain unchanged, issue #56
+stays open, and the stacked pull requests stay draft and unmerged.
+
+Use only the existing POC resources. The intended changes are the required
+database migrations, immutable API and web images, and a new hosted-agent
+version. Do not provision infrastructure, create a resource group or network,
+modify PostgreSQL firewall rules, or use the broader deployment and migration
+scripts below. Preserve authentication, authorization, managed identities,
+and existing safety gates. Tenant-specific identifiers remain outside this
+public repository.
+
+The planned recipe is Azure CLI against the existing resources, with the
+generated independent project and native migration and hosted-agent publisher.
+Before any Azure write, prepare and validate the exact execution path, confirm
+the candidate commit and CI, identify existing resource and image identities,
+and establish a bounded forward-recovery procedure for the separately
+committed base and profile migrations. Verify that the previous API can safely
+operate against the migrated schema before relying on image rollback. Capture
+each case's real observations and errors separately; missing evidence is not a
+pass.
+
+### Prepared existing-resource procedure
+
+The following is preparation for validation, not authorization to execute
+Azure writes before validation:
+
+1. Generate a fresh independent project with
+   `python .\scripts\instantiate_maf.py <new-directory> --profile order-resolution`.
+   Build its backend and frontend and use the generated hosted publisher with
+   `--archive <local-zip> --container-context <new-local-directory>` to prepare
+   the hosted image context. The deployment web build must use the existing
+   API's TLS upstream and approved client configuration. Resolve build inputs
+   without committing tenant values and retain immutable image digests once
+   images are pushed.
+2. Connect to the existing PostgreSQL server using an Entra token and
+   `sslmode=verify-full` over its already permitted path. After validation,
+   run `python -m app.order_resolution.migrations upgrade` from the generated
+   backend with the migration connection in the process environment. Do not
+   call the firewall-mutating migration wrapper. The base and profile
+   transactions can commit separately; on failure stop, preserve the error,
+   and diagnose the actual schema before a forward retry.
+3. Before publishing, preserve endpoint settings and use the native Foundry
+   agent endpoint merge-patch to change only the version-selection rules from
+   `@latest` to the currently serving concrete version at 100%. Re-read the
+   route and stop on a mismatch. Existing sessions are not queried or changed.
+4. Publish one hosted version with the generated publisher's `--publish`,
+   `--agent-name <name>`,
+   `--image-reference <registry/repository@sha256:digest>`,
+   `--expected-route-version <current-version>`, `--operation-id`, and
+   `--journal` options. Retain the journal and do not replay an ambiguous
+   create. Verify the resulting version, identity, required narrowly scoped
+   access, and configured digest before transition. Leave the POC
+   self-decision flag off and do not create a POC self-decision grant.
+5. After validating the precise API and web changes, update the existing
+   Container Apps with `az containerapp update --image` and the required API
+   environment changes. Preserve existing authentication and secret
+   configuration. Verify the active revisions, images, version, and health,
+   then run ORS-001 before the other authorized cases.
+
+### Current validation checklist
+
+- [ ] Prepare a recipe and validation inputs that represent only the intended
+  existing-resource updates and no infrastructure provisioning.
+- [ ] Run the Azure CLI recipe's core CLI, authentication, template build,
+  provider validation, and what-if checks against those exact inputs.
+- [x] Build the three generated containers locally and verify their offline
+  imports or build output. The web build used synthetic configuration.
+- [x] Check the frontend build uses supported Node.js 22 LTS and the existing
+  API and web identities have registry pull roles.
+- [ ] Verify applicable Azure policies, the remaining required roles, and the
+  actual deployed build inputs.
+- [ ] Record commands, timestamps, results, and remaining unknowns in a new
+  current-scope validation proof before setting status to `Validated`.
+- [ ] Complete the required deployment preflight without violating this scope.
+
+Provisioning a new resource group, network, database, or other infrastructure
+is outside this scope, so their creation and capacity checks are not
+applicable; this does not waive the validation recipe's mandatory checks. The
+existing infrastructure template and its historical what-if are not proof for
+the proposed image and agent updates. The repository's POC-specific deployment
+procedure is `.github/skills/azure-poc-deploy/SKILL.md`; it defines the
+existing-resource-only path and prohibits infrastructure provisioning. Its
+presence resolves the earlier workflow conflict with generic deployment
+guidance, but it does not validate the current rollout or authorize Azure
+writes. The seven existing Azure Policy audit findings remain unresolved and
+deferred. Do not assume a required check can be skipped, weaken the existing
+security requirements, or widen the approved scope.
+
+### Current-scope evidence and limitations
+
+- Authorized candidate
+  `3cfdbd942dc7daf37e4f8f136b26645b83471978` passed exact-head CI 8/8 in
+  run `45980935647`. The earlier head
+  `0e3b2397cc1989a3198a04ef7a29c06693d7b079` passed 8/8 in run
+  `45977781842`.
+- The existing-resource-only development deployment completed without
+  provisioning infrastructure or changing networking, firewall, Entra,
+  managed identities, or Azure Policy. The seven Azure Policy audit findings
+  remain unresolved and deferred.
+- Final deployed components use API revision suffix `pr62-3cfdbd9-v11`, web
+  revision suffix `pr62-3cfdbd9-v3`, and fixed hosted-agent version 11 at
+  100%. Immutable digests are API
+  `sha256:561214d1792d055b07f0543ca4c9671448303e88047feafab96cc2af05fb6b75`,
+  web
+  `sha256:2d05f2375fa09bbc81913720664e2e45967273bef3dbcf3d7a7ff349611889e3`,
+  and hosted
+  `sha256:278843a486038c230c78bd658bd1e1a9a59a8c3c40f05dcdbafbd9a27b07223c`.
+  The API and web remain on their existing identities, registry,
+  networking, scale, and secret references; secret-value equality was not
+  exposed or claimed. Self-decision remains `false`.
+- Final live Azure evidence on the final API revision passed ORS-001 and
+  ORS-004 with one claim, one effect, and one terminal event each. ORS-006 and
+  ORS-007 failed explicitly with their required failure codes, zero effects,
+  and one terminal event. All three ORS-008 invalid-evidence variants failed
+  explicitly with zero effects and one terminal event each. ORS-002,
+  ORS-003, ORS-005, and ORS-009 remain pending.
+- Foundry version 10 exposed an image startup defect after the image was
+  successfully pulled: Foundry set `HOME=/home/session`, and AgentServer could
+  not write its default state directory. Version 11 sets
+  `AGENTSERVER_STATE_ROOT=/home/hosted/.agentserver`. Two final version-11
+  hosted sessions were observed for ORS-001 and ORS-004. The earlier ambiguous
+  version-10 case remains historical and was not rewritten or replayed.
+- The image publisher now omits Foundry platform-reserved environment
+  variables from image-container definitions while retaining them in the
+  journaled publication identity. The deployed web proxy also required an
+  Azure-specific HTTPS upstream, SNI, and upstream host header; that
+  deployment-portability correction is not yet represented in the generated
+  generic nginx configuration.
+- These results validate only the explicitly authorized development POC
+  matrix. They do not validate the broader plan, production readiness,
+  reviewer-dependent flows, provider evaluation, browser acceptance, or the
+  unresolved policy findings. Plan status therefore remains **Approved / Not
+  Validated**.
+
+The following bullets preserve historical pre-deployment evidence. Where they
+describe an unstarted rollout, absent live migration, `@latest` routing, or
+unverified pushed artifacts, the completed current-scope evidence above
+supersedes those observations without erasing their audit history.
+
+- Exact-head CI passed 8/8 for
+  `0e3b2397cc1989a3198a04ef7a29c06693d7b079` in run `45977781842`.
+  Earlier exact-head runs also passed for
+  `260d9cbb47390f2fb866bf1e620c9741845484e8` in run `45667244691` and
+  `4c069e10af7d440d47c431ac495988a6ae1d2ae5` in run `45668742499`; a later
+  candidate must have its own passing CI.
+- The generated migration command upgraded a disposable legacy PostgreSQL
+  fixture twice while preserving existing operation and binding states.
+  Live read-only checks found migrations 0004 and 0005 absent; no live
+  migration or POC case was run.
+- A fresh independent project at `4c069e1` matched the local build contexts
+  byte-for-byte, and the native hosted archive matched the earlier generated
+  archive. API, web, and hosted images built locally. The first offline API
+  import failed because `WORKFLOW_HOST` was unset; it succeeded with synthetic
+  hosted configuration. These builds do not prove pushed artifact identity.
+- The existing API and web use one registry with visible `AcrPull` assignments
+  for both managed identities; their current images are digest-pinned. The
+  current hosted endpoint is `@latest`, so the publisher's fixed-route guard
+  requires a route update before publication. A locally serialized SDK
+  merge-patch input passed the publisher's fixed-route check, and `@latest`
+  was rejected; the patch was not sent to Azure.
+- Source-to-immutable-artifact provenance, independently observed runtime
+  identity, and historical hosted response outcomes remain unverified. These
+  unknowns are disclosed rather than represented as passes or used as an
+  exhaustive historical reconciliation prerequisite.
+- The validation evidence below is historical infrastructure-only evidence,
+  not validation or authorization of this current POC rollout.
+
+## Historical infrastructure scope and guardrails
 
 Prepare deployment-ready Azure Developer CLI and Bicep infrastructure for
 Azure/Foundry Workstream B. This branch may perform read-only Azure discovery
@@ -178,10 +658,11 @@ backend/frontend, and `WORKFLOW_HOST=local` are prohibited.
 | Draft integration PR exact-head CI | Draft PR #49 at `007f9bc0136c0d0e42bb22c4d45fd9a7f799cfb4`; run `45090269313` passed contracts, browser, Compose, core, frontend, independent generation, and infrastructure. |
 | Immutable image and observability guard revalidation | `scripts/azure/validate.ps1` passed Bicep build/lint and all 17 infrastructure contracts after making both application images explicit and preserving existing digest pins. Pinned hosted compatibility tests passed for AgentServer, Azure Monitor, HTTP instrumentation, native MAF, and Foundry SDK surfaces; focused privacy, HITL-link, and strict correlation-verifier tests passed. No Azure mutation was performed by these checks. |
 
-The Azure validation workflow is complete and the plan is `Validated`.
+The historical infrastructure-only validation workflow completed with status
+`Validated` for the scope above; it did not validate the current POC rollout.
 Provisioning, live generated-source publication, hosted execution, and
-application verification remain unexecuted and must preserve the fail-closed
-deployment and readiness gates below.
+application verification described in that scope remained unexecuted and must
+preserve the fail-closed deployment and readiness gates below.
 
 The first guarded apply exposed two provider behaviors not represented by the
 catalog-only preflight: ACR Basic rejected the AVM module's default deny

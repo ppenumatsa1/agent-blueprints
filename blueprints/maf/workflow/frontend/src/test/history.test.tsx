@@ -49,18 +49,28 @@ describe("workflow history sidebar", () => {
     const listHistory = vi.fn()
       .mockImplementationOnce(() => new Promise<WorkflowHistoryPage>((resolve) => { finishInitial = resolve; }))
       .mockResolvedValueOnce(historyPage([historyRecord(firstId)]));
-    render(
+    const api = client({ listHistory });
+    const { rerender } = render(
       <HistorySidebar
         profile={defaultWorkflowStudioProfile}
-        client={client({ listHistory })}
+        client={api}
         selectedId={null}
         onSelect={vi.fn()}
+        refreshKey={0}
       />,
     );
     expect(screen.getByRole("status")).toHaveTextContent("Loading history");
     finishInitial(historyPage([]));
     await screen.findByText("No workflows found.");
-    await userEvent.click(screen.getByRole("button", { name: "Refresh history" }));
+    rerender(
+      <HistorySidebar
+        profile={defaultWorkflowStudioProfile}
+        client={api}
+        selectedId={null}
+        onSelect={vi.fn()}
+        refreshKey={1}
+      />,
+    );
     expect(await screen.findByRole("button", { name: new RegExp(firstId) })).toBeVisible();
   });
 
@@ -86,6 +96,25 @@ describe("workflow history sidebar", () => {
     expect(onSelect).toHaveBeenCalledWith(firstId);
     await userEvent.click(screen.getByRole("button", { name: "Load more history" }));
     expect(await screen.findByRole("button", { name: new RegExp(secondId) })).toBeVisible();
+  });
+
+  it("searches only loaded items and keeps pagination available", async () => {
+    const listHistory = vi.fn()
+      .mockResolvedValueOnce(historyPage([historyRecord(firstId)], "next"))
+      .mockResolvedValueOnce(historyPage([historyRecord(secondId)]));
+    render(<HistorySidebar profile={defaultWorkflowStudioProfile} client={client({ listHistory })}
+      selectedId={null} onSelect={vi.fn()} />);
+    await screen.findByRole("button", { name: new RegExp(firstId) });
+    expect(screen.getByText(/Times are browser-local/)).toHaveTextContent(
+      Intl.DateTimeFormat().resolvedOptions().timeZone || "time zone unavailable",
+    );
+    await userEvent.type(screen.getByLabelText("Search loaded history"), secondId);
+    expect(screen.getByText("No matching loaded workflows.")).toBeVisible();
+    expect(listHistory).toHaveBeenCalledTimes(1);
+    await userEvent.click(screen.getByRole("button", { name: "Load more history" }));
+    expect(await screen.findByRole("button", { name: new RegExp(secondId) })).toBeVisible();
+    expect(screen.queryByRole("button", { name: new RegExp(firstId) })).not.toBeInTheDocument();
+    expect(screen.getByText(/Search covers loaded items only/)).toBeVisible();
   });
 
   it("resets load-more state when the status filter changes during pagination", async () => {
@@ -134,7 +163,7 @@ describe("workflow history sidebar", () => {
     const mounted = render(
       <ActivityTimeline caseId={firstId} client={empty} profile={defaultWorkflowStudioProfile} />,
     );
-    await screen.findByText("No workflows found.");
+    await screen.findByText("No activity records are available for this workflow.");
     const result = await axe.run(mounted.container, { rules: { "color-contrast": { enabled: false } } });
     expect(result.violations).toEqual([]);
     mounted.unmount();
@@ -152,7 +181,7 @@ describe("workflow activity timeline", () => {
     render(
       <ActivityTimeline caseId={firstId} client={client({ activityStream })} profile={profile} />,
     );
-    await screen.findByText("No workflows found.");
+    await screen.findByText("No activity records are available for this workflow.");
     expect(activityStream).not.toHaveBeenCalled();
   });
 
@@ -469,17 +498,23 @@ describe("workflow activity timeline", () => {
     expect(screen.getByRole("button", { name: "Load more history" })).toBeEnabled();
   });
 
-  it("shows loading, empty, refresh, and safe error states", async () => {
+  it("shows loading, empty, workspace refresh, and safe error states", async () => {
     const activity = vi.fn()
       .mockResolvedValueOnce({ schema_version: "workflow-activity/1", items: [], next_cursor: null })
       .mockResolvedValueOnce(activityPage("created"))
       .mockRejectedValueOnce(new Error("private canary"));
     const api = client({ activity });
-    render(<ActivityTimeline caseId={firstId} client={api} profile={defaultWorkflowStudioProfile} />);
-    await screen.findByText("No workflows found.");
-    await userEvent.click(screen.getByRole("button", { name: "Refresh activity" }));
+    const { rerender } = render(
+      <ActivityTimeline caseId={firstId} client={api} profile={defaultWorkflowStudioProfile} refreshKey={0} />,
+    );
+    await screen.findByText("No activity records are available for this workflow.");
+    rerender(
+      <ActivityTimeline caseId={firstId} client={api} profile={defaultWorkflowStudioProfile} refreshKey={1} />,
+    );
     expect(await screen.findByText("Workflow created")).toBeVisible();
-    await userEvent.click(screen.getByRole("button", { name: "Refresh activity" }));
+    rerender(
+      <ActivityTimeline caseId={firstId} client={api} profile={defaultWorkflowStudioProfile} refreshKey={2} />,
+    );
     expect(await screen.findByRole("alert")).toHaveTextContent("Workflow history could not be loaded.");
     expect(screen.queryByText("private canary")).not.toBeInTheDocument();
   });

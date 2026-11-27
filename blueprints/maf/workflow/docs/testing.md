@@ -1,5 +1,22 @@
 # Testing and evidence
 
+For an operator-triggered, network-isolated test of the bundled native approval
+graph, see [offline synthetic manual tests](offline-synthetic-tests.md).
+This fixed runner is separate from application tests below and does not
+enable browser callbacks, same-user approval, business effects or recovery.
+
+The [build-attestation preflight](build-attestations.md) has credential-free
+unit tests for strict policy, source, signer, predicate and subject matching:
+
+```text
+python -m unittest discover -s scripts/tests -p test_verify_build_attestations.py -v
+```
+
+These mock CLI results and are not cryptographic or deployment evidence. A
+separate local check verified one real public GitHub-signed OCI attestation
+and rejected an incorrect pinned repository ID; it did not verify any target
+deployment image. Successful preflight results never authorize a release.
+
 Install dependencies as described in [setup](setup.md). Set
 `MAF_TEST_DATABASE_URL` to a disposable, isolated PostgreSQL database. From
 `backend`, run:
@@ -9,6 +26,15 @@ uv run --locked ruff check .
 uv run --locked ruff format --check .
 uv run --locked python -m unittest discover -s tests -v
 ```
+
+On Windows, the real asynchronous PostgreSQL security tests use Python's
+`asyncio.run(loop_factory=...)` and AnyIO/TestClient's `loop_factory` option
+to select the native Selector loop. The ordinary discovery command above
+needs no outer event-loop-policy override. Other platforms keep their
+default loop selection, and the tests assert that the process-wide policy
+is unchanged. A real loopback Uvicorn HTTP test exercises the same supported
+Windows startup option documented in [development](development.md), including
+authorized activity delivery and unauthorized-reader denial.
 
 Complete backend discovery includes hosted failure-runner regression tests. SSE tests
 use synthetic signing keys/HTTP transports and disposable PostgreSQL; they

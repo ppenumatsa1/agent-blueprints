@@ -29,9 +29,14 @@ from azure.ai.agentserver.responses.hosting._observability import (
     start_create_span,
 )
 from azure.ai.projects.models import (
+    AgentDetails,
+    AgentEndpointConfig,
     CodeConfiguration,
+    ContainerConfiguration,
+    FixedRatioVersionSelectionRule,
     HostedAgentDefinition,
     ProtocolVersionRecord,
+    VersionSelector,
 )
 from azure.ai.projects.operations import AgentsOperations
 from order_resolution_hosted.model import create_chat_client
@@ -115,6 +120,38 @@ class SdkCompatibilityTests(unittest.TestCase):
         )
         self.assertEqual(definition.code_configuration.runtime, "python_3_13")
         self.assertEqual(definition.protocol_versions[0].version, "2.0.0")
+        for parameter in ("agent_name", "definition", "metadata"):
+            self.assertIn(parameter, inspect.signature(AgentsOperations.create_version).parameters)
+        image = "registry.example.test/order-resolution@sha256:" + "a" * 64
+        container = HostedAgentDefinition(
+            cpu="0.5",
+            memory="1Gi",
+            container_configuration=ContainerConfiguration(image=image),
+            protocol_versions=[ProtocolVersionRecord(protocol="responses", version="2.0.0")],
+            environment_variables={"PYTHONNOUSERSITE": "1"},
+        )
+        self.assertEqual(container.as_dict()["container_configuration"]["image"], image)
+        self.assertNotIn("code_configuration", container.as_dict())
+        agent = AgentDetails(
+            agent_endpoint=AgentEndpointConfig(
+                version_selector=VersionSelector(
+                    version_selection_rules=[
+                        FixedRatioVersionSelectionRule(
+                            agent_version="9", traffic_percentage=100
+                        )
+                    ]
+                )
+            )
+        )
+        rule = (
+            agent.get("agent_endpoint")
+            .get("version_selector")
+            .get("version_selection_rules")[0]
+        )
+        self.assertEqual(
+            (rule.get("type"), rule.get("agent_version"), rule.get("traffic_percentage")),
+            ("FixedRatio", "9", 100),
+        )
 
     def test_supported_create_span_hook_lifecycle_is_app_supplied(self):
         hook = InvokeAgentSpanHook({})

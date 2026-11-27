@@ -1,5 +1,9 @@
+import io
 import threading
 import unittest
+import urllib.request
+import urllib.response
+from email.message import Message
 from types import SimpleNamespace
 
 from opentelemetry.sdk.trace import TracerProvider
@@ -12,10 +16,13 @@ from unittest.mock import patch
 from order_resolution_hosted.client import (
     AmbiguousCreate,
     ConversationBinding,
+    HostedResponseFailed,
     MemoryOperationJournal,
     OperationStatus,
     ResponsesClient,
     TokenProvider,
+    _post_json,
+    _RejectRedirects,
 )
 
 
@@ -59,6 +66,64 @@ class ClientTests(unittest.TestCase):
             token_provider=TokenProvider(self.credential),
             post=post,
         )
+
+    def test_redirect_never_forwards_bearer_and_create_remains_unknown(self):
+        observed = []
+        code = 302
+        location = ""
+
+        class FakeHTTPS(urllib.request.BaseHandler):
+            handler_order = 100
+
+            def https_open(self, request):
+                observed.append((request.full_url, request.get_header("Authorization")))
+                headers = Message()
+                headers["Location"] = location
+                response = urllib.response.addinfourl(
+                    io.BytesIO(b""), headers, request.full_url, code
+                )
+                response.msg = "Redirect"
+                return response
+
+        for code, location in (
+            (302, "https://attacker.example/steal"),
+            (307, "http://example.test/steal"),
+            (308, "https://example.test/other"),
+        ):
+            with self.subTest(code=code, location=location):
+                observed.clear()
+                journal = MemoryOperationJournal()
+                client = ResponsesClient(
+                    "https://example.test/responses",
+                    journal,
+                    token_provider=TokenProvider(self.credential),
+                    post=_post_json,
+                )
+                opener = urllib.request.build_opener(
+                    urllib.request.ProxyHandler({}), _RejectRedirects(), FakeHTTPS()
+                )
+                with patch("order_resolution_hosted.client.build_opener", return_value=opener):
+                    for _ in range(2):
+                        with self.assertRaises(AmbiguousCreate):
+                            client.start(
+                                operation_id="redirected-create",
+                                binding=self.binding,
+                                case_id="c3dc94c3-7772-4249-bf63-95597591f49c",
+                            )
+                self.assertEqual(
+                    observed, [("https://example.test/responses", "Bearer managed-identity-token")]
+                )
+                self.assertEqual(journal.get("redirected-create").status, OperationStatus.UNKNOWN)
+
+    def test_injected_transport_redirect_is_unknown_even_if_it_returns_an_id(self):
+        client = self.client(lambda *_args, **_kwargs: FakeResponse(status_code=302))
+        with self.assertRaises(AmbiguousCreate):
+            client.start(
+                operation_id="redirect-response",
+                binding=self.binding,
+                case_id="c3dc94c3-7772-4249-bf63-95597591f49c",
+            )
+        self.assertEqual(self.journal.get("redirect-response").status, OperationStatus.UNKNOWN)
 
     def test_managed_identity_token_and_duplicate_acknowledgment(self):
         requests = []
@@ -419,6 +484,33 @@ class ClientTests(unittest.TestCase):
         )
         self.assertEqual(reconciled.status, OperationStatus.ACKNOWLEDGED)
         self.assertEqual(reconciled.remote_id, "resp-authoritative")
+
+    def test_explicit_response_failure_is_terminal_and_retains_remote_id(self):
+        requests = []
+
+        def post(*args, **kwargs):
+            requests.append((args, kwargs))
+            return FakeResponse(
+                body={"id": "resp-failed", "status": "failed", "error": {"message": "private"}}
+            )
+
+        arguments = {
+            "operation_id": "start-failed",
+            "binding": self.binding,
+            "case_id": "c3dc94c3-7772-4249-bf63-95597591f49c",
+        }
+        client = self.client(post)
+        with self.assertRaises(HostedResponseFailed) as captured:
+            client.start(**arguments)
+        self.assertNotIn("private", str(captured.exception))
+        record = self.journal.get("start-failed")
+        self.assertEqual((record.status, record.remote_id), (OperationStatus.FAILED, "resp-failed"))
+        self.assertEqual(client.reconcile_acknowledgment("start-failed", ["resp-failed"]), record)
+        with self.assertRaises(HostedResponseFailed):
+            self.client(post).start(**arguments)
+        with self.assertRaisesRegex(ValueError, "different request content"):
+            client.start(**{**arguments, "case_id": "different-case"})
+        self.assertEqual(len(requests), 1)
 
     def test_resume_rejects_cross_channel_or_conversation(self):
         client = self.client(lambda *_args, **_kwargs: FakeResponse())

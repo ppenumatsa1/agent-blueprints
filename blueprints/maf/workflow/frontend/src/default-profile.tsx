@@ -39,11 +39,11 @@ export const defaultWorkflowStudioProfile: WorkflowStudioProfile = {
   },
   history: {
     heading: "Workflow history",
-    activityHeading: "Activity",
-    refresh: "Refresh history",
+    activityHeading: "Event Timeline",
     loadMore: "Load more history",
     loading: "Loading history...",
     empty: "No workflows found.",
+    activityEmpty: "No activity records are available for this workflow.",
     error: "Workflow history could not be loaded.",
     events: {
       created: "Workflow created",

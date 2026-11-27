@@ -138,15 +138,9 @@ def _api_restart(adapter):
 
 
 def _hosted_interruption(adapter):
-    created = adapter.create(_key("hosted-interruption"))
-    adapter.interrupt_host(created.case_id)
-    interrupted = adapter.read(created.case_id)
-    if interrupted.technical_status not in {"interrupted", "unknown"}:
-        raise AssertionError("Hosted interruption was not visible.")
-    recovered = adapter.reconcile(created.case_id)
-    if not _same_record(created, recovered) or recovered.effect_count != 0:
-        raise AssertionError("Hosted resume did not preserve the pending request.")
-    return recovered
+    raise UnsupportedScenario(
+        "Hosted interruption requires independently verified native continuation evidence."
+    )
 
 
 def _postgres_transient(adapter):
@@ -311,7 +305,7 @@ def run_scenarios(
         raise ValueError("Hosted adapter target does not match the approved target.")
     started_at = datetime.now(timezone.utc).isoformat()
     results = {}
-    expected_correlations = set()
+    expected_cases = set()
     for name, scenario in SCENARIOS:
         try:
             record = scenario(adapter)
@@ -328,7 +322,7 @@ def run_scenarios(
         else:
             if not isinstance(record, HostedRecord):
                 raise ValueError("Hosted scenarios must return their correlated record.")
-            expected_correlations.add((record.request_id, record.case_id))
+            expected_cases.add(record.case_id)
             results[name] = {
                 "status": "passed",
                 "reason": "The hosted failure contract was observed.",
@@ -345,9 +339,11 @@ def run_scenarios(
             "deployment_revision",
         }
         hosted = {"hosted_phase", "conversation_id", "hosted_agent_name", "hosted_agent_version"}
-        optional = {"http_status"} | hosted
+        optional = {"http_status", "extensions"} | hosted
         if not required <= set(item) or set(item) - required - optional:
             raise ValueError("Hosted correlation records have an unexpected shape.")
+        if "extensions" in item and not isinstance(item["extensions"], dict):
+            raise ValueError("Hosted correlation extensions must be an object.")
         if "http_status" in item and (
             type(item["http_status"]) is not int or not 100 <= item["http_status"] <= 599
         ):
@@ -360,6 +356,14 @@ def run_scenarios(
                 for name in hosted - {"hosted_phase"}
             ):
                 raise ValueError("Hosted correlation metadata is invalid.")
+            if item["hosted_phase"] == "start":
+                extensions = item.get("extensions", {})
+                producer = extensions.get("producer")
+                if (
+                    not isinstance(producer, dict)
+                    or producer.get("hosted_start_claim_request_id") != item["request_id"]
+                ):
+                    raise ValueError("Hosted start claim correlation is missing or mismatched.")
         UUID(item["request_id"])
         UUID(item["case_id"])
         int(item["trace_id"], 16)
@@ -367,9 +371,15 @@ def run_scenarios(
             raise ValueError("Hosted trace IDs must contain 32 hexadecimal characters.")
         if item["deployment_revision"] != deployment_revision:
             raise ValueError("Hosted correlation deployment revision mismatch.")
-    observed_correlations = {(item["request_id"], item["case_id"]) for item in correlations}
-    if not expected_correlations.issubset(observed_correlations):
-        raise ValueError("Hosted correlation evidence does not cover every passed scenario.")
+    observed_cases = {
+        item["case_id"]
+        for item in correlations
+        if item.get("hosted_phase") == "start"
+        and type(item.get("http_status")) is int
+        and 200 <= item["http_status"] < 300
+    }
+    if not expected_cases.issubset(observed_cases):
+        raise ValueError("A successful hosted start claim is required for every passed scenario.")
     return {
         "schema_version": "1.0.0",
         "source_revision": source_revision,

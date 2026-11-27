@@ -1,4 +1,5 @@
 import os
+import json
 import re
 import subprocess
 import sys
@@ -16,6 +17,41 @@ GENERATOR = ROOT / "scripts" / "instantiate_maf.py"
 
 
 class InstantiationTests(unittest.TestCase):
+    def test_use_case_catalog_uses_selected_assets_and_excludes_commands(self):
+        catalog = instantiator._order_resolution_catalog(
+            instantiator.ORDER_RESOLUTION_CONTRACT, instantiator.ORDER_RESOLUTION_CASES
+        )
+        self.assertEqual(catalog["status"], "available")
+        self.assertGreater(len(catalog["cases"]), 0)
+        serialized = json.dumps(catalog)
+        self.assertNotIn('"commands"', serialized)
+        self.assertNotIn('"expected"', serialized)
+        with tempfile.TemporaryDirectory() as temporary:
+            target, _, _, _ = self.generate_order_resolution(Path(temporary))
+            generated = json.loads((target / "frontend" / "src" / "order-resolution-use-cases.json").read_text(encoding="utf-8"))
+            self.assertEqual(generated["status"], "unavailable")
+            self.assertEqual(generated["cases"], [])
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            contract = json.loads(instantiator.ORDER_RESOLUTION_CONTRACT.read_text(encoding="utf-8"))
+            contract["orders"]["ORDER-LOW"]["amount"] = "42.00"
+            override = root / "contract.json"
+            override.write_text(json.dumps(contract), encoding="utf-8")
+            target = root / "generated"
+            instantiator.instantiate(target, profile="order-resolution", order_resolution_contract=override)
+            generated = json.loads((target / "frontend" / "src" / "order-resolution-use-cases.json").read_text(encoding="utf-8"))
+            self.assertEqual(generated["cases"][0]["payload"]["order"]["amount"], "42.00")
+
+    def test_azure_web_proxy_verifies_tls_and_keeps_stream_unbuffered(self):
+        source = (ROOT / "scripts" / "azure" / "deploy.ps1").read_text(encoding="utf-8")
+        nginx = (ROOT / "blueprints" / "maf" / "workflow" / "frontend" / "nginx.conf").read_text(encoding="utf-8")
+        dockerfile = (ROOT / "blueprints" / "maf" / "workflow" / "frontend" / "Dockerfile").read_text(encoding="utf-8")
+        for directive in ("proxy_ssl_server_name on", "proxy_ssl_name $apiFqdn", "proxy_ssl_verify on", "proxy_ssl_trusted_certificate /etc/ssl/certs/ca-certificates.crt", "proxy_set_header Host $apiFqdn", "proxy_pass https://$apiFqdn"):
+            self.assertIn(directive, source)
+        self.assertIn("proxy_buffering off;", nginx)
+        self.assertEqual(nginx.count("proxy_pass http://api:8000;"), 3)
+        self.assertIn("ca-certificates", dockerfile)
+
     def generate_order_resolution(self, parent: Path) -> tuple[Path, Path, Path, Path]:
         contract = parent / "acceptance-contract.json"
         contract.write_text(
@@ -463,6 +499,15 @@ class InstantiationTests(unittest.TestCase):
                 ).read_bytes(),
             )
             for relative in (
+                "frontend/e2e/local.spec.ts",
+                "frontend/e2e/studio-shell.spec.ts",
+            ):
+                with self.subTest(profile_browser_spec=relative):
+                    self.assertEqual(
+                        (ROOT / "profiles" / "order-resolution" / "overlay" / relative).read_bytes(),
+                        (target / relative).read_bytes(),
+                    )
+            for relative in (
                 "backend/app/order_resolution/action.py",
                 "backend/app/order_resolution/application.py",
                 "backend/app/order_resolution/host.py",
@@ -479,6 +524,8 @@ class InstantiationTests(unittest.TestCase):
                 "backend/order_resolution_hosted/credentials.py",
                 "backend/tests/test_order_resolution.py",
                 "backend/tests/test_order_resolution_api.py",
+                "hosted-agent/.dockerignore",
+                "hosted-agent/Dockerfile",
                 "hosted-agent/main.py",
                 "hosted-agent/requirements.txt",
                 "hosted-agent/src/order_resolution_hosted/bridge.py",
@@ -505,6 +552,13 @@ class InstantiationTests(unittest.TestCase):
                 (ROOT / "profiles" / "order-resolution" / "backend" / "app" / "api" / "routes" / "cases.py").read_bytes(),
                 (target / "backend" / "app" / "api" / "routes" / "cases.py").read_bytes(),
             )
+            for name in (".dockerignore", "Dockerfile"):
+                self.assertEqual(
+                    (
+                        ROOT / "profiles" / "order-resolution" / "hosted-agent" / name
+                    ).read_bytes(),
+                    (target / "hosted-agent" / name).read_bytes(),
+                )
             order_profile = (target / "frontend" / "src" / "order-resolution.tsx").read_text(
                 encoding="utf-8"
             )

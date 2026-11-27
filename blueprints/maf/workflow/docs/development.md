@@ -9,6 +9,22 @@ direct backend inputs in the launching environment. From `backend`:
 uv run --locked uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload --no-access-log
 ```
 
+On Windows, explicitly select Python's native Selector loop for Psycopg's
+asynchronous activity-stream connections, including runs without reload:
+
+```text
+uv run --locked uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload --no-access-log --loop asyncio:SelectorEventLoop
+```
+
+The Windows VS Code backend launch uses the same Uvicorn option. Other
+platforms retain Uvicorn's default loop selection. This does not change the
+process-wide asyncio policy or replace an already running loop. An embedded
+ASGI host on Windows must also select a compatible loop before starting;
+the default Proactor loop is unsupported by Psycopg async connections.
+Windows Selector loops have Python's socket-count and asynchronous
+subprocess/pipe limitations; this is local development support, not evidence
+of Windows production capacity. Linux container startup is unchanged.
+
 From `frontend`, set the three public `VITE_` inputs and run:
 
 ```text

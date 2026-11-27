@@ -28,6 +28,15 @@ class RecordOrderResolutionAction:
             raise RuntimeError("The Order Resolution action is not bound to persistence.")
         proposal = self.store.get_current_proposal(str(case.id))
         decision = self.store.get_decision(case.id)
+        self_review = case.owner_id == case.reviewer_id or proposal.owner_id == proposal.reviewer_id
+        protected_self_decision = (
+            self_review
+            and decision is not None
+            and type(self.destination) is PostgresSyntheticDestination
+            and self.store.permits_poc_effect(connection, decision)
+        )
+        if self_review and not protected_self_decision:
+            raise Conflict("A protected approval is required for a POC self-reviewed effect.")
         payload = {
             "order_id": case.payload["order"]["id"],
             "action": proposal.action,
@@ -39,6 +48,7 @@ class RecordOrderResolutionAction:
             self.store.get_current_proposal(str(case.id)),
             decision,
             payload,
+            protected_self_decision=protected_self_decision,
         )
         self._project(connection, case, request)
 

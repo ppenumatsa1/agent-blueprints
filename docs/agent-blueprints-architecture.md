@@ -8,6 +8,150 @@ contracts and documented engineering patterns where they have demonstrated
 value; do not hide MAF, LangGraph, or a harness behind a universal runtime.
 Generated projects must not import this repository at runtime.
 
+## Development POC execution
+
+Prioritize the smallest authorized synthetic end-to-end cycle on the current
+CI-validated candidate before optional refinements. Retrospective unknowns
+remain disclosed, while existing explicit safety and security safeguards
+remain in force. A POC cycle is not production-readiness evidence.
+
+## Protected synthetic POC self-decisions
+
+The default Order Resolution API and Agent A require a distinct reviewer.
+In the opt-in hosted synthetic POC only, the API can admit the configured
+operator to stage a self-reviewed case. The API must use the protected
+database scope under strict managed identity and verified TLS. No caller
+flag, review field, acceptance fault setting, or model response can substitute
+for an owner-issued grant bound to the exact pending case, proposal, handle,
+and outcome. Agent A still uses the native approval request and authenticated
+business API, never a database credential or local workflow checkpoint.
+PostgreSQL atomically appends the protected exception audit when the
+durable decision succeeds. Approved effects recheck that audit and use only
+the built-in PostgreSQL synthetic destination. Local relational checks and
+fixture Entra role labels are not live workload identity or artifact
+provenance.
+
+## Windows asynchronous PostgreSQL startup
+
+Psycopg's asynchronous connections require a compatible event loop; Windows'
+default Proactor loop is unsupported. The Windows local Uvicorn launch uses
+its native `--loop asyncio:SelectorEventLoop` option before the server starts.
+Real PostgreSQL tests use Python/AnyIO's scoped loop-factory interfaces and
+assert that the process-wide policy is unchanged. Other platforms retain
+their default loops. No application import or lifespan callback mutates a
+running loop, and no synchronous database fallback replaces stream
+cancellation, read-only connections, server deadlines or authorization.
+Embedded Windows hosts must select a compatible loop themselves. Native
+Selector socket/subprocess restrictions remain development limitations;
+Linux containers and the deployment/recovery gates are unchanged. See the
+[development guide](../blueprints/maf/workflow/docs/development.md).
+
+## Advisory build-attestation preflight
+
+The [independent project](../blueprints/maf/workflow/docs/build-attestations.md)
+can use GitHub CLI to verify exact API, web and Foundry OCI build subjects
+against an externally supplied policy. The same verified result must bind
+the certificate, source and signer IDs/revisions, GitHub-hosted runner,
+standard build predicate and subject digest. An external path does not prove
+independent trust, and a signed build claim does not prove the actual checkout,
+generated inputs, or live image. The preflight is not a release gate or an
+Azure observer; the failure-injection hard stop remains in place.
+
+## Acceptance evidence boundaries
+
+The hosted failure runner requires each passed case to have a successful
+hosted-start HTTP correlation matching the original server-generated request
+ID persisted on its acknowledged start claim. The acceptance operator
+endpoint exposes that ID; replays and legacy claims without it do not count.
+The claim is not proof of outbound dispatch: supplied metadata does not
+authenticate an operation's telemetry or prove recovery. Independent
+telemetry and provenance verification remain mandatory. The HTTP request ID
+is not the native approval handle. The profile
+adapter receives configured target metadata and uses the failure job's
+authentication file; these settings do not independently verify isolation or
+provenance. Hosted interruption is blocked before using a hosted root or
+stopping a session.
+The live browser spec recognizes the base and Order Resolution labels. Local
+fixture checks are not live hosted or identity evidence. Recovery-evidence and
+credential-safety checks do not prove live recovery or trusted origin control.
+The full live result producer refuses to submit any case until ORS-005 native
+continuation can be independently established.
+
+An operator can explicitly request a partial result with
+`create_results(..., case_ids=["ORS-001", "ORS-002", "ORS-003", "ORS-004",
+"ORS-006", "ORS-007", "ORS-008", "ORS-009"])`. Each excluded canonical case
+is retained as `status: not_run` with no fabricated business or technical
+outcome. Empty, unknown, duplicate, and unsupported selections fail before
+live client construction. Default selection still includes all nine and
+refuses ORS-005. Same-identity POC owner-database mode must also exclude
+ORS-009, whose official oracle requires distinct actor identities.
+For cases without an explicit reviewer, this mode uses a stable reserved nil
+UUID and refuses an operator collision; the value does not grant approval.
+The ORS-001, 004, and 006–008 selection has a mocked driver regression that
+does not call the grant or decision paths, not evidence of live execution.
+ORS-004 requires an observed nonterminal same-identity replay and separately
+compares the terminal business outcome after replay; a case that completes
+before that boundary is unverified. ORS-008 checks every invalid variant's
+record and snapshot for the actual failure, absent proposal, decision and
+effects, no recorded local/hosted approval request, and exactly one terminal
+event. The protected snapshot exposes execution completion, failure code and
+durable approval-request event counts for these checks. Those application
+records do not establish complete Foundry session visibility or provenance.
+Partial results do not satisfy the full canonical acceptance contract or
+authorize deployment, recovery injection, or a provenance bypass.
+
+On the deployed PR #62 candidate, the selected live subset confirmed ORS-001
+completion and the expected ORS-006, ORS-007, and ORS-008 failure outcomes.
+ORS-004 completed before its pre-completion replay boundary and remains
+unverified; no replay was attempted. Although hosted version 13 is published,
+the Foundry route and recent telemetry still identify version 12, so version
+13 behavior is not verified live. The API/web revisions are healthy, but
+authenticated UI checks were blocked by browser approval. These partial
+results keep the development POC status **Approved / Not Validated** and do
+not waive the seven unresolved Azure Policy findings or the distinct-reviewer
+and hosted-continuation requirements.
+
+## Hosted response failure visibility
+
+An immediate failed Responses start/resume commits the operation outcome,
+case failure marker and audit event in one application-owned database
+transaction, without fabricating a failed business outcome or native
+checkpoint. Existing failure codes are retained. The stored failed operation
+also prevents a new hosted decision even when another failure code was already
+present; the UI hides decisions for a pending case with a failure. A delayed
+pending or action callback cannot clear the failure before the existing
+hosted completion transition confirms matching business state, including
+when the callback arrives before the failed operation is journaled. Failed
+nonterminal cases keep refreshing without enabling approval. The live
+acceptance poll uses a cancellable overall timeout for its reads. Same-key
+failure replay never redispatches. These are local fixture semantics, not
+evidence of later Foundry background failure detection or recovery.
+
+## Operator-only isolated synthetic manual tests
+
+Above PR #61 (`a78854c5fff4d4f518e9fea729d0bba0123ce2bb`), the blueprint
+ships a separate fixed offline runner, not browser integration. Its
+allowlisted build context contains only the canonical native MAF approval
+graph, domain types, locked dependency inputs and bundled fixture/launcher
+assets. Actual Docker configuration is verified before execution: local
+socket/pipe endpoint, immutable image ID, network none, read-only filesystem,
+unprivileged identity, no capabilities or privilege escalation, no mounts,
+devices, ports or application credentials, and bounded resources. Negative
+runtime probes must pass before native request/response execution. The
+in-memory synthetic record does not execute business effects or checkpoints.
+No application factory or arbitrary callback is loaded.
+
+The trusted operator, reviewed source, dependencies, Docker daemon and host
+are outside this boundary; a local socket may itself be forwarded. Builds
+use public registries and are not offline or independently attested. The
+runner's output is fixed-fixture evidence, not a production release gate.
+Independent base/profile copies carry the runner and real Docker tests;
+neither invokes a runtime dependency on this repository. See the
+[copied operator guide](../blueprints/maf/workflow/docs/offline-synthetic-tests.md)
+for the exact checks and limitations. UI dispatch, same-identity exceptions,
+domain-specific workflow testing, atomic exception audit and durable recovery
+remain unimplemented by this layer. Existing production controls are unchanged.
+
 ## Optional protocol context
 
 Layer 5 exposes explicitly activated, typed read-only context registration for
@@ -31,7 +175,8 @@ Application-supplied manual-test execution is disabled in all environments.
 This interim control is not an isolated synthetic execution capability:
 application code is trusted rather than sandboxed, and a build flag or
 omitting the workflow client cannot prevent network access or real effects.
-A future implementation requires a separately verified isolation boundary.
+A browser implementation still requires a separately verified dispatch and
+isolation boundary; the operator-only fixed runner above does not enable it.
 Evidence projections are not authorization, artifact verification, or
 evidence of production readiness.
 

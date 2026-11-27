@@ -83,6 +83,7 @@ def case_control(
         "case_id": str(case_id),
         "conversation_id": binding["conversation_id"],
         "platform_session_id": binding["session_id"],
+        "start_claim_request_id": store.acceptance_start_claim_request_id(case_id),
         "armed_faults": faults.armed(case_id),
         "observed_faults": faults.observed(case_id),
         "snapshot": store.acceptance_snapshot(case_id),

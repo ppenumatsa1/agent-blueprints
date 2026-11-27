@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
+import { authorizedOrigin, checkedStorageState, injectSessionStorage } from "./live-origin";
 
 test("live generated frontend enforces separate owner and reviewer identities", async ({
   browser,
@@ -8,6 +9,7 @@ test("live generated frontend enforces separate owner and reviewer identities", 
   test.skip(process.env.E2E_LIVE !== "true", "Live browser E2E requires E2E_LIVE=true.");
   const required = [
     "E2E_BASE_URL",
+    "E2E_AUTHORIZED_ORIGIN",
     "E2E_OWNER_STORAGE_STATE",
     "E2E_OWNER_SESSION_STORAGE",
     "E2E_REVIEWER_STORAGE_STATE",
@@ -24,6 +26,7 @@ test("live generated frontend enforces separate owner and reviewer identities", 
   for (const name of required) {
     expect(process.env[name], `${name} must be explicitly configured.`).toBeTruthy();
   }
+  const origin = authorizedOrigin(process.env.E2E_BASE_URL!, process.env.E2E_AUTHORIZED_ORIGIN!);
   const payload = JSON.parse(
     process.env.E2E_PAYLOAD_JSON ?? '{"synthetic":true,"value":42}',
   ) as Record<string, unknown>;
@@ -36,6 +39,7 @@ test("live generated frontend enforces separate owner and reviewer identities", 
     ) as Record<string, string>;
     if (
       !entries ||
+      typeof entries !== "object" ||
       Array.isArray(entries) ||
       Object.values(entries).some((value) => typeof value !== "string")
     ) {
@@ -55,14 +59,13 @@ test("live generated frontend enforces separate owner and reviewer identities", 
   };
   const context = async (name: "OWNER" | "REVIEWER") => {
     const result = await browser.newContext({
-      baseURL: process.env.E2E_BASE_URL,
-      storageState: process.env[`E2E_${name}_STORAGE_STATE`],
+      baseURL: origin,
+      storageState: checkedStorageState(
+        JSON.parse(readFileSync(process.env[`E2E_${name}_STORAGE_STATE`]!, "utf8")) as unknown,
+        origin,
+      ),
     });
-    await result.addInitScript((entries) => {
-      for (const [key, value] of Object.entries(entries)) {
-        window.sessionStorage.setItem(key, value);
-      }
-    }, loadSession(name));
+    await result.addInitScript(injectSessionStorage, { origin, entries: loadSession(name) });
     return result;
   };
 
@@ -71,18 +74,14 @@ test("live generated frontend enforces separate owner and reviewer identities", 
   try {
     const ownerPage = await ownerContext.newPage();
     await ownerPage.goto("/");
-    await expect(ownerPage.getByRole("heading", { name: "New request" })).toBeVisible();
+    await expect(ownerPage.getByRole("heading", { name: /^(New request|New order issue)$/ })).toBeVisible();
     await expect(ownerPage.getByRole("button", { name: "Sign in" })).toHaveCount(0);
     await ownerPage.getByLabel("Reviewer object ID").fill(process.env.E2E_REVIEWER_ID!);
-    await ownerPage.getByLabel("Request data (JSON)").fill(JSON.stringify(payload));
-    await ownerPage.getByRole("button", { name: "Submit request" }).click();
-    await expect(
-      ownerPage.getByRole("heading", { name: "Record status: pending" }),
-    ).toBeVisible();
-    const recordId = (await ownerPage.getByText(/^Record ID:/).textContent())?.replace(
-      "Record ID: ",
-      "",
-    );
+    await ownerPage.getByLabel(/^(Request data|Order issue data) \(JSON\)$/).fill(JSON.stringify(payload));
+    await ownerPage.getByRole("button", { name: /^(Submit request|Submit issue)$/ }).click();
+    await expect(ownerPage.getByRole("status", { name: "Case status: pending" })).toBeVisible();
+    await ownerPage.getByText("Open another case by ID").click();
+    const recordId = await ownerPage.getByLabel("Case ID").inputValue();
     expect(recordId).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
     );
@@ -90,15 +89,12 @@ test("live generated frontend enforces separate owner and reviewer identities", 
     const reviewerPage = await reviewerContext.newPage();
     await reviewerPage.goto("/");
     await expect(reviewerPage.getByRole("button", { name: "Sign in" })).toHaveCount(0);
-    await reviewerPage.getByLabel("Record ID").fill(recordId!);
+    await reviewerPage.getByText("Open a case").click();
+    await reviewerPage.getByLabel("Case ID").fill(recordId);
     await reviewerPage.getByRole("button", { name: "Open" }).click();
-    await expect(
-      reviewerPage.getByRole("heading", { name: "Record status: pending" }),
-    ).toBeVisible();
+    await expect(reviewerPage.getByRole("status", { name: "Case status: pending" })).toBeVisible();
     await reviewerPage.getByRole("button", { name: "Approve" }).click();
-    await expect(
-      reviewerPage.getByRole("heading", { name: "Record status: completed" }),
-    ).toBeVisible();
+    await expect(reviewerPage.getByRole("status", { name: "Case status: completed" })).toBeVisible();
     await expect(reviewerPage.getByText("Decision: approved")).toBeVisible();
 
     const output = resolve(

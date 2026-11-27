@@ -253,12 +253,14 @@ class GeneratedOrderResolutionApplication:
         policy: Any,
         identity_bindings: HostedIdentityBindings,
         workflow_factory: Any,
+        protected_self_decision_enabled: bool = False,
     ) -> None:
         self._store = store
         self._action = action
         self._policy = policy
         self._identity_bindings = identity_bindings
         self._workflow_factory = workflow_factory
+        self._protected_self_decision_enabled = protected_self_decision_enabled
 
     @property
     def checkpoint_types(self) -> tuple[str, ...]:
@@ -400,7 +402,16 @@ class GeneratedOrderResolutionApplication:
             )
             store = _bound_store(self._store, caller, conversation_id, "reviewer")
             case = store.get(response.case_id)
-            self._policy.authorize_decision(principal, case)
+            from .business import _BoundBusinessStore
+
+            # Only the authenticated API callback can decide a protected self-review.
+            if not (
+                self._protected_self_decision_enabled
+                and type(store) is _BoundBusinessStore
+                and case.owner_id == case.reviewer_id == principal.subject
+                and case.tenant_id == principal.tenant_id
+            ):
+                self._policy.authorize_decision(principal, case)
         command = DecisionCommand(
             case_id=str(response.case_id),
             proposal_version=response.proposal_version,
@@ -426,7 +437,9 @@ class GeneratedOrderResolutionApplication:
                 record_decision(
                     _HostedDecisionStore(store),
                     store.get_current_proposal(str(response.case_id)),
-                    Actor(principal.tenant_id, principal.subject, principal.scopes, principal.roles),
+                    Actor(
+                        principal.tenant_id, principal.subject, principal.scopes, principal.roles
+                    ),
                     command,
                     now=datetime.now(timezone.utc),
                 )
@@ -456,6 +469,9 @@ def build_generated_application() -> GeneratedOrderResolutionApplication:
         policy=CaseAccessPolicy(),
         identity_bindings=store,
         workflow_factory=build_order_resolution_workflow,
+        protected_self_decision_enabled=(
+            os.environ.get("ORDER_RESOLUTION_POC_SELF_DECISION") == "true"
+        ),
     )
 
 

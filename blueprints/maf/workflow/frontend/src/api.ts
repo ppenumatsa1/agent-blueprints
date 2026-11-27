@@ -19,6 +19,7 @@ export interface WorkflowCase {
   decision: Decision;
   payload: Record<string, unknown>;
   decision_handle?: string | null;
+  decision_channel?: "api" | "foundry-responses" | null;
   execution_complete: boolean;
   failure_code: string | null;
 }
@@ -58,7 +59,7 @@ export interface DecisionBinding {
 
 export interface WorkflowClient {
   submit(reviewer: string, payload: Record<string, unknown>, idempotencyKey: string): Promise<WorkflowCase>;
-  read(id: string): Promise<WorkflowCase>;
+  read(id: string, options?: { signal?: AbortSignal }): Promise<WorkflowCase>;
   listHistory(options?: {
     status?: WorkflowStatus;
     limit?: number;
@@ -135,6 +136,10 @@ function isWorkflowCase(value: unknown): value is WorkflowCase {
     (record.decision_handle === undefined ||
       record.decision_handle === null ||
       typeof record.decision_handle === "string") &&
+    (record.decision_channel === undefined ||
+      record.decision_channel === null ||
+      record.decision_channel === "api" ||
+      record.decision_channel === "foundry-responses") &&
     typeof record.execution_complete === "boolean" &&
     (record.failure_code === null || typeof record.failure_code === "string")
   );
@@ -238,6 +243,7 @@ export class HttpWorkflowClient implements WorkflowClient {
         },
         body: options.body === undefined ? undefined : JSON.stringify(options.body),
         credentials: "omit",
+        redirect: "error",
         signal: options.signal,
       });
     } catch {
@@ -262,8 +268,8 @@ export class HttpWorkflowClient implements WorkflowClient {
     });
   }
 
-  read(id: string): Promise<WorkflowCase> {
-    return this.request("read", `/api/cases/${encodeURIComponent(id)}`, isWorkflowCase);
+  read(id: string, options: { signal?: AbortSignal } = {}): Promise<WorkflowCase> {
+    return this.request("read", `/api/cases/${encodeURIComponent(id)}`, isWorkflowCase, options);
   }
 
   listHistory(options: { status?: WorkflowStatus; limit?: number; cursor?: string } = {}): Promise<WorkflowHistoryPage> {
@@ -299,6 +305,7 @@ export class HttpWorkflowClient implements WorkflowClient {
       const response = await fetch(`/api/cases/${encodeURIComponent(id)}/activity/stream`, {
         headers: { Authorization: `Bearer ${token}`, Accept: "text/event-stream" },
         credentials: "omit",
+        redirect: "error",
         signal: connection.signal,
       });
       clearTimeout(connectTimeout);

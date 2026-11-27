@@ -17,7 +17,11 @@ from order_resolution_hosted.host import (
     parse_turn,
     run,
 )
-from order_resolution_hosted.observability import InvokeAgentSpanHook
+from order_resolution_hosted.observability import (
+    InvokeAgentSpanHook,
+    sanitize_async_httpx_url,
+    sanitize_httpx_url,
+)
 
 
 class FakeApplication:
@@ -125,7 +129,11 @@ class ProtocolTests(unittest.TestCase):
                 "fastapi": {
                     "excluded_urls": r"^https?://[^/?#]+/healthz$",
                 },
-                "httpx": {"enabled": True},
+                "httpx": {
+                    "enabled": True,
+                    "request_hook": sanitize_httpx_url,
+                    "async_request_hook": sanitize_async_httpx_url,
+                },
                 "openai_agents": {"enabled": False},
                 "urllib": {"enabled": True},
             },

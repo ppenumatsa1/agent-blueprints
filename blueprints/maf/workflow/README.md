@@ -15,6 +15,8 @@ local prototype, not a production deployment:
 - [Setup and configuration](docs/setup.md)
 - [Development and debugging](docs/development.md)
 - [Testing and evidence](docs/testing.md)
+- [Operator-only offline synthetic manual tests](docs/offline-synthetic-tests.md)
+- [Build-attestation preflight](docs/build-attestations.md)
 - [Deployment design](docs/deployment.md)
 - [Observability design and troubleshooting](docs/operations.md)
 
@@ -374,6 +376,14 @@ For interactive development, configure a local PostgreSQL connection,
 actual local redirect URI separately with Entra. These interactive paths
 require real registrations and authorized identities; automated synthetic
 tests do not. No test identity is enabled in the application.
+
+On Windows, add `--loop asyncio:SelectorEventLoop` to the Uvicorn command for
+Psycopg's asynchronous activity-stream connections. The Windows debugger
+configuration includes this option; other platforms retain their default
+loops. The ordinary backend test command selects compatible Windows loops
+through scoped test-runner options, without changing the global policy.
+See [development](docs/development.md) for the embedded-host and Windows
+Selector limitations.
 
 Open the blueprint or generated project root as a VS Code workspace, install
 the Python and Python Debugger extensions, run the locked sync task and select

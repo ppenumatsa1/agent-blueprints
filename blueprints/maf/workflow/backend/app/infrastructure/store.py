@@ -43,6 +43,7 @@ _AUDIT_ACTIVITY_TYPES = {
     "hosted_workflow_finished": "workflow_finished",
     "recovery_failed": "recovery_failed",
     "resolution_failed": "workflow_failed",
+    "hosted_response_failed": "workflow_failed",
 }
 MAX_CONCURRENT_POLL_READS = 4
 # Local workflow execution holds an advisory-lock connection while borrowing another.

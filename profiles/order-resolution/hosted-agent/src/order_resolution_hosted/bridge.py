@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Protocol
+from typing import Any, Callable, Protocol
 from uuid import UUID
+
+from app.domain.errors import HostedWorkflowError
 
 from .client import (
     FOUNDRY_SCOPE,
     ConversationBinding,
+    HostedResponseFailed,
     OperationJournal,
     ResponsesClient,
     TokenProvider,
@@ -109,6 +112,13 @@ class ResponsesWorkflowHost:
     def initialize(self) -> None:
         self._responses.prewarm()
 
+    @staticmethod
+    async def _dispatch(create: Callable[..., str], **values: Any) -> None:
+        try:
+            await asyncio.to_thread(create, **values)
+        except HostedResponseFailed as exc:
+            raise HostedWorkflowError(str(exc)) from exc
+
     async def start(self, case_id: UUID, actor: Any) -> None:
         _require_authenticated_actor(actor)
         binding = await asyncio.to_thread(
@@ -122,7 +132,7 @@ class ResponsesWorkflowHost:
             conversation_id=binding.conversation_id,
             channel=HOSTED_CHANNEL,
         )
-        await asyncio.to_thread(
+        await self._dispatch(
             self._responses.start,
             operation_id=f"case:{case_id}:start",
             binding=binding,
@@ -144,7 +154,7 @@ class ResponsesWorkflowHost:
             channel=HOSTED_CHANNEL,
             decision_command=decision_command,
         )
-        await asyncio.to_thread(
+        await self._dispatch(
             self._responses.resume,
             operation_id=f"case:{case_id}:decision:{payload['proposal_version']}",
             binding=binding,

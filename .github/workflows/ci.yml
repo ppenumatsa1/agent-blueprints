@@ -4,6 +4,7 @@ on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -20,6 +21,8 @@ jobs:
         run: python -m pip install -r requirements-dev.txt
       - name: Run contract and readiness regression tests
         run: python -m unittest discover -s tests -v
+      - name: Run offline hosted publisher regression tests
+        run: python -m unittest discover -s scripts/foundry/tests -v
 
   maf-infrastructure:
     runs-on: ubuntu-latest
@@ -78,6 +81,31 @@ jobs:
       - name: Stop isolated PostgreSQL
         if: always()
         run: docker stop maf-core-test || true
+
+  maf-offline-synthetic:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+      - name: Check fixed launcher boundary
+        run: python -m unittest discover -s tests -p test_synthetic_manual_test.py -v
+      - name: Check source runner against real Docker
+        run: python -m unittest discover -s blueprints/maf/workflow/scripts/tests -v
+      - name: Instantiate base and profile outside checkout
+        run: |
+          python scripts/instantiate_maf.py "$RUNNER_TEMP/offline-base"
+          python scripts/instantiate_maf.py "$RUNNER_TEMP/offline-profile" --profile order-resolution
+      - name: Check independently built runners without source checkout access
+        working-directory: ${{ runner.temp }}
+        run: |
+          mv "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE.offline-hidden"
+          trap 'mv "$GITHUB_WORKSPACE.offline-hidden" "$GITHUB_WORKSPACE"' EXIT
+          for project in offline-base offline-profile; do
+            cd "$RUNNER_TEMP/$project"
+            python -m unittest discover -s scripts/tests -v
+          done
 
   maf-frontend:
     runs-on: ubuntu-latest
@@ -246,6 +274,26 @@ jobs:
             echo "Order Resolution verification must not skip canonical scenarios." >&2
             exit 1
           fi
+      - name: Build and verify the generated hosted image without Azure
+        run: |
+          python "$ORDER_RESOLUTION_DIR/scripts/foundry/publish_order_resolution_hosted.py" \
+            "$ORDER_RESOLUTION_DIR" --archive "$RUNNER_TEMP/hosted-source.zip" \
+            --container-context "$RUNNER_TEMP/hosted-container"
+          docker build --platform linux/amd64 --tag agent-blueprints-hosted:ci "$RUNNER_TEMP/hosted-container"
+          docker run --rm --network none --entrypoint python agent-blueprints-hosted:ci -c '
+          import os
+          from unittest.mock import Mock, patch
+          from agent_framework_foundry_hosting import ResponsesHostServer
+          from order_resolution_hosted.host import create_responses_server
+          app = Mock()
+          app.checkpoint_types = ("app.order_resolution.workflow:OrderResolutionDecision",)
+          with patch("order_resolution_hosted.host._configure_host_observability"):
+              server = create_responses_server(app)
+          assert isinstance(server, ResponsesHostServer)
+          app.prewarm.assert_called_once()
+          assert os.geteuid() != 0
+          assert os.access(os.environ["HOME"], os.W_OK)
+          '
       - name: Produce Order Resolution evaluation evidence and run independent validator
         run: |
           cd "$ORDER_RESOLUTION_DIR/backend"
@@ -385,14 +433,24 @@ jobs:
           destination="$RUNNER_TEMP/maf-browser-generated"
           python scripts/instantiate_maf.py "$destination"
           echo "GENERATED_FRONTEND=$destination/frontend" >> "$GITHUB_ENV"
+          profile_destination="$RUNNER_TEMP/maf-browser-order-resolution"
+          python scripts/instantiate_maf.py "$profile_destination" --profile order-resolution
+          echo "GENERATED_PROFILE_FRONTEND=$profile_destination/frontend" >> "$GITHUB_ENV"
       - name: Install locked browser dependencies and Chromium
         run: |
           cd "$GENERATED_FRONTEND"
           npm ci --no-audit --no-fund
           npx playwright install --with-deps chromium
+          cd "$GENERATED_PROFILE_FRONTEND"
+          npm ci --no-audit --no-fund
       - name: Run actual local Chromium E2E
         run: |
           cd "$GENERATED_FRONTEND"
+          npm run e2e:local
+          npm run e2e:history
+          npm run e2e:studio
+          E2E_LIVE=true E2E_BASE_URL=https://app.example.test npx playwright test e2e/live-origin.spec.ts
+          cd "$GENERATED_PROFILE_FRONTEND"
           npm run e2e:local
           npm run e2e:history
           npm run e2e:studio
@@ -404,5 +462,11 @@ jobs:
           path: |
             ${{ runner.temp }}/maf-browser-generated/frontend/playwright-report
             ${{ runner.temp }}/maf-browser-generated/frontend/test-results
+            ${{ runner.temp }}/maf-browser-generated/frontend/test-results-history
+            ${{ runner.temp }}/maf-browser-generated/frontend/test-results-studio
+            ${{ runner.temp }}/maf-browser-order-resolution/frontend/playwright-report
+            ${{ runner.temp }}/maf-browser-order-resolution/frontend/test-results
+            ${{ runner.temp }}/maf-browser-order-resolution/frontend/test-results-history
+            ${{ runner.temp }}/maf-browser-order-resolution/frontend/test-results-studio
           if-no-files-found: warn
           retention-days: 7

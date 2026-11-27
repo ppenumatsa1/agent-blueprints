@@ -1,5 +1,6 @@
 import type { DecisionBinding, WorkflowCase } from "./api";
-import type { PayloadProjection, WorkflowStudioProfile } from "./studio-profile";
+import catalog from "./order-resolution-use-cases.json";
+import type { PayloadProjection, StudioUseCaseCatalog, WorkflowStudioProfile } from "./studio-profile";
 import { defaultWorkflowStudioProfile } from "./default-profile";
 
 type JsonObject = Record<string, unknown>;
@@ -23,7 +24,6 @@ function projectOrderResolution(record: WorkflowCase): PayloadProjection {
   const amount = typeof proposal.amount === "string"
     ? `${text(proposal.currency)} ${proposal.amount}`
     : "Not applicable";
-  const outcome = record.status === "rejected" ? "Escalated after rejection" : record.status;
   return {
     summary: `Review ${text(proposal.action)} for ${text(order.id)}.`,
     fields: [
@@ -31,8 +31,8 @@ function projectOrderResolution(record: WorkflowCase): PayloadProjection {
       { label: "Issue", value: text(order.issue) },
       { label: "Proposed action", value: text(proposal.action) },
       { label: "Proposed amount", value: amount },
-      { label: "Approval required", value: proposal.approval_required === true ? "Yes" : "No" },
-      { label: "Outcome", value: outcome },
+      { label: "Approval required", value: proposal.approval_required === true ? "Yes" : proposal.approval_required === false ? "No" : "Unavailable" },
+      { label: "Status", value: record.status },
     ],
   };
 }
@@ -43,12 +43,13 @@ function decisionBinding(record: WorkflowCase): DecisionBinding | undefined {
     && typeof proposal.action === "string"
     && typeof proposal.destination_id === "string"
     && typeof record.decision_handle === "string"
+    && (record.decision_channel === "api" || record.decision_channel === "foundry-responses")
     ? {
         proposal_version: proposal.version,
         action: proposal.action,
         destination_id: proposal.destination_id,
         handle: record.decision_handle,
-        channel: "api",
+        channel: record.decision_channel,
       }
     : undefined;
 }
@@ -59,7 +60,7 @@ export const orderResolutionProfile: WorkflowStudioProfile = {
   eyebrow: "Order resolution workflow",
   labels: {
     newRequest: "New order issue",
-    requestGuidance: "The assigned reviewer must authorize the proposed resolution.",
+    requestGuidance: "Review the input before submitting. Some resolutions require an authorized reviewer.",
     reviewer: "Reviewer object ID",
     payload: "Order issue data (JSON)",
     submit: "Submit issue",
@@ -80,4 +81,9 @@ export const orderResolutionProfile: WorkflowStudioProfile = {
   },
   projectPayload: (_payload, record) => projectOrderResolution(record),
   decisionBinding,
+  approvalRequired: (record) => {
+    const required = object(record.payload.proposal).approval_required;
+    return typeof required === "boolean" ? required : undefined;
+  },
+  useCaseCatalog: catalog as StudioUseCaseCatalog,
 };

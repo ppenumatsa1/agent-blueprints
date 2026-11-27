@@ -1,5 +1,381 @@
 # Phased implementation plan
 
+## Approved observability and Workflow Studio follow-up in PR #62
+
+**Approved; development POC deployed, validation partial.**
+Reduce credential and fast successful polling noise while retaining errors,
+slow requests, metrics, and connected API -> Foundry -> hosted MAF -> database
+traces. Align the Order Resolution UI with the existing MAF Workflow
+Studio reference and screenshot: history on the left, workflow/timeline in
+the center, and approvals/evidence on the right, with a simpler responsive
+layout. Keep the existing React, Vite, TypeScript, and CopilotKit dependency
+choices unless an implemented feature demonstrably requires a change.
+
+Source `62fdb05d9d1ef00d7273ecc9db21a8ecf5a439d2` passed exact-head CI 8/8
+in [run 46045692581](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/46045692581)
+and was deployed to the existing POC with self-approval disabled. The API and
+web revisions are healthy on immutable images, with protected settings,
+identities and secrets preserved. Hosted version 13 is published and active,
+but the Foundry route remains pinned to version 12; recent live spans identify
+version 12, so candidate hosted behavior is not verified. Do not switch the
+route until old-session callback safety is established. Keep PR #62 draft and
+the overall deployment plan **Approved / Not Validated**. The seven Azure
+Policy audit findings, prior Foundry `403`, and unavailable distinct reviewer
+remain disclosed, not waived. Acceptance criteria and rollout boundaries are
+in the [deployment plan](../.azure/deployment-plan.md#approved-pr-62-observability-and-operator-ui-correction).
+
+Live acceptance evidence: ORS-001 completed with one claim, effect and
+terminal event. ORS-004 completed on its initial response before the required
+pre-completion replay boundary; no replay was attempted, so it remains
+unverified. ORS-006/007 failed with the expected missing/conflicting-evidence
+codes and zero claims/effects. All three ORS-008 variants failed explicitly
+with zero claims/effects and one terminal event each. Ten callback-host
+dependencies were parent-linked and contained no case UUID, callback route or
+query string, but the spans identify version 12 rather than version 13. A
+baggage marker was absent from a traced read-only API request, not from a
+verified hosted-agent callback. A handled 404 error canary produced no
+`AppExceptions` row; actual HTTPX exception exposure remains unverified.
+Database span correlation, Foundry portal visibility, and authenticated UI
+behavior remain unverified. Browser approval was denied and the blocked tab
+was not retried.
+
+The Workflow Studio UI implementation includes the approved run-centered
+layout, distinct activity-timeline empty copy, and semantic light/dark status
+text colors. Local shared-frontend checks passed (64 unit tests, build, CSP,
+Chromium E2E local/history/studio 1/5/1); a fresh generated Order Resolution
+frontend passed (74 unit tests, build, CSP, E2E 1/5/1, responsive accessibility
+1). These do not verify authenticated Azure behavior. Next: establish the
+old-session callback safety boundary before routing version 13, then verify
+the hosted candidate and live authenticated UI when access is available.
+Preserve self-approval disabled, the seven unresolved policy findings, and
+the overall plan **Approved / Not Validated**.
+
+## Development POC execution priority
+
+Repository guidance now prioritizes the smallest authorized end-to-end
+synthetic cycle on the current CI-validated candidate before non-blocking
+refinements. Existing explicit safeguards and honest reporting of unverified
+checks remain required. Evidence: `.github/copilot-instructions.md` and draft
+[PR #62](https://github.com/ppenumatsa1/agent-blueprints/pull/62). Next:
+apply this priority to the pending Azure POC cycle without treating it as a
+production-readiness claim.
+
+## Single-identity synthetic POC in PR #62
+
+Use the existing operator and PostgreSQL owner, not a new identity. Install
+the optional protected grant/audit schema only on the dedicated POC database;
+enable the generated hosted API and Agent A options only after verifying the
+reviewed artifacts and actual scope, TLS, managed-identity principal mapping,
+protected trigger ownership and operator grants. The owner command issues
+the exact case/proposal/outcome grant after the native pause without storing
+an Entra credential. Production remains default-off with distinct actors.
+Local PostgreSQL fixture results do not prove Azure activation, hosted
+continuation, adoption of independent provenance, or live multi-actor
+authorization evidence. See the [operator runbook](../profiles/order-resolution/overlay/backend/poc/README.md).
+The security review returned no verdict, so activation remains blocked.
+Before any old-binary rollback, drain and account for all self-reviewed
+cases, decisions, queued effects, grants, and hosted sessions. Historical
+effect authorization accepts an already persisted self-approval without the
+new protected-grant check; a clean journal alone cannot permit rollback.
+
+## Explicit partial live acceptance in PR #62
+
+**Selection implemented and locally verified; Azure execution pending.**
+The live producer accepts an explicit `case_ids` list. It preserves default
+all-nine behavior, source/deployment parity, and the ORS-005 fail-closed oracle.
+Unselected canonical cases remain in the result as `status: not_run`, never
+as normalized business success. Invalid or unsupported selection fails before
+constructing a live client. ORS-009 requires distinct actors and is refused
+when same-identity POC owner-database mode is configured.
+
+Evidence: three isolated generated-backend selection/guard tests passed on
+the change based on `28b7da3`. A generated API test reproduced HTTP 422 for
+the old POC reviewer placeholder; six focused tests then passed for a stable
+reserved UUID, operator-collision refusal, and a mocked five-case driver with
+no grant or decision calls. The generated acceptance module passed 33 tests
+and Ruff after an initial formatting failure was corrected. Next: verify the
+integrated POC approval/rejection seam and execute an explicitly selected
+live subset only when its deployment prerequisites are satisfied. All-nine
+acceptance, native hosted recovery, deployment provenance, and production
+authorization remain unverified or blocked; none is waived.
+
+## Live acceptance oracle corrections in PR #62
+
+**Locally verified; exact-head CI and Azure execution pending.** ORS-004 now
+submits an identical pre-completion replay only after observing a nonterminal
+case, verifies that replay is still nonterminal and uses the original case,
+then compares the original and replayed terminal business outcomes. A fast
+completion is explicitly unverified. ORS-008 checks each submitted record and
+protected snapshot for the real `policy_evidence_invalid` failure, absent
+proposal and decision, no recorded approval, action, claim or effect, and
+exactly one terminal event. Missing or conflicting evidence stops the run.
+Approval-request counts cover the application's durable local and hosted audit
+events; they do not prove a global Foundry session or compute inventory.
+
+Focused tests reproduced the prior false positives. A fresh independent
+generation then passed 38 acceptance tests and three PostgreSQL-backed tests;
+the isolated root suite passed 114 tests with two existing skips. The first
+format check failed before the repository-specific formatting and lint checks
+passed. Next: verify exact-head CI, then establish the actual scoped rollout,
+in-flight-operation and provenance prerequisites before live testing. No
+Azure outcome or production readiness is inferred from these local checks.
+
+## Opt-in hosted image publication for PR #62
+
+**Local implementation; integration and Azure verification pending.** Generated
+projects can stage the deterministic hosted archive into a minimal image
+context, build a non-root Python 3.13 Responses host, and opt into SDK
+publication by immutable image digest. The image operation binds its journal
+to the image and a fixed prior route; it checks that route before and after
+creation, including ambiguous outcomes, during reconciliation and during
+identity polling. It refuses ambiguous replay and checks the exact version's
+configured image. The original source remote-build behavior remains the
+default. These point-in-time control-plane checks are not atomic and do not
+authenticate source-to-image provenance or measure the running container.
+
+Local evidence at parent `28b7da3`: 17 publisher tests, eight instantiation
+tests, 67 hosted tests inside the `linux/amd64` image, and the isolated root
+suite (114 tests, two existing skips) passed. A synthetic, network-isolated
+probe reached `/readiness` on port 8088. The default-PyPI image build failed
+on a TLS handshake; the documented credentialless HTTPS mirror build passed.
+An initial image failed host construction because its non-root home was
+missing; the corrected image passed construction. The initial `/healthz`
+probe timed out on a `404`. The readiness probe mocked prewarm and
+observability; a separate unmocked, credentialless probe logged failed token
+prewarm and telemetry initialization and does not establish live auth or
+observability. The credential-free CI workflow now includes the publisher
+regressions and a generated-image build with a mocked, network-isolated
+composition check; exact-head CI is pending integration.
+
+Next: transfer to the #62 owner for independent review and exact-head CI,
+then coordinate the authorized registry push and fixed-route deployment.
+Existing rollout gates are not weakened. Project pull permissions, a real
+candidate version, session routing, hosted execution, and independent
+provenance remain unverified. Route restoration alone is not a verified
+binary rollback; see the POC rollback constraints above.
+
+## Windows asynchronous PostgreSQL startup in PR #62
+
+**Local acceptance passed; exact-head CI pending.** The default generated
+backend discovery command reproduced two Psycopg Proactor `InterfaceError`s
+and the related activity-stream 503 at `1d36ebf`. Native Python and AnyIO
+`loop_factory` options now select Selector loops only for Windows asynchronous
+PostgreSQL security tests, without changing the global policy or bypassing
+cancellation, read-only, server-deadline or authorization assertions.
+Windows Uvicorn development/debug startup uses its supported native
+`--loop asyncio:SelectorEventLoop` option; other platforms keep their defaults.
+
+Evidence: four focused checks passed, including real loopback Uvicorn
+authorized activity and unauthorized-reader denial; ordinary
+`python -m unittest discover -s tests -v` passed 176 generated base tests
+and 273 profile tests with one existing real-provider skip. The original
+three-case failure remains recorded, as do Psycopg connection ResourceWarnings.
+The isolated root suite ran 114 tests with two existing adapter-selection
+skips; generated backend lint and format checks passed.
+This does not make existing embedded Proactor loops compatible, lift Windows
+Selector socket/subprocess restrictions, or establish production capacity.
+
+Next: publish and verify exact-head CI on the existing draft
+[#62](https://github.com/ppenumatsa1/agent-blueprints/pull/62).
+No Azure, firewall, provenance or recovery gate is changed.
+
+## Hosted failure and acceptance review in PR #62
+
+**In progress; deployment remains blocked.** Immediate failed Responses
+start/resume outcomes, the case failure marker and the audit event are
+transactional. Existing failures are preserved; delayed pending/action
+callbacks cannot hide the failure before hosted completion, and new hosted
+decisions are denied when a failed operation is recorded. No failed business
+outcome, framework checkpoint, or replay is fabricated. A pending case with
+any failure code does not offer approval in the UI.
+
+The live adapter polls bounded reads for a hosted decision handle and for the
+requested terminal state with a cancellable 60-second overall timeout,
+rejects a different case or invalid channel, and does not repeat a decision
+POST. Failed nonterminal cases continue refreshing while approval remains
+hidden. The failure runner requires each passed case's successful correlation
+to match the server-recorded request ID of its acknowledged start claim;
+replays and legacy claims without that ID cannot cover it. This structural
+claim correlation does not prove outbound dispatch or independently
+authenticate producer metadata. Independent telemetry and provenance remain
+mandatory. The full nine-case live result producer fails before submissions
+because its ORS-005 native continuation is not verified. Hosted interruption
+and reconciliation remain blocked.
+
+Acceptance evidence on the follow-up candidate above `174eca3`: three
+generated local happy paths; nine synthetic canonical scenarios; 42 focused
+checks; 175 base and 272 profile backend tests under Windows Selector policy,
+with one profile real-provider skip; 67 hosted-agent tests; 62 base and 67 profile frontend
+tests plus builds/CSP; and Chromium local/history/studio suites of 1/5/1 for
+each generated frontend. Three real Docker isolation tests passed using the
+previously verified package mirror, including approval, rejection, and
+capability-denial probes. A loopback HTTPS stalled-body probe timed out and
+observed client socket closure. The isolated root suite passed 114 tests with two
+adapter-selection skips. A pre-fix failure-state regression, the earlier
+wrong-directory and missing-database scenario invocations, dependency setup
+errors, two broad-UI fixture failures in each frontend, a profile studio-title
+failure, a negative-test message assertion and a formatting check are retained
+as failed attempts, not relabeled. A fresh Docker build using the default
+PyPI index failed before tests on a package-download TLS handshake; the
+mirror-backed Docker pass is a separate run. An additional root-level Ruff invocation
+did not apply the generated project's path-relative adapter ignores; lint and
+format checks pass from both generated backend directories. A shorter first
+HTTPS probe did not establish that its server handler was reached and remains
+inconclusive. The earlier default-Proactor backend failure remains recorded;
+the scoped startup correction above does not relabel the original run. Historical
+[run 45487881616](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/45487881616)
+passed at exact head `8c2a8c909b27b23802b4ee71450e82a5ebfcd2e7`, not this
+candidate; [run 45496167774](https://github.com/ppenumatsa1/agent-blueprints/actions/runs/45496167774)
+passed at `174eca3d9a6b02f5fe4d42f3e2ae4a360639d5c8`, before these changes.
+
+Next: bind the reviewed commit to exact-head CI, then establish independently
+administered build provenance and a fresh deployment observer. Verify a
+firewall-preserving path for migration
+`0004_order_resolution_hosted_response_outcomes.sql` and
+`0005_order_resolution_hosted_start_claim.sql` before any authorized rollout.
+No current-head Azure, live Entra, authenticated-browser, real
+provider or Foundry recovery result is claimed.
+
+## Advisory deployment-provenance preflight
+
+**In progress; deployment provenance and rollout remain blocked.** The
+independently copied [preflight](../blueprints/maf/workflow/docs/build-attestations.md)
+uses GitHub CLI to verify three exact OCI build attestations against an
+externally supplied policy. Certificate, numeric source IDs, event revision and
+ref, pinned signer, GitHub-hosted runner, standard GitHub Actions SLSA
+predicate, invocation and exact name/digest must agree in one verified result.
+Malformed, duplicate, mismatched and ambiguous input fails closed; the result
+always disclaims deployment provenance and release authorization. Local unit
+tests exercise the three-role flow and negative mutations. A real public OCI
+attestation passed with `gh` 2.103.3 and failed with a wrong source repository
+ID; this does not verify a target artifact.
+
+An external path is not proof of independently controlled policy or trusted
+execution. A separately governed builder must bind the event SHA to the actual
+reviewed checkout and all generated build inputs and derive each digest from
+its own output. A separately governed observer must bind fresh authenticated
+deployment identity, image, route, target, time and nonce to those subjects
+under controlled deployment concurrency. Current ACA local-context builds,
+Foundry `remote_build`, target attestations, observer, and protected environment
+do not establish those guarantees. The pre-OIDC hard stop remains unchanged.
+Next: obtain these independently controlled trust decisions and target evidence,
+then separately validate any deployment; do not mutate Azure or the firewall as
+part of this preflight.
+
+## Hosted interruption evidence
+
+**Blocked.** The previous live adapter cleared in-memory interrupted/unknown
+markers and read the case without proving native continuation or authoritative
+reconciliation. The hosted-interruption runner now blocks before any adapter
+operation, and the live adapter refuses interruption and reconciliation
+without clearing markers. Timeout/reconciliation scenarios using that adapter
+therefore also remain blocked. Synthetic unit tests check these fail-closed
+behaviors; they are not live recovery evidence. Next: establish independently
+verifiable native continuation and durable outcome evidence before enabling
+the scenarios. No Azure operations or live tests were performed.
+
+## Live acceptance credential boundary
+
+An independent review identified bearer disclosure on redirects and unrestricted
+browser session-storage injection. The acceptance client now requires a
+separately configured matching HTTPS origin and refuses all redirects; the
+browser limits injected storage to that origin and rejects cross-origin state
+and all cookies. The model evaluator requires its own independently authorized
+HTTPS origin and also refuses redirects. Focused checks use synthetic tokens and
+routed browser pages; the independently generated profile is checked without
+live Azure or Entra access. Existing local browser suites remain intact. CI
+and real deployment configuration remain unverified. Next: review exact-head
+CI and independently authorize the live origin. This does not establish
+trusted deployment provenance, proxy safety or isolation for same-identity
+approval.
+The same trace found a hosted Responses POST using default redirect handling
+and browser API/stream fetches that followed redirects. Both now reject
+redirects; the hosted client records an ambiguous outcome as unknown. Synthetic
+loopback and transport checks do not prove live service or proxy behavior.
+
+## Hosted approval UI repair in PR #62
+
+**In progress**, based on `19e1837e2cb4d0781aa34ec7e345c5fed30b7a03`.
+Acceptance: local and hosted decisions carry the server-selected channel;
+asynchronous case changes become visible without stale case replacement or
+retaining a case after read authorization is revoked. Timed-out or transient
+refreshes retry while authorization failures stop and clear the case; sign-out
+discards the prior workspace. Source frontend tests passed 59; independently
+generated profile tests passed 64, with build, CSP and three Chromium origin
+checks. The isolated repository suite passed 114 tests with two
+adapter-selection skips. A generated profile passed local automatic and
+human-approval API/MAF/PostgreSQL happy paths and Agent A loopback composition
+using synthetic identities and a Foundry fixture. These are not proof of
+actual Foundry execution.
+
+The default Windows Proactor full generated-backend run failed three of 251
+tests (two Psycopg async errors and a stream 503 instead of 200); one
+real-provider test was skipped. A separate Windows Selector-policy run
+completed 251 tests with the same real-provider skip, and all nine canonical
+scenario cases passed independently through the generated local adapter.
+Do not relabel the Proactor failure.
+
+The generated profile's signed-out Chromium check initially failed at
+`1591e20293bbfad351f54243f74fb471203bc274` because it inherited the base
+title expectation. A profile-specific title expectation passed locally, as
+did the unchanged base check; CI now runs the check on both generated
+frontends. Next: review exact-head CI and, after trust and isolation are
+established, separately run authorized live approval, rejection,
+checkpoint/resume, restart, idempotency and recovery checks.
+
+## Acceptance harness contract repairs in PR #62
+
+**In progress**, starting at `19e1837e2cb4d0781aa34ec7e345c5fed30b7a03`.
+Acceptance criteria: load the profile adapter using the runner's target and
+workflow environment contract; associate actual HTTP correlations with each
+passed case without treating an approval handle as a correlation ID; and
+select the generated UI's real controls. Source runner and independently
+generated backend and UI fixture tests pass, as does the generated frontend
+build. These checks do not verify a hosted recovery, human identity, effect,
+deployment provenance or a live browser session.
+
+The recovery-evidence and credential-safety changes are integrated in
+[draft #62](https://github.com/ppenumatsa1/agent-blueprints/pull/62). Next:
+review exact-head checks. Keep failure injection blocked by the existing
+provenance hard stop; no Azure call or live evidence is claimed.
+
+## Fixed offline synthetic manual tests above PR #61
+
+**In progress; local implementation and validation completed, draft/CI review
+pending.** Base verified against open draft #61 at
+`a78854c5fff4d4f518e9fea729d0bba0123ce2bb`.
+The incremental deliverable is an operator-triggered fixed runner rather
+than unsafe browser dispatch. It packages the canonical native MAF approval
+graph plus fixed in-memory synthetic state in a separate image. It accepts
+only approval/rejection selection (and a credential-free HTTPS package mirror
+for builds), with no code/image/payload/factory injection. Actual pre-start
+Docker inspection enforces network none, read-only root, unprivileged user,
+no capabilities or privilege escalation, no user mounts/devices/ports,
+credential environment exclusion and resource limits. Runtime negative
+network/metadata and filesystem probes must pass before the native graph.
+The host, daemon, reviewed sources and dependencies remain trusted.
+
+Acceptance/evidence: eight boundary unit tests pass; three real Docker tests
+pass in each of source, independently generated base and generated profile,
+including both native decisions and six actual altered-container denials
+before execution. Both generated operator CLIs pass independently. Isolated
+repository suite: 114 tests with two inherited adapter-selection skips; Ruff
+0.14.13 lint/format and whitespace checks pass. Local package-download TLS
+failure was resolved with an HTTPS public mirror without changing dependency
+hashes or disabling TLS. CI adds source and independently built base/profile
+Docker checks with the original checkout temporarily unavailable; exact-head
+CI remains pending.
+
+No application business workflow/action, human approval, model, database,
+checkpoint, durable recovery, browser integration, same-identity exception or
+atomic exception audit is implemented or claimed by this layer. Production
+controls remain unchanged. Builds use public registries and mutable base
+tags; source-to-image attestation and arbitrary hostile-code sandboxing are
+not claimed. Next: review the stacked draft and exact-head CI without merging
+or changing stack metadata, Azure resources or firewall rules. The
+[operator guide](../blueprints/maf/workflow/docs/offline-synthetic-tests.md)
+records runnable commands, assumptions and limits.
+
 ## Polling fallback containment above PR #60
 
 **In progress**, based on `99b4303a209c983ca7d306fd6d23473476e85ff6`.
@@ -1305,6 +1681,14 @@ Acceptance requires:
    artifact hashes, plus a permanently non-authorizing production dimension
    that defers to the signed trust validator.
 
+For an immediate Responses `status: failed` with an authoritative ID, the
+client surfaces an error and persists the outcome; same-key retries, including
+after a PostgreSQL-backed restart, must fail without redispatch. The generated
+hosted API regression covers this contract without Azure. Apply the profile
+migration before deploying the client fix. Keep later background failure,
+safe HTTP 429 retry, and authoritative unknown-outcome reconciliation open
+until verified against the hosted API.
+
 The exact commands, GitHub environment inputs, evidence schemas, baseline CI,
 region reference, current blocked/unverified matrix, and dependencies on
 Agents A-C are in the [Workstream D readiness guide](azure-foundry/readiness.md).
@@ -1476,6 +1860,26 @@ invoke the Azure CLI packaged Python module directly on Windows and continue to
 use normal `az` resolution elsewhere. Contract validation requires both API
 updates to use this path; the TLS query string is unchanged. Exact-head CI and
 live deployment evidence remain required before this correction is complete.
+
+The authorized PR #62 existing-resource POC deployment subsequently completed
+on candidate `3cfdbd942dc7daf37e4f8f136b26645b83471978`. Exact-head CI run
+`45980935647` passed 8/8. Immutable API, web, and hosted images were published
+without infrastructure, network, firewall, Entra, managed-identity, or policy
+changes. Foundry image mode required two bounded corrections: platform-reserved
+environment variables are omitted from the submitted image definition while
+remaining journal-bound, and the image fixes AgentServer state under
+`/home/hosted/.agentserver` because Foundry overrides `HOME`.
+
+The final state is hosted version 11 fixed at 100%, API revision
+suffix `pr62-3cfdbd9-v11`, and web revision suffix `pr62-3cfdbd9-v3`.
+ORS-001 and ORS-004 completed with one
+claim, one effect, and one terminal event; ORS-004 reused its request identity
+without duplicating the terminal outcome. ORS-006, ORS-007, and all three
+ORS-008 variants failed explicitly with their required policy evidence codes,
+zero effects, and one terminal event. ORS-002, ORS-003, ORS-005, ORS-009, the
+seven Azure Policy audit findings, provider/browser validation, and production
+readiness remain unresolved. The deployment plan therefore remains
+**Approved / Not Validated**.
 
 Infrastructure redeployment must never infer an application image. The Bicep
 entry point now requires explicit API and web images, and the guarded

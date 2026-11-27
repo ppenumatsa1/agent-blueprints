@@ -17,6 +17,14 @@ HOSTED_DECISION_MIGRATION = ROOT / "0003_order_resolution_hosted_decision_intent
 HOSTED_DECISION_MIGRATION_SHA256 = (
     "92eceac225f5369ef207ef23c0dd4f350bce30a58dbe2b42d70389700157d247"
 )
+HOSTED_RESPONSE_MIGRATION = ROOT / "0004_order_resolution_hosted_response_outcomes.sql"
+HOSTED_RESPONSE_MIGRATION_SHA256 = (
+    "8ef850de0f196d738eee64219aa160dc7ec3719b67c07cb81bd1b687afabc876"
+)
+HOSTED_START_CLAIM_MIGRATION = ROOT / "0005_order_resolution_hosted_start_claim.sql"
+HOSTED_START_CLAIM_MIGRATION_SHA256 = (
+    "ba35f595998c24696e5b7aea4a7beccfc826e4f9218d2fcdf11e05fdabf29b4f"
+)
 TABLES = (
     "order_resolution_requests",
     "order_resolution_proposals",
@@ -56,6 +64,20 @@ def _hosted_decision_sql() -> str:
     return value
 
 
+def _hosted_response_sql() -> str:
+    value = HOSTED_RESPONSE_MIGRATION.read_text(encoding="utf-8")
+    if hashlib.sha256(value.encode("utf-8")).hexdigest() != HOSTED_RESPONSE_MIGRATION_SHA256:
+        raise OrderResolutionSchemaError("The hosted response outcome migration has changed.")
+    return value
+
+
+def _hosted_start_claim_sql() -> str:
+    value = HOSTED_START_CLAIM_MIGRATION.read_text(encoding="utf-8")
+    if hashlib.sha256(value.encode("utf-8")).hexdigest() != HOSTED_START_CLAIM_MIGRATION_SHA256:
+        raise OrderResolutionSchemaError("The hosted start claim migration has changed.")
+    return value
+
+
 def validate_connection(connection) -> None:
     missing = []
     for table in TABLES:
@@ -67,6 +89,29 @@ def validate_connection(connection) -> None:
         raise OrderResolutionSchemaError(
             "The Order Resolution schema is not migrated: " + ", ".join(missing)
         )
+    if (
+        connection.execute(
+            """
+        SELECT 1 FROM pg_constraint
+        WHERE conrelid = 'order_resolution_hosted_operations'::regclass
+            AND conname = 'order_resolution_hosted_operations_outcome_check'
+        """
+        ).fetchone()
+        is None
+    ):
+        raise OrderResolutionSchemaError("The hosted response outcome migration is required.")
+    if (
+        connection.execute(
+            """
+        SELECT 1 FROM pg_attribute
+        WHERE attrelid = 'order_resolution_hosted_operations'::regclass
+            AND attname = 'first_request_id' AND NOT attisdropped
+            AND atttypid = 'uuid'::regtype AND NOT attnotnull
+        """
+        ).fetchone()
+        is None
+    ):
+        raise OrderResolutionSchemaError("The hosted start claim migration is required.")
 
 
 def upgrade(dsn: str, *, connect=None) -> None:
@@ -82,6 +127,8 @@ def upgrade(dsn: str, *, connect=None) -> None:
         connection.execute(_sql())
         connection.execute(_hosted_sql())
         connection.execute(_hosted_decision_sql())
+        connection.execute(_hosted_response_sql())
+        connection.execute(_hosted_start_claim_sql())
         validate_connection(connection)
 
 

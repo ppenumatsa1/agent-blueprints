@@ -3,7 +3,7 @@ import os
 import sys
 import unittest
 from dataclasses import replace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from uuid import uuid4
 
 from tests.hosted_failure_runner import (
@@ -13,6 +13,8 @@ from tests.hosted_failure_runner import (
     StaleApproval,
     TransientFailure,
     UnknownOutcome,
+    UnsupportedScenario,
+    _hosted_interruption,
     main,
     run_scenarios,
 )
@@ -131,13 +133,19 @@ class FixtureHostedAdapter:
                 "trace_id": f"{index + 1:032x}",
                 "agent_version": "0.1.0",
                 "deployment_revision": self.deployment_revision,
+                "http_status": 200,
+                "hosted_phase": "start",
+                "conversation_id": f"conversation-{record.case_id}",
+                "hosted_agent_name": "synthetic-agent",
+                "hosted_agent_version": "1",
+                "extensions": {"producer": {"hosted_start_claim_request_id": record.request_id}},
             }
             for index, record in enumerate(self.records.values())
         ]
 
 
 class HostedFailureRunnerTests(unittest.TestCase):
-    def test_all_required_hosted_failure_scenarios_are_explicit_and_pass(self):
+    def test_unsupported_hosted_interruption_is_blocked_without_hiding_other_results(self):
         result = run_scenarios(
             FixtureHostedAdapter(),
             source_revision="source-123",
@@ -147,14 +155,26 @@ class HostedFailureRunnerTests(unittest.TestCase):
             target_id="synthetic-target",
         )
         self.assertEqual(len(result["scenarios"]), 9)
+        self.assertEqual(result["scenarios"]["hosted_interruption"]["status"], "blocked")
         self.assertEqual(
-            {item["status"] for item in result["scenarios"].values()},
-            {"passed"},
+            {
+                name: item["status"]
+                for name, item in result["scenarios"].items()
+                if name != "hosted_interruption"
+            },
+            {name: "passed" for name in result["scenarios"] if name != "hosted_interruption"},
         )
         self.assertEqual(result["source_revision"], "source-123")
         self.assertEqual(result["deployment_revision"], "deployment-456")
         self.assertNotIn("synthetic-target", json.dumps(result))
         self.assertTrue(result["correlations"])
+
+    def test_hosted_interruption_blocks_before_any_adapter_call(self):
+        adapter = Mock()
+        with self.assertRaises(UnsupportedScenario):
+            _hosted_interruption(adapter)
+        adapter.assert_not_called()
+        self.assertEqual(adapter.mock_calls, [])
 
     def test_exact_active_revision_is_required(self):
         with self.assertRaisesRegex(ValueError, "source revision"):
@@ -275,21 +295,118 @@ class HostedFailureRunnerTests(unittest.TestCase):
                 target_id="synthetic-target",
             )
 
+    def test_unrelated_case_reads_do_not_cover_passed_hosted_scenarios(self):
+        adapter = FixtureHostedAdapter()
+        original = adapter.correlations
+        adapter.correlations = lambda: [
+            {
+                key: value
+                for key, value in item.items()
+                if key
+                not in {
+                    "hosted_phase",
+                    "conversation_id",
+                    "hosted_agent_name",
+                    "hosted_agent_version",
+                    "http_status",
+                }
+            }
+            for item in original()
+        ]
+        with self.assertRaisesRegex(ValueError, "hosted start"):
+            run_scenarios(
+                adapter,
+                source_revision="source-123",
+                deployment_revision="deployment-456",
+                environment="synthetic-hosted",
+                target_kind="synthetic-nonproduction",
+                target_id="synthetic-target",
+            )
+
+    def test_failed_hosted_start_does_not_cover_a_passed_scenario(self):
+        adapter = FixtureHostedAdapter()
+        original = adapter.correlations
+        adapter.correlations = lambda: [{**item, "http_status": 403} for item in original()]
+        with self.assertRaisesRegex(ValueError, "hosted start"):
+            run_scenarios(
+                adapter,
+                source_revision="source-123",
+                deployment_revision="deployment-456",
+                environment="synthetic-hosted",
+                target_kind="synthetic-nonproduction",
+                target_id="synthetic-target",
+            )
+
+    def test_replayed_request_cannot_cover_a_hosted_start_claim(self):
+        for claim in (None, str(uuid4())):
+            with self.subTest(claim=claim):
+                adapter = FixtureHostedAdapter()
+                original = adapter.correlations
+                adapter.correlations = lambda: [
+                    {
+                        **item,
+                        "extensions": {"producer": {"hosted_start_claim_request_id": claim}},
+                    }
+                    for item in original()
+                ]
+                with self.assertRaisesRegex(ValueError, "Hosted start claim"):
+                    run_scenarios(
+                        adapter,
+                        source_revision="source-123",
+                        deployment_revision="deployment-456",
+                        environment="synthetic-hosted",
+                        target_kind="synthetic-nonproduction",
+                        target_id="synthetic-target",
+                    )
+
+    def test_correlation_request_ids_are_distinct_from_approval_handles(self):
+        adapter = FixtureHostedAdapter()
+        original = adapter.correlations
+
+        def correlations():
+            result = []
+            for item in original():
+                request_id = str(uuid4())
+                result.append(
+                    {
+                        **item,
+                        "request_id": request_id,
+                        "extensions": {"producer": {"hosted_start_claim_request_id": request_id}},
+                    }
+                )
+            return result
+
+        adapter.correlations = correlations
+        result = run_scenarios(
+            adapter,
+            source_revision="source-123",
+            deployment_revision="deployment-456",
+            environment="synthetic-hosted",
+            target_kind="synthetic-nonproduction",
+            target_id="synthetic-target",
+        )
+        self.assertEqual(result["scenarios"]["hosted_interruption"]["status"], "blocked")
+        self.assertTrue(
+            all(
+                item["status"] == "passed"
+                for name, item in result["scenarios"].items()
+                if name != "hosted_interruption"
+            )
+        )
+
     def test_live_correlation_metadata_survives_and_invalid_status_is_rejected(self):
         adapter = FixtureHostedAdapter()
         original = adapter.correlations
 
         def correlations():
-            return [
+            starts = original()
+            return starts + [
                 {
-                    **item,
+                    **starts[0],
+                    "request_id": str(uuid4()),
                     "http_status": 403,
                     "hosted_phase": "resume",
-                    "conversation_id": "synthetic-conversation",
-                    "hosted_agent_name": "synthetic-agent",
-                    "hosted_agent_version": "1",
                 }
-                for item in original()
             ]
 
         adapter.correlations = correlations
@@ -301,8 +418,8 @@ class HostedFailureRunnerTests(unittest.TestCase):
             "target_id": "synthetic-target",
         }
         result = run_scenarios(adapter, **args)
-        self.assertEqual(result["correlations"][0]["http_status"], 403)
-        self.assertEqual(result["correlations"][0]["hosted_phase"], "resume")
+        self.assertEqual(result["correlations"][-1]["http_status"], 403)
+        self.assertEqual(result["correlations"][-1]["hosted_phase"], "resume")
         adapter.correlations = lambda: [{**correlations()[0], "http_status": True}]
         with self.assertRaisesRegex(ValueError, "HTTP status"):
             run_scenarios(adapter, **args)

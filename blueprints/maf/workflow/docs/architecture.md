@@ -15,6 +15,28 @@ coordinates transitions; checkpoint and database writes are not one atomic
 transaction. Recovery reconciles them. Neither a conversation nor a
 checkpoint is a human approval.
 
+## Advisory build-attestation preflight
+
+The [build-attestation preflight](build-attestations.md) checks three
+independently specified OCI subjects using GitHub CLI signature verification
+and exact source, signer and predicate matching. The policy path, verifier,
+builder and trust roots require independent administration; a path check
+cannot establish that trust. This preflight does not inspect a deployment,
+prove a builder's actual checkout or generated inputs, or authorize release.
+The cloud failure-injection hard stop remains in force.
+
+## Fixed offline synthetic runner
+
+The [operator-only runner](offline-synthetic-tests.md) builds a separate image
+from an explicit source allowlist and executes the canonical native approval
+graph with a fixed in-memory synthetic record. The API, application factories,
+business actions and browser are outside this image and are never dispatched.
+The host verifies actual Docker isolation before start; runtime probes verify
+denied network and filesystem operations before the graph. The reviewed source,
+local Docker daemon and host remain trusted. This is not a general application
+sandbox, human approval, durable recovery or UI manual-test support. Production
+separation of duties and disabled studio callbacks remain unchanged.
+
 ## Authorized history and activity
 
 The generic history API uses the existing PostgreSQL `wf_cases` fields for
@@ -43,6 +65,13 @@ checkpoint IDs, prompts, model responses, and tool contents are not
 projected. Application audit state and native MAF continuation/checkpoint
 state remain separate. Existing single-case reads and decision endpoints
 remain unchanged.
+
+The studio separately refreshes an incomplete selected case through the
+authorized case-read endpoint at five-second intervals after each completed
+read. Switching cases or signing out invalidates late results; read
+authorization failures clear the displayed case. Refresh stops on read error,
+execution completion or a reported failure; reopening the case retries it.
+This is not a deadline on an in-flight read or proof of cloud availability.
 
 ### Live activity
 
@@ -374,7 +403,9 @@ The profile copies the authoritative
 verification tree, together with `tests/test_order_resolution_contract.py`.
 The generated runtime does not read those assets or this repository. Explicit
 asset overrides exist only for isolated generator tests; they do not replace
-the canonical generated assets.
+the canonical generated assets. At generation time, the selected synthetic assets
+also produce an inert, bounded frontend use-case catalog; the deployed frontend
+does not read the original verification assets.
 
 The base frontend includes a generic `WorkflowStudioProfile` with no
 Order Resolution vocabulary. UX Layer 2 adds reusable profile-owned history
@@ -384,6 +415,14 @@ payload projection, and proposal decision binding while retaining the same
 protected API and MSAL client; its history UI reuses the generic labels and
 does not add order-specific event content. Evidence and manual tests are
 disabled by default; AG-UI and CopilotKit remain reserved flags.
+
+The operator workspace presents history, workflow and activity, and
+approval/evidence in three responsive panels. History search covers loaded
+items only. Loading a synthetic use case fills editable inputs without
+submitting a case or running a test; missing or unsupported catalogs are
+shown as unavailable. Approval controls still require the case's binding and
+server authorization. An unknown approval requirement is not treated as an
+approval decision, and synthetic policy inputs are not verified evidence.
 
 Applications may opt in to `projectEvidence` and return a text-only
 `EvidenceProjection` from a selected, already authorized case. Explicitly
@@ -436,3 +475,28 @@ does not provide working Foundry or monitoring private connectivity, API databas
 token authentication, or the hosted-agent service. A project-wide agent-consumer
 grant is opt-in and disabled; its eventual scope and inherited grants require
 review. Offline compilation is not cloud integration evidence.
+
+## Live acceptance credential boundary
+
+The opt-in live browser harness confines session storage to a separately
+authorized HTTPS origin and rejects supplied cookies or foreign-origin storage
+state. The Order Resolution live acceptance client validates the same kind of
+origin before reading auth material and refuses redirects. The model evaluator
+requires a separate authorized HTTPS origin and refuses redirects. The operator
+must independently authorize and trust that origin and the network path; this does
+not verify Entra authentication, deployment provenance, or a compromised
+authorized page.
+Protected browser API/stream requests and hosted Responses POSTs reject
+redirects. A potentially applied hosted POST remains unknown, not retried.
+These controls do not constrain top-level navigation or establish trust in
+custom factories, configured endpoints, the host, or its proxy.
+
+Case refreshes abort a stalled read and retry transient failures; access
+revocation clears the displayed case instead of retrying it. Account changes
+and sign-out remount the workspace, discarding the previous account's state.
+
+The hosted failure runner blocks its interruption scenario before invoking an
+adapter because its current interface does not verify native continuation.
+The Order Resolution live adapter also refuses reconciliation rather than
+clearing unknown/interrupted markers on an ordinary case read. This is not a
+verified recovery mechanism.

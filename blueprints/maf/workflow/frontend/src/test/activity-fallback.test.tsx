@@ -42,6 +42,7 @@ it("polls with authorization after stream 503s and clears activity on revocation
     expect(streams).toBe(3);
     expect(reads).toBeGreaterThan(1);
     expect(screen.getByText("Workflow created")).toBeVisible();
+    expect(screen.getByText(/Activity may not include every workflow event/)).toBeVisible();
     expect(tokenFor.mock.calls.every(([scope]) => scope === "read")).toBe(true);
 
     updated = true;

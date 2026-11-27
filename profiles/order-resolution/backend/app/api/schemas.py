@@ -32,6 +32,7 @@ class CaseOutput(BaseModel):
     decision: Literal["pending", "approved", "rejected"]
     payload: dict[str, Any]
     decision_handle: str | None
+    decision_channel: Literal["api", "foundry-responses"] | None
     execution_complete: bool
     failure_code: str | None
 
@@ -83,16 +84,20 @@ class ActivityOutput(BaseModel):
     next_cursor: str | None
 
 
-def case_output(case: Case) -> CaseOutput:
+def case_output(case: Case, *, hosted_mode: bool = False) -> CaseOutput:
+    has_decision_handle = (
+        case.status == "pending" and case.decision is None and bool(case.request_id)
+    )
     return CaseOutput(
         id=case.id,
         correlation_id=case.id,
         status=case.status,
         decision=case.decision or "pending",
         payload=case.payload,
-        decision_handle=(
-            case.request_id if case.status == "pending" and case.decision is None else None
-        ),
+        decision_handle=(case.request_id if has_decision_handle else None),
+        decision_channel=("foundry-responses" if hosted_mode else "api")
+        if has_decision_handle
+        else None,
         execution_complete=case.execution_complete,
         failure_code=case.failure_code,
     )

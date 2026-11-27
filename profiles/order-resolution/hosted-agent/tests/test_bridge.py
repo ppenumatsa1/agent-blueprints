@@ -3,6 +3,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 from uuid import uuid4
 
+from app.domain.errors import HostedWorkflowError
 from app.domain.models import Principal
 from app.order_resolution.durability import Decision, DecisionCommand
 from order_resolution_hosted.bridge import (
@@ -13,6 +14,7 @@ from order_resolution_hosted.bridge import (
 from order_resolution_hosted.client import (
     FOUNDRY_SCOPE,
     ConversationBinding,
+    HostedResponseFailed,
     MemoryOperationJournal,
     ResponsesClient,
     TokenProvider,
@@ -107,6 +109,19 @@ class BridgeTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("session_id", binding)
         self.assertEqual(events[2][1]["operation_id"], f"case:{self.case_id}:start")
         self.assertNotIn("agent_session_id", events[2][1])
+
+    async def test_start_and_resume_surface_explicit_responses_failure(self):
+        binding = ConversationBinding("conversation-server-selected")
+        responses = Mock()
+        responses.create_conversation.return_value = binding
+        responses.start.side_effect = HostedResponseFailed
+        responses.resume.side_effect = HostedResponseFailed
+        host = ResponsesWorkflowHost(responses, FakeAuthority([], binding))
+
+        with self.assertRaisesRegex(HostedWorkflowError, "Foundry returned a failed response"):
+            await host.start(self.case_id, self.owner)
+        with self.assertRaisesRegex(HostedWorkflowError, "Foundry returned a failed response"):
+            await host.resume(self.case_id, self.reviewer, self.command())
 
     async def test_resume_loads_and_prebinds_reviewer_intent_before_function_output(self):
         events = []
