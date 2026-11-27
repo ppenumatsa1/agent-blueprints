@@ -4,7 +4,7 @@
 
 Plan status: **Approved / Not Validated**
 
-Deployment status: **Not Started**
+Deployment status: **Development POC Deployed / Validation Partial**
 
 ## Current POC rollout scope
 
@@ -100,6 +100,55 @@ deferred. Do not assume a required check can be skipped, weaken the existing
 security requirements, or widen the approved scope.
 
 ### Current-scope evidence and limitations
+
+- Authorized candidate
+  `3cfdbd942dc7daf37e4f8f136b26645b83471978` passed exact-head CI 8/8 in
+  run `45980935647`. The earlier head
+  `0e3b2397cc1989a3198a04ef7a29c06693d7b079` passed 8/8 in run
+  `45977781842`.
+- The existing-resource-only development deployment completed without
+  provisioning infrastructure or changing networking, firewall, Entra,
+  managed identities, or Azure Policy. The seven Azure Policy audit findings
+  remain unresolved and deferred.
+- Final deployed components use API revision suffix `pr62-3cfdbd9-v11`, web
+  revision suffix `pr62-3cfdbd9-v3`, and fixed hosted-agent version 11 at
+  100%. Immutable digests are API
+  `sha256:561214d1792d055b07f0543ca4c9671448303e88047feafab96cc2af05fb6b75`,
+  web
+  `sha256:2d05f2375fa09bbc81913720664e2e45967273bef3dbcf3d7a7ff349611889e3`,
+  and hosted
+  `sha256:278843a486038c230c78bd658bd1e1a9a59a8c3c40f05dcdbafbd9a27b07223c`.
+  The API and web remain on their existing identities, registry,
+  networking, scale, and secret references; secret-value equality was not
+  exposed or claimed. Self-decision remains `false`.
+- Final live Azure evidence on the final API revision passed ORS-001 and
+  ORS-004 with one claim, one effect, and one terminal event each. ORS-006 and
+  ORS-007 failed explicitly with their required failure codes, zero effects,
+  and one terminal event. All three ORS-008 invalid-evidence variants failed
+  explicitly with zero effects and one terminal event each. ORS-002,
+  ORS-003, ORS-005, and ORS-009 remain pending.
+- Foundry version 10 exposed an image startup defect after the image was
+  successfully pulled: Foundry set `HOME=/home/session`, and AgentServer could
+  not write its default state directory. Version 11 sets
+  `AGENTSERVER_STATE_ROOT=/home/hosted/.agentserver`. Two final version-11
+  hosted sessions were observed for ORS-001 and ORS-004. The earlier ambiguous
+  version-10 case remains historical and was not rewritten or replayed.
+- The image publisher now omits Foundry platform-reserved environment
+  variables from image-container definitions while retaining them in the
+  journaled publication identity. The deployed web proxy also required an
+  Azure-specific HTTPS upstream, SNI, and upstream host header; that
+  deployment-portability correction is not yet represented in the generated
+  generic nginx configuration.
+- These results validate only the explicitly authorized development POC
+  matrix. They do not validate the broader plan, production readiness,
+  reviewer-dependent flows, provider evaluation, browser acceptance, or the
+  unresolved policy findings. Plan status therefore remains **Approved / Not
+  Validated**.
+
+The following bullets preserve historical pre-deployment evidence. Where they
+describe an unstarted rollout, absent live migration, `@latest` routing, or
+unverified pushed artifacts, the completed current-scope evidence above
+supersedes those observations without erasing their audit history.
 
 - Exact-head CI passed 8/8 for
   `0e3b2397cc1989a3198a04ef7a29c06693d7b079` in run `45977781842`.

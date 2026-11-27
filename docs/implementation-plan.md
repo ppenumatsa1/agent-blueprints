@@ -1811,6 +1811,26 @@ use normal `az` resolution elsewhere. Contract validation requires both API
 updates to use this path; the TLS query string is unchanged. Exact-head CI and
 live deployment evidence remain required before this correction is complete.
 
+The authorized PR #62 existing-resource POC deployment subsequently completed
+on candidate `3cfdbd942dc7daf37e4f8f136b26645b83471978`. Exact-head CI run
+`45980935647` passed 8/8. Immutable API, web, and hosted images were published
+without infrastructure, network, firewall, Entra, managed-identity, or policy
+changes. Foundry image mode required two bounded corrections: platform-reserved
+environment variables are omitted from the submitted image definition while
+remaining journal-bound, and the image fixes AgentServer state under
+`/home/hosted/.agentserver` because Foundry overrides `HOME`.
+
+The final state is hosted version 11 fixed at 100%, API revision
+suffix `pr62-3cfdbd9-v11`, and web revision suffix `pr62-3cfdbd9-v3`.
+ORS-001 and ORS-004 completed with one
+claim, one effect, and one terminal event; ORS-004 reused its request identity
+without duplicating the terminal outcome. ORS-006, ORS-007, and all three
+ORS-008 variants failed explicitly with their required policy evidence codes,
+zero effects, and one terminal event. ORS-002, ORS-003, ORS-005, ORS-009, the
+seven Azure Policy audit findings, provider/browser validation, and production
+readiness remain unresolved. The deployment plan therefore remains
+**Approved / Not Validated**.
+
 Infrastructure redeployment must never infer an application image. The Bicep
 entry point now requires explicit API and web images, and the guarded
 orchestrator resolves existing applications before ARM deployment. Existing

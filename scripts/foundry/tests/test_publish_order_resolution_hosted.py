@@ -1073,6 +1073,17 @@ class PublisherTests(unittest.TestCase):
                 runtime_environment=runtime_environment(),
             )
 
+    def test_image_definition_omits_platform_reserved_environment(self):
+        environment = publisher.image_runtime_environment(runtime_environment())
+        self.assertEqual(
+            environment["AZURE_AI_MODEL_DEPLOYMENT_NAME"],
+            "configured-model",
+        )
+        self.assertFalse(
+            publisher.PLATFORM_RESERVED_IMAGE_ENVIRONMENT
+            & set(environment)
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -378,7 +378,10 @@ remote source build. Image publication is a separate, explicit path:
 2. Build the context for `linux/amd64` with a unique tag in the authorized
    existing registry. The Dockerfile runs `python main.py` as a non-root user,
    provides a writable home, exposes port 8088, and sets
-   `PYTHONNOUSERSITE=1`. For a restricted network,
+   `PYTHONNOUSERSITE=1`. It also sets
+   `AGENTSERVER_STATE_ROOT=/home/hosted/.agentserver` because Foundry may
+   override `HOME` with a platform path that is not writable by the image
+   user. For a restricted network,
    `PYTHON_PACKAGE_INDEX` may select a credentialless HTTPS package mirror;
    never pass credentials in build arguments. Direct requirements are pinned,
    but the base image tag and transitive dependencies are not a reproducible
@@ -409,6 +412,11 @@ remote source build. Image publication is a separate, explicit path:
    reported explicitly. Reconciliation also checks the route after version
    listing, even when no match is found or the list fails, and after candidate
    lookup.
+   Image-container definitions omit Foundry-reserved
+   `FOUNDRY_PROJECT_ENDPOINT`, `APPLICATIONINSIGHTS_CONNECTION_STRING`, and
+   `APPLICATIONINSIGHTS_AUTH_MODE` values because the platform injects them.
+   The publisher still validates and binds those values into the publication
+   identity, hashing the connection string rather than recording it.
 6. Resolve the exact returned version and verify its image, identity and
    `active` state before candidate-specific testing. The journal's
    `observed_image_reference` is a version GET configuration observation, not
@@ -454,6 +462,15 @@ image test discovery failed because the curated image excludes tests; all 67
 passed when the generated tests were mounted read-only. YAML parsing first
 failed because the isolated SDK environment lacked PyYAML; the existing
 system parser then successfully parsed the workflow.
+
+Live PR #62 evidence on candidate `3cfdbd9` published corrected immutable image
+`sha256:278843a486038c230c78bd658bd1e1a9a59a8c3c40f05dcdbafbd9a27b07223c`
+as active hosted version 11. The fixed route was promoted from version 10 to
+version 11 only after image, identity, API app-role, active-state, and route
+checks passed. ORS-001 and ORS-004 then completed through version-11 sessions.
+The explicit ORS-006, ORS-007, and three ORS-008 policy failures terminated
+with zero effects. This is development POC evidence, not production readiness
+or source-to-image attestation.
 
 ## Compatibility matrix
 

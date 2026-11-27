@@ -45,6 +45,13 @@ OBSERVABILITY_RUNTIME_ENVIRONMENT = {
     "AGENTSERVER_FLUSH_MODE": "async",
     "APPLICATIONINSIGHTS_AUTH_MODE": "entra",
 }
+PLATFORM_RESERVED_IMAGE_ENVIRONMENT = frozenset(
+    {
+        "APPLICATIONINSIGHTS_AUTH_MODE",
+        "APPLICATIONINSIGHTS_CONNECTION_STRING",
+        "FOUNDRY_PROJECT_ENDPOINT",
+    }
+)
 IMAGE_REFERENCE = re.compile(
     r"(?P<registry>[a-z0-9](?:[a-z0-9-]*[a-z0-9])?"
     r"(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*(?::[0-9]{1,5})?)/"
@@ -348,6 +355,15 @@ def _publication_environment(environment: Mapping[str, str]) -> dict[str, str]:
     return published
 
 
+def image_runtime_environment(source: Mapping[str, str]) -> dict[str, str]:
+    environment = hosted_runtime_environment(source)
+    return {
+        name: value
+        for name, value in environment.items()
+        if name not in PLATFORM_RESERVED_IMAGE_ENVIRONMENT
+    }
+
+
 def build_definition(
     runtime_environment: Mapping[str, str], *, image_reference: str | None = None
 ) -> Any:
@@ -373,6 +389,7 @@ def build_definition(
         configuration = {
             "container_configuration": ContainerConfiguration(image=image_reference)
         }
+        environment = image_runtime_environment(runtime_environment)
     return HostedAgentDefinition(
         cpu=CPU,
         memory=MEMORY,
